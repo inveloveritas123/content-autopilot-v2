@@ -54,7 +54,7 @@ def get_active_provider(tenant_id=None, task: str = "all") -> Optional[dict]:
         api_key = _decrypt_key(provider.api_key_encrypted) if provider.api_key_encrypted else ""
 
         return {
-            "base_url": provider.base_url or "https://router.requesty.ai/v1",
+            "base_url": provider.base_url or "https://router.eu.requesty.ai/v1",
             "api_key": api_key,
             "model_name": provider.model_name or "google/gemini-2.0-flash-exp",
             "provider_id": str(provider.id),
