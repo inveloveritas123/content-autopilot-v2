@@ -5,7 +5,7 @@ Plattformunabhaengig: Funktioniert mit jedem AI-Client der MCP spricht.
 - Claude Desktop / Cowork
 - ChatGPT (mit MCP-Support)
 - Gemini
-- Jeder zukuenftige MCP-kompatible Client
+- Jeder zukuenftiger MCP-kompatibler Client
 
 Der Unternehmer verbindet seinen bevorzugten AI-Assistenten und hat
 sofort Zugriff auf seine Content-Pipeline:
@@ -24,14 +24,16 @@ from mcp.server.fastmcp import FastMCP
 
 logger = logging.getLogger(__name__)
 
-# ── Server Init ─────────────────────────────────────────────────────────────
+# ── Server Init ───────────────────────────────────────────────────────
 
 mcp = FastMCP("content_autopilot_mcp")
 
 # Backend-URL wird ueber Env konfiguriert
+# Primaer: BACKEND_URL (wie in docker-compose.yml)
+# Fallback: CONTENT_AUTOPILOT_URL (fuer standalone-Betrieb)
 import os
-BACKEND_URL = os.getenv("CONTENT_AUTOPILOT_URL", "http://localhost:8501")
-API_KEY = os.getenv("CONTENT_AUTOPILOT_API_KEY", "")
+BACKEND_URL = os.getenv("BACKEND_URL", os.getenv("CONTENT_AUTOPILOT_URL", "http://localhost:8501"))
+API_KEY = os.getenv("API_KEY", os.getenv("CONTENT_AUTOPILOT_API_KEY", ""))
 
 
 async def _api(method: str, path: str, json_data: dict = None, params: dict = None) -> dict:
@@ -56,7 +58,7 @@ def _fmt(data: dict | list, title: str = "") -> str:
     return json.dumps(data, indent=2, ensure_ascii=False)
 
 
-# ── Tool: Dashboard / Ueberblick ────────────────────────────────────────────
+# ── Tool: Dashboard / Ueberblick ──────────────────────────────────────
 
 @mcp.tool(
     name="autopilot_dashboard",
@@ -82,7 +84,7 @@ async def autopilot_dashboard() -> str:
         return f"Fehler beim Laden des Dashboards: {e}"
 
 
-# ── Tool: Videos / Quellen ──────────────────────────────────────────────────
+# ── Tool: Videos / Quellen ────────────────────────────────────────────
 
 class ListVideosInput(BaseModel):
     """Filter fuer die Video-Liste."""
@@ -124,7 +126,7 @@ async def autopilot_list_videos(params: ListVideosInput) -> str:
         return f"Fehler beim Laden der Videos: {e}"
 
 
-# ── Tool: Content-Ideen ─────────────────────────────────────────────────────
+# ── Tool: Content-Ideen ───────────────────────────────────────────────
 
 class GenerateIdeasInput(BaseModel):
     """Video-ID fuer die Ideen-Generierung."""
@@ -243,7 +245,7 @@ async def autopilot_get_idea(params: GetIdeaInput) -> str:
         return f"Fehler beim Laden der Idee: {e}"
 
 
-# ── Tool: Unternehmer-Antworten ─────────────────────────────────────────────
+# ── Tool: Unternehmer-Antworten ───────────────────────────────────────
 
 class SubmitAnswerInput(BaseModel):
     """Antwort des Unternehmers auf eine Frage."""
@@ -294,7 +296,7 @@ async def autopilot_submit_answer(params: SubmitAnswerInput) -> str:
         return f"Fehler beim Speichern der Antwort: {e}"
 
 
-# ── Tool: Post-Generierung ──────────────────────────────────────────────────
+# ── Tool: Post-Generierung ────────────────────────────────────────────
 
 class GeneratePostInput(BaseModel):
     """Parameter fuer die Post-Generierung."""
@@ -340,7 +342,7 @@ async def autopilot_generate_post(params: GeneratePostInput) -> str:
         return f"Fehler bei der Post-Generierung: {e}"
 
 
-# ── Tool: Post freigeben ────────────────────────────────────────────────────
+# ── Tool: Post freigeben ──────────────────────────────────────────────
 
 class ApprovePostInput(BaseModel):
     """Post-Freigabe."""
@@ -385,7 +387,7 @@ async def autopilot_approve_post(params: ApprovePostInput) -> str:
         return f"Fehler bei der Freigabe: {e}"
 
 
-# ── Tool: Brand Voice ───────────────────────────────────────────────────────
+# ── Tool: Brand Voice ─────────────────────────────────────────────────
 
 @mcp.tool(
     name="autopilot_get_voice_profile",
@@ -462,7 +464,7 @@ async def autopilot_start_onboarding(params: OnboardingAnswersInput) -> str:
         return f"Fehler beim Erstellen des Voice-Profils: {e}"
 
 
-# ── Tool: Video-Analyse anstossen ───────────────────────────────────────────
+# ── Tool: Video-Analyse anstossen ─────────────────────────────────────
 
 class AnalyzeVideoInput(BaseModel):
     """YouTube-URL fuer manuelle Analyse."""
@@ -506,7 +508,7 @@ async def autopilot_analyze_video(params: AnalyzeVideoInput) -> str:
         return f"Fehler beim Starten der Analyse: {e}"
 
 
-# ── Server starten ──────────────────────────────────────────────────────────
+# ── Server starten ────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     mcp.run()
