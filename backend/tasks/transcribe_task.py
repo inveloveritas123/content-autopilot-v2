@@ -61,7 +61,7 @@ def transcribe_item(item_id: str):
 def batch_transcribe(tenant_id: str = None):
     """Batch transcribe 'new' items via unified transcribe_content() — full 4-step fallback chain."""
     with sync_session_factory() as session:
-        query = select(SourceItem).where(SourceItem.status.in_(["new", "transcription_failed"]))
+        query = select(SourceItem).where(SourceItem.status.in_(["new", "transcription_failed", "needs_voicescriptor"]))
         if tenant_id:
             query = query.where(SourceItem.tenant_id == tenant_id)
         query = query.order_by(SourceItem.created_at.asc())
