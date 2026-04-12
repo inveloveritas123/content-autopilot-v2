@@ -11,6 +11,31 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+# ── Purpose → Model Routing ─────────────────────────────────────────
+# Gemini Flash: cheap ($0.075/1M tokens) — bulk work, structured analysis
+# Claude Sonnet: creative — ideation, empathy, storytelling
+PURPOSE_MODEL_MAP = {
+    # Analysis & structured tasks → Gemini Flash (cheap)
+    "transcription": "gemini-flash",
+    "analysis": "gemini-flash",
+    "voice_update": "gemini-flash",
+    "summary": "gemini-flash",
+    "tagging": "gemini-flash",
+    "scoring": "gemini-flash",
+    # Creative & empathy tasks → Claude Sonnet (quality)
+    "ideation": "claude-sonnet",
+    "questions": "claude-sonnet",
+    "creative": "claude-sonnet",
+    "post_generation": "claude-sonnet",
+    "onboarding": "claude-sonnet",
+}
+
+# Requesty.ai model strings (via LITELLM_BASE_URL)
+REQUESTY_MODELS = {
+    "gemini-flash": "google/gemini-2.0-flash",
+    "claude-sonnet": "anthropic/claude-sonnet-4-20250514",
+}
+
 
 class LLMService:
     def __init__(self):
@@ -29,15 +54,25 @@ class LLMService:
             self._anthropic = None
             logger.info(f"LLM Service using LiteLLM proxy at {self._litellm_base_url}")
 
+    def _resolve_model(self, model: str, purpose: Optional[str] = None) -> str:
+        """Resolve model name from purpose or explicit model string."""
+        if purpose and purpose in PURPOSE_MODEL_MAP:
+            resolved = PURPOSE_MODEL_MAP[purpose]
+            logger.info(f"LLM routing: purpose={purpose} → model={resolved}")
+            return resolved
+        return model
+
     async def complete(
         self,
         prompt: str,
         system: Optional[str] = None,
         model: str = "gemini-flash",
+        purpose: Optional[str] = None,
         response_format: str = "text",
         max_retries: int = 3,
     ) -> str:
-        """Unified LLM completion with retry logic."""
+        """Unified LLM completion with purpose-based routing and retry logic."""
+        model = self._resolve_model(model, purpose)
         last_error = None
         for attempt in range(max_retries):
             try:
@@ -52,7 +87,7 @@ class LLMService:
             except Exception as e:
                 last_error = e
                 wait = 2 ** attempt
-                logger.warning(f"LLM call failed (attempt {attempt + 1}/{max_retries}): {e}")
+                logger.warning(f"LLM call failed (attempt {attempt + 1}/{max_retries}, model={model}, purpose={purpose}): {e}")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(wait)
         raise last_error
@@ -62,9 +97,10 @@ class LLMService:
         prompt: str,
         system: Optional[str] = None,
         model: str = "gemini-flash",
+        purpose: Optional[str] = None,
     ) -> dict:
         """Complete and parse JSON response."""
-        text = await self.complete(prompt, system, model, response_format="json")
+        text = await self.complete(prompt, system, model, purpose=purpose, response_format="json")
         # Strip markdown code fences if present
         text = text.strip()
         if text.startswith("```"):
@@ -98,19 +134,24 @@ class LLMService:
         return response.content[0].text
 
     async def _litellm(self, prompt: str, system: Optional[str], model: str) -> str:
-        """Route through LiteLLM proxy."""
+        """Route through LiteLLM/Requesty proxy with purpose-aware model selection."""
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
-        # Map internal model names to LiteLLM model aliases on Server B
-        if model.startswith("gemini"):
-            litellm_model = "gemini-lite"
-        elif model.startswith("claude"):
-            litellm_model = "claude-sonnet"
-        else:
-            litellm_model = model
+        # Map to Requesty model strings
+        litellm_model = REQUESTY_MODELS.get(model)
+        if not litellm_model:
+            # Fallback: try direct mapping
+            if model.startswith("gemini"):
+                litellm_model = REQUESTY_MODELS["gemini-flash"]
+            elif model.startswith("claude"):
+                litellm_model = REQUESTY_MODELS["claude-sonnet"]
+            else:
+                litellm_model = model
+
+        logger.info(f"LLM request: internal={model} → requesty={litellm_model}")
 
         headers = {"Content-Type": "application/json"}
         if self._litellm_api_key:
