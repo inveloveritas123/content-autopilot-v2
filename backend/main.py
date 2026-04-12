@@ -17,7 +17,7 @@ async def lifespan(app: FastAPI):
     import subprocess
     logger.info("Running database migrations...")
     try:
-        subprocess.run(["alembic", "upgrade", "head"], check=True, cwd="/app")
+        pass  # Migration already applied (003). Re-enable if needed: subprocess.run(["alembic", "upgrade", "head"], check=True, cwd="/app", timeout=30)
     except Exception as e:
         logger.warning(f"Migration failed (may already be applied): {e}")
 

@@ -17,3 +17,12 @@ async def get_tenant(x_api_key: str = Header(...), db: AsyncSession = Depends(ge
     if not tenant:
         raise HTTPException(status_code=401, detail="Invalid API key")
     return tenant
+
+import uuid
+
+async def get_tenant_id(x_api_key: str = Header(...), db: AsyncSession = Depends(get_db)) -> uuid.UUID:
+    result = await db.execute(select(Tenant).where(Tenant.api_key == x_api_key))
+    tenant = result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return tenant.id

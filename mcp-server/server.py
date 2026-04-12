@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 
 # ── Server Init ───────────────────────────────────────────────────────
 
-mcp = FastMCP("content_autopilot_mcp")
+import os
+mcp_port = int(os.environ.get("MCP_PORT", "8080"))
+mcp = FastMCP("content_autopilot_mcp", host="0.0.0.0", port=mcp_port)
 
 # Backend-URL wird ueber Env konfiguriert
 # Primaer: BACKEND_URL (wie in docker-compose.yml)
@@ -511,4 +513,4 @@ async def autopilot_analyze_video(params: AnalyzeVideoInput) -> str:
 # ── Server starten ────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport="sse")

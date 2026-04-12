@@ -22,6 +22,7 @@ class ContentPiece(Base):
     content_text: Mapped[str] = mapped_column(Text, nullable=False)
     content_metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
     status: Mapped[str] = mapped_column(String(50), default="draft")
+    idea_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("content_ideas.id"), nullable=True)
     scheduled_for: Mapped[Optional[datetime]] = mapped_column(DateTime)
     approved_by: Mapped[Optional[str]] = mapped_column(String(100))
     approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime)

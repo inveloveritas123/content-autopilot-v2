@@ -8,7 +8,7 @@ from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from models.source_item import SourceItem
 from models.source import Source
-from services.transcription import get_transcript
+from services.transcription import get_youtube_transcript as get_transcript
 
 logger = logging.getLogger(__name__)
 
