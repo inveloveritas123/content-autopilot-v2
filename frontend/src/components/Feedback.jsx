@@ -159,7 +159,7 @@ function PerformanceForm({ onSubmitted }) {
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {[
           { key: 'impressions', label: 'Impressions' },
           { key: 'reactions', label: 'Reaktionen' },
@@ -285,7 +285,7 @@ export default function Feedback() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         {/* Angles Chart */}
         <div className="bg-white rounded-xl border border-surface-border p-5">
           <h2 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">

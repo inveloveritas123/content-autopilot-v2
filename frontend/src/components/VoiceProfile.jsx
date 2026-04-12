@@ -102,7 +102,7 @@ export default function VoiceProfile() {
 
       {/* KPI Cards */}
       {stats && (
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <StatCard
             icon={BookOpen}
             label="Posts insgesamt"
@@ -168,7 +168,7 @@ export default function VoiceProfile() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-ink-muted">{a.count} Posts</span>
-                  <span className="text-xs font-medium text-emerald-600">{(a.avg_engagement * 100).toFixed(1)}% Engagement</span>
+                  <span className="text-xs font-medium text-emerald-600">{((a.avg_engagement ?? 0) * 100).toFixed(1)}% Engagement</span>
                 </div>
               </div>
             ))}
