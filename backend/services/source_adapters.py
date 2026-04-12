@@ -57,6 +57,7 @@ class AbstractSourceAdapter(ABC):
             "youtube": YouTubeAdapter(),
             "rss": RSSAdapter(),
             "podcast": PodcastAdapter(),
+            "web": WebScrapingAdapter(),
         }
         adapter = adapters.get(source_type)
         if not adapter:
@@ -533,6 +534,96 @@ class PodcastAdapter(AbstractSourceAdapter):
 
 
 # ═══════════════════════════════════════════════════
+# WEB SCRAPING ADAPTER (NEU — Change Detection)
+# ═══════════════════════════════════════════════════
+
+class WebScrapingAdapter(AbstractSourceAdapter):
+    """Adapter fuer Webseiten-Monitoring mit Change Detection.
+
+    Strategie: Seite fetchen, Content extrahieren, Hash vergleichen.
+    Neues Item nur wenn sich der Content geaendert hat.
+    """
+
+    async def fetch_new_items(self, source: Source, existing_external_ids: set[str]) -> list[dict]:
+        page_url = source.url
+        if not page_url:
+            logger.warning(f"Web source {source.name} has no URL")
+            return []
+
+        try:
+            async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+                resp = await client.get(page_url, headers={
+                    "User-Agent": "ContentAutopilot/2.0 (Web Monitor)",
+                })
+                resp.raise_for_status()
+                html = resp.text
+        except Exception as e:
+            logger.error(f"Web fetch failed for {source.name}: {e}")
+            return []
+
+        # Extract content with readability
+        content_text = self._extract_readable_content(html, page_url)
+        if not content_text or len(content_text) < 50:
+            logger.warning(f"Web source {source.name}: too little content extracted ({len(content_text or '')} chars)")
+            return []
+
+        # Hash for change detection
+        import hashlib
+        content_hash = hashlib.sha256(content_text.encode()).hexdigest()[:16]
+        external_id = f"web-{content_hash}"
+
+        # If this hash already exists, no change detected
+        if external_id in existing_external_ids:
+            logger.info(f"Web '{source.name}': no change detected")
+            return []
+
+        # Extract title from HTML
+        title = self._extract_title(html) or source.name
+
+        logger.info(f"Web '{source.name}': change detected, {len(content_text)} chars")
+        return [{
+            "external_id": external_id,
+            "title": f"{title} ({datetime.now().strftime('%d.%m.%Y')})",
+            "url": page_url,
+            "published_at": datetime.now(),
+            "thumbnail_url": None,
+            "content_text": content_text,
+            "content_type": "article",
+            "source_type": "web",
+        }]
+
+    async def extract_content(self, item_data: dict) -> Optional[str]:
+        """Content already extracted during fetch."""
+        return item_data.get("content_text")
+
+    @staticmethod
+    def _extract_readable_content(html: str, url: str) -> str:
+        """Extract main content using readability-lxml."""
+        try:
+            from readability import Document as ReadabilityDoc
+            doc = ReadabilityDoc(html, url=url)
+            readable_html = doc.summary()
+            text = re.sub(r'<[^>]+>', ' ', readable_html)
+            text = re.sub(r'\s+', ' ', text).strip()
+            return text
+        except Exception as e:
+            logger.warning(f"Readability failed for {url}: {e}")
+            # Fallback: strip all tags
+            text = re.sub(r'<[^>]+>', ' ', html)
+            text = re.sub(r'\s+', ' ', text).strip()
+            return text[:10000] if len(text) > 10000 else text
+
+    @staticmethod
+    def _extract_title(html: str) -> Optional[str]:
+        """Extract page title from HTML."""
+        match = re.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
+        if match:
+            title = re.sub(r'\s+', ' ', match.group(1)).strip()
+            return title[:200] if title else None
+        return None
+
+
+# ═══════════════════════════════════════════════════
 # UPDATED check_source_for_new_items — uses Adapter Pattern
 # ═══════════════════════════════════════════════════
 
@@ -549,7 +640,7 @@ async def check_source_for_new_items(
         items = await adapter.fetch_new_items(source, existing_external_ids)
 
         # For text-based sources: enrich with full content extraction
-        if source.type in ("rss",):
+        if source.type in ("rss",):  # Web items already have full content from fetch
             for item in items:
                 if item.get("url") and (not item.get("content_text") or len(item.get("content_text", "")) < 500):
                     try:
