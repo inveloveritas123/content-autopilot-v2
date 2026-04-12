@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     litellm_base_url: Optional[str] = None
     litellm_api_key: Optional[str] = None
+    requesty_api_key: Optional[str] = None
 
     # Nextcloud
     nextcloud_url: str = ""

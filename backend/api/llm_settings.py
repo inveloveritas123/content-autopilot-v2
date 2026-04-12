@@ -87,6 +87,9 @@ async def list_providers(
             "last_test_at": p.last_test_at.isoformat() if p.last_test_at else None,
             "last_test_status": p.last_test_status,
             "last_test_error": p.last_test_error,
+            "cost_limit_daily_cents": p.cost_limit_daily_cents,
+            "cost_spent_today_cents": p.cost_spent_today_cents,
+            "cost_reset_at": p.cost_reset_at.isoformat() if p.cost_reset_at else None,
         }
         for p in providers
     ]

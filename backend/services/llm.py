@@ -134,37 +134,52 @@ class LLMService:
         return response.content[0].text
 
     async def _litellm(self, prompt: str, system: Optional[str], model: str) -> str:
-        """Route through LiteLLM/Requesty proxy with purpose-aware model selection."""
+        """Route through configured provider (Requesty.ai or LiteLLM proxy)."""
+        from services.provider_resolver import get_active_provider, track_cost
+
+        # Try DB-configured provider first
+        task = "analysis" if model in ("gemini-flash",) else "creative" if model in ("claude-sonnet",) else "all"
+        provider = get_active_provider(task=task)
+
+        if provider:
+            base_url = provider["base_url"]
+            api_key = provider["api_key"]
+            # Map internal model names to provider model strings
+            litellm_model = REQUESTY_MODELS.get(model, provider["model_name"])
+            if model == "claude-sonnet":
+                litellm_model = REQUESTY_MODELS.get("claude-sonnet", "anthropic/claude-sonnet-4-20250514")
+            elif model == "gemini-flash":
+                litellm_model = REQUESTY_MODELS.get("gemini-flash", "google/gemini-2.0-flash-exp")
+        else:
+            # Fallback to env config
+            base_url = self._litellm_base_url or "https://router.requesty.ai/v1"
+            api_key = self._litellm_api_key or ""
+            litellm_model = REQUESTY_MODELS.get(model, model)
+
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
-        # Map to Requesty model strings
-        litellm_model = REQUESTY_MODELS.get(model)
-        if not litellm_model:
-            # Fallback: try direct mapping
-            if model.startswith("gemini"):
-                litellm_model = REQUESTY_MODELS["gemini-flash"]
-            elif model.startswith("claude"):
-                litellm_model = REQUESTY_MODELS["claude-sonnet"]
-            else:
-                litellm_model = model
-
-        logger.info(f"LLM request: internal={model} → requesty={litellm_model}")
+        logger.info(f"LLM request: {model} → {litellm_model} via {base_url[:40]}...")
 
         headers = {"Content-Type": "application/json"}
-        if self._litellm_api_key:
-            headers["Authorization"] = f"Bearer {self._litellm_api_key}"
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
 
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
-                f"{self._litellm_base_url}/chat/completions",
+                f"{base_url}/chat/completions",
                 json={"model": litellm_model, "messages": messages, "max_tokens": 4096},
                 headers=headers,
             )
             resp.raise_for_status()
             data = resp.json()
+
+            # Track cost if provider from DB
+            if provider and data.get("usage"):
+                track_cost(provider["provider_id"], data["usage"])
+
             return data["choices"][0]["message"]["content"]
 
 

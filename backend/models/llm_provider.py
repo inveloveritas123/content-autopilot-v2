@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, func
+from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +25,9 @@ class LLMProvider(Base):
     last_test_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     last_test_status: Mapped[Optional[str]] = mapped_column(String(20))  # ok, error
     last_test_error: Mapped[Optional[str]] = mapped_column(String(500))
+    cost_limit_daily_cents: Mapped[int] = mapped_column(Integer, default=500, server_default="500")
+    cost_spent_today_cents: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    cost_reset_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     config: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

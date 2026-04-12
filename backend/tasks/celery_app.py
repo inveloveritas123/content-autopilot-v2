@@ -36,6 +36,10 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.publish_task.publish_scheduled_posts",
         "schedule": 60.0,
     },
+    "reset-daily-costs-midnight": {
+        "task": "tasks.cost_reset_task.reset_daily_costs",
+        "schedule": 86400.0,  # Once per day
+    },
 }
 
 # Explicit task module imports
@@ -47,4 +51,5 @@ celery_app.conf.include = [
     "tasks.ideation_task",
     "tasks.cleanup_task",
     "tasks.publish_task",
+    "tasks.cost_reset_task",
 ]

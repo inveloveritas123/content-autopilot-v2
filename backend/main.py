@@ -35,6 +35,27 @@ async def lifespan(app: FastAPI):
             await session.commit()
             logger.info(f"Default tenant created with API key: {settings.default_tenant_key}")
 
+        # Auto-setup Requesty.ai provider if REQUESTY_API_KEY is set and no providers exist
+        if settings.requesty_api_key and tenant:
+            from models.llm_provider import LLMProvider
+            existing = await session.execute(select(LLMProvider).where(LLMProvider.tenant_id == tenant.id))
+            if not existing.scalars().first():
+                from api.llm_settings import _encrypt_key
+                provider = LLMProvider(
+                    tenant_id=tenant.id,
+                    name="Requesty.ai",
+                    provider_type="requesty",
+                    api_key_encrypted=_encrypt_key(settings.requesty_api_key),
+                    base_url="https://router.requesty.ai/v1",
+                    model_name="google/gemini-2.0-flash-exp",
+                    task_assignment="all",
+                    is_default=True,
+                    is_active=True,
+                )
+                session.add(provider)
+                await session.commit()
+                logger.info("Auto-configured Requesty.ai as default LLM provider")
+
     yield
 
 
