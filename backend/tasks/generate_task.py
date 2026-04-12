@@ -36,7 +36,7 @@ def analyze_item(item_id: str):
         source_type = source.type if source else "youtube"
 
         try:
-            analysis = asyncio.get_event_loop().run_until_complete(
+            analysis = asyncio.run(
                 analyze_transcript(
                     item.transcript_text,
                     source_type=source_type,
@@ -46,7 +46,7 @@ def analyze_item(item_id: str):
 
             if analysis:
                 # Fact check top claims
-                fact_results = asyncio.get_event_loop().run_until_complete(
+                fact_results = asyncio.run(
                     check_facts(analysis.get("key_points", []))
                 )
                 if fact_results:
@@ -110,7 +110,7 @@ def generate_content(item_id: str):
         tone = (tenant.settings or {}).get("tone", "professionell, informativ, mit persoenliche Note")
 
         try:
-            content = asyncio.get_event_loop().run_until_complete(
+            content = asyncio.run(
                 generate_all_content(
                     analysis=item.analysis,
                     title=item.title or "",

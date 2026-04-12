@@ -28,7 +28,7 @@ def update_all_views():
         updated = 0
         for item in items:
             try:
-                meta = asyncio.get_event_loop().run_until_complete(
+                meta = asyncio.run(
                     scrape_video_metadata(item.external_id)
                 )
                 if not meta:
@@ -93,7 +93,7 @@ def update_single_item_views(item_id: str):
         if not item:
             return
 
-        meta = asyncio.get_event_loop().run_until_complete(
+        meta = asyncio.run(
             scrape_video_metadata(item.external_id)
         )
         if not meta:

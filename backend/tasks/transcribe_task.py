@@ -93,7 +93,7 @@ def batch_transcribe(tenant_id: str = None):
             source = session.get(Source, item.source_id)
             channel_name = source.name if source else ""
 
-            transcript_text, source_tag = asyncio.get_event_loop().run_until_complete(
+            transcript_text, source_tag = asyncio.run(
                 get_transcript(
                     video_id=item.external_id,
                     title=item.title or "",

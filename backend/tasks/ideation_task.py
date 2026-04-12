@@ -50,7 +50,7 @@ def auto_generate_ideas(item_id: str):
 
         try:
             # Ideation-Pipeline ausführen
-            ideas_data = asyncio.get_event_loop().run_until_complete(
+            ideas_data = asyncio.run(
                 run_ideation_pipeline(item.analysis)
             )
 
