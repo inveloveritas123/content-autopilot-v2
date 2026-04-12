@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, Integer, Text, DateTime, ForeignKey, UniqueConstraint, Index, func
+from sqlalchemy import String, Integer, Boolean, Text, DateTime, ForeignKey, UniqueConstraint, Index, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -34,6 +34,7 @@ class SourceItem(Base):
     channel_name: Mapped[Optional[str]] = mapped_column(String(255))
     audio_url: Mapped[Optional[str]] = mapped_column(String(500))
     content_type: Mapped[Optional[str]] = mapped_column(String(50))  # video, article, podcast
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     transcript_text: Mapped[Optional[str]] = mapped_column(Text)
     transcript_source: Mapped[Optional[str]] = mapped_column(String(50))
     analysis: Mapped[Optional[dict]] = mapped_column(JSONB)

@@ -2,11 +2,13 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
 from models.tenant import Tenant
+from models.source import Source
 from models.source_item import SourceItem
 from tasks.transcribe_task import transcribe_item, batch_transcribe
 from tasks.generate_task import analyze_item, generate_content
@@ -19,6 +21,9 @@ router = APIRouter()
 async def list_items(
     status: Optional[str] = None,
     source_id: Optional[str] = None,
+    source_type: Optional[str] = None,
+    archived: Optional[str] = None,
+    sort: Optional[str] = "date_desc",
     limit: int = Query(50, le=200),
     offset: int = 0,
     tenant: Tenant = Depends(get_tenant),
@@ -29,8 +34,20 @@ async def list_items(
         query = query.where(SourceItem.status == status)
     if source_id:
         query = query.where(SourceItem.source_id == uuid.UUID(source_id))
+    if source_type:
+        source_ids_q = select(Source.id).where(Source.tenant_id == tenant.id, Source.type == source_type)
+        query = query.where(SourceItem.source_id.in_(source_ids_q))
+    if archived == "true":
+        query = query.where(SourceItem.is_archived == True)
+    elif archived != "all":
+        query = query.where(SourceItem.is_archived == False)
 
-    query = query.order_by(SourceItem.created_at.desc()).offset(offset).limit(limit)
+    if sort == "date_asc":
+        query = query.order_by(SourceItem.created_at.asc())
+    else:
+        query = query.order_by(SourceItem.created_at.desc())
+
+    query = query.offset(offset).limit(limit)
     result = await db.execute(query)
     items = result.scalars().all()
 
@@ -44,6 +61,8 @@ async def list_items(
             "published_at": i.published_at.isoformat() if i.published_at else None,
             "thumbnail_url": i.thumbnail_url,
             "status": i.status,
+            "content_type": i.content_type,
+            "is_archived": i.is_archived,
             "transcript_source": i.transcript_source,
             "has_analysis": i.analysis is not None,
             "trend_score": i.analysis.get("trend_score") if i.analysis else None,
@@ -56,6 +75,56 @@ async def list_items(
         }
         for i in items
     ]
+
+
+class ItemUpdate(BaseModel):
+    is_archived: Optional[bool] = None
+    status: Optional[str] = None
+
+
+@router.patch("/items/{item_id}")
+async def update_item(
+    item_id: str,
+    data: ItemUpdate,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    item = await db.get(SourceItem, uuid.UUID(item_id))
+    if not item or item.tenant_id != tenant.id:
+        raise HTTPException(404, "Item not found")
+    if data.is_archived is not None:
+        item.is_archived = data.is_archived
+    if data.status is not None:
+        item.status = data.status
+    await db.commit()
+    return {"updated": True}
+
+
+class BulkArchiveRequest(BaseModel):
+    source_id: Optional[str] = None
+    item_ids: Optional[list[str]] = None
+
+
+@router.post("/items/bulk-archive")
+async def bulk_archive(
+    data: BulkArchiveRequest,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    if data.item_ids:
+        ids = [uuid.UUID(i) for i in data.item_ids]
+        stmt = update(SourceItem).where(
+            SourceItem.id.in_(ids), SourceItem.tenant_id == tenant.id
+        ).values(is_archived=True)
+    elif data.source_id:
+        stmt = update(SourceItem).where(
+            SourceItem.source_id == uuid.UUID(data.source_id), SourceItem.tenant_id == tenant.id
+        ).values(is_archived=True)
+    else:
+        raise HTTPException(400, "source_id or item_ids required")
+    result = await db.execute(stmt)
+    await db.commit()
+    return {"archived": result.rowcount}
 
 
 @router.get("/items/{item_id}")
