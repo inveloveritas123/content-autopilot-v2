@@ -1,17 +1,118 @@
+"""
+Content Generator — Erstellt LinkedIn-Posts, Blog-Drafts und Newsletter-Snippets.
+
+WICHTIG: Zwei Modi:
+1. QUICK MODE (bestehend): Direkt aus Analyse → Post (fuer schnelle Entwuerfe)
+2. DIALOG MODE (neu): Aus Analyse + Unternehmer-Antworten → authentischer Post
+
+Der Dialog-Mode ist der Kern des Kunden-Konzepts:
+"Ein KI-System, das dem Unternehmer nicht das Denken abnimmt — sondern die Arbeit."
+"""
 import logging
 from typing import Optional
 
 from services.llm import llm_service
+from services.brand_voice import format_voice_for_prompt
 
 logger = logging.getLogger(__name__)
 
+
+# ── DIALOG MODE: Post aus Unternehmer-Antworten ─────────────────────────────
+
+DIALOG_POST_SYSTEM = """Du bist ein LinkedIn-Ghostwriter der im Namen eines Unternehmers schreibt.
+
+DEINE AUFGABE: Aus den Antworten des Unternehmers einen authentischen LinkedIn-Post erstellen.
+Der Post muss klingen als haette der Unternehmer ihn SELBST geschrieben.
+
+REGELN:
+- Nutze die WORTE und FORMULIERUNGEN des Unternehmers wo moeglich
+- Ergaenze Struktur und Feinschliff, aber veraendere nicht die Kernaussage
+- Hook muss in den ersten 2 Zeilen zum Weiterlesen motivieren
+- Kein "Ich habe kuerzlich ein spannendes Video gesehen" — die Quelle ist unsichtbar
+- Der Post steht fuer sich allein, ohne Bezug zum Quell-Video
+- Laenge: 150-300 Woerter (je nach Inhalt)
+- Am Ende: 3-5 relevante Hashtags
+- Kein Emoji-Spam (max 2-3 wenn passend)
+
+STRUKTUR-OPTIONEN (waehle passend zum Angle):
+- Hook → Story → Erkenntnis → CTA
+- Hook → These → Begruendung → Gegenargument → Fazit → CTA
+- Hook → 3 Punkte → Zusammenfassung → CTA
+- Hook → Frage → Persoenliche Antwort → CTA
+
+Schreibe NUR den fertigen Post, keine Erklaerungen."""
+
+
+async def generate_linkedin_post_from_dialog(
+    idea: dict,
+    answers: list[dict],
+    analysis: dict,
+    voice_profile: dict = None,
+    variants: int = 2,
+) -> Optional[list[str]]:
+    """Generiere LinkedIn-Post-Varianten aus Unternehmer-Antworten.
+
+    Dies ist der KERN des dialogischen Workflows.
+    """
+    # Brand Voice Kontext aufbauen
+    voice_context = ""
+    if voice_profile:
+        voice_context = f"\n\nBRAND VOICE DES UNTERNEHMERS:\n{format_voice_for_prompt(voice_profile)}"
+
+    # Antworten formatieren
+    qa_block = "\n".join(
+        f"Frage: {a.get('question_text', a.get('question', ''))}\nAntwort: {a.get('answer_text', a.get('answer', ''))}"
+        for a in answers
+    )
+
+    prompt = f"""Erstelle {variants} verschiedene LinkedIn-Post-Varianten.
+
+CONTENT-IDEE:
+Titel: {idea.get('title', '')}
+Angle: {idea.get('angle', '')}
+Hook-Vorschlag: {idea.get('hook_suggestion', '')}
+
+ANTWORTEN DES UNTERNEHMERS:
+{qa_block}
+
+HINTERGRUND (aus Video-Analyse, NICHT im Post erwaehnen):
+{analysis.get('summary', '')}
+Kernaussagen: {', '.join(analysis.get('key_points', [])[:3])}
+{voice_context}
+
+Trenne die {variants} Varianten mit "---VARIANTE---".
+Jede Variante ist ein komplett eigenstaendiger Post."""
+
+    try:
+        result = await llm_service.complete(
+            prompt=prompt,
+            system=DIALOG_POST_SYSTEM,
+            model="claude-sonnet",
+        )
+        # Varianten aufteilen
+        posts = [v.strip() for v in result.split("---VARIANTE---") if v.strip()]
+        if not posts:
+            posts = [result.strip()]
+        logger.info(f"Generated {len(posts)} LinkedIn post variants from dialog")
+        return posts
+    except Exception as e:
+        logger.error(f"Dialog post generation failed: {e}")
+        return None
+
+
+# ── QUICK MODE: Direkt aus Analyse (bestehende Funktionalitaet) ─────────────
 
 async def generate_linkedin_post(
     analysis: dict,
     title: str,
     tone: str = "professionell, informativ, mit persoenlicher Note",
+    voice_profile: dict = None,
 ) -> Optional[str]:
-    """Generate a LinkedIn post from video analysis."""
+    """Generate a LinkedIn post from video analysis (Quick Mode)."""
+    voice_context = ""
+    if voice_profile:
+        voice_context = f"\nBrand Voice:\n{format_voice_for_prompt(voice_profile)}"
+
     prompt = f"""Erstelle einen LinkedIn-Post basierend auf diesem Video-Summary.
 
 Video-Titel: {title}
@@ -23,6 +124,7 @@ Laenge: 150-250 Woerter
 Struktur: Hook -> Kernaussage -> Einordnung -> CTA
 Hashtags: 3-5 relevante
 Sprache: Deutsch
+{voice_context}
 
 Schreibe NUR den fertigen Post, keine Erklaerungen."""
 
@@ -38,8 +140,13 @@ async def generate_blog_draft(
     title: str,
     transcript_text: str = "",
     tone: str = "professionell, informativ",
+    voice_profile: dict = None,
 ) -> Optional[str]:
     """Generate a blog article draft from video analysis."""
+    voice_context = ""
+    if voice_profile:
+        voice_context = f"\nBrand Voice:\n{format_voice_for_prompt(voice_profile)}"
+
     prompt = f"""Erstelle einen Blog-Artikel-Entwurf basierend auf diesem Video.
 
 Video-Titel: {title}
@@ -55,6 +162,7 @@ Laenge: 500-800 Woerter
 Struktur: Titel -> Einleitung -> 3 Hauptpunkte -> Fazit -> CTA
 SEO: Meta-Description + 3 Keywords vorschlagen (am Ende als JSON-Block)
 Sprache: Deutsch
+{voice_context}
 
 Schreibe den kompletten Artikel."""
 
@@ -96,10 +204,11 @@ async def generate_all_content(
     transcript_text: str = "",
     video_url: str = "",
     tone: str = "professionell, informativ, mit persoenlicher Note",
+    voice_profile: dict = None,
 ) -> dict[str, Optional[str]]:
-    """Generate content for all channels."""
-    linkedin = await generate_linkedin_post(analysis, title, tone)
-    blog = await generate_blog_draft(analysis, title, transcript_text, tone)
+    """Generate content for all channels (Quick Mode)."""
+    linkedin = await generate_linkedin_post(analysis, title, tone, voice_profile)
+    blog = await generate_blog_draft(analysis, title, transcript_text, tone, voice_profile)
     newsletter = await generate_newsletter_snippet(analysis, title, video_url)
 
     return {
