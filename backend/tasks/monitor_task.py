@@ -8,14 +8,14 @@ from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from models.source import Source
 from models.source_item import SourceItem
-from services.rss_monitor import check_source_for_new_items
+from services.source_adapters import check_source_for_new_items
 
 logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="tasks.monitor_task.monitor_all_sources")
 def monitor_all_sources():
-    """Check all active sources for new items."""
+    """Check all active sources for new items — supports YouTube, RSS, Podcast."""
     with sync_session_factory() as session:
         sources = session.execute(
             select(Source).where(Source.is_active == True)
@@ -30,7 +30,7 @@ def monitor_all_sources():
                 ).scalars().all()
                 existing_ids = set(existing)
 
-                # Fetch new items
+                # Fetch new items via Adapter Pattern
                 new_items = asyncio.get_event_loop().run_until_complete(
                     check_source_for_new_items(source, existing_ids)
                 )
@@ -46,6 +46,12 @@ def monitor_all_sources():
                         thumbnail_url=item_data.get("thumbnail_url"),
                         status="new",
                     )
+                    # RSS-Artikel haben content_text direkt beim Fetch
+                    if item_data.get("content_text"):
+                        item.transcript_text = item_data["content_text"]
+                        item.transcript_source = f"{source.type}_feed"
+                        item.status = "transcribed"
+
                     session.add(item)
 
                 source.last_checked_at = datetime.utcnow()
@@ -62,11 +68,17 @@ def monitor_all_sources():
                             )
                         ).scalar_one_or_none()
                         if result:
-                            from tasks.transcribe_task import transcribe_item
-                            transcribe_item.delay(str(result.id))
+                            if result.status == "transcribed":
+                                # RSS/Text-Quellen: direkt analysieren (kein Transkript nötig)
+                                from tasks.generate_task import analyze_item
+                                analyze_item.delay(str(result.id))
+                            else:
+                                # YouTube/Podcast: erst transkribieren
+                                from tasks.transcribe_task import transcribe_item
+                                transcribe_item.delay(str(result.id))
 
             except Exception as e:
-                logger.error(f"Error monitoring source {source.name}: {e}")
+                logger.error(f"Error monitoring source {source.name} (type={source.type}): {e}")
                 session.rollback()
 
         logger.info(f"Monitoring complete: {total_new} new items from {len(sources)} sources")
@@ -102,10 +114,14 @@ def check_single_source(source_id: str):
                 thumbnail_url=item_data.get("thumbnail_url"),
                 status="new",
             )
+            if item_data.get("content_text"):
+                item.transcript_text = item_data["content_text"]
+                item.transcript_source = f"{source.type}_feed"
+                item.status = "transcribed"
             session.add(item)
 
         source.last_checked_at = datetime.utcnow()
         session.commit()
 
-        logger.info(f"Source '{source.name}': {len(new_items)} new items")
+        logger.info(f"Source '{source.name}' ({source.type}): {len(new_items)} new items")
         return {"new_items": len(new_items)}
