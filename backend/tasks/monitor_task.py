@@ -44,6 +44,8 @@ def monitor_all_sources():
                         url=item_data.get("url"),
                         published_at=item_data.get("published_at"),
                         thumbnail_url=item_data.get("thumbnail_url"),
+                        audio_url=item_data.get("audio_url"),
+                        content_type=item_data.get("content_type"),
                         status="new",
                     )
                     # RSS-Artikel haben content_text direkt beim Fetch
@@ -112,6 +114,8 @@ def check_single_source(source_id: str):
                 url=item_data.get("url"),
                 published_at=item_data.get("published_at"),
                 thumbnail_url=item_data.get("thumbnail_url"),
+                audio_url=item_data.get("audio_url"),
+                content_type=item_data.get("content_type"),
                 status="new",
             )
             if item_data.get("content_text"):

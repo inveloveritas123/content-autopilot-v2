@@ -78,7 +78,7 @@ async def get_youtube_transcript(video_id: str, languages: list[str] = None) -> 
 
 
 # ═══════════════════════════════════════════════════
-# GEMINI AUDIO API TRANSCRIPTION
+# GEMINI AUDIO API TRANSCRIPTION (via LiteLLM Proxy)
 # ═══════════════════════════════════════════════════
 
 async def transcribe_with_gemini_audio(
@@ -86,119 +86,95 @@ async def transcribe_with_gemini_audio(
     language: str = "de",
     max_duration_hours: float = 3.0,
 ) -> Optional[str]:
-    """Transkribiere Audio/Video via Gemini Flash 2.0 Audio-API.
+    """Transkribiere Audio via Gemini Flash 2.0 durch den LiteLLM-Proxy.
 
     Gemini Flash 2.0 kann Audio direkt verarbeiten:
     - 1M Token Kontextfenster = ~8 Stunden Audio
     - Kosten: ~$0,50 pro Stunde Audio
     - Unterstützt: mp3, wav, m4a, ogg, flac, webm
 
-    Args:
-        audio_url: URL der Audio-Datei
-        language: Sprache für Transkription
-        max_duration_hours: Maximale Dauer in Stunden
+    Nutzt den LiteLLM-Proxy (OpenAI-kompatibles Chat-Format mit Audio-Part).
     """
+    import base64
+    from config import settings
+
     try:
-        import google.generativeai as genai
-        from config import settings
-
-        if not settings.gemini_api_key:
-            logger.error("GEMINI_API_KEY not set — cannot use Gemini Audio API")
-            return None
-
-        genai.configure(api_key=settings.gemini_api_key)
-
         # Audio herunterladen
         logger.info(f"Downloading audio from {audio_url}")
-        async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=180, follow_redirects=True) as client:
             resp = await client.get(audio_url)
             resp.raise_for_status()
             audio_data = resp.content
 
-        # Dateigröße prüfen (Gemini Limit: ~20MB inline, größer via Files API)
         size_mb = len(audio_data) / (1024 * 1024)
         logger.info(f"Audio downloaded: {size_mb:.1f} MB")
 
-        if size_mb > 20:
-            # Für große Dateien: Gemini Files API verwenden
-            return await _transcribe_large_audio_gemini(audio_data, language)
-        else:
-            # Inline-Transkription für kleinere Dateien
-            return await _transcribe_inline_audio_gemini(audio_data, language)
+        if size_mb > 100:
+            logger.error(f"Audio too large ({size_mb:.0f} MB), skipping")
+            return None
 
-    except ImportError:
-        logger.error("google-generativeai not installed")
+        audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+
+        # Detect MIME type from URL
+        mime_type = "audio/mpeg"
+        url_lower = audio_url.lower()
+        if ".m4a" in url_lower:
+            mime_type = "audio/mp4"
+        elif ".wav" in url_lower:
+            mime_type = "audio/wav"
+        elif ".ogg" in url_lower:
+            mime_type = "audio/ogg"
+
+        prompt = (
+            f"Transkribiere das folgende Audio vollstaendig und woertlich auf "
+            f"{'Deutsch' if language == 'de' else language.upper()}.\n"
+            f"Gib NUR den transkribierten Text zurueck, ohne Zeitstempel, "
+            f"ohne Sprecherbezeichnungen. Behalte natuerliche Absaetze bei."
+        )
+
+        # Call via LiteLLM Proxy (OpenAI-compatible)
+        api_url = f"{settings.litellm_base_url}/chat/completions"
+        payload = {
+            "model": "google/gemini-2.0-flash",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "input_audio",
+                            "input_audio": {
+                                "data": audio_b64,
+                                "format": mime_type.split("/")[-1],
+                            },
+                        },
+                    ],
+                }
+            ],
+            "max_tokens": 100000,
+        }
+
+        async with httpx.AsyncClient(timeout=300) as client:
+            resp = await client.post(
+                api_url,
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {settings.litellm_api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            resp.raise_for_status()
+            result = resp.json()
+
+        text = result["choices"][0]["message"]["content"]
+        if text:
+            logger.info(f"Gemini audio transcription via LiteLLM: {len(text)} chars")
+            return text
         return None
+
     except Exception as e:
         logger.error(f"Gemini Audio transcription failed: {e}")
         return None
-
-
-async def _transcribe_inline_audio_gemini(audio_data: bytes, language: str) -> Optional[str]:
-    """Transkribiere kleine Audio-Dateien inline mit Gemini."""
-    import google.generativeai as genai
-
-    model = genai.GenerativeModel("gemini-2.0-flash")
-
-    prompt = f"""Transkribiere das folgende Audio vollständig und wörtlich auf {language.upper()}.
-Gib NUR den transkribierten Text zurück, ohne Zeitstempel, ohne Sprecherbezeichnungen.
-Behalte natürliche Absätze bei."""
-
-    # Gemini kann Audio als inline_data verarbeiten
-    import base64
-    audio_b64 = base64.b64encode(audio_data).decode("utf-8")
-
-    response = model.generate_content([
-        prompt,
-        {"inline_data": {"mime_type": "audio/mpeg", "data": audio_b64}},
-    ])
-
-    if response.text:
-        logger.info(f"Gemini inline transcription: {len(response.text)} chars")
-        return response.text
-    return None
-
-
-async def _transcribe_large_audio_gemini(audio_data: bytes, language: str) -> Optional[str]:
-    """Transkribiere große Audio-Dateien via Gemini Files API."""
-    import google.generativeai as genai
-
-    # Temporäre Datei erstellen und hochladen
-    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-        f.write(audio_data)
-        temp_path = f.name
-
-    try:
-        uploaded = genai.upload_file(temp_path, mime_type="audio/mpeg")
-        logger.info(f"Uploaded to Gemini Files API: {uploaded.name}")
-
-        # Warten bis Datei verarbeitet ist
-        import time
-        while uploaded.state.name == "PROCESSING":
-            time.sleep(2)
-            uploaded = genai.get_file(uploaded.name)
-
-        if uploaded.state.name != "ACTIVE":
-            logger.error(f"File upload failed: {uploaded.state.name}")
-            return None
-
-        model = genai.GenerativeModel("gemini-2.0-flash")
-        prompt = f"""Transkribiere das Audio vollständig und wörtlich auf {language.upper()}.
-Gib NUR den transkribierten Text zurück."""
-
-        response = model.generate_content([prompt, uploaded])
-
-        # Aufräumen
-        genai.delete_file(uploaded.name)
-
-        if response.text:
-            logger.info(f"Gemini Files API transcription: {len(response.text)} chars")
-            return response.text
-        return None
-
-    finally:
-        import os
-        os.unlink(temp_path)
 
 
 # ═══════════════════════════════════════════════════

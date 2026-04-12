@@ -8,14 +8,14 @@ from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from models.source_item import SourceItem
 from models.source import Source
-from services.transcription import get_youtube_transcript as get_transcript
+from services.transcription import get_youtube_transcript as get_transcript, transcribe_content
 
 logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="tasks.transcribe_task.transcribe_item")
 def transcribe_item(item_id: str):
-    """Transcribe a single source item."""
+    """Transcribe a single source item — supports YouTube and Podcast."""
     with sync_session_factory() as session:
         item = session.get(SourceItem, item_id)
         if not item:
@@ -28,38 +28,33 @@ def transcribe_item(item_id: str):
         session.commit()
 
         source = session.get(Source, item.source_id)
-        channel_name = source.name if source else ""
+        source_type = source.type if source else "youtube"
 
-        transcript_text, source_tag = asyncio.get_event_loop().run_until_complete(
-            get_transcript(
-                video_id=item.external_id,
-                title=item.title or "",
-                channel_name=channel_name,
-                published_at=item.published_at,
+        # Route to unified transcription interface
+        transcript_text = asyncio.run(
+            transcribe_content(
+                source_type=source_type,
+                external_id=item.external_id,
+                url=item.url or "",
+                audio_url=item.audio_url or (item.url if source_type == "podcast" else ""),
+                language=source.language if source else "de",
+                content_text=item.transcript_text or "",
             )
         )
 
         if transcript_text:
             item.transcript_text = transcript_text
-            item.transcript_source = source_tag
+            item.transcript_source = f"{source_type}_api"
             item.status = "transcribed"
             session.commit()
-            # Auto-chain: analyze + generate content
-            from tasks.generate_task import analyze_item, generate_content
+            # Auto-chain: analyze
+            from tasks.generate_task import analyze_item
             analyze_item.delay(item_id)
-            return {"item_id": item_id, "status": "transcribed", "source": source_tag}
-        elif source_tag in ("rate_limited", "proxy_offline"):
-            item.status = "new"
-            session.commit()
-            return {"item_id": item_id, "status": source_tag}
-        elif source_tag in ("no_subs", "no_speech"):
-            item.status = "needs_voicescriptor"
-            session.commit()
-            return {"item_id": item_id, "status": source_tag}
+            return {"item_id": item_id, "status": "transcribed", "source": f"{source_type}_api"}
         else:
             item.status = "needs_voicescriptor"
             session.commit()
-            return {"item_id": item_id, "status": source_tag or "failed"}
+            return {"item_id": item_id, "status": "failed"}
 
 
 @celery_app.task(name="tasks.transcribe_task.batch_transcribe")

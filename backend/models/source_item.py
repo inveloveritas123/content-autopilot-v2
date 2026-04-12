@@ -32,6 +32,8 @@ class SourceItem(Base):
     view_history: Mapped[Optional[dict]] = mapped_column(JSONB)  # {"2026-04-01T12:00": 1234, ...}
     keywords: Mapped[Optional[list]] = mapped_column(JSONB)
     channel_name: Mapped[Optional[str]] = mapped_column(String(255))
+    audio_url: Mapped[Optional[str]] = mapped_column(String(500))
+    content_type: Mapped[Optional[str]] = mapped_column(String(50))  # video, article, podcast
     transcript_text: Mapped[Optional[str]] = mapped_column(Text)
     transcript_source: Mapped[Optional[str]] = mapped_column(String(50))
     analysis: Mapped[Optional[dict]] = mapped_column(JSONB)
