@@ -79,7 +79,7 @@ export default function LLMSettings() {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [testingId, setTestingId] = useState(null)
-  const [form, setForm] = useState({ name: '', provider_type: 'litellm', api_key: '', base_url: '', model_name: '', task_assignment: 'all' })
+  const [form, setForm] = useState({ name: '', provider_type: 'requesty', api_key: '', base_url: 'https://router.eu.requesty.ai/v1', model_name: '', task_assignment: 'all' })
   const [showKey, setShowKey] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -171,6 +171,32 @@ export default function LLMSettings() {
           ))}
         </div>
       )}
+
+      {/* Cost Dashboard */}
+      {providers.some(p => p.cost_limit_daily_cents > 0) && (() => {
+        const defaultProvider = providers.find(p => p.is_default) || providers[0]
+        if (!defaultProvider) return null
+        const spent = defaultProvider.cost_spent_today_cents || 0
+        const limit = defaultProvider.cost_limit_daily_cents || 500
+        const pct = Math.min((spent / limit) * 100, 100)
+        const isWarning = pct >= 80
+        const isBlocked = pct >= 100
+        return (
+          <div className={`mt-4 p-4 rounded-xl border ${isBlocked ? 'bg-red-50 border-red-200' : isWarning ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-ink">Tageskosten</span>
+              <span className={`text-xs font-bold ${isBlocked ? 'text-red-600' : isWarning ? 'text-amber-600' : 'text-ink'}`}>
+                {(spent / 100).toFixed(2)} / {(limit / 100).toFixed(2)} EUR
+              </span>
+            </div>
+            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${isBlocked ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-primary-500'}`}
+                style={{ width: `${pct}%` }} />
+            </div>
+            {isBlocked && <p className="text-[11px] text-red-600 mt-1 font-medium">TAGESLIMIT ERREICHT — keine LLM-Calls bis Mitternacht</p>}
+          </div>
+        )
+      })()}
 
       {showAdd && (
         <div className="mt-4 bg-white rounded-xl border border-primary-200 p-5">

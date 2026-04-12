@@ -140,6 +140,13 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      {/* LLM Provider Management — prominent position */}
+      <Card>
+        <CardContent>
+          <LLMSettings />
+        </CardContent>
+      </Card>
+
       {/* YouTube API Key */}
       <Card>
         <CardHeader><CardTitle>YouTube API</CardTitle></CardHeader>
@@ -277,12 +284,6 @@ export default function Settings() {
         </div>
       </Dialog>
 
-      {/* LLM Provider Management */}
-      <Card className="mt-6">
-        <CardContent>
-          <LLMSettings />
-        </CardContent>
-      </Card>
     </div>
   )
 }
