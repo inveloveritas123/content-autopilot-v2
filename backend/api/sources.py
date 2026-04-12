@@ -1,8 +1,11 @@
 import uuid
+import asyncio
+import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +17,8 @@ from services.youtube_search import search_youtube_channels, search_youtube_vide
 from services.rss_monitor import fetch_all_channel_videos
 from services.transcript_sync import scan_existing_transcripts
 from models.source_item import SourceItem
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -119,6 +124,60 @@ async def search_videos(
     """Search YouTube for videos by keywords. Returns top 20 results."""
     videos = await search_youtube_videos(data.query, max_results=20)
     return videos
+
+
+@router.get("/sources/discover")
+async def discover_sources_route(
+    topics: str = Query(..., description="Comma-separated topic keywords"),
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Discover relevant sources (YouTube channels, podcasts, websites) for given topics."""
+    keywords = [t.strip() for t in topics.split(",") if t.strip()]
+    if not keywords:
+        raise HTTPException(400, "topics parameter is required")
+
+    result = await db.execute(select(Source.channel_id, Source.url).where(Source.tenant_id == tenant.id))
+    existing = result.all()
+    existing_channel_ids = {r.channel_id for r in existing if r.channel_id}
+    existing_urls = {r.url for r in existing if r.url}
+
+    youtube_task = search_youtube_channels(" ".join(keywords[:3]), max_results=8)
+    podcast_task = _search_podcasts(keywords, max_results=8)
+    website_task = _suggest_websites_via_llm(keywords)
+
+    youtube_results, podcast_results, website_results = await asyncio.gather(
+        youtube_task, podcast_task, website_task, return_exceptions=True
+    )
+
+    if isinstance(youtube_results, Exception):
+        logger.warning(f"YouTube discover failed: {youtube_results}")
+        youtube_results = []
+    if isinstance(podcast_results, Exception):
+        logger.warning(f"Podcast discover failed: {podcast_results}")
+        podcast_results = []
+    if isinstance(website_results, Exception):
+        logger.warning(f"Website discover failed: {website_results}")
+        website_results = []
+
+    for ch in youtube_results:
+        ch["already_added"] = ch.get("channel_id", "") in existing_channel_ids
+
+    for p in podcast_results:
+        feed = p.get("feed_url", "") or ""
+        url = p.get("url", "") or ""
+        p["already_added"] = feed in existing_urls or url in existing_urls
+
+    for w in website_results:
+        url = w.get("url", "") or ""
+        w["already_added"] = url in existing_urls
+
+    return {
+        "topics": keywords,
+        "youtube": youtube_results,
+        "podcasts": podcast_results,
+        "websites": website_results,
+    }
 
 
 @router.put("/sources/{source_id}")
@@ -277,3 +336,87 @@ async def sync_transcripts(
 
     await db.commit()
     return {"synced": synced, "checked": len(items), "available_transcripts": len(vs_index)}
+
+
+# ── Source Discovery ──────────────────────────────────────────────────
+
+async def _search_podcasts(keywords: List[str], max_results: int = 8) -> list[dict]:
+    """Search Apple iTunes for podcasts matching keywords."""
+    query = " ".join(keywords[:3])
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://itunes.apple.com/search",
+                params={"term": query, "media": "podcast", "limit": max_results, "country": "DE"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        results = []
+        for item in data.get("results", []):
+            results.append({
+                "type": "podcast",
+                "name": item.get("collectionName", ""),
+                "description": item.get("artistName", ""),
+                "thumbnail": item.get("artworkUrl100", ""),
+                "url": item.get("collectionViewUrl", ""),
+                "feed_url": item.get("feedUrl", ""),
+                "episode_count": item.get("trackCount", 0),
+                "genre": item.get("primaryGenreName", ""),
+                "source_type": "podcast",
+                "channel_id": None,
+            })
+        return results
+    except Exception as e:
+        logger.warning(f"Podcast search failed: {e}")
+        return []
+
+
+async def _suggest_websites_via_llm(keywords: List[str]) -> list[dict]:
+    """Use LLM to suggest relevant websites/blogs for given topics."""
+    from services.llm import llm_service
+
+    topic_str = ", ".join(keywords)
+    prompt = f"""Du bist ein Content-Researcher. Empfehle 6 relevante deutschsprachige (oder internationale) Blogs, Webseiten und Newsletter fuer folgende Themen: {topic_str}
+
+Antworte NUR mit einem JSON-Array. Jedes Objekt hat diese Felder:
+- name: Name der Website/des Blogs
+- url: Vollstaendige URL (https://...)
+- description: 1 Satz Beschreibung (auf Deutsch)
+- type: "blog", "news", "newsletter", oder "community"
+
+Beispiel-Format:
+[
+  {{"name": "OMR", "url": "https://omr.com", "description": "Deutschlands groesstes Online-Marketing-Medium", "type": "news"}},
+  ...
+]
+
+Gib nur das JSON-Array zurueck, nichts anderes."""
+
+    try:
+        suggestions = await llm_service.complete_json(prompt, purpose="analysis")
+        if not isinstance(suggestions, list):
+            return []
+        results = []
+        for s in suggestions[:8]:
+            if not isinstance(s, dict):
+                continue
+            url = s.get("url", "")
+            if not url.startswith("http"):
+                continue
+            results.append({
+                "type": "website",
+                "name": s.get("name", ""),
+                "description": s.get("description", ""),
+                "thumbnail": "",
+                "url": url,
+                "feed_url": None,
+                "episode_count": None,
+                "genre": s.get("type", "blog"),
+                "source_type": "website",
+                "channel_id": None,
+            })
+        return results
+    except Exception as e:
+        logger.warning(f"LLM website suggestions failed: {e}")
+        return []

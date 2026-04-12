@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Radio, Rss, Mic, Globe, Plus, RefreshCw, Trash2, Power, Clock, Loader2, Search } from 'lucide-react'
+import { Radio, Rss, Mic, Globe, Plus, RefreshCw, Trash2, Power, Clock, Loader2, Search, Compass, ExternalLink } from 'lucide-react'
 import { useApi } from '../hooks/useApi'
-import { getSources, createSource, updateSource, deleteSource, checkSource, searchChannels } from '../api'
+import { getSources, createSource, updateSource, deleteSource, checkSource, searchChannels, discoverSources } from '../api'
 
 const SOURCE_TYPES = [
   { key: '', label: 'Alle', icon: Radio },
@@ -192,14 +192,216 @@ function AddSourceForm({ type, onAdd, onCancel }) {
   )
 }
 
+function DiscoverCard({ item, onAdd, adding }) {
+  return (
+    <div className="bg-white rounded-xl border border-surface-border hover:border-primary-300 transition-colors p-4 flex items-start gap-3">
+      {item.thumbnail ? (
+        <img src={item.thumbnail} alt="" className="w-11 h-11 rounded-lg object-cover shrink-0"
+          onError={e => { e.target.style.display = 'none' }} />
+      ) : (
+        <div className="w-11 h-11 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+          {item.source_type === 'podcast' ? <Mic className="w-5 h-5 text-gray-400" />
+            : item.source_type === 'website' ? <Globe className="w-5 h-5 text-gray-400" />
+            : <Radio className="w-5 h-5 text-gray-400" />}
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-ink truncate">{item.name}</p>
+        {item.description && <p className="text-xs text-ink-muted mt-0.5 line-clamp-2">{item.description}</p>}
+        <div className="flex items-center gap-2 mt-1">
+          {item.url && (
+            <a href={item.url} target="_blank" rel="noopener noreferrer"
+              className="text-xs text-primary-600 hover:underline flex items-center gap-0.5 truncate max-w-[180px]">
+              <ExternalLink className="w-3 h-3 shrink-0" />
+              <span className="truncate">{item.url.replace(/^https?:\/\//, '')}</span>
+            </a>
+          )}
+          {item.episode_count > 0 && (
+            <span className="text-xs text-ink-muted">{item.episode_count} Eps.</span>
+          )}
+          {item.feed_url && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700">RSS</span>
+          )}
+          {item.genre && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600">{item.genre}</span>
+          )}
+        </div>
+      </div>
+      <div className="shrink-0 mt-0.5">
+        {item.already_added ? (
+          <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700">
+            Hinzugefuegt
+          </span>
+        ) : (
+          <button onClick={() => onAdd(item)} disabled={adding}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800 disabled:opacity-50 transition-colors">
+            {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+            Add
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DiscoverTab({ sources }) {
+  const [topics, setTopics] = useState('')
+  const [results, setResults] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [activeType, setActiveType] = useState('youtube')
+  const [addingKey, setAddingKey] = useState(null)
+
+  const existingChannelIds = new Set((sources || []).map(s => s.channel_id).filter(Boolean))
+  const existingUrls = new Set((sources || []).map(s => s.url).filter(Boolean))
+
+  const handleDiscover = async () => {
+    if (!topics.trim()) return
+    setLoading(true)
+    setResults(null)
+    try {
+      const data = await discoverSources(topics)
+      setResults(data)
+      setActiveType('youtube')
+    } catch (e) {
+      alert('Fehler: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAdd = async (item) => {
+    const key = item.url || item.channel_id
+    setAddingKey(key)
+    try {
+      const data = { name: item.name, language: 'de', auto_process: false }
+      if (item.source_type === 'podcast') {
+        data.type = 'podcast'
+        data.url = item.feed_url || item.url
+      } else if (item.source_type === 'website') {
+        data.type = 'web'
+        data.url = item.url
+      } else {
+        data.type = 'youtube'
+        data.channel_id = item.channel_id
+        data.url = item.url
+      }
+      await createSource(data)
+      setResults(prev => {
+        if (!prev) return prev
+        const listKey = item.source_type === 'podcast' ? 'podcasts'
+          : item.source_type === 'website' ? 'websites' : 'youtube'
+        return {
+          ...prev,
+          [listKey]: prev[listKey].map(i =>
+            (i.channel_id === item.channel_id && i.url === item.url) ? { ...i, already_added: true } : i
+          ),
+        }
+      })
+    } catch (e) {
+      alert('Fehler: ' + e.message)
+    } finally {
+      setAddingKey(null)
+    }
+  }
+
+  const tabs = results ? [
+    { key: 'youtube', label: 'YouTube', count: results.youtube.length },
+    { key: 'podcasts', label: 'Podcasts', count: results.podcasts.length },
+    { key: 'websites', label: 'Webseiten', count: results.websites.length },
+  ] : []
+
+  const currentItems = results
+    ? (activeType === 'youtube' ? results.youtube : activeType === 'podcasts' ? results.podcasts : results.websites)
+    : []
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-white rounded-xl border border-surface-border p-5">
+        <p className="text-sm text-ink-light mb-3">
+          Gib Themen ein — das System sucht passende YouTube-Kanaele, Podcasts und schlaegt Webseiten vor.
+        </p>
+        <div className="flex gap-2">
+          <input
+            value={topics}
+            onChange={e => setTopics(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleDiscover()}
+            placeholder="z.B. KI, LinkedIn Marketing, Handwerk, Digitalisierung KMU"
+            className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          <button onClick={handleDiscover} disabled={loading || !topics.trim()}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800 disabled:opacity-50 transition-colors">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Compass className="w-4 h-4" />}
+            {loading ? 'Suche...' : 'Entdecken'}
+          </button>
+        </div>
+        {results && (
+          <div className="flex gap-2 mt-3 flex-wrap">
+            {results.topics.map(t => (
+              <span key={t} className="px-2 py-0.5 bg-primary-50 text-primary-700 rounded text-xs font-medium">{t}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {loading && (
+        <div className="text-center py-16">
+          <Loader2 className="w-8 h-8 text-primary-600 animate-spin mx-auto mb-3" />
+          <p className="text-sm text-ink-muted">Suche YouTube, Podcasts, generiere Webseiten-Vorschlaege...</p>
+        </div>
+      )}
+
+      {results && !loading && (
+        <>
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+            {tabs.map(t => (
+              <button key={t.key} onClick={() => setActiveType(t.key)}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  activeType === t.key ? 'bg-white text-ink shadow-sm' : 'text-ink-light hover:text-ink'
+                }`}>
+                {t.label}
+                {t.count > 0 && <span className="px-1.5 py-0.5 rounded-full bg-gray-200 text-[10px]">{t.count}</span>}
+              </button>
+            ))}
+          </div>
+
+          {currentItems.length === 0 ? (
+            <div className="text-center py-12 text-ink-muted">
+              <p className="text-sm">Keine Ergebnisse fuer diesen Typ.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {currentItems.map((item, i) => (
+                <DiscoverCard
+                  key={item.channel_id || item.url || i}
+                  item={item}
+                  onAdd={handleAdd}
+                  adding={addingKey === (item.url || item.channel_id)}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {!results && !loading && (
+        <div className="text-center py-16">
+          <Compass className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-sm text-ink-light">Themen eingeben und auf "Entdecken" klicken</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function SourceList() {
   const { data: sources, loading, refetch } = useApi(getSources)
-  const [activeTab, setActiveTab] = useState('')
+  const [mainTab, setMainTab] = useState('sources')
+  const [activeTypeTab, setActiveTypeTab] = useState('')
   const [addingType, setAddingType] = useState(null)
   const [checkingId, setCheckingId] = useState(null)
 
-  const filtered = activeTab
-    ? (sources || []).filter(s => s.type === activeTab)
+  const filtered = activeTypeTab
+    ? (sources || []).filter(s => s.type === activeTypeTab)
     : (sources || [])
 
   const counts = {}
@@ -244,59 +446,81 @@ export default function SourceList() {
           <h1 className="text-xl font-bold text-ink">Quellen</h1>
           <p className="text-sm text-ink-light mt-0.5">{(sources || []).length} Quellen, {(sources || []).filter(s => s.is_active).length} aktiv</p>
         </div>
-        <div className="relative">
-          <button onClick={() => setAddingType(activeTab || 'youtube')}
+        {mainTab === 'sources' && (
+          <button onClick={() => setAddingType(activeTypeTab || 'youtube')}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800 transition-colors">
             <Plus className="w-4 h-4" /> Quelle hinzufuegen
           </button>
-        </div>
+        )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 mb-5 overflow-x-auto">
-        {SOURCE_TYPES.map(t => {
-          const count = t.key ? (counts[t.key] || 0) : (sources || []).length
-          return (
-            <button key={t.key} onClick={() => setActiveTab(t.key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
-                activeTab === t.key ? 'bg-white text-ink shadow-sm' : 'text-ink-light hover:text-ink'
-              }`}>
-              <t.icon className="w-3.5 h-3.5" />
-              {t.label}
-              {count > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-gray-200 text-[10px]">{count}</span>}
-            </button>
-          )
-        })}
+      {/* Main Tabs */}
+      <div className="flex gap-1 mb-5 border-b border-gray-200">
+        <button onClick={() => setMainTab('sources')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+            mainTab === 'sources' ? 'border-primary-600 text-primary-700' : 'border-transparent text-ink-muted hover:text-ink'
+          }`}>
+          <Radio className="w-4 h-4" /> Meine Quellen
+        </button>
+        <button onClick={() => setMainTab('discover')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+            mainTab === 'discover' ? 'border-primary-600 text-primary-700' : 'border-transparent text-ink-muted hover:text-ink'
+          }`}>
+          <Compass className="w-4 h-4" /> Quellen entdecken
+        </button>
       </div>
 
-      {/* Add Form */}
-      {addingType && (
-        <AddSourceForm type={addingType} onAdd={handleAdd} onCancel={() => setAddingType(null)} />
+      {mainTab === 'discover' && (
+        <DiscoverTab sources={sources} />
       )}
 
-      {/* Source Cards */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-12">
-          <Radio className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-          <p className="text-sm text-ink-light">Keine Quellen {activeTab ? `vom Typ "${SOURCE_TYPES.find(t => t.key === activeTab)?.label}"` : ''} vorhanden.</p>
-          <button onClick={() => setAddingType(activeTab || 'youtube')} className="mt-2 text-sm text-primary-600 hover:text-primary-700 font-medium">
-            Jetzt hinzufuegen
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filtered.map(source => (
-            <SourceCard
-              key={source.id}
-              source={source}
-              onCheck={handleCheck}
-              onToggle={handleToggle}
-              onDelete={handleDelete}
-              onUpdateInterval={handleUpdateInterval}
-              checking={checkingId === source.id}
-            />
-          ))}
-        </div>
+      {mainTab === 'sources' && (
+        <>
+          {/* Type filter tabs */}
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 mb-5 overflow-x-auto">
+            {SOURCE_TYPES.map(t => {
+              const count = t.key ? (counts[t.key] || 0) : (sources || []).length
+              return (
+                <button key={t.key} onClick={() => setActiveTypeTab(t.key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${
+                    activeTypeTab === t.key ? 'bg-white text-ink shadow-sm' : 'text-ink-light hover:text-ink'
+                  }`}>
+                  <t.icon className="w-3.5 h-3.5" />
+                  {t.label}
+                  {count > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-gray-200 text-[10px]">{count}</span>}
+                </button>
+              )
+            })}
+          </div>
+
+          {addingType && (
+            <AddSourceForm type={addingType} onAdd={handleAdd} onCancel={() => setAddingType(null)} />
+          )}
+
+          {filtered.length === 0 ? (
+            <div className="text-center py-12">
+              <Radio className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-sm text-ink-light">Keine Quellen {activeTypeTab ? `vom Typ "${SOURCE_TYPES.find(t => t.key === activeTypeTab)?.label}"` : ''} vorhanden.</p>
+              <button onClick={() => setAddingType(activeTypeTab || 'youtube')} className="mt-2 text-sm text-primary-600 hover:text-primary-700 font-medium">
+                Jetzt hinzufuegen
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filtered.map(source => (
+                <SourceCard
+                  key={source.id}
+                  source={source}
+                  onCheck={handleCheck}
+                  onToggle={handleToggle}
+                  onDelete={handleDelete}
+                  onUpdateInterval={handleUpdateInterval}
+                  checking={checkingId === source.id}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   )

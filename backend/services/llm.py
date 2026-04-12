@@ -78,7 +78,7 @@ class LLMService:
         for attempt in range(max_retries):
             try:
                 if self._litellm_base_url:
-                    return await self._litellm(prompt, system, model)
+                    return await self._litellm(prompt, system, model, purpose=purpose)
                 elif model.startswith("gemini"):
                     return await self._gemini(prompt, system, model)
                 elif model.startswith("claude"):
@@ -134,7 +134,7 @@ class LLMService:
         response = await self._anthropic.messages.create(**kwargs)
         return response.content[0].text
 
-    async def _litellm(self, prompt: str, system: Optional[str], model: str) -> str:
+    async def _litellm(self, prompt: str, system: Optional[str], model: str, purpose: Optional[str] = None) -> str:
         """Route through configured provider (Requesty.ai or LiteLLM proxy)."""
         from services.provider_resolver import get_active_provider, track_cost, get_model_for_task
 
