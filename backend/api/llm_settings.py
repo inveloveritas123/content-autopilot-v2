@@ -15,8 +15,12 @@ from models.llm_provider import LLMProvider
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
-# Simple encryption key derived from app — in production use env var
-_FERNET_KEY = Fernet.generate_key()
+# Derive stable encryption key from tenant key (survives restarts)
+import base64
+import hashlib
+from config import settings as _app_settings
+_key_material = hashlib.sha256((_app_settings.default_tenant_key + "-llm-encrypt").encode()).digest()
+_FERNET_KEY = base64.urlsafe_b64encode(_key_material)
 _fernet = Fernet(_FERNET_KEY)
 
 
@@ -183,7 +187,7 @@ async def test_provider(
             resp = await client.post(
                 f"{base_url}/chat/completions",
                 json={
-                    "model": provider.model_name or "google/gemini-2.0-flash",
+                    "model": provider.model_name or "vertex/gemini-2.5-flash-lite@europe-central2",
                     "messages": [{"role": "user", "content": "Say hello in one word."}],
                     "max_tokens": 10,
                 },

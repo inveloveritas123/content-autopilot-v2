@@ -30,10 +30,11 @@ PURPOSE_MODEL_MAP = {
     "onboarding": "claude-sonnet",
 }
 
-# Requesty.ai model strings (via LITELLM_BASE_URL)
+# Requesty.ai model strings (direct, EU-region)
 REQUESTY_MODELS = {
-    "gemini-flash": "google/gemini-2.0-flash",
-    "claude-sonnet": "anthropic/claude-sonnet-4-20250514",
+    "gemini-flash": "vertex/gemini-2.5-flash-lite@europe-central2",
+    "claude-sonnet": "bedrock/claude-haiku-4-5@eu-central-1",
+    "gpt-4o-mini": "openai/gpt-4.1-mini",
 }
 
 

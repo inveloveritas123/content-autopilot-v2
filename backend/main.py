@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
                     provider_type="requesty",
                     api_key_encrypted=_encrypt_key(settings.requesty_api_key),
                     base_url="https://router.eu.requesty.ai/v1",
-                    model_name="google/gemini-2.0-flash-exp",
+                    model_name="vertex/gemini-2.5-flash-lite@europe-central2",
                     task_assignment="all",
                     is_default=True,
                     is_active=True,
