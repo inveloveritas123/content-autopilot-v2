@@ -10,7 +10,7 @@ from dependencies import get_db, get_tenant
 from models.tenant import Tenant
 from models.source import Source
 from tasks.monitor_task import check_single_source
-from services.youtube_search import search_youtube_channels
+from services.youtube_search import search_youtube_channels, search_youtube_videos
 from services.rss_monitor import fetch_all_channel_videos
 from services.transcript_sync import scan_existing_transcripts
 from models.source_item import SourceItem
@@ -109,6 +109,16 @@ async def search_channels(
     """Search YouTube for channels. Returns top 10 results."""
     channels = await search_youtube_channels(data.query, max_results=10)
     return channels
+
+
+@router.post("/sources/youtube/search-videos")
+async def search_videos(
+    data: ChannelSearchQuery,
+    tenant: Tenant = Depends(get_tenant),
+):
+    """Search YouTube for videos by keywords. Returns top 20 results."""
+    videos = await search_youtube_videos(data.query, max_results=20)
+    return videos
 
 
 @router.put("/sources/{source_id}")
