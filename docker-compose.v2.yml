@@ -1,0 +1,120 @@
+services:
+  redis-v2:
+    image: redis:7-alpine
+    command: redis-server --databases 4
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+    networks:
+      - cap-v2-net
+
+  backend-v2:
+    build: ./backend
+    privileged: true
+    security_opt:
+      - label=disable
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://autopilot:${DB_PASSWORD}@host.docker.internal:5432/content_autopilot_v2
+      SYNC_DATABASE_URL: postgresql://autopilot:${DB_PASSWORD}@host.docker.internal:5432/content_autopilot_v2
+      REDIS_URL: redis://redis-v2:6379/1
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-}
+      LITELLM_API_KEY: ${LITELLM_API_KEY:-}
+      NEXTCLOUD_URL: ${NEXTCLOUD_URL:-}
+      NEXTCLOUD_USER: ${NEXTCLOUD_USER:-}
+      NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:-}
+      DEFAULT_TENANT_KEY: ${DEFAULT_TENANT_KEY}
+      UVICORN_LOOP: asyncio
+    depends_on:
+      redis-v2:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    networks:
+      - cap-v2-net
+
+  celery-worker-v2:
+    build: ./backend
+    privileged: true
+    security_opt:
+      - label=disable
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: celery -A tasks.celery_app worker -l info -c 2
+    environment:
+      DATABASE_URL: postgresql+asyncpg://autopilot:${DB_PASSWORD}@host.docker.internal:5432/content_autopilot_v2
+      SYNC_DATABASE_URL: postgresql://autopilot:${DB_PASSWORD}@host.docker.internal:5432/content_autopilot_v2
+      REDIS_URL: redis://redis-v2:6379/1
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-}
+      LITELLM_API_KEY: ${LITELLM_API_KEY:-}
+      NEXTCLOUD_URL: ${NEXTCLOUD_URL:-}
+      NEXTCLOUD_USER: ${NEXTCLOUD_USER:-}
+      NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:-}
+    depends_on:
+      redis-v2:
+        condition: service_healthy
+    networks:
+      - cap-v2-net
+
+  celery-beat-v2:
+    build: ./backend
+    privileged: true
+    security_opt:
+      - label=disable
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: celery -A tasks.celery_app beat -l info
+    environment:
+      DATABASE_URL: postgresql+asyncpg://autopilot:${DB_PASSWORD}@host.docker.internal:5432/content_autopilot_v2
+      SYNC_DATABASE_URL: postgresql://autopilot:${DB_PASSWORD}@host.docker.internal:5432/content_autopilot_v2
+      REDIS_URL: redis://redis-v2:6379/1
+    depends_on:
+      redis-v2:
+        condition: service_healthy
+    networks:
+      - cap-v2-net
+
+  mcp-server-v2:
+    build: ./mcp-server
+    privileged: true
+    security_opt:
+      - label=disable
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      BACKEND_URL: http://backend-v2:8000
+      API_KEY: ${DEFAULT_TENANT_KEY}
+      MCP_PORT: "8080"
+    ports:
+      - "${MCP_PORT:-8180}:8080"
+    depends_on:
+      - backend-v2
+    networks:
+      - cap-v2-net
+
+  nginx-v2:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile.v2
+    privileged: true
+    security_opt:
+      - label=disable
+    ports:
+      - "${APP_PORT:-8601}:80"
+    depends_on:
+      - backend-v2
+    networks:
+      - cap-v2-net
+
+networks:
+  cap-v2-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.128.0/20
