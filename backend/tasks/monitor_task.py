@@ -1,8 +1,8 @@
 import logging
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, or_
 
 from tasks.celery_app import celery_app
 from models.base import sync_session_factory
@@ -15,11 +15,25 @@ logger = logging.getLogger(__name__)
 
 @celery_app.task(name="tasks.monitor_task.monitor_all_sources")
 def monitor_all_sources():
-    """Check all active sources for new items — supports YouTube, RSS, Podcast."""
+    """Check sources that are DUE for polling based on their individual interval."""
     with sync_session_factory() as session:
-        sources = session.execute(
+        now = datetime.utcnow()
+        all_sources = session.execute(
             select(Source).where(Source.is_active == True)
         ).scalars().all()
+
+        # Filter to sources that are due for polling
+        sources = []
+        for s in all_sources:
+            interval = timedelta(minutes=s.polling_interval_minutes or 15)
+            if s.last_checked_at is None or (now - s.last_checked_at) >= interval:
+                sources.append(s)
+
+        if not sources:
+            logger.info(f"Monitor: {len(all_sources)} active sources, none due for polling")
+            return {"sources_checked": 0, "new_items": 0}
+
+        logger.info(f"Monitor: {len(sources)}/{len(all_sources)} sources due for polling")
 
         total_new = 0
         for source in sources:

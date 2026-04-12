@@ -16,9 +16,9 @@ celery_app.conf.update(
 
 # Periodic tasks
 celery_app.conf.beat_schedule = {
-    "monitor-sources-every-15min": {
+    "monitor-sources-check-due": {
         "task": "tasks.monitor_task.monitor_all_sources",
-        "schedule": 900.0,
+        "schedule": 60.0,  # Check every minute, but only poll sources that are due
     },
     "update-views-every-3h": {
         "task": "tasks.views_task.update_all_views",
