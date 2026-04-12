@@ -36,6 +36,7 @@ class SourceItem(Base):
     content_type: Mapped[Optional[str]] = mapped_column(String(50))  # video, article, podcast
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     transcript_text: Mapped[Optional[str]] = mapped_column(Text)
+    analysis_summary: Mapped[Optional[str]] = mapped_column(Text)  # Compressed summary for downstream tasks
     transcript_source: Mapped[Optional[str]] = mapped_column(String(50))
     analysis: Mapped[Optional[dict]] = mapped_column(JSONB)
     campaign_match_id: Mapped[Optional[uuid.UUID]] = mapped_column(

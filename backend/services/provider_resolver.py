@@ -62,22 +62,68 @@ def get_active_provider(tenant_id=None, task: str = "all") -> Optional[dict]:
         }
 
 
-def track_cost(provider_id: str, usage: dict):
-    """Track LLM cost from response usage data."""
+# Model-specific pricing (per 1M tokens, in USD)
+MODEL_PRICING = {
+    "vertex/gemini-2.5-flash-lite@europe-central2": {"input": 0.075, "output": 0.30},
+    "bedrock/claude-haiku-4-5@eu-central-1": {"input": 1.00, "output": 5.00},
+    "openai/gpt-4.1-mini": {"input": 0.40, "output": 1.60},
+}
+
+# Task → preferred model mapping
+TASK_MODEL_MAP = {
+    "research": "vertex/gemini-2.5-flash-lite@europe-central2",
+    "analysis": "vertex/gemini-2.5-flash-lite@europe-central2",
+    "transcription": "vertex/gemini-2.5-flash-lite@europe-central2",
+    "ideation": "vertex/gemini-2.5-flash-lite@europe-central2",
+    "voice_profile": "bedrock/claude-haiku-4-5@eu-central-1",
+    "post_finalize": "bedrock/claude-haiku-4-5@eu-central-1",
+    "content_dna": "bedrock/claude-haiku-4-5@eu-central-1",
+    "creative": "bedrock/claude-haiku-4-5@eu-central-1",
+}
+
+
+def get_model_for_task(task: str) -> str:
+    """Get the optimal model for a task type."""
+    return TASK_MODEL_MAP.get(task, "vertex/gemini-2.5-flash-lite@europe-central2")
+
+
+def track_cost(provider_id: str, usage: dict, model: str = "", task_type: str = "unknown", tenant_id=None):
+    """Track LLM cost from response usage data + log the call."""
     if not usage:
         return
 
-    # Estimate cost in cents (rough: $0.075/1M input, $0.30/1M output for Gemini Flash)
     input_tokens = usage.get("prompt_tokens", 0)
     output_tokens = usage.get("completion_tokens", 0)
-    cost_cents = (input_tokens * 0.0000075 + output_tokens * 0.00003) * 100  # Convert to cents
 
-    if cost_cents < 0.01:
-        return
+    # Get model-specific pricing
+    pricing = MODEL_PRICING.get(model, {"input": 0.075, "output": 0.30})
+    cost_usd = (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
+    cost_cents = cost_usd * 100
 
     with sync_session_factory() as session:
-        provider = session.get(LLMProvider, provider_id)
-        if provider:
-            provider.cost_spent_today_cents += max(1, int(cost_cents))
-            session.commit()
-            logger.debug(f"Cost tracked: +{cost_cents:.1f} cents for {provider.name}")
+        # Update provider cost
+        if provider_id:
+            provider = session.get(LLMProvider, provider_id)
+            if provider:
+                provider.cost_spent_today_cents += max(1, int(cost_cents)) if cost_cents >= 0.01 else 0
+                if not tenant_id:
+                    tenant_id = str(provider.tenant_id)
+
+        # Log the call
+        if tenant_id:
+            from models.llm_call_log import LLMCallLog
+            import uuid
+            log = LLMCallLog(
+                tenant_id=uuid.UUID(str(tenant_id)),
+                provider_id=uuid.UUID(str(provider_id)) if provider_id else None,
+                task_type=task_type,
+                model=model,
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
+                cost_cents=round(cost_cents, 4),
+            )
+            session.add(log)
+
+        session.commit()
+        if cost_cents >= 0.1:
+            logger.info(f"LLM cost: {cost_cents:.2f}c ({task_type}, {model}, {input_tokens}+{output_tokens} tokens)")

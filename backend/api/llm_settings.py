@@ -64,6 +64,7 @@ class ProviderUpdate(BaseModel):
     task_assignment: Optional[str] = None
     is_active: Optional[bool] = None
     is_default: Optional[bool] = None
+    cost_limit_daily_cents: Optional[int] = None
 
 
 # Endpoints
@@ -146,9 +147,48 @@ async def update_provider(
         provider.is_active = data.is_active
     if data.is_default is not None:
         provider.is_default = data.is_default
+    if data.cost_limit_daily_cents is not None:
+        provider.cost_limit_daily_cents = max(0, data.cost_limit_daily_cents)
 
     await db.commit()
     return {"updated": True}
+
+
+@router.get("/llm-cost-history")
+async def cost_history(
+    days: int = 7,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get LLM cost history for the last N days."""
+    from datetime import timedelta
+    from models.llm_call_log import LLMCallLog
+    from sqlalchemy import func as sqlfunc
+
+    since = datetime.utcnow() - timedelta(days=days)
+    result = await db.execute(
+        select(
+            sqlfunc.date(LLMCallLog.created_at).label("date"),
+            sqlfunc.sum(LLMCallLog.cost_cents).label("total_cents"),
+            sqlfunc.count(LLMCallLog.id).label("calls"),
+            sqlfunc.sum(LLMCallLog.prompt_tokens).label("input_tokens"),
+            sqlfunc.sum(LLMCallLog.completion_tokens).label("output_tokens"),
+        ).where(
+            LLMCallLog.tenant_id == tenant.id,
+            LLMCallLog.created_at >= since,
+        ).group_by(sqlfunc.date(LLMCallLog.created_at)).order_by(sqlfunc.date(LLMCallLog.created_at))
+    )
+    rows = result.all()
+    return [
+        {
+            "date": str(r.date),
+            "total_cents": round(float(r.total_cents or 0), 2),
+            "calls": r.calls,
+            "input_tokens": r.input_tokens or 0,
+            "output_tokens": r.output_tokens or 0,
+        }
+        for r in rows
+    ]
 
 
 @router.delete("/llm-providers/{provider_id}")

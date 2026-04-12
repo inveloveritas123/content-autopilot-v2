@@ -136,11 +136,12 @@ class LLMService:
 
     async def _litellm(self, prompt: str, system: Optional[str], model: str) -> str:
         """Route through configured provider (Requesty.ai or LiteLLM proxy)."""
-        from services.provider_resolver import get_active_provider, track_cost
+        from services.provider_resolver import get_active_provider, track_cost, get_model_for_task
 
         # Try DB-configured provider first
         task = "analysis" if model in ("gemini-flash",) else "creative" if model in ("claude-sonnet",) else "all"
         provider = get_active_provider(task=task)
+        purpose_task = purpose or task  # For cost tracking
 
         if provider:
             base_url = provider["base_url"]
@@ -179,7 +180,7 @@ class LLMService:
 
             # Track cost if provider from DB
             if provider and data.get("usage"):
-                track_cost(provider["provider_id"], data["usage"])
+                track_cost(provider["provider_id"], data["usage"], model=litellm_model, task_type=purpose_task)
 
             return data["choices"][0]["message"]["content"]
 
