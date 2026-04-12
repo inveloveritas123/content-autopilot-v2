@@ -206,12 +206,13 @@ async def transcribe_content(
         if transcript:
             return transcript
 
-        # Fallback: Gemini Audio API mit YouTube-Video
-        logger.info(f"YouTube captions unavailable for {external_id}, trying Gemini Audio")
-        video_url = f"https://www.youtube.com/watch?v={external_id}"
-        # Note: Gemini kann YouTube-URLs nicht direkt verarbeiten
-        # Hier müsste yt-dlp o.ä. die Audio-URL extrahieren
-        logger.warning(f"Gemini Audio fallback for YouTube not yet implemented for {external_id}")
+        # Fallback: yt-dlp download + Whisper/Gemini transcription
+        logger.info(f"YouTube captions unavailable for {external_id}, trying yt-dlp + Whisper")
+        from services.audio_transcription import transcribe_youtube_video
+        transcript = await transcribe_youtube_video(external_id, language)
+        if transcript:
+            return transcript
+        logger.warning(f"Audio transcription also failed for {external_id}")
         return None
 
     elif source_type == "rss":
