@@ -63,6 +63,9 @@ app.include_router(ideas_router, prefix="/api", tags=["Ideas"])
 app.include_router(feedback_router, prefix="/api", tags=["Feedback"])
 app.include_router(llm_settings_router, prefix="/api", tags=["Settings"])
 
+from api.scheduling import router as scheduling_router
+app.include_router(scheduling_router, prefix="/api", tags=["Scheduling"])
+
 
 @app.get("/api/health")
 async def health():

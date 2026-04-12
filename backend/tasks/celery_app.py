@@ -32,6 +32,10 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.cleanup_task.cleanup_media_files",
         "schedule": 21600.0,
     },
+    "publish-scheduled-posts-every-minute": {
+        "task": "tasks.publish_task.publish_scheduled_posts",
+        "schedule": 60.0,
+    },
 }
 
 # Explicit task module imports
@@ -42,4 +46,5 @@ celery_app.conf.include = [
     "tasks.views_task",
     "tasks.ideation_task",
     "tasks.cleanup_task",
+    "tasks.publish_task",
 ]
