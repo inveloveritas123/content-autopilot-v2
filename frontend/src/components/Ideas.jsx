@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Lightbulb, MessageCircleQuestion, ChevronDown, ChevronUp, Send, Sparkles, Tag, Star, Clock, CheckCircle2, AlertCircle } from 'lucide-react'
-import { getIdeas, getIdea, submitAnswer, generatePost, updateIdea } from '../api'
+import { Lightbulb, MessageCircleQuestion, ChevronDown, ChevronUp, Send, Sparkles, Tag, Star, Clock, CheckCircle2, AlertCircle, Plus, Loader2 } from 'lucide-react'
+import { getIdeas, getIdea, submitAnswer, generatePost, updateIdea, getItems, generateIdeas } from '../api'
 
 const STATUS_MAP = {
   new: { label: 'Neu', color: 'bg-blue-100 text-blue-700', icon: Lightbulb },
@@ -266,6 +266,10 @@ export default function Ideas() {
   const [error, setError] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
   const [filter, setFilter] = useState('')
+  const [showGenerate, setShowGenerate] = useState(false)
+  const [analyzedItems, setAnalyzedItems] = useState([])
+  const [selectedItemId, setSelectedItemId] = useState('')
+  const [generating, setGenerating] = useState(false)
 
   useEffect(() => { loadIdeas() }, [filter])
 
@@ -280,6 +284,30 @@ export default function Ideas() {
       setError(e.message)
     }
     setLoading(false)
+  }
+
+  async function openGeneratePanel() {
+    setShowGenerate(true)
+    try {
+      const items = await getItems({ status: 'analyzed' })
+      setAnalyzedItems(Array.isArray(items) ? items : [])
+    } catch (e) {
+      setError('Konnte analysierte Videos nicht laden: ' + e.message)
+    }
+  }
+
+  async function handleGenerateIdeas() {
+    if (!selectedItemId) return
+    setGenerating(true)
+    try {
+      await generateIdeas(selectedItemId)
+      setShowGenerate(false)
+      setSelectedItemId('')
+      await loadIdeas()
+    } catch (e) {
+      setError('Ideen-Generierung fehlgeschlagen: ' + e.message)
+    }
+    setGenerating(false)
   }
 
   const filters = [
@@ -297,20 +325,67 @@ export default function Ideas() {
           <h1 className="text-xl font-bold text-ink">Content-Ideen</h1>
           <p className="text-sm text-ink-light mt-0.5">Beantworte die Fragen und lass daraus Posts erstellen.</p>
         </div>
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-          {filters.map(f => (
-            <button
-              key={f.value}
-              onClick={() => setFilter(f.value)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                filter === f.value ? 'bg-white text-ink shadow-sm' : 'text-ink-light hover:text-ink'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={openGeneratePanel}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Neue Ideen
+          </button>
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+            {filters.map(f => (
+              <button
+                key={f.value}
+                onClick={() => setFilter(f.value)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  filter === f.value ? 'bg-white text-ink shadow-sm' : 'text-ink-light hover:text-ink'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {showGenerate && (
+        <div className="mb-6 p-5 bg-white rounded-xl border border-primary-200 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary-600" />
+              Ideen aus analysiertem Video generieren
+            </h3>
+            <button onClick={() => setShowGenerate(false)} className="text-xs text-ink-muted hover:text-ink">Abbrechen</button>
+          </div>
+          {analyzedItems.length === 0 ? (
+            <p className="text-sm text-ink-light">Keine analysierten Videos gefunden. Analysiere zuerst ein Video unter "Quellen".</p>
+          ) : (
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <label className="block text-xs text-ink-muted mb-1">Video auswaehlen</label>
+                <select
+                  value={selectedItemId}
+                  onChange={e => setSelectedItemId(e.target.value)}
+                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="">— Video waehlen —</option>
+                  {analyzedItems.map(item => (
+                    <option key={item.id} value={item.id}>{item.title}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={handleGenerateIdeas}
+                disabled={!selectedItemId || generating}
+                className="flex items-center gap-2 px-4 py-2 bg-accent-500 text-white rounded-lg font-medium hover:bg-accent-600 disabled:opacity-50 transition-colors"
+              >
+                {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                {generating ? 'Generiere...' : 'Ideen generieren'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>

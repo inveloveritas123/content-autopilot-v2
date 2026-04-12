@@ -80,7 +80,6 @@ export const approveContent = (id) => request(`/content/${id}/approve`, { method
 
 // Tenants / Voice
 export const getVoiceProfile = () => request('/tenants/me/voice-profile').catch(() => null)
-export const startOnboarding = (data) => request('/tenants/me/onboarding', { method: 'POST', body: data })
 
 // Pipeline
 export const getPipelineProgress = () => request('/pipeline/progress')
@@ -110,4 +109,4 @@ export const ncBrowse = (path) => request('/nc/browse', { method: 'POST', body: 
 export const ncSuggest = () => request('/nc/suggest', { method: 'POST' })
 
 // Activity
-export const getActivity = (params) => request('/activity', { params })
+export const getActivity = (params) => request('/pipeline/log', { params })
