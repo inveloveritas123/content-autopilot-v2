@@ -89,16 +89,16 @@ export default function Dashboard() {
       )}
 
       {/* KPI Grid */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <KpiCard icon={Radio} label="Aktive Quellen" value={data?.active_sources?.length || 0} color="blue" onClick={() => navigate('/sources')} />
         <KpiCard icon={Lightbulb} label="Offene Ideen" value={openIdeas} color="amber" onClick={() => navigate('/ideas')} />
         <KpiCard icon={FileText} label="Post-Entwuerfe" value={s.content_suggestions || 0} color="teal" onClick={() => navigate('/posts')} />
         <KpiCard icon={CheckCircle2} label="Freigegeben" value={s.approved || 0} color="emerald" />
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Recent Ideas */}
-        <div className="col-span-2 bg-white rounded-xl border border-surface-border p-5">
+        <div className="lg:col-span-2 bg-white rounded-xl border border-surface-border p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
               <Lightbulb className="w-4 h-4 text-accent-500" />

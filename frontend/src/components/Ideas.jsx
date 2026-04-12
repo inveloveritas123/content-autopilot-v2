@@ -21,14 +21,15 @@ function StatusBadge({ status }) {
 }
 
 function RelevanceBar({ score }) {
-  const pct = Math.min(score * 10, 100)
-  const color = score >= 7 ? 'bg-emerald-500' : score >= 4 ? 'bg-amber-500' : 'bg-red-400'
+  const s = score ?? 0
+  const pct = Math.min(s * 10, 100)
+  const color = s >= 7 ? 'bg-emerald-500' : s >= 4 ? 'bg-amber-500' : 'bg-red-400'
   return (
     <div className="flex items-center gap-2">
       <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs text-ink-muted">{score.toFixed(1)}</span>
+      <span className="text-xs text-ink-muted">{s.toFixed(1)}</span>
     </div>
   )
 }
@@ -274,7 +275,7 @@ export default function Ideas() {
       const params = {}
       if (filter) params.status = filter
       const data = await getIdeas(params)
-      setIdeas(data)
+      setIdeas(Array.isArray(data) ? data : [])
     } catch (e) {
       setError(e.message)
     }

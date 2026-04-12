@@ -251,7 +251,7 @@ export default function Feedback() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard
           icon={FileText}
           label="Bewertete Posts"

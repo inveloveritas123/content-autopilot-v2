@@ -3,12 +3,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from dependencies import get_db, get_tenant
+from dependencies import get_db, get_tenant, get_tenant_id
 from models.tenant import Tenant
+from models.content_performance import ContentPerformance
 from services.nextcloud import nextcloud_client
 
 router = APIRouter()
@@ -160,3 +161,55 @@ async def suggest_nc_paths(
             continue
 
     return suggestions
+
+
+# ── Zukunftsbund Brand-Voice Defaults (12 Dimensionen) ──
+
+_ZB_VOICE_DEFAULTS = {
+    "directness": 8.0,
+    "competence": 7.5,
+    "warmth": 7.0,
+    "pragmatism": 8.5,
+    "confidence": 7.0,
+    "humor": 5.0,
+    "storytelling": 6.5,
+    "formality": 4.0,
+    "emotion": 6.0,
+    "technical_depth": 7.0,
+    "call_to_action": 6.5,
+    "authenticity": 8.0,
+}
+
+
+@router.get("/tenants/me/voice-profile")
+async def get_voice_profile(
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Voice-Profil: 12 Dimensionen, aggregiert aus Feedback + Brand-Defaults."""
+    tenant_id = tenant.id
+
+    # Count performance entries and avg engagement
+    result = await db.execute(
+        select(
+            func.count(ContentPerformance.id),
+            func.avg(ContentPerformance.engagement_rate),
+        ).where(ContentPerformance.tenant_id == tenant_id)
+    )
+    row = result.one()
+    total_posts = row[0] or 0
+    avg_engagement = round(float(row[1] or 0) * 100, 2)
+
+    # Check if tenant has a stored voice profile with dimension overrides
+    stored = (tenant.settings or {}).get("voice_dimensions")
+    dimensions = dict(_ZB_VOICE_DEFAULTS)
+    if stored and isinstance(stored, dict):
+        for k, v in stored.items():
+            if k in dimensions and isinstance(v, (int, float)):
+                dimensions[k] = float(v)
+
+    return {
+        "dimensions": dimensions,
+        "total_posts": total_posts,
+        "avg_engagement": avg_engagement,
+    }
