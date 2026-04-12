@@ -1,0 +1,227 @@
+"""
+Brand Voice Service — Persoenliche Stimme des Unternehmers lernen und anwenden.
+
+Drei Lernquellen:
+1. Onboarding-Fragebogen (explizit: Werte, Tonalitaet, Zielgruppe)
+2. Bestehende Texte (Posts, E-Mails, Website-Texte)
+3. Unternehmer-Antworten (fortlaufend: aus dem Dialog-Workflow)
+
+Das Brand-Voice-Profil wird als JSONB im Tenant gespeichert und bei jeder
+Content-Generierung als Kontext mitgegeben.
+"""
+import logging
+from typing import Optional
+
+from services.llm import llm_service
+
+logger = logging.getLogger(__name__)
+
+# ── Brand Voice Analyse aus bestehenden Texten ──────────────────────────────
+
+VOICE_ANALYSIS_SYSTEM = """Du bist ein Sprachwissenschaftler spezialisiert auf persoenliche Schreibstile.
+Analysiere die gegebenen Texte und extrahiere ein Brand-Voice-Profil.
+
+Extrahiere:
+1. tone: Grundton (z.B. "direkt und bodenstaendig", "akademisch und differenziert")
+2. vocabulary_level: einfach / mittel / gehoben / fachsprachlich
+3. sentence_style: Wie schreibt die Person? (kurz+knackig, lang+verschachtelt, gemischt)
+4. favorite_phrases: Wiederkehrende Redewendungen oder Wortmuster (5-10)
+5. emoji_usage: nie / selten / regelmaessig / viel
+6. formatting_style: Wie strukturiert die Person? (Absaetze, Listen, Einzeiler)
+7. perspective: Ich-Form / Wir-Form / Man-Form / gemischt
+8. call_to_action_style: Wie formuliert die Person Handlungsaufforderungen?
+9. topics_passion: Worueberredet die Person besonders leidenschaftlich?
+10. topics_avoid: Welche Themen/Toene meidet die Person offensichtlich?
+11. authenticity_markers: Was macht die Texte einzigartig/wiedererkennbar?
+12. linkedin_specific: Besonderheiten im LinkedIn-Stil (Hooks, Hashtags, Laenge)
+
+Antworte NUR als JSON. Kein Markdown, keine Erklaerung."""
+
+
+async def analyze_voice_from_texts(texts: list[str]) -> Optional[dict]:
+    """Analysiere Brand Voice aus einer Liste bestehender Texte."""
+    if not texts:
+        return None
+
+    combined = "\n\n---\n\n".join(texts[:20])  # Max 20 Texte
+
+    try:
+        profile = await llm_service.complete_json(
+            prompt=f"Analysiere folgende Texte und erstelle ein Brand-Voice-Profil:\n\n{combined[:12000]}",
+            system=VOICE_ANALYSIS_SYSTEM,
+            model="claude-sonnet",
+        )
+        logger.info(f"Voice analysis complete from {len(texts)} texts")
+        return profile
+    except Exception as e:
+        logger.error(f"Voice analysis failed: {e}")
+        return None
+
+
+# ── Brand Voice aus Onboarding-Fragebogen ────────────────────────────────────
+
+ONBOARDING_QUESTIONS = [
+    {
+        "key": "company_description",
+        "question": "Beschreibe dein Unternehmen in 2-3 Saetzen — so wie du es einem Freund erklaeren wuerdest.",
+        "required": True,
+    },
+    {
+        "key": "target_audience",
+        "question": "Wer ist deine Zielgruppe auf LinkedIn? (Branche, Position, Problemstellung)",
+        "required": True,
+    },
+    {
+        "key": "tone_preference",
+        "question": "Wie moechtest du auf LinkedIn klingen? (z.B. locker, professionell, provokant, inspirierend)",
+        "required": True,
+    },
+    {
+        "key": "topics_core",
+        "question": "Ueber welche 3-5 Themen moechtest du hauptsaechlich posten?",
+        "required": True,
+    },
+    {
+        "key": "topics_avoid",
+        "question": "Gibt es Themen oder Toene die du auf LinkedIn bewusst vermeidest?",
+        "required": False,
+    },
+    {
+        "key": "role_description",
+        "question": "Wie wuerdest du deine Rolle/Position beschreiben?",
+        "required": True,
+    },
+    {
+        "key": "unique_perspective",
+        "question": "Was unterscheidet deine Sichtweise von anderen in deiner Branche?",
+        "required": False,
+    },
+    {
+        "key": "example_post_liked",
+        "question": "Zeig mir einen LinkedIn-Post (von dir oder anderen) der dir gut gefaellt — und warum.",
+        "required": False,
+    },
+    {
+        "key": "example_post_disliked",
+        "question": "Zeig mir einen Post-Stil den du NICHT magst — und warum.",
+        "required": False,
+    },
+    {
+        "key": "personal_values",
+        "question": "Welche Werte sind dir im Business wichtig und sollen in deinem Content spuerbar sein?",
+        "required": False,
+    },
+]
+
+
+def get_onboarding_questions() -> list[dict]:
+    """Gibt die Onboarding-Fragen zurueck."""
+    return ONBOARDING_QUESTIONS
+
+
+async def build_voice_profile_from_onboarding(answers: dict) -> dict:
+    """Erstelle ein initiales Brand-Voice-Profil aus Onboarding-Antworten."""
+    prompt = f"""Erstelle ein Brand-Voice-Profil aus diesen Onboarding-Antworten:
+
+{chr(10).join(f'{k}: {v}' for k, v in answers.items() if v)}
+
+Erstelle ein JSON-Profil mit: tone, vocabulary_level, sentence_style,
+perspective, topics_passion, topics_avoid, formatting_preferences,
+call_to_action_style, authenticity_markers."""
+
+    try:
+        profile = await llm_service.complete_json(
+            prompt=prompt,
+            system="Du erstellst Brand-Voice-Profile fuer LinkedIn-Content. Antworte NUR als JSON.",
+            model="claude-sonnet",
+        )
+        profile["source"] = "onboarding"
+        profile["onboarding_answers"] = answers
+        return profile
+    except Exception as e:
+        logger.error(f"Onboarding voice profile failed: {e}")
+        return {"source": "onboarding", "onboarding_answers": answers, "error": str(e)}
+
+
+# ── Brand Voice fortlaufend lernen ──────────────────────────────────────────
+
+async def update_voice_from_answer(
+    current_profile: dict,
+    answer_text: str,
+) -> dict:
+    """Aktualisiere das Brand-Voice-Profil basierend auf einer neuen Unternehmer-Antwort.
+
+    Wird nach jeder Antwort im Dialog-Workflow aufgerufen.
+    Leichtgewichtig — nur Ergaenzungen, kein komplettes Neuschreiben.
+    """
+    prompt = f"""Aktuelles Brand-Voice-Profil:
+{current_profile}
+
+Neue Antwort des Unternehmers:
+"{answer_text}"
+
+Gibt es neue Erkenntnisse zum Schreibstil oder zur Persoenlichkeit?
+Wenn ja, gib NUR die zu aendernden/ergaenzenden Felder als JSON zurueck.
+Wenn nein, antworte mit {{}}.
+
+Moegliche Updates: neue favorite_phrases, verfeinerte tone-Beschreibung,
+neue authenticity_markers."""
+
+    try:
+        updates = await llm_service.complete_json(
+            prompt=prompt,
+            system="Du analysierst Schreibstile. Antworte NUR als JSON mit den Updates.",
+            model="gemini-flash",  # Schnell + guenstig fuer inkrementelle Updates
+        )
+        if updates:
+            # Merge: Listen werden ergaenzt, Strings ueberschrieben
+            for key, value in updates.items():
+                if isinstance(value, list) and isinstance(current_profile.get(key), list):
+                    # Deduplizierte Ergaenzung
+                    existing = set(str(x) for x in current_profile[key])
+                    current_profile[key].extend(
+                        x for x in value if str(x) not in existing
+                    )
+                else:
+                    current_profile[key] = value
+            logger.info(f"Voice profile updated with {len(updates)} changes")
+        return current_profile
+    except Exception as e:
+        logger.error(f"Voice profile update failed: {e}")
+        return current_profile
+
+
+# ── Voice-Profil als Prompt-Kontext formatieren ─────────────────────────────
+
+def format_voice_for_prompt(profile: dict) -> str:
+    """Formatiere das Brand-Voice-Profil als Kontext fuer Content-Generierung."""
+    if not profile:
+        return ""
+
+    parts = []
+    if profile.get("tone"):
+        parts.append(f"Tonalitaet: {profile['tone']}")
+    if profile.get("vocabulary_level"):
+        parts.append(f"Sprachniveau: {profile['vocabulary_level']}")
+    if profile.get("sentence_style"):
+        parts.append(f"Satzstil: {profile['sentence_style']}")
+    if profile.get("perspective"):
+        parts.append(f"Perspektive: {profile['perspective']}")
+    if profile.get("favorite_phrases"):
+        phrases = profile["favorite_phrases"][:8]
+        parts.append(f"Typische Redewendungen: {', '.join(str(p) for p in phrases)}")
+    if profile.get("formatting_style"):
+        parts.append(f"Formatierung: {profile['formatting_style']}")
+    if profile.get("emoji_usage"):
+        parts.append(f"Emoji-Nutzung: {profile['emoji_usage']}")
+    if profile.get("authenticity_markers"):
+        markers = profile["authenticity_markers"][:5]
+        parts.append(f"Wiedererkennungsmerkmale: {', '.join(str(m) for m in markers)}")
+    if profile.get("topics_avoid"):
+        avoids = profile["topics_avoid"]
+        if isinstance(avoids, list):
+            parts.append(f"VERMEIDE: {', '.join(str(a) for a in avoids)}")
+        else:
+            parts.append(f"VERMEIDE: {avoids}")
+
+    return "\n".join(parts)
