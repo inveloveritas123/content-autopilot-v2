@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Cpu, Plus, Trash2, Zap, CheckCircle2, XCircle, Loader2, Star, Eye, EyeOff } from 'lucide-react'
-import { getLLMProviders, createLLMProvider, updateLLMProvider, deleteLLMProvider, testLLMProvider } from '../api'
+import { Cpu, Plus, Trash2, Zap, CheckCircle2, XCircle, Loader2, Star, Eye, EyeOff, Pencil, Check, X } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { getLLMProviders, createLLMProvider, updateLLMProvider, deleteLLMProvider, testLLMProvider, getLLMCostHistory } from '../api'
 
 const PROVIDER_TYPES = [
   { value: 'litellm', label: 'LiteLLM Proxy', defaultUrl: 'http://host.docker.internal:4000/v1' },
   { value: 'openai', label: 'OpenAI', defaultUrl: 'https://api.openai.com/v1' },
   { value: 'anthropic', label: 'Anthropic (Claude)', defaultUrl: 'https://api.anthropic.com/v1' },
   { value: 'google', label: 'Google (Gemini)', defaultUrl: '' },
-  { value: 'requesty', label: 'Requesty.ai', defaultUrl: 'https://router.requesty.ai/v1' },
+  { value: 'requesty', label: 'Requesty.ai', defaultUrl: 'https://router.eu.requesty.ai/v1' },
   { value: 'groq', label: 'Groq', defaultUrl: 'https://api.groq.com/openai/v1' },
 ]
 
@@ -18,9 +19,41 @@ const TASK_OPTIONS = [
   { value: 'transcription', label: 'Transkription' },
 ]
 
-function ProviderCard({ provider, onTest, onDelete, onToggleDefault, testing }) {
+// Aufgaben → Modell-Zuordnung (spiegelt provider_resolver.py TASK_MODEL_MAP)
+const TASK_MODEL_MAP = [
+  { task: 'Recherche / Analyse', model: 'Gemini 2.5 Flash Lite', tier: 'flash', assignment: 'analysis' },
+  { task: 'Transkription', model: 'Gemini 2.5 Flash Lite', tier: 'flash', assignment: 'analysis' },
+  { task: 'Ideen (Draft)', model: 'Gemini 2.5 Flash Lite', tier: 'flash', assignment: 'analysis' },
+  { task: 'Voice-Profil', model: 'Claude Haiku 4.5', tier: 'creative', assignment: 'creative' },
+  { task: 'Posts finalisieren', model: 'Claude Haiku 4.5', tier: 'creative', assignment: 'creative' },
+  { task: 'Content DNA', model: 'Claude Haiku 4.5', tier: 'creative', assignment: 'creative' },
+]
+
+function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLimit, testing }) {
   const statusColor = provider.last_test_status === 'ok' ? 'text-emerald-500' : provider.last_test_status === 'error' ? 'text-red-500' : 'text-gray-400'
   const StatusIcon = provider.last_test_status === 'ok' ? CheckCircle2 : provider.last_test_status === 'error' ? XCircle : Cpu
+
+  const [editingLimit, setEditingLimit] = useState(false)
+  const [limitInput, setLimitInput] = useState('')
+
+  const spent = provider.cost_spent_today_cents || 0
+  const limit = provider.cost_limit_daily_cents || 500
+  const pct = Math.min((spent / limit) * 100, 100)
+  const isWarning = pct >= 80
+  const isBlocked = pct >= 100
+
+  const startEdit = () => {
+    setLimitInput(((provider.cost_limit_daily_cents || 500) / 100).toFixed(2))
+    setEditingLimit(true)
+  }
+
+  const saveLimit = async () => {
+    const cents = Math.round(parseFloat(limitInput) * 100)
+    if (!isNaN(cents) && cents >= 0) {
+      await onUpdateLimit(provider.id, cents)
+    }
+    setEditingLimit(false)
+  }
 
   return (
     <div className={`bg-white rounded-xl border p-4 transition-colors ${provider.is_active ? 'border-surface-border' : 'border-gray-200 opacity-60'}`}>
@@ -62,14 +95,128 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, testing }) 
         {provider.api_key_masked && (
           <span className="text-[11px] text-ink-muted font-mono">{provider.api_key_masked}</span>
         )}
-        {provider.base_url && (
-          <span className="text-[11px] text-ink-muted truncate max-w-[200px]">{provider.base_url}</span>
-        )}
+      </div>
+
+      {/* Cost bar with editable limit */}
+      <div className={`mt-3 pt-3 border-t border-gray-100 p-2 rounded-lg ${isBlocked ? 'bg-red-50' : isWarning ? 'bg-amber-50' : 'bg-gray-50'}`}>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[11px] text-ink-muted">Tageskosten</span>
+          <div className="flex items-center gap-1">
+            <span className={`text-[11px] font-semibold ${isBlocked ? 'text-red-600' : isWarning ? 'text-amber-600' : 'text-ink'}`}>
+              {(spent / 100).toFixed(2)} EUR /
+            </span>
+            {editingLimit ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="number" step="0.01" min="0"
+                  value={limitInput}
+                  onChange={e => setLimitInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveLimit(); if (e.key === 'Escape') setEditingLimit(false) }}
+                  className="w-16 text-[11px] border border-primary-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  autoFocus
+                />
+                <span className="text-[11px] text-ink-muted">EUR</span>
+                <button onClick={saveLimit} className="text-emerald-600 hover:text-emerald-700"><Check className="w-3 h-3" /></button>
+                <button onClick={() => setEditingLimit(false)} className="text-gray-400 hover:text-gray-600"><X className="w-3 h-3" /></button>
+              </div>
+            ) : (
+              <button onClick={startEdit} className="flex items-center gap-0.5 text-[11px] text-ink-muted hover:text-primary-600 group">
+                <span>{(limit / 100).toFixed(2)} EUR</span>
+                <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${isBlocked ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-primary-500'}`}
+            style={{ width: `${pct}%` }} />
+        </div>
+        {isBlocked && <p className="text-[10px] text-red-600 mt-1 font-medium">LIMIT ERREICHT — keine LLM-Calls bis Mitternacht</p>}
       </div>
 
       {provider.last_test_error && (
         <p className="text-[11px] text-red-500 mt-2 truncate">{provider.last_test_error}</p>
       )}
+    </div>
+  )
+}
+
+function CostHistoryChart() {
+  const [history, setHistory] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    getLLMCostHistory(7)
+      .then(data => setHistory(data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="h-28 flex items-center justify-center text-xs text-ink-muted">Lade Verlauf...</div>
+  if (!history.length) return (
+    <div className="h-28 flex items-center justify-center text-xs text-ink-muted">Noch keine Kostendaten</div>
+  )
+
+  const formatted = history.map(r => ({
+    date: new Date(r.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric' }),
+    eur: parseFloat((r.total_cents / 100).toFixed(3)),
+    calls: r.calls,
+  }))
+
+  return (
+    <ResponsiveContainer width="100%" height={100}>
+      <BarChart data={formatted} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+        <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+        <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={v => `${v}€`} />
+        <Tooltip
+          formatter={(val, name) => [`${val.toFixed(3)} EUR`, 'Kosten']}
+          labelStyle={{ fontSize: 11 }}
+          contentStyle={{ fontSize: 11, padding: '4px 8px' }}
+        />
+        <Bar dataKey="eur" fill="#0F766E" radius={[3, 3, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+function TaskAssignmentTable({ providers }) {
+  const getProvider = (assignment) => {
+    const p = providers.find(p => p.task_assignment === assignment && p.is_active)
+      || providers.find(p => p.task_assignment === 'all' && p.is_default && p.is_active)
+      || providers.find(p => p.is_active)
+    return p?.name || '—'
+  }
+
+  return (
+    <div className="mt-5 pt-5 border-t border-gray-100">
+      <h3 className="text-xs font-semibold text-ink mb-3">Aufgaben-Zuordnung</h3>
+      <div className="overflow-hidden rounded-lg border border-gray-200">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="px-3 py-2 text-left font-medium text-ink-muted">Aufgabe</th>
+              <th className="px-3 py-2 text-left font-medium text-ink-muted">Modell</th>
+              <th className="px-3 py-2 text-left font-medium text-ink-muted">Provider</th>
+            </tr>
+          </thead>
+          <tbody>
+            {TASK_MODEL_MAP.map((row, i) => (
+              <tr key={row.task} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                <td className="px-3 py-2 text-ink">{row.task}</td>
+                <td className="px-3 py-2">
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    row.tier === 'flash' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
+                  }`}>
+                    {row.model}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-ink-muted">{getProvider(row.assignment)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] text-ink-muted mt-1.5">Routing basiert auf Provider-Aufgabenzuordnung. Flash = guenstig, Haiku = kreativ.</p>
     </div>
   )
 }
@@ -134,6 +281,11 @@ export default function LLMSettings() {
     await loadProviders()
   }
 
+  const handleUpdateLimit = async (id, cents) => {
+    await updateLLMProvider(id, { cost_limit_daily_cents: cents })
+    await loadProviders()
+  }
+
   const handleTypeChange = (type) => {
     const pt = PROVIDER_TYPES.find(p => p.value === type)
     setForm({ ...form, provider_type: type, base_url: pt?.defaultUrl || '' })
@@ -167,36 +319,21 @@ export default function LLMSettings() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {providers.map(p => (
             <ProviderCard key={p.id} provider={p} onTest={handleTest} onDelete={handleDelete}
-              onToggleDefault={handleToggleDefault} testing={testingId === p.id} />
+              onToggleDefault={handleToggleDefault} onUpdateLimit={handleUpdateLimit} testing={testingId === p.id} />
           ))}
         </div>
       )}
 
-      {/* Cost Dashboard */}
-      {providers.some(p => p.cost_limit_daily_cents > 0) && (() => {
-        const defaultProvider = providers.find(p => p.is_default) || providers[0]
-        if (!defaultProvider) return null
-        const spent = defaultProvider.cost_spent_today_cents || 0
-        const limit = defaultProvider.cost_limit_daily_cents || 500
-        const pct = Math.min((spent / limit) * 100, 100)
-        const isWarning = pct >= 80
-        const isBlocked = pct >= 100
-        return (
-          <div className={`mt-4 p-4 rounded-xl border ${isBlocked ? 'bg-red-50 border-red-200' : isWarning ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-ink">Tageskosten</span>
-              <span className={`text-xs font-bold ${isBlocked ? 'text-red-600' : isWarning ? 'text-amber-600' : 'text-ink'}`}>
-                {(spent / 100).toFixed(2)} / {(limit / 100).toFixed(2)} EUR
-              </span>
-            </div>
-            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full transition-all ${isBlocked ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-primary-500'}`}
-                style={{ width: `${pct}%` }} />
-            </div>
-            {isBlocked && <p className="text-[11px] text-red-600 mt-1 font-medium">TAGESLIMIT ERREICHT — keine LLM-Calls bis Mitternacht</p>}
-          </div>
-        )
-      })()}
+      {/* Cost History */}
+      {providers.length > 0 && (
+        <div className="mt-5 pt-5 border-t border-gray-100">
+          <h3 className="text-xs font-semibold text-ink mb-3">Kosten der letzten 7 Tage</h3>
+          <CostHistoryChart />
+        </div>
+      )}
+
+      {/* Task Assignment Table */}
+      {providers.length > 0 && <TaskAssignmentTable providers={providers} />}
 
       {showAdd && (
         <div className="mt-4 bg-white rounded-xl border border-primary-200 p-5">

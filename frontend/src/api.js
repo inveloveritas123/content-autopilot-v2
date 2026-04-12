@@ -113,6 +113,12 @@ export const createLLMProvider = (data) => request('/settings/llm-providers', { 
 export const updateLLMProvider = (id, data) => request(`/settings/llm-providers/${id}`, { method: 'PATCH', body: data })
 export const deleteLLMProvider = (id) => request(`/settings/llm-providers/${id}`, { method: 'DELETE' })
 export const testLLMProvider = (id) => request(`/settings/llm-providers/${id}/test`, { method: 'POST' })
+export const getLLMCostHistory = (days = 7) => request('/settings/llm-cost-history', { params: { days } })
+
+// Projects
+export const getProjects = () => request('/projects')
+export const createProject = (data) => request('/projects', { method: 'POST', body: data })
+export const deleteProject = (id) => request(`/projects/${id}`, { method: 'DELETE' })
 
 // Nextcloud
 export const ncBrowse = (path) => request('/nc/browse', { method: 'POST', body: { path } })
