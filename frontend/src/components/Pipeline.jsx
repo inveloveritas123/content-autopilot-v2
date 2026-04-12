@@ -6,14 +6,15 @@ import { Dialog } from './ui/Dialog'
 import { Tabs } from './ui/Tabs'
 import { Input, Select } from './ui/Input'
 import { useApi } from '../hooks/useApi'
-import { getItems, getItem, transcribeItem, analyzeItem, generateContent, syncTranscripts, updateAllViews, getPipelineProgress, getPipelineLog, getCookieStatus, batchTranscribe } from '../api'
+import { getItems, getItem, transcribeItem, analyzeItem, generateContent, syncTranscripts, updateAllViews, getPipelineProgress, getPipelineLog, getCookieStatus, batchTranscribe, retryTranscribe, bulkRetryFailed } from '../api'
 import CookieSetup from './CookieSetup'
 
 const statusLabels = {
   new: 'Neu',
   transcribing: 'Transkribiert...',
   transcribed: 'Transkribiert',
-  needs_voicescriptor: 'Braucht VoiceScriptor',
+  needs_voicescriptor: 'Fehler (alt)',
+  transcription_failed: 'Transkription fehlgeschlagen',
   analyzing: 'Analysiert...',
   analyzed: 'Analysiert',
   generating: 'Generiert...',
@@ -168,6 +169,7 @@ export default function Pipeline() {
   const newCount = (items || []).filter(i => i.status === 'new').length
   const transcribedCount = (items || []).filter(i => i.status === 'transcribed').length
   const analyzedCount = (items || []).filter(i => i.status === 'analyzed').length
+  const failedCount = (items || []).filter(i => i.status === 'transcription_failed' || i.status === 'needs_voicescriptor').length
 
   return (
     <div className="space-y-6">
@@ -185,6 +187,18 @@ export default function Pipeline() {
           }} disabled={batchRunning || newCount === 0}>
             {batchRunning ? 'Batch laeuft...' : `Alle transkribieren (${newCount})`}
           </Button>
+          {failedCount > 0 && (
+            <Button size="sm" variant="danger" onClick={async () => {
+              if (!confirm(`${failedCount} fehlgeschlagene Transkriptionen neu starten?`)) return
+              try {
+                const r = await bulkRetryFailed()
+                alert(`${r.retried} Items zurückgesetzt und neu gestartet.`)
+                setTimeout(refetch, 1500)
+              } catch (e) { alert('Fehler: ' + e.message) }
+            }}>
+              Retry Fehler ({failedCount})
+            </Button>
+          )}
           <Button size="sm" variant="secondary" onClick={handleBulkAnalyze} disabled={bulkRunning || selectedIds.size === 0}>Analysieren ({selectedIds.size})</Button>
           <Button size="sm" variant="secondary" onClick={handleBulkGenerate} disabled={bulkRunning || selectedIds.size === 0}>Content ({selectedIds.size})</Button>
           <Button size="sm" variant="ghost" onClick={() => { setSelectedIds(new Set()); refetch() }}>Aktualisieren</Button>
@@ -413,6 +427,9 @@ export default function Pipeline() {
                       {item.status === 'analyzed' && (
                         <Button size="sm" variant="secondary" onClick={async () => { await generateContent(item.id); setTimeout(refetch, 2000) }}>C</Button>
                       )}
+                      {(item.status === 'transcription_failed' || item.status === 'needs_voicescriptor') && (
+                        <Button size="sm" variant="danger" title="Erneut versuchen (4-Stufen-Fallback)" onClick={async () => { await retryTranscribe(item.id); setTimeout(refetch, 2000) }}>↺</Button>
+                      )}
                       <Button size="sm" variant="ghost" onClick={() => openDetail(item)}>Details</Button>
                     </div>
                   </td>
@@ -463,6 +480,9 @@ export default function Pipeline() {
                   {detail.status === 'new' && <Button size="sm" onClick={async () => { await transcribeItem(detail.id); alert('Transkription gestartet') }}>Transkribieren</Button>}
                   {detail.status === 'transcribed' && <Button size="sm" onClick={async () => { await analyzeItem(detail.id); alert('Analyse gestartet') }}>Analysieren</Button>}
                   {detail.status === 'analyzed' && <Button size="sm" onClick={async () => { await generateContent(detail.id); alert('Content-Generierung gestartet') }}>Content generieren</Button>}
+                  {(detail.status === 'transcription_failed' || detail.status === 'needs_voicescriptor') && (
+                    <Button size="sm" variant="danger" onClick={async () => { await retryTranscribe(detail.id); alert('Retry gestartet (4-Stufen-Fallback)') }}>Erneut versuchen</Button>
+                  )}
                 </div>
               </div>
             )}

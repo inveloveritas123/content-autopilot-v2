@@ -59,6 +59,8 @@ export const analyzeItem = (id) => request(`/items/${id}/analyze`, { method: 'PO
 export const generateContent = (id) => request(`/items/${id}/generate`, { method: 'POST' })
 export const updateAllViews = () => request('/items/update-views', { method: 'POST' })
 export const batchTranscribe = () => request('/items/batch-transcribe', { method: 'POST' })
+export const retryTranscribe = (id) => request(`/items/${id}/retry-transcribe`, { method: 'POST' })
+export const bulkRetryFailed = () => request('/items/bulk-retry-failed', { method: 'POST' })
 
 // Ideas (v2 dialogic workflow)
 export const getIdeas = (params) => request('/ideas', { params })
