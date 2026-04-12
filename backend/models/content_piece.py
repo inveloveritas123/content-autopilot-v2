@@ -30,3 +30,4 @@ class ContentPiece(Base):
 
     source_item = relationship("SourceItem", back_populates="content_pieces")
     tenant = relationship("Tenant", back_populates="content_pieces")
+    performances = relationship("ContentPerformance", back_populates="content_piece", cascade="all, delete-orphan")

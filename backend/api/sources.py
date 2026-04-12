@@ -144,6 +144,23 @@ async def delete_source(
     return {"deleted": True}
 
 
+@router.delete("/sources")
+async def delete_all_sources(
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete all sources for this tenant (cascades to items, content, ideas)."""
+    result = await db.execute(
+        select(Source).where(Source.tenant_id == tenant.id)
+    )
+    sources = result.scalars().all()
+    count = len(sources)
+    for source in sources:
+        await db.delete(source)
+    await db.commit()
+    return {"deleted": count}
+
+
 @router.post("/sources/{source_id}/check")
 async def check_source(
     source_id: str,

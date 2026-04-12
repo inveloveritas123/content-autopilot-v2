@@ -58,7 +58,8 @@ class ContentIdea(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    source_item = relationship("SourceItem", backref="content_ideas")
+    source_item = relationship("SourceItem", back_populates="content_ideas")
     tenant = relationship("Tenant", backref="content_ideas")
     answers = relationship("EntrepreneurAnswer", back_populates="content_idea", cascade="all, delete-orphan")
+    selection_logs = relationship("IdeaSelectionLog", back_populates="content_idea", cascade="all, delete-orphan")
     content_pieces = relationship("ContentPiece", backref="content_idea")

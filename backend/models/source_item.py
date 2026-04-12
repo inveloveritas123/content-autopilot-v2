@@ -47,3 +47,4 @@ class SourceItem(Base):
     tenant = relationship("Tenant", back_populates="source_items")
     campaign_match = relationship("Campaign", back_populates="matched_items")
     content_pieces = relationship("ContentPiece", back_populates="source_item", cascade="all, delete-orphan")
+    content_ideas = relationship("ContentIdea", back_populates="source_item", cascade="all, delete-orphan")

@@ -67,7 +67,7 @@ class ContentPerformance(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    content_piece = relationship("ContentPiece", backref="performances")
+    content_piece = relationship("ContentPiece", back_populates="performances")
     tenant = relationship("Tenant")
 
 
@@ -96,5 +96,5 @@ class IdeaSelectionLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     # Relationships
-    content_idea = relationship("ContentIdea", backref="selection_logs")
+    content_idea = relationship("ContentIdea", back_populates="selection_logs")
     source_item = relationship("SourceItem")
