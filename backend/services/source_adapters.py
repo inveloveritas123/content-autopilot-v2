@@ -540,10 +540,26 @@ async def check_source_for_new_items(
     source: Source,
     existing_external_ids: set[str],
 ) -> list[dict]:
-    """Check a source for new items — delegates to the correct adapter."""
+    """Check a source for new items — delegates to the correct adapter.
+
+    For text-based sources (RSS), also extracts full article content via readability.
+    """
     try:
         adapter = AbstractSourceAdapter.get_adapter(source.type)
-        return await adapter.fetch_new_items(source, existing_external_ids)
+        items = await adapter.fetch_new_items(source, existing_external_ids)
+
+        # For text-based sources: enrich with full content extraction
+        if source.type in ("rss",):
+            for item in items:
+                if item.get("url") and (not item.get("content_text") or len(item.get("content_text", "")) < 500):
+                    try:
+                        full_text = await adapter.extract_content(item)
+                        if full_text and len(full_text) > len(item.get("content_text", "")):
+                            item["content_text"] = full_text
+                    except Exception as e:
+                        logger.warning(f"Content extraction failed for {item.get('url')}: {e}")
+
+        return items
     except ValueError as e:
         logger.warning(str(e))
         return []
