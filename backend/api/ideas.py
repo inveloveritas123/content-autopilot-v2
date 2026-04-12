@@ -28,7 +28,7 @@ from services.content_generator import generate_linkedin_post_from_dialog
 from services.brand_voice import update_voice_from_answer
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/ideas", tags=["ideas"])
+router = APIRouter(prefix="/ideas", tags=["ideas"])
 
 
 # ── Pydantic Schemas ────────────────────────────────────────────────────────
