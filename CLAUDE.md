@@ -1,10 +1,27 @@
 # Content Autopilot v2.0 — Projekt-Kontext
 
+## DEIN AUFTRAG JETZT
+
+Du bist der Builder. Ein zweiter Claude ("Cowork") ueberwacht deine Arbeit als QA-Architekt via Gitea Issues.
+
+**STARTE SO:**
+1. Lies die offenen Issues (curl-Befehl unten)
+2. Arbeite sie in der Reihenfolge aus COORDINATION.md ab
+3. Nach jedem Fix: git commit + push, Issue kommentieren + schliessen
+4. Am Ende: Frontend deployen (Issue #6)
+
+**Aktuelle Prioritaeten (Stand 2026-04-12):**
+1. **#2 [MEDIUM]** RelevanceBar null-check in Ideas.jsx + Array-Guard (schneller Fix)
+2. **#3 [MEDIUM]** Dashboard responsive Breakpoints
+3. **#1 [HIGH]** VoiceProfile Backend-Endpoint `/tenants/me/voice-profile` erstellen
+4. **#6 [HIGH]** Frontend v2 deployen: `git pull && cd frontend && npm install && npm run build && cd .. && docker compose build nginx && docker compose up -d --force-recreate nginx`
+5. **#4 [MEDIUM]** Ideen-Generierung von Ideas-Seite ermoeglichen
+6. **#5 [LOW]** api.js tote Endpoints aufraeumen
+
 ## Zugang
 
-Du arbeitest remote auf diesem Server via SSH:
+Du arbeitest direkt auf diesem Server:
 - Server B: 152.53.142.163, Port 10022, User meister
-- SSH: `ssh -p 10022 meister@152.53.142.163`
 - Projektverzeichnis: /opt/zukunftsbund-content-autopilot/
 - Gitea Repo: meister/zukunftsbund-content-autopilot (Branch: main)
 - Gitea Push URL: http://meister:db9757580bef3e9bbb134d1084413abc2c4a88a9@localhost:3000/meister/zukunftsbund-content-autopilot.git
@@ -100,9 +117,10 @@ Bestehende Endpoints:
 - GET/POST /api/content — Generierte Posts
 - GET /api/campaigns — Content-Kampagnen
 - GET /api/dashboard — Statistiken
-- GET /api/activity — Aktivitaets-Log
+- GET /api/pipeline/progress — Pipeline-Fortschritt
+- GET /api/pipeline/log — Activity-Log
 
-Neue v2.0 Endpoints (Backend fertig, Frontend FEHLT):
+Neue v2.0 Endpoints (Backend fertig, Frontend CODE COMMITTED aber NICHT DEPLOYED):
 - GET/POST /api/ideas — Content-Ideen (dialogischer Workflow)
 - POST /api/ideas/{id}/answer — Unternehmer-Antworten
 - POST /api/ideas/{id}/generate-post — Post aus Antworten generieren
@@ -110,10 +128,15 @@ Neue v2.0 Endpoints (Backend fertig, Frontend FEHLT):
 - POST /api/feedback/edit-diff — Edit-Diff Tracking
 - POST /api/feedback/performance — Performance-Metriken
 
+**FEHLENDER Endpoint (Issue #1 — MUSS GEBAUT WERDEN):**
+- GET /api/tenants/me/voice-profile — Voice-Profil aus Feedback-Daten aggregieren
+  Frontend erwartet: `{ dimensions: {name: score_0_to_10}, total_posts: int, avg_engagement: float }`
+  12 Dimensionen: directness, competence, warmth, pragmatism, confidence, humor, storytelling, formality, emotion, technical_depth, call_to_action, authenticity
+
 ## Tech-Stack Frontend
 
 - React 18 + Vite
-- Tailwind CSS
+- Tailwind CSS (ZB Brand-Farben: primary=teal, accent=amber)
 - React Router DOM
 - Recharts (Charts)
 - Lucide React (Icons)
@@ -162,10 +185,10 @@ Kommunikationskanal: Gitea Issues im Repo meister/zukunftsbund-content-autopilot
 2. Arbeite Issues mit hoechster Prioritaet zuerst ab
 
 3. Nach Fertigstellung: Kommentiere auf dem Issue:
-   curl -sf -X POST 'http://localhost:3000/api/v1/repos/meister/zukunftsbund-content-autopilot/issues/ISSUE_NR/comments?token=***REMOVED-GITEA-TOKEN***' -H 'Content-Type: application/json' -d '{body: Erledigt in Commit XYZ. Deployed und getestet.}'
+   curl -sf -X POST 'http://localhost:3000/api/v1/repos/meister/zukunftsbund-content-autopilot/issues/ISSUE_NR/comments?token=***REMOVED-GITEA-TOKEN***' -H 'Content-Type: application/json' -d '{"body": "Erledigt in Commit XYZ. Deployed und getestet."}'
 
 4. Schliesse das Issue:
-   curl -sf -X PATCH 'http://localhost:3000/api/v1/repos/meister/zukunftsbund-content-autopilot/issues/ISSUE_NR?token=***REMOVED-GITEA-TOKEN***' -H 'Content-Type: application/json' -d '{state: closed}'
+   curl -sf -X PATCH 'http://localhost:3000/api/v1/repos/meister/zukunftsbund-content-autopilot/issues/ISSUE_NR?token=***REMOVED-GITEA-TOKEN***' -H 'Content-Type: application/json' -d '{"state": "closed"}'
 
 5. Update COORDINATION.md mit dem neuen Stand
 
