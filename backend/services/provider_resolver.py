@@ -5,9 +5,25 @@ from typing import Optional
 
 from sqlalchemy import select
 
+import base64
+import hashlib
+from cryptography.fernet import Fernet
+
+from config import settings as _app_settings
 from models.base import sync_session_factory
 from models.llm_provider import LLMProvider
-from api.llm_settings import _decrypt_key
+
+# Local decrypt — mirrors api/llm_settings.py without importing the FastAPI module
+_key_material = hashlib.sha256((_app_settings.default_tenant_key + "-llm-encrypt").encode()).digest()
+_FERNET_KEY = base64.urlsafe_b64encode(_key_material)
+_fernet = Fernet(_FERNET_KEY)
+
+
+def _decrypt_key(encrypted: str) -> str:
+    try:
+        return _fernet.decrypt(encrypted.encode()).decode()
+    except Exception:
+        return ""
 
 logger = logging.getLogger(__name__)
 

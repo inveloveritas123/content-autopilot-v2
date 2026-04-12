@@ -175,6 +175,19 @@ class LLMService:
                 json={"model": litellm_model, "messages": messages, "max_tokens": 4096},
                 headers=headers,
             )
+            # 401 from DB provider → fall back to env config (expired key)
+            if resp.status_code == 401 and provider:
+                logger.warning(f"DB provider returned 401, falling back to env LiteLLM config")
+                env_base = self._litellm_base_url or "https://router.requesty.ai/v1"
+                env_key = self._litellm_api_key or ""
+                env_headers = {"Content-Type": "application/json"}
+                if env_key:
+                    env_headers["Authorization"] = f"Bearer {env_key}"
+                resp = await client.post(
+                    f"{env_base}/chat/completions",
+                    json={"model": litellm_model, "messages": messages, "max_tokens": 4096},
+                    headers=env_headers,
+                )
             resp.raise_for_status()
             data = resp.json()
 

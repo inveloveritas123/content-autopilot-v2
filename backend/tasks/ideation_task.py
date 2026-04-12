@@ -51,7 +51,11 @@ def auto_generate_ideas(item_id: str):
         try:
             # Ideation-Pipeline ausführen
             ideas_data = asyncio.run(
-                run_ideation_pipeline(item.analysis)
+                run_ideation_pipeline(
+                    analysis=item.analysis,
+                    title=item.title or "",
+                    transcript_excerpt=(item.transcript_text or "")[:500],
+                )
             )
 
             if not ideas_data:
