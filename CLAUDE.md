@@ -1,146 +1,137 @@
 # Content Autopilot v2.0 — Projekt-Kontext
 
-## DEIN AUFTRAG JETZT
+## DEIN AUFTRAG
 
-Du bist der Builder. Ein zweiter Claude ("Cowork") ueberwacht deine Arbeit als QA-Architekt via Gitea Issues.
+Du bist der Fullstack-Vorarbeiter fuer Content Autopilot v2. Du hast Opus-Subagenten zur Verfuegung. Ein zweiter Claude ("Cowork") ueberwacht deine Arbeit als QA-Architekt via Gitea Issues.
+
+**WICHTIG:** Dies ist die v2-Instanz (Fork). Die v1 ("Pitch Alpha") unter /opt/zukunftsbund-content-autopilot/ darf NICHT angefasst werden!
 
 **STARTE SO:**
 1. Lies die offenen Issues (curl-Befehl unten)
-2. Arbeite sie in der Reihenfolge aus COORDINATION.md ab
+2. Arbeite sie in Prioritaets-Reihenfolge ab (KRITISCH → HOCH → MITTEL)
 3. Nach jedem Fix: git commit + push, Issue kommentieren + schliessen
-4. Am Ende: Frontend deployen (Issue #6)
-
-**Aktuelle Prioritaeten (Stand 2026-04-12):**
-1. **#2 [MEDIUM]** RelevanceBar null-check in Ideas.jsx + Array-Guard (schneller Fix)
-2. **#3 [MEDIUM]** Dashboard responsive Breakpoints
-3. **#1 [HIGH]** VoiceProfile Backend-Endpoint `/tenants/me/voice-profile` erstellen
-4. **#6 [HIGH]** Frontend v2 deployen: `git pull && cd frontend && npm install && npm run build && cd .. && docker compose build nginx && docker compose up -d --force-recreate nginx`
-5. **#4 [MEDIUM]** Ideen-Generierung von Ideas-Seite ermoeglichen
-6. **#5 [LOW]** api.js tote Endpoints aufraeumen
+4. Lies SCOPE.md fuer den Gesamtkontext
 
 ## Zugang
 
 Du arbeitest direkt auf diesem Server:
 - Server B: 152.53.142.163, Port 10022, User meister
-- Projektverzeichnis: /opt/zukunftsbund-content-autopilot/
-- Gitea Repo: meister/zukunftsbund-content-autopilot (Branch: main)
-- Gitea Push URL: http://meister:db9757580bef3e9bbb134d1084413abc2c4a88a9@localhost:3000/meister/zukunftsbund-content-autopilot.git
+- Projektverzeichnis: /opt/content-autopilot-v2/
+- Gitea Repo: meister/content-autopilot-v2 (Branch: main)
+- Gitea Push URL: http://meister:db975758_0bef3e9bbb134d1084413abc2c4a88a9@localhost:3000/meister/content-autopilot-v2.git
+
+## Zwei Instanzen — NICHT VERWECHSELN
+
+| Instanz | Pfad | Frontend | API | MCP | Status |
+|---------|------|----------|-----|-----|--------|
+| **Pitch Alpha (v1)** | /opt/zukunftsbund-content-autopilot/ | :8501 | :8501/api | :8080 | EINGEFROREN — FINGER WEG |
+| **v2 (Main Dev)** | /opt/content-autopilot-v2/ | :8601 | :8601/api | :8180 | AKTIVE ENTWICKLUNG |
 
 ## Architektur
 
-6 Docker-Container, alle via docker-compose.yml:
+6 Docker-Container, alle via docker-compose.v2.yml:
 
 | Container | Image | Port | Funktion |
 |-----------|-------|------|----------|
-| backend | FastAPI/uvicorn | intern :8000 | REST API v2.0 |
-| celery-worker | gleich wie backend | - | Async Tasks (Transkription, Analyse, Content) |
-| celery-beat | gleich wie backend | - | Scheduler (15min Monitoring) |
-| mcp-server | Python/FastMCP | :8080 | 11 MCP Tools, SSE Transport |
-| nginx | nginx:alpine | :8501 | Reverse Proxy (Frontend + /api/) |
-| redis | redis:7-alpine | - | Celery Broker |
+| backend-v2 | FastAPI/uvicorn | intern :8000 | REST API v2.0 |
+| celery-worker-v2 | gleich wie backend | - | Async Tasks (Transkription, Analyse, Content) |
+| celery-beat-v2 | gleich wie backend | - | Scheduler (dynamische Intervalle pro Source!) |
+| mcp-server-v2 | Python/FastMCP | :8180 (VPN) | MCP Tools, SSE Transport |
+| nginx-v2 | nginx:alpine | :8601 (VPN) | Reverse Proxy (Frontend + /api/) |
+| redis-v2 | redis:7-alpine | - | Celery Broker (DB 1) |
 
 PostgreSQL 17 laeuft NICHT im Docker, sondern direkt auf dem Host (:5432).
+DB: `content_autopilot_v2` (NICHT die v1-DB!)
 LiteLLM Proxy laeuft auf :4000 (separater Service, NICHT ANFASSEN).
+
+## Netzwerk
+
+- v2 ist NUR per VPN erreichbar (10.10.0.0/24)
+- Docker-Netzwerk: cap-v2-net (Subnet 192.168.112.0/20)
+- UFW: Ports 8601 + 8180 nur fuer VPN
 
 ## Proxmox LXC Eigenheiten (KRITISCH)
 
-Dieser Server ist ein Proxmox LXC Container. Das bedeutet:
-1. ALLE Docker-Container brauchen `privileged: true` und `security_opt: [label=disable]` — sonst scheitert socketpair() mit Permission denied
-2. npm/esbuild im Docker funktioniert NICHT — Frontend muss auf dem Host gebaut werden: `cd frontend && npm install && npm run build`, dann nur dist/ ins nginx-Image kopieren
-3. Docker-Netzwerk-Subnet ist 192.168.96.0/20 (nicht 172.17.x) — UFW und pg_hba sind bereits konfiguriert
+1. ALLE Docker-Container brauchen `privileged: true` und `security_opt: [label=disable]`
+2. npm/esbuild im Docker funktioniert NICHT — Frontend auf Host bauen
+3. Docker-Netzwerk-Subnet ist 192.168.x.x (nicht 172.17.x)
 
 ## Frontend Build-Prozess
 
 ```bash
 # 1. Frontend auf Host bauen (NICHT in Docker!)
-cd /opt/zukunftsbund-content-autopilot/frontend
+cd /opt/content-autopilot-v2/frontend
 npm install
 npm run build
 
-# 2. Nginx-Container neu bauen (kopiert dist/ rein)
-cd /opt/zukunftsbund-content-autopilot
-docker compose build nginx
+# 2. Nginx-Container neu bauen
+cd /opt/content-autopilot-v2
+docker compose -f docker-compose.v2.yml build nginx-v2
 
 # 3. Nginx neu starten
-docker compose up -d --force-recreate nginx
+docker compose -f docker-compose.v2.yml up -d --force-recreate nginx-v2
 ```
-
-Das nginx/Dockerfile ist:
-```dockerfile
-FROM nginx:alpine
-COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
-COPY frontend/dist/ /usr/share/nginx/html/
-```
-
-Build-Context ist das Projekt-Root (nicht ./nginx/).
 
 ## Backend aendern
 
 ```bash
-cd /opt/zukunftsbund-content-autopilot
-docker compose build backend celery-worker celery-beat
-docker compose up -d --force-recreate backend celery-worker celery-beat
+cd /opt/content-autopilot-v2
+docker compose -f docker-compose.v2.yml build backend-v2 celery-worker-v2 celery-beat-v2
+docker compose -f docker-compose.v2.yml up -d --force-recreate backend-v2 celery-worker-v2 celery-beat-v2
 ```
 
 ## Testen
 
 ```bash
 # Health
-curl -sf http://localhost:8501/api/health
+curl -sf http://localhost:8601/api/health
 
 # API mit Auth
-curl -sf -H 'X-API-Key: ***REMOVED-TENANT-KEY***' http://localhost:8501/api/dashboard
-curl -sf -H 'X-API-Key: ***REMOVED-TENANT-KEY***' http://localhost:8501/api/sources
-curl -sf -H 'X-API-Key: ***REMOVED-TENANT-KEY***' http://localhost:8501/api/ideas
-curl -sf -H 'X-API-Key: ***REMOVED-TENANT-KEY***' http://localhost:8501/api/feedback/stats
+curl -sf -H 'X-API-Key: ***REMOVED-TENANT-KEY***' http://localhost:8601/api/dashboard
+curl -sf -H 'X-API-Key: ***REMOVED-TENANT-KEY***' http://localhost:8601/api/sources
+curl -sf -H 'X-API-Key: ***REMOVED-TENANT-KEY***' http://localhost:8601/api/ideas
 
 # Frontend
-curl -sf -o /dev/null -w '%{http_code}' http://localhost:8501/
+curl -sf -o /dev/null -w '%{http_code}' http://localhost:8601/
 
 # MCP
-curl -sf -o /dev/null -w '%{http_code}' http://localhost:8080/sse
+curl -sf -o /dev/null -w '%{http_code}' http://localhost:8180/sse
 
-# External (VPN)
-curl -sf -o /dev/null -w '%{http_code}' http://152.53.142.163:8501/
+# v1 MUSS NOCH LAUFEN
+curl -sf -o /dev/null -w '%{http_code}' http://localhost:8501/
 
 # Logs bei Problemen
-docker compose logs backend --tail 30
-docker compose logs nginx --tail 10
-docker compose logs mcp-server --tail 10
+docker compose -f docker-compose.v2.yml logs backend-v2 --tail 30
+docker compose -f docker-compose.v2.yml logs nginx-v2 --tail 10
+docker compose -f docker-compose.v2.yml logs mcp-server-v2 --tail 10
 ```
 
-## v2.0 Backend API (bereits live)
+## v2.0 Backend API (bestehend von v1)
 
-Bestehende Endpoints:
-- GET/POST /api/sources — YouTube-Quellen verwalten
-- GET /api/items — Videos mit Transkripten/Analysen
+- GET/POST /api/sources — Quellen verwalten (YouTube, RSS, Podcast, Web)
+- GET /api/items — Videos/Artikel mit Transkripten/Analysen
 - GET/POST /api/content — Generierte Posts
 - GET /api/campaigns — Content-Kampagnen
 - GET /api/dashboard — Statistiken
 - GET /api/pipeline/progress — Pipeline-Fortschritt
 - GET /api/pipeline/log — Activity-Log
-
-Neue v2.0 Endpoints (Backend fertig, Frontend CODE COMMITTED aber NICHT DEPLOYED):
 - GET/POST /api/ideas — Content-Ideen (dialogischer Workflow)
 - POST /api/ideas/{id}/answer — Unternehmer-Antworten
 - POST /api/ideas/{id}/generate-post — Post aus Antworten generieren
 - GET /api/feedback/stats — Feedback-Statistiken
 - POST /api/feedback/edit-diff — Edit-Diff Tracking
 - POST /api/feedback/performance — Performance-Metriken
-
-**FEHLENDER Endpoint (Issue #1 — MUSS GEBAUT WERDEN):**
-- GET /api/tenants/me/voice-profile — Voice-Profil aus Feedback-Daten aggregieren
-  Frontend erwartet: `{ dimensions: {name: score_0_to_10}, total_posts: int, avg_engagement: float }`
-  12 Dimensionen: directness, competence, warmth, pragmatism, confidence, humor, storytelling, formality, emotion, technical_depth, call_to_action, authenticity
+- GET /api/tenants/me/voice-profile — Voice-Profil (12 Dimensionen)
 
 ## Tech-Stack Frontend
 
 - React 18 + Vite
-- Tailwind CSS (ZB Brand-Farben: primary=teal, accent=amber)
+- Tailwind CSS (ZB Brand: primary=teal #0F766E, accent=amber)
 - React Router DOM
 - Recharts (Charts)
 - Lucide React (Icons)
 - clsx + tailwind-merge (Utility)
+- Font: Inter
 
 UI-Komponenten unter src/components/ui/ (Button, Card, Badge, Dialog, Input, Tabs).
 
@@ -148,49 +139,49 @@ UI-Komponenten unter src/components/ui/ (Button, Card, Badge, Dialog, Input, Tab
 
 Nach JEDEM fertigen Feature:
 ```bash
-cd /opt/zukunftsbund-content-autopilot
+cd /opt/content-autopilot-v2
 git add -A
 git commit -m 'feat: <was gebaut wurde>'
 git push origin main
 ```
 
-## GRENZEN — Was du NICHT tun darfst
-
-- KEINE Dateien ausserhalb von /opt/zukunftsbund-content-autopilot/ aendern
-- KEINE systemd Services aendern oder erstellen
-- KEINE UFW/Firewall-Regeln aendern
-- KEINE PostgreSQL-Config (pg_hba.conf, postgresql.conf) aendern
-- KEINE anderen Docker-Container oder -Netzwerke anfassen
-- KEINE Ports belegen die nicht 8501 oder 8080 sind
-- LiteLLM (:4000), Nextcloud, Gitea, Nanobot, n8n — FINGER WEG
-- KEINE LLM-Config oder API-Keys aendern (GESPERRT laut Firmenrichtlinie)
-- KEIN sudo fuer systemweite Aenderungen (nur fuer docker/projekt-bezogenes)
-
-## .env Variablen (bereits konfiguriert, NICHT AENDERN)
-
-- DB_PASSWORD, DEFAULT_TENANT_KEY, LITELLM_BASE_URL, LITELLM_API_KEY
-- APP_PORT=8501, MCP_PORT=8080
-- NEXTCLOUD_URL, NEXTCLOUD_USER, NEXTCLOUD_PASSWORD
-
 ## Koordination mit Cowork (WICHTIG)
 
 Du arbeitest im Team mit einem zweiten Claude ("Cowork") der als QA und Architekt fungiert.
-Kommunikationskanal: Gitea Issues im Repo meister/zukunftsbund-content-autopilot.
+Kommunikationskanal: Gitea Issues im Repo meister/content-autopilot-v2.
 
 ### Dein Workflow vor JEDEM neuen Feature:
 
 1. Checke offene Issues:
-   curl -sf 'http://localhost:3000/api/v1/repos/meister/zukunftsbund-content-autopilot/issues?state=open&token=***REMOVED-GITEA-TOKEN***' | python3 -m json.tool
+   curl -sf 'http://localhost:3000/api/v1/repos/meister/content-autopilot-v2/issues?state=open&token=***REMOVED-GITEA-TOKEN***' | python3 -m json.tool
 
-2. Arbeite Issues mit hoechster Prioritaet zuerst ab
+2. Arbeite Issues mit hoechster Prioritaet zuerst ab (KRITISCH > HOCH > MITTEL)
 
 3. Nach Fertigstellung: Kommentiere auf dem Issue:
-   curl -sf -X POST 'http://localhost:3000/api/v1/repos/meister/zukunftsbund-content-autopilot/issues/ISSUE_NR/comments?token=***REMOVED-GITEA-TOKEN***' -H 'Content-Type: application/json' -d '{"body": "Erledigt in Commit XYZ. Deployed und getestet."}'
+   curl -sf -X POST 'http://localhost:3000/api/v1/repos/meister/content-autopilot-v2/issues/ISSUE_NR/comments?token=***REMOVED-GITEA-TOKEN***' -H 'Content-Type: application/json' -d '{"body": "Erledigt in Commit XYZ. Deployed und getestet."}'
 
 4. Schliesse das Issue:
-   curl -sf -X PATCH 'http://localhost:3000/api/v1/repos/meister/zukunftsbund-content-autopilot/issues/ISSUE_NR?token=***REMOVED-GITEA-TOKEN***' -H 'Content-Type: application/json' -d '{"state": "closed"}'
-
-5. Update COORDINATION.md mit dem neuen Stand
+   curl -sf -X PATCH 'http://localhost:3000/api/v1/repos/meister/content-autopilot-v2/issues/ISSUE_NR?token=***REMOVED-GITEA-TOKEN***' -H 'Content-Type: application/json' -d '{"state": "closed"}'
 
 ### Wenn keine Issues offen sind:
-Arbeite die Feature-Liste aus COORDINATION.md von oben nach unten ab.
+Lies SCOPE.md und arbeite die naechste Phase ab.
+
+## GRENZEN — Was du NICHT tun darfst
+
+- KEINE Dateien ausserhalb von /opt/content-autopilot-v2/ aendern
+- KEINE systemd Services aendern oder erstellen
+- KEINE UFW/Firewall-Regeln aendern (ausser im Issue #1 explizit angewiesen)
+- KEINE PostgreSQL-Config (pg_hba.conf, postgresql.conf) aendern
+- KEINE anderen Docker-Container oder -Netzwerke anfassen
+- KEINE Ports belegen die nicht 8601 oder 8180 sind
+- /opt/zukunftsbund-content-autopilot/ — ABSOLUT FINGER WEG (Pitch Alpha fuer Eric!)
+- LiteLLM (:4000), Nextcloud, Gitea, Nanobot, n8n — FINGER WEG
+- KEINE LLM-Config oder API-Keys aendern (GESPERRT laut Firmenrichtlinie)
+- KEIN sudo fuer systemweite Aenderungen
+
+## .env Variablen (bereits konfiguriert, NICHT AENDERN)
+
+- DB_PASSWORD, DEFAULT_TENANT_KEY, LITELLM_BASE_URL, LITELLM_API_KEY
+- APP_PORT=8601, MCP_PORT=8180
+- DATABASE_URL mit DB content_autopilot_v2
+- NEXTCLOUD_URL, NEXTCLOUD_USER, NEXTCLOUD_PASSWORD
