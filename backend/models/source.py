@@ -22,8 +22,10 @@ class Source(Base):
     polling_interval_minutes: Mapped[int] = mapped_column(Integer, default=15)
     auto_process: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    project_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
     last_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     tenant = relationship("Tenant", back_populates="sources")
+    project = relationship("Project", back_populates="sources")
     items = relationship("SourceItem", back_populates="source", cascade="all, delete-orphan")

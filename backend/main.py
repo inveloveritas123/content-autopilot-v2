@@ -35,6 +35,29 @@ async def lifespan(app: FastAPI):
             await session.commit()
             logger.info(f"Default tenant created with API key: {settings.default_tenant_key}")
 
+        # Auto-setup default project if none exists
+        from models.project import Project
+        existing_projects = await session.execute(select(Project).where(Project.tenant_id == tenant.id))
+        if not existing_projects.scalars().first():
+            default_project = Project(
+                tenant_id=tenant.id,
+                name="Standard",
+                slug="standard",
+                description="Standard-Projekt",
+            )
+            session.add(default_project)
+            await session.commit()
+            logger.info("Default project 'Standard' created")
+
+            # Assign existing sources to default project
+            from models.source import Source
+            await session.execute(
+                Source.__table__.update().where(
+                    Source.tenant_id == tenant.id, Source.project_id == None
+                ).values(project_id=default_project.id)
+            )
+            await session.commit()
+
         # Auto-setup Requesty.ai provider if REQUESTY_API_KEY is set and no providers exist
         if settings.requesty_api_key and tenant:
             from models.llm_provider import LLMProvider
@@ -89,6 +112,9 @@ app.include_router(scheduling_router, prefix="/api", tags=["Scheduling"])
 
 from api.carousels import router as carousels_router
 app.include_router(carousels_router, prefix="/api", tags=["Carousels"])
+
+from api.projects import router as projects_router
+app.include_router(projects_router, prefix="/api", tags=["Projects"])
 
 from api.content_dna import router as content_dna_router
 app.include_router(content_dna_router, prefix="/api", tags=["ContentDNA"])
