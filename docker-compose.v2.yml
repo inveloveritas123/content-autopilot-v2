@@ -115,6 +115,3 @@ services:
 networks:
   cap-v2-net:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 192.168.128.0/20
