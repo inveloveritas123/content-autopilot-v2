@@ -82,5 +82,32 @@ export const approveContent = (id) => request(`/content/${id}/approve`, { method
 export const getVoiceProfile = () => request('/tenants/me/voice-profile').catch(() => null)
 export const startOnboarding = (data) => request('/tenants/me/onboarding', { method: 'POST', body: data })
 
+// Pipeline
+export const getPipelineProgress = () => request('/pipeline/progress')
+export const getPipelineLog = (params) => request('/pipeline/log', { params })
+export const getCookieStatus = () => request('/pipeline/cookie-status')
+
+// Cookies
+export async function saveCookies(cookieText) {
+  const resp = await fetch(`${API_BASE}/pipeline/save-cookies`, {
+    method: 'POST',
+    headers: { 'X-API-Key': getApiKey(), 'Content-Type': 'text/plain' },
+    body: cookieText,
+  })
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: resp.statusText }))
+    throw new Error(err.detail || 'API Error')
+  }
+  return resp.json()
+}
+
+// Settings
+export const getSettings = () => request('/settings')
+export const updateSettings = (data) => request('/settings', { method: 'PUT', body: data })
+
+// Nextcloud
+export const ncBrowse = (path) => request('/nc/browse', { method: 'POST', body: { path } })
+export const ncSuggest = () => request('/nc/suggest', { method: 'POST' })
+
 // Activity
 export const getActivity = (params) => request('/activity', { params })

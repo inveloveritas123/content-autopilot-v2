@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard'
 import SourceList from './components/SourceList'
 import Pipeline from './components/Pipeline'
 import Ideas from './components/Ideas'
+import Feedback from './components/Feedback'
 import Posts from './components/Posts'
 import VoiceProfile from './components/VoiceProfile'
 import Settings from './components/Settings'
@@ -25,6 +26,7 @@ function App() {
         <Route path="/sources" element={<SourceList />} />
         <Route path="/pipeline" element={<Pipeline />} />
         <Route path="/ideas" element={<Ideas />} />
+        <Route path="/feedback" element={<Feedback />} />
         <Route path="/posts" element={<Posts />} />
         <Route path="/voice" element={<VoiceProfile />} />
         <Route path="/settings" element={<Settings />} />

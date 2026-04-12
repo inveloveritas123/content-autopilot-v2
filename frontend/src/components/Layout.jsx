@@ -6,6 +6,7 @@ import {
   Radio,
   Lightbulb,
   FileText,
+  BarChart3,
   Fingerprint,
   Settings,
 } from 'lucide-react'
@@ -16,6 +17,7 @@ const navItems = [
   { to: '/sources', label: 'Quellen', icon: Radio },
   { to: '/ideas', label: 'Ideen', icon: Lightbulb },
   { to: '/posts', label: 'Posts', icon: FileText },
+  { to: '/feedback', label: 'Feedback', icon: BarChart3 },
   { to: '/voice', label: 'Voice-Profil', icon: Fingerprint },
   { to: '/settings', label: 'Einstellungen', icon: Settings },
 ]
