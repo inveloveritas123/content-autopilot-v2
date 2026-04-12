@@ -69,6 +69,9 @@ app.include_router(scheduling_router, prefix="/api", tags=["Scheduling"])
 from api.carousels import router as carousels_router
 app.include_router(carousels_router, prefix="/api", tags=["Carousels"])
 
+from api.content_dna import router as content_dna_router
+app.include_router(content_dna_router, prefix="/api", tags=["ContentDNA"])
+
 
 @app.get("/api/health")
 async def health():
