@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @celery_app.task(name="tasks.generate_task.analyze_item")
 def analyze_item(item_id: str):
-    """Analyze a transcribed item."""
+    """Analyze a transcribed item — then auto-chain to ideation."""
     with sync_session_factory() as session:
         item = session.get(SourceItem, item_id)
         if not item or not item.transcript_text:
@@ -31,9 +31,17 @@ def analyze_item(item_id: str):
         item.status = "analyzing"
         session.commit()
 
+        # Source-Typ ermitteln für kontextabhängige Analyse
+        source = session.get(Source, item.source_id) if item.source_id else None
+        source_type = source.type if source else "youtube"
+
         try:
             analysis = asyncio.get_event_loop().run_until_complete(
-                analyze_transcript(item.transcript_text)
+                analyze_transcript(
+                    item.transcript_text,
+                    source_type=source_type,
+                    title=item.title or "",
+                )
             )
 
             if analysis:
@@ -64,9 +72,15 @@ def analyze_item(item_id: str):
                     item.campaign_match_id = match_id
 
                 session.commit()
-                logger.info(f"Item {item_id} analyzed successfully")
-                # Auto-chain: generate content
+                logger.info(f"Item {item_id} analyzed successfully (source_type={source_type})")
+
+                # ═══ AUTO-CHAIN: Content generieren (Quick-Mode) ═══
                 generate_content.delay(item_id)
+
+                # ═══ AUTO-CHAIN: Ideen + Fragen generieren (Dialog-Mode) ═══
+                from tasks.ideation_task import auto_generate_ideas
+                auto_generate_ideas.delay(item_id)
+
             else:
                 item.status = "transcribed"  # Reset to allow retry
                 session.commit()
@@ -82,7 +96,7 @@ def analyze_item(item_id: str):
 
 @celery_app.task(name="tasks.generate_task.generate_content")
 def generate_content(item_id: str):
-    """Generate content for all channels from an analyzed item."""
+    """Generate content for all channels from an analyzed item (Quick-Mode)."""
     with sync_session_factory() as session:
         item = session.get(SourceItem, item_id)
         if not item or not item.analysis:
@@ -93,7 +107,7 @@ def generate_content(item_id: str):
         session.commit()
 
         tenant = session.get(Tenant, item.tenant_id)
-        tone = (tenant.settings or {}).get("tone", "professionell, informativ, mit persoenlicher Note")
+        tone = (tenant.settings or {}).get("tone", "professionell, informativ, mit persoenliche Note")
 
         try:
             content = asyncio.get_event_loop().run_until_complete(
