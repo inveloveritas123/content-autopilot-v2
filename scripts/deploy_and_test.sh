@@ -2,6 +2,7 @@
 # ═══════════════════════════════════════════════════════════════════
 # Content Autopilot v2.0 — Deployment + QA Script
 # Ausfuehren auf Server 152.53.142.163 als root
+# Handhabt automatisch: v1→v2 Migration, alte Stacks, Port-Konflikte
 # ═══════════════════════════════════════════════════════════════════
 set -e
 
@@ -17,11 +18,54 @@ info() { echo -e "${YELLOW}[INFO]${NC} $1"; }
 ERRORS=0
 WARNINGS=0
 
-# ─── STEP 1: Projektverzeichnis ──────────────────────────────────
-info "=== STEP 1: Projekt-Setup ==="
+# ─── STEP 0: Alten v1 Stack stoppen ─────────────────────────────
+info "=== STEP 0: Alten v1 Stack stoppen (falls vorhanden) ==="
 
+OLD_DIR="/opt/content-autopilot"
 PROJECT_DIR="/opt/zukunftsbund-content-autopilot"
 GITEA_URL="http://10.10.0.1:3000/meister/zukunftsbund-content-autopilot.git"
+
+# Systemd-Services stoppen
+for svc in content-autopilot content_autopilot streamlit-autopilot; do
+    if systemctl is-active --quiet "$svc" 2>/dev/null; then
+        info "Stoppe systemd service: $svc"
+        systemctl stop "$svc" 2>/dev/null || true
+        systemctl disable "$svc" 2>/dev/null || true
+        ok "Service $svc gestoppt und deaktiviert"
+    fi
+done
+
+# Alte Docker Container stoppen (falls im alten Verzeichnis)
+if [ -d "$OLD_DIR" ] && [ -f "$OLD_DIR/docker-compose.yml" ]; then
+    info "Stoppe alte Docker Container in $OLD_DIR..."
+    cd "$OLD_DIR"
+    docker compose down 2>/dev/null || docker-compose down 2>/dev/null || true
+    ok "Alte Container gestoppt"
+fi
+
+# Prüfe ob Ports 8501/8502/8080 belegt sind
+for port in 8501 8502 8080; do
+    PID=$(lsof -ti :$port 2>/dev/null || true)
+    if [ -n "$PID" ]; then
+        PROC=$(ps -p $PID -o comm= 2>/dev/null || echo "unbekannt")
+        info "Port $port belegt von PID $PID ($PROC)"
+        if [ "$PROC" = "nginx" ] || [ "$PROC" = "python3" ] || [ "$PROC" = "streamlit" ] || [ "$PROC" = "uvicorn" ]; then
+            info "Stoppe Prozess auf Port $port (PID $PID)..."
+            kill $PID 2>/dev/null || true
+            sleep 1
+            kill -9 $PID 2>/dev/null || true
+            ok "Port $port freigegeben"
+        else
+            info "Port $port belegt von $PROC — bitte manuell pruefen"
+            WARNINGS=$((WARNINGS + 1))
+        fi
+    else
+        ok "Port $port ist frei"
+    fi
+done
+
+# ─── STEP 1: Projektverzeichnis ──────────────────────────────────
+info "=== STEP 1: Projekt-Setup ==="
 
 if [ -d "$PROJECT_DIR/.git" ]; then
     info "Projekt existiert, ziehe Updates..."
@@ -36,8 +80,35 @@ else
     ok "Git clone erfolgreich"
 fi
 
-# ─── STEP 2: .env pruefen ────────────────────────────────────────
+# ─── STEP 2: .env pruefen (mit v1-Migration) ────────────────────
 info "=== STEP 2: .env Konfiguration ==="
+
+# Falls keine .env im neuen Verzeichnis, aber eine im alten → kopieren + anpassen
+if [ ! -f "$PROJECT_DIR/.env" ] && [ -f "$OLD_DIR/.env" ]; then
+    info "Kopiere .env aus altem Verzeichnis $OLD_DIR/.env..."
+    cp "$OLD_DIR/.env" "$PROJECT_DIR/.env"
+    
+    # Fix bekannte Typos aus v1: LITELM → LITELLM
+    if grep -q "LITELM_BASE_URL" "$PROJECT_DIR/.env" 2>/dev/null; then
+        info "Korrigiere LITELM → LITELLM Typos in .env..."
+        sed -i 's/LITELM_BASE_URL/LITELLM_BASE_URL/g' "$PROJECT_DIR/.env"
+        sed -i 's/LITELM_API_KEY/LITELLM_API_KEY/g' "$PROJECT_DIR/.env"
+        ok "Typos in .env korrigiert"
+    fi
+    
+    # Fehlende v2-Variablen ergaenzen
+    if ! grep -q "DEFAULT_TENANT_KEY" "$PROJECT_DIR/.env" 2>/dev/null; then
+        echo "" >> "$PROJECT_DIR/.env"
+        echo "# v2: API-Schluessel fuer Mandanten-Authentifizierung" >> "$PROJECT_DIR/.env"
+        echo "DEFAULT_TENANT_KEY=change_me_to_random_string" >> "$PROJECT_DIR/.env"
+        info "DEFAULT_TENANT_KEY hinzugefuegt (bitte setzen!)"
+    fi
+    if ! grep -q "MCP_PORT" "$PROJECT_DIR/.env" 2>/dev/null; then
+        echo "MCP_PORT=8080" >> "$PROJECT_DIR/.env"
+    fi
+    
+    ok ".env aus v1 migriert"
+fi
 
 if [ ! -f "$PROJECT_DIR/.env" ]; then
     fail ".env Datei fehlt! Erstelle aus .env.example..."
@@ -107,13 +178,23 @@ info "=== STEP 3: PostgreSQL ==="
 
 if command -v psql &>/dev/null; then
     if sudo -u postgres psql -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw content_autopilot; then
-        ok "Datenbank 'content_autopilot' existiert"
+        ok "Datenbank 'content_autopilot' existiert (v1→v2 Alembic Migration wird automatisch ausgefuehrt)"
     else
         info "Erstelle Datenbank und User..."
         sudo -u postgres psql -c "CREATE USER autopilot WITH PASSWORD '${DB_PASSWORD}';" 2>/dev/null || true
         sudo -u postgres psql -c "CREATE DATABASE content_autopilot OWNER autopilot;" 2>/dev/null || true
         sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE content_autopilot TO autopilot;" 2>/dev/null || true
         ok "Datenbank erstellt"
+    fi
+    
+    # Prüfe ob Alembic-Tabelle existiert (v1 hatte evtl. schon Migrationen)
+    ALEMBIC_EXISTS=$(sudo -u postgres psql -d content_autopilot -tAc "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name='alembic_version');" 2>/dev/null || echo "f")
+    if [ "$ALEMBIC_EXISTS" = "t" ]; then
+        CURRENT_REV=$(sudo -u postgres psql -d content_autopilot -tAc "SELECT version_num FROM alembic_version;" 2>/dev/null || echo "unbekannt")
+        info "Aktuelle Alembic-Revision: $CURRENT_REV"
+        info "v2 Migrationen (003_*) werden beim Backend-Start automatisch angewendet"
+    else
+        info "Keine Alembic-Tabelle gefunden — wird beim ersten Start erstellt"
     fi
 else
     fail "psql nicht gefunden — PostgreSQL installiert?"
@@ -132,7 +213,7 @@ if [ $ERRORS -gt 0 ]; then
 fi
 
 cd "$PROJECT_DIR"
-info "Stoppe alte Container..."
+info "Stoppe evtl. laufende v2-Container..."
 docker compose down 2>/dev/null || true
 
 info "Baue Container neu (kann 2-3 Minuten dauern)..."
@@ -272,6 +353,22 @@ else
     docker compose exec -T backend alembic current 2>/dev/null && ok "Alembic erreichbar" || fail "Alembic check fehlgeschlagen"
 fi
 
+# Test 11: Alembic auf neuester Revision
+info "Test 11: Alembic Revision Check"
+ALEMBIC_HEAD=$(docker compose exec -T backend alembic heads 2>/dev/null | head -1 || echo "")
+ALEMBIC_CURRENT=$(docker compose exec -T backend alembic current 2>/dev/null | head -1 || echo "")
+if [ -n "$ALEMBIC_HEAD" ] && [ -n "$ALEMBIC_CURRENT" ]; then
+    if echo "$ALEMBIC_CURRENT" | grep -q "head"; then
+        ok "Datenbank ist auf neuester Migration (head)"
+    else
+        info "Alembic current: $ALEMBIC_CURRENT / head: $ALEMBIC_HEAD"
+        WARNINGS=$((WARNINGS + 1))
+    fi
+else
+    info "Konnte Alembic-Revision nicht pruefen"
+    WARNINGS=$((WARNINGS + 1))
+fi
+
 # ─── STEP 6: Zusammenfassung ─────────────────────────────────────
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
@@ -293,7 +390,8 @@ if [ $ERRORS -eq 0 ]; then
 else
     echo -e "${RED}  $ERRORS FEHLER, $WARNINGS Warnungen${NC}"
     echo ""
-    echo "  Bitte Fehler beheben und erneut starten."
+    echo "  Bitte Fehler beheben und erneut starten:"
+    echo "    bash $PROJECT_DIR/scripts/deploy_and_test.sh"
 fi
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
