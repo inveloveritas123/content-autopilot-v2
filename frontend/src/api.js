@@ -105,6 +105,13 @@ export async function saveCookies(cookieText) {
 export const getSettings = () => request('/settings')
 export const updateSettings = (data) => request('/settings', { method: 'PUT', body: data })
 
+// LLM Providers
+export const getLLMProviders = () => request('/settings/llm-providers')
+export const createLLMProvider = (data) => request('/settings/llm-providers', { method: 'POST', body: data })
+export const updateLLMProvider = (id, data) => request(`/settings/llm-providers/${id}`, { method: 'PATCH', body: data })
+export const deleteLLMProvider = (id) => request(`/settings/llm-providers/${id}`, { method: 'DELETE' })
+export const testLLMProvider = (id) => request(`/settings/llm-providers/${id}/test`, { method: 'POST' })
+
 // Nextcloud
 export const ncBrowse = (path) => request('/nc/browse', { method: 'POST', body: { path } })
 export const ncSuggest = () => request('/nc/suggest', { method: 'POST' })

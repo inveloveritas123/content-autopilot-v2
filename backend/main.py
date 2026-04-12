@@ -50,6 +50,7 @@ from api.tenants import router as tenants_router
 from api.activity import router as activity_router
 from api.ideas import router as ideas_router
 from api.feedback import router as feedback_router
+from api.llm_settings import router as llm_settings_router
 
 app.include_router(dashboard_router, prefix="/api", tags=["Dashboard"])
 app.include_router(sources_router, prefix="/api", tags=["Sources"])
@@ -60,6 +61,7 @@ app.include_router(tenants_router, prefix="/api", tags=["Tenants"])
 app.include_router(activity_router, prefix="/api", tags=["Activity"])
 app.include_router(ideas_router, prefix="/api", tags=["Ideas"])
 app.include_router(feedback_router, prefix="/api", tags=["Feedback"])
+app.include_router(llm_settings_router, prefix="/api", tags=["Settings"])
 
 
 @app.get("/api/health")

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card'
 import { Button } from './ui/Button'
+import LLMSettings from './LLMSettings'
 import { Badge } from './ui/Badge'
 import { Input, Textarea } from './ui/Input'
 import { Dialog } from './ui/Dialog'
@@ -275,6 +276,13 @@ export default function Settings() {
           </div>
         </div>
       </Dialog>
+
+      {/* LLM Provider Management */}
+      <Card className="mt-6">
+        <CardContent>
+          <LLMSettings />
+        </CardContent>
+      </Card>
     </div>
   )
 }
