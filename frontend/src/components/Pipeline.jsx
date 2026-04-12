@@ -25,6 +25,8 @@ const statusLabels = {
 export default function Pipeline() {
   const [statusFilter, setStatusFilter] = useState('')
   const [sourceFilter, setSourceFilter] = useState('')
+  const [sourceTypeFilter, setSourceTypeFilter] = useState('')
+  const [archivedFilter, setArchivedFilter] = useState('false')
   const [sortField, setSortField] = useState('published_at')
   const [sortDir, setSortDir] = useState('desc')
   const [searchText, setSearchText] = useState('')
@@ -36,8 +38,8 @@ export default function Pipeline() {
   const { data: progress, refetch: refetchProgress } = useApi(getPipelineProgress, [])
   const { data: activityLog, refetch: refetchLog } = useApi(() => getPipelineLog(30), [])
   const { data: items, loading, refetch } = useApi(
-    () => getItems({ limit: 200, status: statusFilter || undefined, source_id: sourceFilter || undefined }),
-    [statusFilter, sourceFilter]
+    () => getItems({ limit: 200, status: statusFilter || undefined, source_id: sourceFilter || undefined, source_type: sourceTypeFilter || undefined, archived: archivedFilter || undefined }),
+    [statusFilter, sourceFilter, sourceTypeFilter, archivedFilter]
   )
   const [selectedItem, setSelectedItem] = useState(null)
   const [detail, setDetail] = useState(null)
@@ -304,10 +306,22 @@ export default function Pipeline() {
           <option value="">Alle</option>
           {Object.entries(statusLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </Select>
-        <Select value={sortField} onChange={e => setSortField(e.target.value)} label="Sortieren nach">
+        <Select value={sourceTypeFilter} onChange={e => setSourceTypeFilter(e.target.value)} label="Quellentyp">
+          <option value="">Alle Typen</option>
+          <option value="youtube">YouTube</option>
+          <option value="rss">RSS</option>
+          <option value="podcast">Podcast</option>
+          <option value="web">Webseite</option>
+        </Select>
+        <Select value={archivedFilter} onChange={e => setArchivedFilter(e.target.value)} label="Archiv">
+          <option value="false">Nur aktive</option>
+          <option value="true">Nur archivierte</option>
+          <option value="all">Alle</option>
+        </Select>
+        <Select value={sortField} onChange={e => setSortField(e.target.value)} label="Sortieren">
           <option value="published_at">Datum</option>
-          <option value="title">Videoname</option>
-          <option value="channel_name">Kanal</option>
+          <option value="title">Titel</option>
+          <option value="channel_name">Quelle</option>
           <option value="view_count">Views</option>
           <option value="trend_score">Trend</option>
         </Select>
@@ -316,9 +330,9 @@ export default function Pipeline() {
           <option value="asc">Aufsteigend</option>
         </Select>
         <div className="flex-1 min-w-[200px]">
-          <Input label="Suche (Titel, Kanal, Schlagwoerter)" value={searchText}
+          <Input label="Suche" value={searchText}
             onChange={e => setSearchText(e.target.value)}
-            placeholder="z.B. KI, Claude, Marketing..." />
+            placeholder="Titel, Kanal, Schlagwoerter..." />
         </div>
       </div>
 
