@@ -28,6 +28,10 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.transcribe_task.batch_transcribe",
         "schedule": 1800.0,
     },
+    "cleanup-media-every-6h": {
+        "task": "tasks.cleanup_task.cleanup_media_files",
+        "schedule": 21600.0,
+    },
 }
 
 # Explicit task module imports
@@ -37,4 +41,5 @@ celery_app.conf.include = [
     "tasks.generate_task",
     "tasks.views_task",
     "tasks.ideation_task",
+    "tasks.cleanup_task",
 ]
