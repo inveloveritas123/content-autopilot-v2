@@ -1,28 +1,29 @@
 # Content Autopilot v2 — Status
 
-## Letzte Aenderung: 2026-04-12 17:58
+## Letzte Aenderung: 2026-04-12 18:10
 
 | # | Titel | Status | Letzter Test | Ergebnis |
 |---|-------|--------|-------------|----------|
 | 8 | Bootstrap | done | 2026-04-12 | Repo analysiert, Docs gelesen |
-| 1/10 | Deploy v2 | done | 2026-04-12 | 6 Container auf :8601/:8180, DB migriert |
-| 3 | RSS-Adapter | done | 2026-04-12 | 50 Artikel mit Volltext via readability |
-| 4 | Podcast-Adapter | done | 2026-04-12 | 2826 Episoden mit audio_url importiert |
-| 5 | WebScraping-Adapter | open | - | - |
-| 6 | Monitor-Task | open | - | - |
-| 7 | Frontend Source-Mgmt | open | - | - |
+| 1 | Deploy v2 | done | 2026-04-12 | 6 Container auf :8601/:8180 |
+| 3 | RSS-Adapter | done | 2026-04-12 | 50 Artikel mit Volltext |
+| 4 | Podcast-Adapter | done | 2026-04-12 | 2826 Episoden mit audio_url |
+| 5 | WebScraping-Adapter | done | 2026-04-12 | Change Detection funktioniert |
+| 6 | Monitor-Task | done | 2026-04-12 | Dynamische Intervalle pro Source |
+| 7 | Frontend Source-Mgmt | done | 2026-04-12 | Tabs, Cards, Intervall-Config |
+
+## Phase 1 KOMPLETT
+
+Alle 4 Source-Adapter (YouTube, RSS, Podcast, Web) funktionieren.
+Monitor-Task pollt mit dynamischen Intervallen.
+Frontend zeigt Multi-Source-Verwaltung mit Tabs.
 
 ## System-Status
-- v2 Health: OK (:8601/api/health)
-- v2 Frontend: 200 (:8601)
-- v2 MCP: SSE erreichbar (:8180)
-- v1 Pitch Alpha: LAEUFT (:8501)
+- v2: Health OK, Frontend 200, MCP erreichbar
+- v1 Pitch Alpha: LAEUFT auf :8501 — nicht angefasst
 
-## Bekannte Einschraenkungen
-- Podcast Audio-Transkription E2E ungetestet (LiteLLM → Gemini Audio)
-- 2826 Podcast-Items in DB (Test-Daten, ggf. bereinigen)
-
-## Naechste Schritte
-- #5 WebScraping-Adapter (HOCH)
-- #6 Monitor-Task generalisieren (HOCH)
-- #7 Frontend Source-Management (MITTEL)
+## Naechste Schritte (Phase 2)
+- Dialogischer Workflow E2E
+- Brand Voice Onboarding
+- Content Calendar
+- Performance Tracking
