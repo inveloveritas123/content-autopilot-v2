@@ -210,6 +210,31 @@ async def get_voice_profile(
 
     return {
         "dimensions": dimensions,
+        "defaults": dict(_ZB_VOICE_DEFAULTS),
         "total_posts": total_posts,
         "avg_engagement": avg_engagement,
     }
+
+
+class VoiceProfileUpdate(BaseModel):
+    dimensions: dict
+
+
+@router.patch("/tenants/me/voice-profile")
+async def update_voice_profile(
+    data: VoiceProfileUpdate,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update voice profile dimensions (custom overrides)."""
+    current = tenant.settings or {}
+    # Validate and store only known dimensions
+    valid_dims = {}
+    for k, v in data.dimensions.items():
+        if k in _ZB_VOICE_DEFAULTS and isinstance(v, (int, float)):
+            valid_dims[k] = max(0.0, min(10.0, float(v)))
+    current["voice_dimensions"] = valid_dims
+    tenant.settings = current
+    flag_modified(tenant, "settings")
+    await db.commit()
+    return {"status": "saved", "dimensions": valid_dims}

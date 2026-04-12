@@ -80,6 +80,7 @@ export const approveContent = (id) => request(`/content/${id}/approve`, { method
 
 // Tenants / Voice
 export const getVoiceProfile = () => request('/tenants/me/voice-profile').catch(() => null)
+export const updateVoiceProfile = (dimensions) => request('/tenants/me/voice-profile', { method: 'PATCH', body: { dimensions } })
 
 // Pipeline
 export const getPipelineProgress = () => request('/pipeline/progress')
