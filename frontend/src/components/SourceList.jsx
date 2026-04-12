@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Radio, Rss, Mic, Globe, Plus, RefreshCw, Trash2, Power, Clock, Loader2, Search, Compass, ExternalLink } from 'lucide-react'
+import { Radio, Rss, Mic, Globe, Plus, RefreshCw, Trash2, Power, Clock, Loader2, Search, Compass, ExternalLink, Play } from 'lucide-react'
 import { useApi } from '../hooks/useApi'
-import { getSources, createSource, updateSource, deleteSource, checkSource, searchChannels, discoverSources } from '../api'
+import { getSources, createSource, updateSource, deleteSource, checkSource, searchChannels, searchVideos, discoverSources } from '../api'
 
 const SOURCE_TYPES = [
   { key: '', label: 'Alle', icon: Radio },
@@ -188,6 +188,80 @@ function AddSourceForm({ type, onAdd, onCancel }) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function YouTubeVideoSearch() {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [searched, setSearched] = useState(false)
+
+  const handleSearch = async () => {
+    if (!query.trim()) return
+    setLoading(true)
+    try {
+      const data = await searchVideos(query)
+      setResults(data)
+      setSearched(true)
+    } catch (e) {
+      alert('Suche fehlgeschlagen: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="mb-5 bg-white rounded-xl border border-surface-border p-4">
+      <h3 className="text-xs font-semibold text-ink mb-3 flex items-center gap-1.5">
+        <Play className="w-3.5 h-3.5 text-primary-600" />
+        YouTube-Video suchen
+      </h3>
+      <div className="flex gap-2 mb-3">
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleSearch()}
+          placeholder="z.B. KI Handwerk Digitalisierung..."
+          className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+        <button onClick={handleSearch} disabled={loading || !query.trim()}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors">
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+        </button>
+      </div>
+
+      {results.length > 0 && (
+        <div className="space-y-2 max-h-80 overflow-y-auto">
+          {results.map((v, i) => (
+            <a key={v.video_id || i} href={v.url} target="_blank" rel="noopener noreferrer"
+              className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors group">
+              {v.thumbnail ? (
+                <img src={v.thumbnail} alt="" className="w-20 h-12 rounded object-cover shrink-0 bg-gray-100" />
+              ) : (
+                <div className="w-20 h-12 rounded bg-gray-100 flex items-center justify-center shrink-0">
+                  <Play className="w-5 h-5 text-gray-400" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-ink line-clamp-2 group-hover:text-primary-700">{v.title}</p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  {v.channel_name && <span className="text-[10px] text-ink-muted">{v.channel_name}</span>}
+                  {v.duration && <span className="text-[10px] text-gray-400">{v.duration}</span>}
+                  {v.view_count && <span className="text-[10px] text-gray-400">{v.view_count}</span>}
+                  {v.published && <span className="text-[10px] text-gray-400">{v.published}</span>}
+                </div>
+              </div>
+              <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-primary-500 shrink-0 mt-0.5" />
+            </a>
+          ))}
+        </div>
+      )}
+
+      {searched && results.length === 0 && !loading && (
+        <p className="text-xs text-ink-muted text-center py-4">Keine Videos gefunden.</p>
+      )}
     </div>
   )
 }
@@ -495,6 +569,11 @@ export default function SourceList() {
 
           {addingType && (
             <AddSourceForm type={addingType} onAdd={handleAdd} onCancel={() => setAddingType(null)} />
+          )}
+
+          {/* YouTube Video-Suche im YouTube-Tab */}
+          {activeTypeTab === 'youtube' && !addingType && (
+            <YouTubeVideoSearch />
           )}
 
           {filtered.length === 0 ? (
