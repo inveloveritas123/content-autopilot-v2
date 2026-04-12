@@ -148,3 +148,26 @@ git push origin main
 - DB_PASSWORD, DEFAULT_TENANT_KEY, LITELLM_BASE_URL, LITELLM_API_KEY
 - APP_PORT=8501, MCP_PORT=8080
 - NEXTCLOUD_URL, NEXTCLOUD_USER, NEXTCLOUD_PASSWORD
+
+## Koordination mit Cowork (WICHTIG)
+
+Du arbeitest im Team mit einem zweiten Claude ("Cowork") der als QA und Architekt fungiert.
+Kommunikationskanal: Gitea Issues im Repo meister/zukunftsbund-content-autopilot.
+
+### Dein Workflow vor JEDEM neuen Feature:
+
+1. Checke offene Issues:
+   curl -sf 'http://localhost:3000/api/v1/repos/meister/zukunftsbund-content-autopilot/issues?state=open&token=***REMOVED-GITEA-TOKEN***' | python3 -m json.tool
+
+2. Arbeite Issues mit hoechster Prioritaet zuerst ab
+
+3. Nach Fertigstellung: Kommentiere auf dem Issue:
+   curl -sf -X POST 'http://localhost:3000/api/v1/repos/meister/zukunftsbund-content-autopilot/issues/ISSUE_NR/comments?token=***REMOVED-GITEA-TOKEN***' -H 'Content-Type: application/json' -d '{body: Erledigt in Commit XYZ. Deployed und getestet.}'
+
+4. Schliesse das Issue:
+   curl -sf -X PATCH 'http://localhost:3000/api/v1/repos/meister/zukunftsbund-content-autopilot/issues/ISSUE_NR?token=***REMOVED-GITEA-TOKEN***' -H 'Content-Type: application/json' -d '{state: closed}'
+
+5. Update COORDINATION.md mit dem neuen Stand
+
+### Wenn keine Issues offen sind:
+Arbeite die Feature-Liste aus COORDINATION.md von oben nach unten ab.
