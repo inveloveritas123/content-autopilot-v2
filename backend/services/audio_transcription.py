@@ -13,9 +13,13 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+COOKIES_FILE = os.environ.get("YTDLP_COOKIES_FILE", "/opt/content-autopilot-v2/cookies.txt")
+
+
 def download_youtube_audio(video_url: str) -> Optional[str]:
     """Download audio from YouTube video using yt-dlp.
 
+    Uses cookies if YTDLP_COOKIES_FILE exists (helps with IP-blocking on Datacenter IPs).
     Returns path to temporary MP3 file, or None on failure.
     """
     try:
@@ -39,6 +43,12 @@ def download_youtube_audio(video_url: str) -> Optional[str]:
         "no_warnings": True,
         "socket_timeout": 30,
     }
+
+    if os.path.exists(COOKIES_FILE):
+        ydl_opts["cookiefile"] = COOKIES_FILE
+        logger.info(f"yt-dlp: using cookies from {COOKIES_FILE}")
+    else:
+        logger.debug(f"yt-dlp: no cookies file at {COOKIES_FILE}, proceeding without")
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:

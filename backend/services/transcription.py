@@ -1,11 +1,14 @@
 """
 Transkription — komplett API-basiert, kein Whisper.
 
-Strategie:
-1. YouTube-Videos: youtube-transcript-api (YouTube's eigene Untertitel)
-2. Fallback YouTube: Gemini Audio API (Video-URL direkt an Gemini senden)
-3. Podcasts/Audio: Gemini Flash 2.0 Audio-API (1M Token Kontext = ~8h Audio)
-4. Fallback Audio: AssemblyAI oder Deepgram API
+Strategie YouTube (4-Stufen-Fallback):
+1. youtube-transcript-api (YouTube's eigene Untertitel — schnell, kostenlos)
+2. Gemini URL-Direkt (YouTube-URL direkt an Gemini senden — kein Download, ~$0.001/Video)
+3. yt-dlp + Whisper/Gemini Audio (mit Cookie-Support für IP-Blocking)
+4. Gemini Audio base64 (letzter Fallback via Audio-URL)
+
+Podcasts/Audio:
+- Gemini Flash 2.0 Audio-API (1M Token Kontext = ~8h Audio)
 
 KEIN lokales Whisper — alles über Cloud-APIs.
 """
@@ -74,6 +77,70 @@ async def get_youtube_transcript(video_id: str, languages: list[str] = None) -> 
 
     except Exception as e:
         logger.warning(f"YouTube transcript API failed for {video_id}: {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════════
+# GEMINI URL-DIREKT TRANSKRIPTION (Stufe 2)
+# ═══════════════════════════════════════════════════
+
+async def transcribe_youtube_with_gemini_url(
+    video_id: str,
+    language: str = "de",
+) -> Optional[str]:
+    """Gemini 2.0 Flash verarbeitet YouTube-URL direkt — kein Audio-Download nötig.
+
+    Vorteile:
+    - Kein IP-Blocking (Gemini hat eigenen YouTube-Zugang)
+    - Kein Download (~$0.001/Video)
+    - Funktioniert auch wenn youtube_transcript_api geblockt ist
+    """
+    from config import settings
+
+    youtube_url = f"https://www.youtube.com/watch?v={video_id}"
+    prompt = (
+        f"Transkribiere dieses YouTube-Video vollständig und wörtlich auf "
+        f"{'Deutsch' if language == 'de' else language.upper()}.\n"
+        f"Gib NUR den transkribierten Text zurück, ohne Zeitstempel, "
+        f"ohne Sprecherbezeichnungen. Behalte natürliche Absätze bei."
+    )
+
+    try:
+        api_url = f"{settings.litellm_base_url}/chat/completions"
+        payload = {
+            "model": "google/gemini-2.0-flash",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": youtube_url}},
+                    ],
+                }
+            ],
+            "max_tokens": 100000,
+        }
+
+        async with httpx.AsyncClient(timeout=300) as client:
+            resp = await client.post(
+                api_url,
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {settings.litellm_api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            resp.raise_for_status()
+            result = resp.json()
+
+        text = result["choices"][0]["message"]["content"]
+        if text and len(text) > 100:
+            logger.info(f"Gemini URL-direct transcript for {video_id}: {len(text)} chars")
+            return text
+        return None
+
+    except Exception as e:
+        logger.warning(f"Gemini URL-direct transcription failed for {video_id}: {e}")
         return None
 
 
@@ -201,18 +268,25 @@ async def transcribe_content(
     """
 
     if source_type == "youtube":
-        # Primär: YouTube's eigene Untertitel
+        # Stufe 1: YouTube's eigene Untertitel (schnell, kostenlos)
         transcript = await get_youtube_transcript(external_id, [language, "en"])
         if transcript:
             return transcript
 
-        # Fallback: yt-dlp download + Whisper/Gemini transcription
-        logger.info(f"YouTube captions unavailable for {external_id}, trying yt-dlp + Whisper")
+        # Stufe 2: Gemini URL-Direkt (kein Download, umgeht IP-Blocking)
+        logger.info(f"YouTube captions unavailable for {external_id}, trying Gemini URL-direct")
+        transcript = await transcribe_youtube_with_gemini_url(external_id, language)
+        if transcript:
+            return transcript
+
+        # Stufe 3: yt-dlp + Whisper/Gemini Audio (mit Cookie-Support)
+        logger.info(f"Gemini URL-direct failed for {external_id}, trying yt-dlp + audio")
         from services.audio_transcription import transcribe_youtube_video
         transcript = await transcribe_youtube_video(external_id, language)
         if transcript:
             return transcript
-        logger.warning(f"Audio transcription also failed for {external_id}")
+
+        logger.warning(f"All transcription methods failed for {external_id}")
         return None
 
     elif source_type == "rss":

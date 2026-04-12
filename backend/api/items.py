@@ -204,6 +204,45 @@ async def start_generation(
     return {"status": "generation_started", "item_id": item_id}
 
 
+@router.post("/items/{item_id}/retry-transcribe")
+async def retry_transcribe(
+    item_id: str,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reset a failed item and retry transcription via full 4-step fallback chain."""
+    item = await db.get(SourceItem, uuid.UUID(item_id))
+    if not item or item.tenant_id != tenant.id:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    item.status = "new"
+    item.transcript_text = None
+    await db.commit()
+    transcribe_item.delay(item_id)
+    return {"status": "retry_started", "item_id": item_id}
+
+
+@router.post("/items/bulk-retry-failed")
+async def bulk_retry_failed(
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reset all transcription_failed / needs_voicescriptor items and retry."""
+    from sqlalchemy import or_
+    q = select(SourceItem).where(
+        SourceItem.tenant_id == tenant.id,
+        or_(SourceItem.status == "transcription_failed", SourceItem.status == "needs_voicescriptor"),
+    )
+    result = await db.execute(q)
+    items = result.scalars().all()
+    for item in items:
+        item.status = "new"
+        item.transcript_text = None
+    await db.commit()
+    batch_transcribe.delay(str(tenant.id))
+    return {"status": "bulk_retry_started", "retried": len(items)}
+
+
 @router.post("/items/update-views")
 async def trigger_view_update(
     tenant: Tenant = Depends(get_tenant),

@@ -8,7 +8,7 @@ from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from models.source_item import SourceItem
 from models.source import Source
-from services.transcription import get_youtube_transcript as get_transcript, transcribe_content
+from services.transcription import transcribe_content
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ def transcribe_item(item_id: str):
         if not item:
             return {"item_id": item_id, "status": "not_found"}
 
-        if item.status not in ("new", "needs_voicescriptor"):
+        if item.status not in ("new", "transcription_failed", "needs_voicescriptor"):
             return {"item_id": item_id, "status": item.status, "skipped": True}
 
         item.status = "transcribing"
@@ -52,23 +52,16 @@ def transcribe_item(item_id: str):
             analyze_item.delay(item_id)
             return {"item_id": item_id, "status": "transcribed", "source": f"{source_type}_api"}
         else:
-            item.status = "needs_voicescriptor"
+            item.status = "transcription_failed"
             session.commit()
-            return {"item_id": item_id, "status": "failed"}
+            return {"item_id": item_id, "status": "transcription_failed"}
 
 
 @celery_app.task(name="tasks.transcribe_task.batch_transcribe")
 def batch_transcribe(tenant_id: str = None):
-    """
-    Batch transcribe 'new' items.
-    - Tries youtube_transcript_api first (fast, for videos with subs)
-    - Falls back to VoiceScriptor/Whisper (for videos without subs)
-    - Stops immediately on rate-limit (tries again next cycle in 30 min)
-    - Max 10 VoiceScriptor jobs per batch (RAM protection)
-    - 10 second delay between VoiceScriptor requests
-    """
+    """Batch transcribe 'new' items via unified transcribe_content() — full 4-step fallback chain."""
     with sync_session_factory() as session:
-        query = select(SourceItem).where(SourceItem.status == "new")
+        query = select(SourceItem).where(SourceItem.status.in_(["new", "transcription_failed"]))
         if tenant_id:
             query = query.where(SourceItem.tenant_id == tenant_id)
         query = query.order_by(SourceItem.created_at.asc())
@@ -76,80 +69,47 @@ def batch_transcribe(tenant_id: str = None):
         items = session.execute(query).scalars().all()
         total = len(items)
         success = 0
-        no_subs = 0
-        rate_limit_streak = 0
-        voicescriptor_jobs = 0
-        MAX_VS_PER_BATCH = 10
+        failed = 0
 
-        logger.info(f"=== BATCH START: {total} videos to transcribe ===")
+        logger.info(f"=== BATCH START: {total} items to transcribe ===")
 
         for i, item in enumerate(items):
-            if item.status != "new":
-                continue
-
             item.status = "transcribing"
             session.commit()
 
             source = session.get(Source, item.source_id)
-            channel_name = source.name if source else ""
+            source_type = source.type if source else "youtube"
 
-            transcript_text, source_tag = asyncio.run(
-                get_transcript(
-                    video_id=item.external_id,
-                    title=item.title or "",
-                    channel_name=channel_name,
-                    published_at=item.published_at,
+            transcript_text = asyncio.run(
+                transcribe_content(
+                    source_type=source_type,
+                    external_id=item.external_id,
+                    url=item.url or "",
+                    audio_url=item.audio_url or (item.url if source_type == "podcast" else ""),
+                    language=source.language if source else "de",
+                    content_text=item.transcript_text or "",
                 )
             )
 
             if transcript_text:
                 item.transcript_text = transcript_text
-                item.transcript_source = source_tag
+                item.transcript_source = f"{source_type}_api"
                 item.status = "transcribed"
                 success += 1
-                rate_limit_streak = 0
-                if "voicescriptor" in (source_tag or ""):
-                    voicescriptor_jobs += 1
-                logger.info(f"[{success}/{total}] OK ({source_tag}): {item.title[:60]}")
-            elif source_tag == "no_subs":
-                item.status = "needs_voicescriptor"
-                no_subs += 1
-                rate_limit_streak = 0
-                logger.info(f"[{i+1}/{total}] Keine Subs: {item.title[:60]}")
-            elif source_tag == "proxy_offline":
-                item.status = "new"
-                session.commit()
-                logger.warning(f"=== Proxy offline (Roberts PC nicht verbunden). Batch gestoppt. ===")
-                break
-            elif source_tag == "rate_limited":
-                item.status = "new"
-                rate_limit_streak += 1
-                logger.warning(f"[{i+1}/{total}] Rate-limited (streak {rate_limit_streak})")
-
-                if rate_limit_streak >= 2:
-                    session.commit()
-                    logger.warning(f"=== Rate-limited, stopping batch. Retry in 30 min. ===")
-                    break
+                logger.info(f"[{success}/{total}] OK: {item.title[:60]}")
+                from tasks.generate_task import analyze_item
+                analyze_item.delay(item.id)
             else:
-                item.status = "needs_voicescriptor"
-                no_subs += 1
+                item.status = "transcription_failed"
+                failed += 1
+                logger.warning(f"[{i+1}/{total}] FAILED: {item.title[:60]}")
 
             session.commit()
-
-            # Limit VoiceScriptor jobs per batch (RAM protection)
-            if voicescriptor_jobs >= MAX_VS_PER_BATCH:
-                logger.info(f"=== Max {MAX_VS_PER_BATCH} VoiceScriptor jobs reached, stopping. Next batch in 30 min. ===")
-                break
 
         remaining = session.execute(
             select(func.count(SourceItem.id)).where(SourceItem.status == "new")
         ).scalar() or 0
 
-        result = {
-            "total": total,
-            "success": success,
-            "no_subs": no_subs,
-            "remaining_new": remaining,
-        }
+        result = {"total": total, "success": success, "failed": failed, "remaining_new": remaining}
         logger.info(f"=== BATCH DONE: {result} ===")
         return result

@@ -608,10 +608,10 @@ class WebScrapingAdapter(AbstractSourceAdapter):
             return text
         except Exception as e:
             logger.warning(f"Readability failed for {url}: {e}")
-            # Fallback: strip all tags
+            # Fallback: strip all tags — no hard-cap, raw data must be preserved
             text = re.sub(r'<[^>]+>', ' ', html)
             text = re.sub(r'\s+', ' ', text).strip()
-            return text[:10000] if len(text) > 10000 else text
+            return text
 
     @staticmethod
     def _extract_title(html: str) -> Optional[str]:
@@ -639,10 +639,11 @@ async def check_source_for_new_items(
         adapter = AbstractSourceAdapter.get_adapter(source.type)
         items = await adapter.fetch_new_items(source, existing_external_ids)
 
-        # For text-based sources: enrich with full content extraction
+        # For text-based sources: ALWAYS fetch full article via Readability.
+        # Feed content (often truncated) is only used as fallback if Readability fails.
         if source.type in ("rss",):  # Web items already have full content from fetch
             for item in items:
-                if item.get("url") and (not item.get("content_text") or len(item.get("content_text", "")) < 500):
+                if item.get("url"):
                     try:
                         full_text = await adapter.extract_content(item)
                         if full_text and len(full_text) > len(item.get("content_text", "")):
