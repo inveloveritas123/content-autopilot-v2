@@ -30,10 +30,11 @@ celery_app.conf.beat_schedule = {
     },
 }
 
-# Explicit task module imports (autodiscover unreliable with systemd)
+# Explicit task module imports
 celery_app.conf.include = [
     "tasks.monitor_task",
     "tasks.transcribe_task",
     "tasks.generate_task",
     "tasks.views_task",
+    "tasks.ideation_task",
 ]
