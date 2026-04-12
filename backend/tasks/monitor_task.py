@@ -31,7 +31,7 @@ def monitor_all_sources():
                 existing_ids = set(existing)
 
                 # Fetch new items via Adapter Pattern
-                new_items = asyncio.get_event_loop().run_until_complete(
+                new_items = asyncio.run(
                     check_source_for_new_items(source, existing_ids)
                 )
 
@@ -69,7 +69,7 @@ def monitor_all_sources():
                         ).scalar_one_or_none()
                         if result:
                             if result.status == "transcribed":
-                                # RSS/Text-Quellen: direkt analysieren (kein Transkript nötig)
+                                # RSS/Text-Quellen: direkt analysieren (kein Transkript noetig)
                                 from tasks.generate_task import analyze_item
                                 analyze_item.delay(str(result.id))
                             else:
@@ -99,7 +99,7 @@ def check_single_source(source_id: str):
         ).scalars().all()
         existing_ids = set(existing)
 
-        new_items = asyncio.get_event_loop().run_until_complete(
+        new_items = asyncio.run(
             check_source_for_new_items(source, existing_ids)
         )
 
