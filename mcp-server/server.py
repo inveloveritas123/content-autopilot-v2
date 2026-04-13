@@ -81,7 +81,43 @@ async def autopilot_dashboard() -> str:
     """
     try:
         data = await _api("GET", "/api/dashboard")
-        return _fmt(data, "Content Autopilot — Dein Dashboard")
+        stats = data.get("stats", {})
+        pipeline = data.get("pipeline", {})
+        budget_exceeded = data.get("llm_budget_exceeded", False)
+
+        lines = ["## Content Autopilot — Status\n"]
+
+        # Budget warning takes priority
+        if budget_exceeded:
+            lines.append("🔴 **ACHTUNG: KI-Pipeline pausiert** — Requesty.ai Portal-Budget erschoepft.")
+            lines.append("   Robert muss unter https://requesty.ai das Guthaben aufladen.\n")
+
+        # Pipeline status
+        lines.append("### Pipeline")
+        lines.append(f"- **{stats.get('total_items', 0)}** Items gesamt")
+        transcribed = pipeline.get("transcribed", 0)
+        if transcribed > 0:
+            lines.append(f"- **{transcribed}** warten auf Analyse {'(pausiert)' if budget_exceeded else ''}")
+        analyzed = pipeline.get("analyzed", 0) + pipeline.get("content_ready", 0)
+        if analyzed > 0:
+            lines.append(f"- **{analyzed}** analysiert / content-ready")
+
+        # Content status
+        lines.append("\n### Posts")
+        lines.append(f"- **{stats.get('drafts', 0)}** Entw\u00fcrfe")
+        lines.append(f"- **{stats.get('approved', 0)}** freigegeben")
+        lines.append(f"- **{stats.get('published', 0)}** ver\u00f6ffentlicht")
+
+        # Guidance
+        lines.append("\n### Was jetzt?")
+        if budget_exceeded:
+            lines.append("1. Guthaben bei requesty.ai aufladen (blockiert alles andere)")
+        if stats.get("approved", 0) > 0:
+            lines.append(f"- {stats['approved']} Posts sind freigegeben und k\u00f6nnen ver\u00f6ffentlicht werden")
+        if stats.get("drafts", 0) > 0:
+            lines.append(f"- {stats['drafts']} Entw\u00fcrfe warten auf Pr\u00fcfung → nutze `autopilot_list_ideas` oder Posts-Tab")
+
+        return "\n".join(lines)
     except Exception as e:
         return f"Fehler beim Laden des Dashboards: {e}"
 
@@ -202,13 +238,53 @@ async def autopilot_list_ideas(params: ListIdeasInput) -> str:
         Sortierte Liste der Ideen nach LinkedIn-Relevanz-Score.
     """
     try:
-        query = {}
+        query = {"limit": 30}
         if params.status:
             query["status"] = params.status
         if params.source_item_id:
             query["source_item_id"] = params.source_item_id
         data = await _api("GET", "/api/ideas", params=query)
-        return _fmt(data, "Content-Ideen")
+        if isinstance(data, list):
+            ideas = data
+            total = len(data)
+        elif isinstance(data, dict):
+            ideas = data.get("items", data.get("ideas", []))
+            total = data.get("total", len(ideas))
+        else:
+            ideas = []
+            total = 0
+
+        if not ideas:
+            return "Keine Ideen gefunden. Nutze `autopilot_generate_ideas` um neue Ideen zu generieren."
+
+        lines = [f"## Content-Ideen ({len(ideas)} angezeigt von {total} gesamt)\n"]
+        for idea in ideas[:20]:  # Show max 20 for readability
+            score = idea.get("relevance_score", 0)
+            angle = idea.get("angle", "?")
+            status = idea.get("status", "new")
+            q_count = len(idea.get("entrepreneur_questions", []))
+            answered = idea.get("answered_questions", 0)
+
+            status_icon = {"new": "🆕", "answers_received": "✅", "content_generated": "📝", "skipped": "⏭️"}.get(status, "•")
+            lines.append(f"{status_icon} **{idea.get('title', 'Unbekannt')}**")
+            lines.append(f"   ID: `{idea.get('id', '')[:8]}` | Angle: {angle} | Score: {score}/10 | Fragen: {answered}/{q_count}")
+            if idea.get("hook_suggestion"):
+                lines.append(f"   Hook: *{idea['hook_suggestion'][:80]}...*" if len(idea['hook_suggestion']) > 80 else f"   Hook: *{idea['hook_suggestion']}*")
+            lines.append("")
+
+        if total > 20:
+            lines.append(f"*... und {total - 20} weitere Ideen (nur erste 20 angezeigt). Filter mit status=new/answers_received etc.*")
+
+        lines.append("\n---")
+        lines.append("**Naechste Schritte:**")
+        new_count = sum(1 for i in ideas if i.get("status") == "new")
+        answered_count = sum(1 for i in ideas if i.get("status") == "answers_received")
+        if answered_count > 0:
+            lines.append(f"- {answered_count} Ideen haben Antworten → `autopilot_save_post` oder `dialogue_generate_post`")
+        if new_count > 0:
+            lines.append(f"- {new_count} neue Ideen → `autopilot_get_idea` für Details und Fragen")
+
+        return "\n".join(lines)
     except Exception as e:
         return f"Fehler beim Laden der Ideen: {e}"
 
@@ -510,7 +586,406 @@ async def autopilot_analyze_video(params: AnalyzeVideoInput) -> str:
         return f"Fehler beim Starten der Analyse: {e}"
 
 
+# ── Dialogic MCP Tools ───────────────────────────────────────────────
+
+class DialogueListInput(BaseModel):
+    """Filter fuer den Dialogue-Workflow."""
+    model_config = ConfigDict(str_strip_whitespace=True)
+    limit: int = Field(default=10, ge=1, le=50, description="Maximale Anzahl Items")
+    ready_only: bool = Field(default=True, description="Nur Items mit Analyse (bereit fuer Dialogue)")
+
+
+@mcp.tool(
+    name="dialogue_list_items",
+    annotations={
+        "title": "Dialogue-Items auflisten",
+        "readOnlyHint": True,
+        "idempotentHint": True,
+    }
+)
+async def dialogue_list_items(params: DialogueListInput) -> str:
+    """Liste Items die bereit fuer den Dialogue-Workflow sind.
+
+    Zeigt analysierte Videos/Podcasts mit:
+    - Einzeiligem Summary
+    - Anzahl vorbereiteter smarter Fragen
+    - Status: waiting_for_answers | answers_given | no_questions_yet
+
+    WORKFLOW: dialogue_list_items → dialogue_get_context → Fragen stellen
+    → dialogue_submit_answers → dialogue_generate_post
+
+    Args:
+        params: limit (max Items), ready_only (nur analysierte Items)
+
+    Returns:
+        Liste der Items mit Status und Fragen-Anzahl.
+    """
+    try:
+        data = await _api("GET", "/api/dialogue/items", params={
+            "limit": params.limit,
+            "ready_only": str(params.ready_only).lower(),
+        })
+        return _fmt(data, "Items bereit fuer Dialogue")
+    except Exception as e:
+        return f"Fehler beim Laden der Dialogue-Items: {e}"
+
+
+class DialogueContextInput(BaseModel):
+    """Item-ID fuer Kontext-Abruf."""
+    model_config = ConfigDict(str_strip_whitespace=True)
+    item_id: str = Field(..., description="UUID des Items", min_length=1)
+
+
+@mcp.tool(
+    name="dialogue_get_context",
+    annotations={
+        "title": "Dialogue-Kontext laden",
+        "readOnlyHint": True,
+        "idempotentHint": True,
+    }
+)
+async def dialogue_get_context(params: DialogueContextInput) -> str:
+    """Vollstaendiger Kontext fuer ein Item — alles was fuer smarte Fragen und Post-Generierung benoetigt wird.
+
+    Liefert:
+    - Transkript-Auszug (500 Woerter) mit Key-Quotes
+    - Analyse-Ergebnisse (Hauptthema, Insights, Hooks)
+    - Vorbereitete smarte Fragen (referenzieren spezifische Transkript-Stellen)
+    - Brand-Voice-Profil des Unternehmers
+    - Verbotene Phrasen
+    - Letzte freigegebene Posts (Stil-Referenz)
+
+    WICHTIG: Nutze die smart_questions aus dem Kontext um Robert GEZIELT zu befragen.
+    Stelle die Fragen natuerlich im Gespraech — nicht als Liste vorlesen.
+
+    Args:
+        params: Item-ID
+
+    Returns:
+        Vollstaendiger Kontext fuer den Dialogue-Workflow.
+    """
+    try:
+        data = await _api("GET", f"/api/dialogue/items/{params.item_id}/context")
+        return _fmt(data, f"Kontext: {data.get('item', {}).get('title', params.item_id)}")
+    except Exception as e:
+        return f"Fehler beim Laden des Kontexts: {e}"
+
+
+class DialogueAnswerItem(BaseModel):
+    """Einzelne Antwort auf eine Frage."""
+    model_config = ConfigDict(str_strip_whitespace=True)
+    question_id: str = Field(..., description="UUID der Frage aus dialogue_get_context")
+    answer_text: str = Field(..., description="Roberts Antwort — moeglichst woertlich", min_length=5)
+
+
+class DialogueAnswersInput(BaseModel):
+    """Antworten auf smarte Fragen."""
+    model_config = ConfigDict(str_strip_whitespace=True)
+    item_id: str = Field(..., description="UUID des Items")
+    answers: list[DialogueAnswerItem] = Field(..., description="Liste der Frage-Antwort-Paare")
+
+
+@mcp.tool(
+    name="dialogue_submit_answers",
+    annotations={
+        "title": "Antworten speichern",
+        "readOnlyHint": False,
+        "idempotentHint": False,
+    }
+)
+async def dialogue_submit_answers(params: DialogueAnswersInput) -> str:
+    """Speichere Roberts Antworten auf die smarten Fragen.
+
+    WICHTIG: Speichere die Antworten WOERTLICH wie Robert sie formuliert hat.
+    Nicht zusammenfassen — die Original-Stimme ist der Content.
+
+    Nach dem Speichern: dialogue_generate_post aufrufen fuer $0-Post-Generierung.
+
+    Args:
+        params: Item-ID und Liste der Antworten (question_id + answer_text)
+
+    Returns:
+        Gespeicherte Antworten, Fortschritt und ob Post-Generierung starten kann.
+    """
+    try:
+        data = await _api("POST", f"/api/dialogue/items/{params.item_id}/answers", json_data={
+            "answers": [{"question_id": a.question_id, "answer_text": a.answer_text} for a in params.answers]
+        })
+        return _fmt(data, "Antworten gespeichert")
+    except Exception as e:
+        return f"Fehler beim Speichern der Antworten: {e}"
+
+
+class DialogueGenerateInput(BaseModel):
+    """Parameter fuer die Post-Generierung via Dialogue."""
+    model_config = ConfigDict(str_strip_whitespace=True)
+    item_id: str = Field(..., description="UUID des Items mit gespeicherten Antworten")
+    format: str = Field(
+        default="story",
+        description="Post-Format: story | opinion | how_to | question"
+    )
+    use_claude_direct: bool = Field(
+        default=True,
+        description="True: Claude generiert direkt (kein Requesty-Call, $0 Kosten). False: Backend-LLM."
+    )
+
+
+@mcp.tool(
+    name="dialogue_generate_post",
+    annotations={
+        "title": "Post generieren (via Dialogue)",
+        "readOnlyHint": False,
+        "idempotentHint": False,
+    }
+)
+async def dialogue_generate_post(params: DialogueGenerateInput) -> str:
+    """Generiere LinkedIn-Post aus Roberts Antworten.
+
+    use_claude_direct=True (Standard, empfohlen):
+        Gibt strukturierten Prompt zurueck — DU (Claude) generierst den Post direkt.
+        Kosten: $0 (kein Requesty-Call).
+        NACH dem Tool-Aufruf: Nutze den prompt_for_claude um den Post zu erstellen.
+
+    use_claude_direct=False:
+        Ruft Backend-LLM (Requesty/Haiku) auf.
+        Kosten: ~$0.005 pro Post.
+
+    Formate:
+    - story: Persoenliche Geschichte mit Konflikt → Erkenntnis
+    - opinion: Starke Meinung, provokante These
+    - how_to: Konkrete Schritte aus Erfahrung
+    - question: Oeffnet Diskussion, endet mit Frage
+
+    Args:
+        params: Item-ID, Format, use_claude_direct
+
+    Returns:
+        Bei use_claude_direct=True: prompt_for_claude (dann Post selbst generieren)
+        Bei use_claude_direct=False: post_draft vom Backend
+    """
+    try:
+        data = await _api(
+            "POST",
+            f"/api/dialogue/items/{params.item_id}/generate-post",
+            params={"format": params.format, "use_claude_direct": str(params.use_claude_direct).lower()},
+        )
+        if data.get("mode") == "claude_direct":
+            # Claude generates directly — return the prompt
+            prompt = data.get("prompt_for_claude", "")
+            context = data.get("context_summary", {})
+            return (
+                f"## Post-Generierung: {context.get('source', '')} [{context.get('format', '')}]\n\n"
+                f"**Beantwortet:** {context.get('answered_questions', 0)} Fragen | "
+                f"**Stimme:** {context.get('voice', 'Standard')}\n\n"
+                f"---\n\n"
+                f"### Dein Prompt:\n\n{prompt}\n\n"
+                f"---\n\n"
+                f"*Generiere jetzt den Post basierend auf diesem Prompt.*"
+            )
+        else:
+            return _fmt(data, "Post generiert (Backend-LLM)")
+    except Exception as e:
+        return f"Fehler bei der Post-Generierung: {e}"
+
+
+# ── Tool: Post direkt speichern (kein Backend-LLM nötig) ─────────────
+
+class SaveDirectPostInput(BaseModel):
+    """Fertigen Post-Text direkt speichern."""
+    model_config = ConfigDict(str_strip_whitespace=True)
+    content_text: str = Field(
+        ...,
+        description="Der fertige LinkedIn-Post-Text (von Claude geschrieben)",
+        min_length=50,
+    )
+    title: Optional[str] = Field(
+        default=None,
+        description="Kurzer Titel/Überschrift für interne Übersicht (optional)",
+    )
+    angle: Optional[str] = Field(
+        default="manual",
+        description="Post-Typ: howto, meinung, story, trend, kontroverse, statistik, manual",
+    )
+    pillar: Optional[str] = Field(
+        default=None,
+        description="Content-Säule: thought_leadership, how_to, personal_story, industry_news, product_service",
+    )
+    channel: str = Field(default="linkedin", description="Kanal (immer linkedin)")
+    idea_id: Optional[str] = Field(
+        default=None,
+        description="UUID der Quell-Idee (optional, verknüpft den Post mit der Idee)",
+    )
+
+
+@mcp.tool(
+    name="autopilot_save_post",
+    annotations={
+        "title": "Post direkt speichern (kein LLM-Budget nötig)",
+        "readOnlyHint": False,
+        "idempotentHint": False,
+    }
+)
+async def autopilot_save_post(params: SaveDirectPostInput) -> str:
+    """Speichere einen von DIR (Claude) direkt geschriebenen LinkedIn-Post.
+
+    Nutze dieses Tool wenn du einen Post selbst geschrieben hast und ihn
+    im Content-Autopilot-System speichern möchtest — ohne Backend-LLM-Kosten.
+
+    Workflow:
+    1. Hole eine Idee mit autopilot_get_idea
+    2. Schreibe den Post selbst basierend auf der Idee + Unternehmer-Kontext
+    3. Speichere ihn mit diesem Tool
+    4. Der Post erscheint als Entwurf im Posts-Tab zur Freigabe
+
+    Args:
+        params: Post-Text + optionale Metadaten
+
+    Returns:
+        Bestätigung mit Post-ID für Freigabe via autopilot_approve_post
+    """
+    try:
+        body: dict = {
+            "content_text": params.content_text,
+            "angle": params.angle or "manual",
+            "channel": params.channel,
+        }
+        if params.title:
+            body["title"] = params.title
+        if params.pillar:
+            body["pillar"] = params.pillar
+        if params.idea_id:
+            body["idea_id"] = params.idea_id
+
+        data = await _api("POST", "/api/content/save-direct", json_data=body)
+        post_id = data.get("id", "")
+        char_count = data.get("char_count", 0)
+        return (
+            f"## Post gespeichert ✅\n\n"
+            f"**Post-ID**: `{post_id}`\n"
+            f"**Zeichen**: {char_count} (LinkedIn-Optimum: 800–1500)\n"
+            f"**Status**: Entwurf — bereit zur Freigabe\n\n"
+            f"Freigeben mit: `autopilot_approve_post(content_piece_id='{post_id}')`\n\n"
+            f"Oder im Posts-Tab unter https://cap.zukunftsbund.de (Port 8601) freigeben."
+        )
+    except Exception as e:
+        return f"Fehler beim Speichern: {e}"
+
+
+# ── Tool: Idee überspringen ────────────────────────────────────────────
+
+class SkipIdeaInput(BaseModel):
+    """Idee als nicht relevant markieren."""
+    model_config = ConfigDict(str_strip_whitespace=True)
+    idea_id: str = Field(..., description="UUID der Content-Idee", min_length=1)
+
+
+@mcp.tool(
+    name="autopilot_skip_idea",
+    annotations={
+        "title": "Idee überspringen",
+        "readOnlyHint": False,
+        "idempotentHint": True,
+    }
+)
+async def autopilot_skip_idea(params: SkipIdeaInput) -> str:
+    """Markiere eine Idee als übersprungen (nicht relevant / kein Post erwünscht).
+
+    Nutze dieses Tool wenn eine Idee nicht zum Unternehmer passt oder
+    nicht verarbeitet werden soll. Die Idee bleibt im System aber
+    wird bei Listen-Filtern nicht mehr angezeigt.
+
+    Args:
+        params: Idee-ID
+
+    Returns:
+        Bestätigung der Statusänderung
+    """
+    try:
+        data = await _api("PATCH", f"/api/ideas/{params.idea_id}", json_data={"status": "skipped"})
+        return f"Idee übersprungen ✓ — Status: {data.get('status', 'skipped')}"
+    except Exception as e:
+        return f"Fehler beim Überspringen: {e}"
+
+
+# ── OAuth 2.0 Client Credentials (für claude.ai Connector) ────────────
+
+MCP_CLIENT_ID = os.getenv("MCP_CLIENT_ID", "")
+MCP_CLIENT_SECRET = os.getenv("MCP_CLIENT_SECRET", "")
+MCP_BEARER_TOKEN = os.getenv("MCP_BEARER_TOKEN", "")
+
+from starlette.applications import Starlette
+from starlette.routing import Route, Mount
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+import uvicorn
+
+
+async def oauth_discovery(request: Request) -> JSONResponse:
+    """OAuth 2.0 Authorization Server Metadata (RFC 8414)."""
+    host = request.headers.get("host", "localhost")
+    # Preserve scheme from X-Forwarded-Proto header (set by Traefik)
+    scheme = request.headers.get("x-forwarded-proto", "https")
+    base = f"{scheme}://{host}"
+    return JSONResponse({
+        "issuer": base,
+        "token_endpoint": f"{base}/oauth/token",
+        "token_endpoint_auth_methods_supported": ["client_secret_post"],
+        "grant_types_supported": ["client_credentials"],
+        "response_types_supported": ["token"],
+        "scopes_supported": ["mcp"],
+    })
+
+
+async def oauth_token(request: Request) -> JSONResponse:
+    """OAuth 2.0 Token Endpoint — client_credentials grant."""
+    # Support both form-encoded and JSON body
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        body = await request.json()
+        grant_type = body.get("grant_type")
+        client_id = body.get("client_id")
+        client_secret = body.get("client_secret")
+    else:
+        form = await request.form()
+        grant_type = form.get("grant_type")
+        client_id = form.get("client_id")
+        client_secret = form.get("client_secret")
+
+    if grant_type != "client_credentials":
+        return JSONResponse({"error": "unsupported_grant_type"}, status_code=400)
+
+    # If no credentials configured, allow any request (open mode)
+    if MCP_CLIENT_ID and MCP_CLIENT_SECRET:
+        if client_id != MCP_CLIENT_ID or client_secret != MCP_CLIENT_SECRET:
+            return JSONResponse({"error": "invalid_client", "error_description": "Invalid credentials"}, status_code=401)
+
+    token = MCP_BEARER_TOKEN if MCP_BEARER_TOKEN else "open"
+    return JSONResponse({
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": 86400,
+        "scope": "mcp",
+    })
+
+
+async def health(request: Request) -> JSONResponse:
+    return JSONResponse({"status": "ok", "server": "content-autopilot-mcp"})
+
+
 # ── Server starten ────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    mcp.run(transport="sse")
+    # Build FastMCP SSE ASGI app
+    mcp_asgi = mcp.sse_app()
+
+    # Wrap with Starlette for OAuth + health endpoints
+    app = Starlette(
+        routes=[
+            Route("/.well-known/oauth-authorization-server", oauth_discovery, methods=["GET"]),
+            Route("/oauth/token", oauth_token, methods=["POST"]),
+            Route("/health", health, methods=["GET"]),
+            Mount("/", app=mcp_asgi),
+        ],
+    )
+
+    uvicorn.run(app, host="0.0.0.0", port=mcp_port, log_level="warning")

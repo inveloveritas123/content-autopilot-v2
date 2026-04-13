@@ -1,0 +1,4 @@
+[2026-04-13T21:32:25.748885] Webhook empfangen: event=issues action=opened
+[2026-04-13T21:32:25.749037] Starte Agent fuer Issue #99: Test Webhook
+[2026-04-13T21:32:25.749079] Spawne Agent fuer Issue #99: Test Webhook
+[2026-04-13T21:32:25.757436] Agent PID 1525215 fuer Issue #99 gestartet

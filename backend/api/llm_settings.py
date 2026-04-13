@@ -242,9 +242,329 @@ async def test_provider(
         await db.commit()
         return {"status": "ok", "latency_ms": latency_ms}
 
+    except httpx.HTTPStatusError as e:
+        provider.last_test_at = datetime.utcnow()
+        provider.last_test_status = "error"
+        if e.response.status_code == 412:
+            msg = "🔴 Portal-Budget erschöpft (412) — Bitte Guthaben bei requesty.ai aufladen."
+        elif e.response.status_code == 401:
+            msg = "🔴 Authentifizierung fehlgeschlagen (401) — API-Key ungültig oder abgelaufen."
+        elif e.response.status_code == 429:
+            msg = "🟡 Rate-Limit erreicht (429) — kurz warten und nochmal versuchen."
+        else:
+            msg = f"HTTP {e.response.status_code}: {str(e)[:150]}"
+        provider.last_test_error = msg
+        await db.commit()
+        return {"status": "error", "error": msg, "http_status": e.response.status_code}
     except Exception as e:
         provider.last_test_at = datetime.utcnow()
         provider.last_test_status = "error"
         provider.last_test_error = str(e)[:500]
         await db.commit()
         return {"status": "error", "error": str(e)[:200]}
+
+
+class BenchmarkRequest(BaseModel):
+    step: str  # analysis | ideation | post_generation | smart_questions
+    item_id: Optional[str] = None  # specific item, or pick most recent
+
+
+@router.post("/benchmark")
+async def run_benchmark(
+    data: BenchmarkRequest,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Run a single LLM pipeline step and return quality + cost metrics.
+
+    Runs the step without saving results to DB — read-only benchmark.
+    Budget will be consumed for the one LLM call.
+    """
+    import time
+    from sqlalchemy import select as sa_select, desc
+    from models.source_item import SourceItem
+
+    VALID_STEPS = {"analysis", "ideation", "post_generation", "smart_questions"}
+    if data.step not in VALID_STEPS:
+        raise HTTPException(400, f"Invalid step. Must be one of: {', '.join(VALID_STEPS)}")
+
+    # Pick item
+    if data.item_id:
+        item = await db.get(SourceItem, uuid.UUID(data.item_id))
+        if not item or item.tenant_id != tenant.id:
+            raise HTTPException(404, "Item not found")
+    else:
+        # Pick most recent item that has the data needed for this step
+        if data.step == "analysis":
+            # Need transcript_text
+            result = await db.execute(
+                sa_select(SourceItem).where(
+                    SourceItem.tenant_id == tenant.id,
+                    SourceItem.transcript_text.isnot(None),
+                ).order_by(desc(SourceItem.updated_at)).limit(1)
+            )
+        else:
+            # Need analysis (content_ready or analyzed)
+            result = await db.execute(
+                sa_select(SourceItem).where(
+                    SourceItem.tenant_id == tenant.id,
+                    SourceItem.analysis.isnot(None),
+                    SourceItem.transcript_text.isnot(None),
+                ).order_by(desc(SourceItem.updated_at)).limit(1)
+            )
+        item = result.scalar_one_or_none()
+        if not item:
+            raise HTTPException(404, "No suitable items found for benchmark")
+
+    item_title = item.title or "(kein Titel)"
+
+    # Check circuit breaker before attempting LLM call
+    try:
+        import redis as redis_lib, os
+        _r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://redis-v2:6379/1"))
+        if _r.get("llm:budget_exceeded"):
+            ttl = _r.ttl("llm:budget_exceeded")
+            return {
+                "step": data.step,
+                "item_id": str(item.id),
+                "item_title": item.title[:80] if item.title else "—",
+                "model_used": None,
+                "latency_ms": 0,
+                "quality_score": None,
+                "result_preview": None,
+                "error": f"LLM-Budget erschöpft (Pause noch ~{ttl}s). Bitte Guthaben bei requesty.ai aufladen, dann 'Pipeline fortsetzen' klicken.",
+                "status": "budget_exceeded",
+            }
+    except Exception:
+        pass
+
+    t_start = time.time()
+    result_preview = None
+    quality_score = None
+    error = None
+    model_used = None
+
+    try:
+        if data.step == "analysis":
+            from services.analyzer import analyze_transcript
+            from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+            analysis = await analyze_transcript(
+                item.transcript_text,
+                source_type="youtube",
+                title=item.title or "",
+            )
+            model_used = REQUESTY_MODELS.get(PURPOSE_MODEL_MAP.get("analysis", "gemini-flash"), "gemini-flash")
+            if analysis:
+                from services.quality_scorer import score_analysis
+                scores = score_analysis(analysis)
+                quality_score = scores.get("overall_score")
+                # Preview: key fields summary
+                result_preview = (
+                    f"Titel: {analysis.get('topic_title', '—')}\n"
+                    f"Summary: {str(analysis.get('summary', ''))[:200]}\n"
+                    f"Key Points: {len(analysis.get('key_points', []))} Punkte\n"
+                    f"Tags: {', '.join(analysis.get('tags', [])[:5])}"
+                )
+            else:
+                error = "Keine Analyse zurückgegeben"
+
+        elif data.step == "ideation":
+            from services.content_ideation import run_ideation_pipeline
+            from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+            ideas = await run_ideation_pipeline(
+                analysis=item.analysis,
+                title=item.title or "",
+                transcript_excerpt=(item.transcript_text or "")[:500],
+            )
+            model_used = REQUESTY_MODELS.get(PURPOSE_MODEL_MAP.get("ideation", "claude-sonnet"), "claude-sonnet")
+            if ideas:
+                from services.quality_scorer import score_ideation
+                idea_list = [{"angle": i.get("angle", ""), "title": i.get("title", "")} for i in ideas]
+                scores = score_ideation(idea_list)
+                quality_score = scores.get("overall_score")
+                result_preview = "\n".join([
+                    f"• {i.get('title', '—')} [{i.get('angle', '—')}]"
+                    for i in ideas[:5]
+                ])
+            else:
+                error = "Keine Ideen generiert"
+
+        elif data.step == "smart_questions":
+            from services.smart_questions import generate_smart_questions
+            from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+            entrepreneur = (tenant.settings or {}).get("entrepreneur", {})
+            questions = await generate_smart_questions(
+                item_id=str(item.id),
+                transcript_text=item.transcript_text or "",
+                analysis=item.analysis,
+                title=item.title or "",
+                entrepreneur=entrepreneur,
+            )
+            model_used = REQUESTY_MODELS.get(PURPOSE_MODEL_MAP.get("questions", "claude-sonnet"), "claude-sonnet")
+            if questions:
+                from services.quality_scorer import score_smart_questions
+                scores = score_smart_questions(questions)
+                quality_score = scores.get("overall_score")
+                result_preview = "\n".join([
+                    f"• {q.get('question_text', '—')[:100]}"
+                    for q in questions[:4]
+                ])
+            else:
+                error = "Keine Fragen generiert"
+
+        elif data.step == "post_generation":
+            from services.content_generator import generate_all_content
+            from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+            # Voice profile from tenant settings
+            voice_profile = (tenant.settings or {}).get("voice_profile")
+            if not voice_profile:
+                voice_profile = {
+                    "name": tenant.name or "Unternehmer",
+                    "tone": "authentisch",
+                    "industry": "Mittelstand",
+                }
+            content_dict = await generate_all_content(
+                analysis=item.analysis,
+                title=item.title or "",
+                transcript_text=item.transcript_text or "",
+                voice_profile=voice_profile,
+            )
+            model_used = REQUESTY_MODELS.get(PURPOSE_MODEL_MAP.get("post_generation", "claude-sonnet"), "claude-sonnet")
+            linkedin_post = content_dict.get("linkedin") or ""
+            if linkedin_post:
+                from services.quality_scorer import score_post_generation
+                scores = score_post_generation(linkedin_post)
+                quality_score = scores.get("overall_score")
+                result_preview = linkedin_post[:400] + ("..." if len(linkedin_post) > 400 else "")
+            else:
+                error = "Kein Post generiert"
+
+    except Exception as e:
+        error = str(e)[:300]
+
+    latency_ms = int((time.time() - t_start) * 1000)
+
+    return {
+        "step": data.step,
+        "item_id": str(item.id),
+        "item_title": item_title[:80],
+        "model_used": model_used,
+        "latency_ms": latency_ms,
+        "quality_score": quality_score,
+        "result_preview": result_preview,
+        "error": error,
+        "status": "error" if error else "ok",
+    }
+
+
+class VoiceCompareRequest(BaseModel):
+    item_id: Optional[str] = None  # specific item, or pick most recent content_ready
+
+
+@router.post("/voice-compare")
+async def run_voice_compare(
+    data: VoiceCompareRequest,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Run post_generation with all configured voice profiles for comparison.
+
+    Reads all tenants with configured voice_profiles, generates posts from the same item
+    concurrently using each profile, returns side-by-side results.
+    """
+    import asyncio as _asyncio
+    import time
+    from sqlalchemy import select as sa_select, desc
+    from models.source_item import SourceItem
+    from models.tenant import Tenant as TenantModel
+
+    # Check budget
+    try:
+        import redis as redis_lib, os
+        _r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://redis-v2:6379/1"))
+        if _r.get("llm:budget_exceeded"):
+            ttl = _r.ttl("llm:budget_exceeded")
+            return {
+                "status": "budget_exceeded",
+                "error": f"LLM-Budget erschöpft (Pause noch ~{ttl}s). Budget aufladen und 'Pipeline fortsetzen' klicken.",
+                "results": [],
+            }
+    except Exception:
+        pass
+
+    # Get all tenants with voice profiles
+    all_tenants_result = await db.execute(sa_select(TenantModel).order_by(TenantModel.created_at))
+    all_tenants = all_tenants_result.scalars().all()
+
+    configured_tenants = [
+        t for t in all_tenants
+        if (t.settings or {}).get("voice_profile", {}).get("tone")
+    ]
+
+    if not configured_tenants:
+        return {"status": "error", "error": "Keine Voice-Profile konfiguriert", "results": []}
+
+    # Find source item (use current tenant's items, or specific item)
+    source_item = None
+    if data.item_id:
+        source_item = await db.get(SourceItem, __import__('uuid').UUID(data.item_id))
+    else:
+        item_result = await db.execute(
+            sa_select(SourceItem).where(
+                SourceItem.tenant_id == tenant.id,
+                SourceItem.analysis.isnot(None),
+                SourceItem.transcript_text.isnot(None),
+            ).order_by(desc(SourceItem.updated_at)).limit(1)
+        )
+        source_item = item_result.scalar_one_or_none()
+
+    if not source_item:
+        return {"status": "error", "error": "Kein geeignetes Item gefunden (kein analysiertes Item vorhanden)", "results": []}
+
+    from services.content_generator import generate_all_content
+    from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+    from services.quality_scorer import score_post_generation
+
+    async def generate_for_profile(t):
+        voice_profile = (t.settings or {}).get("voice_profile", {})
+        entrepreneur = (t.settings or {}).get("entrepreneur", {})
+        t_start = time.time()
+        try:
+            content_dict = await generate_all_content(
+                analysis=source_item.analysis,
+                title=source_item.title or "",
+                transcript_text=source_item.transcript_text or "",
+                voice_profile=voice_profile,
+            )
+            linkedin_post = content_dict.get("linkedin") or ""
+            latency_ms = int((time.time() - t_start) * 1000)
+            quality_score = score_post_generation(linkedin_post).get("overall_score") if linkedin_post else None
+            return {
+                "tenant_name": t.name,
+                "industry": entrepreneur.get("industry", "—"),
+                "entrepreneur_name": entrepreneur.get("name", "—"),
+                "tone": voice_profile.get("tone", "—"),
+                "model_used": REQUESTY_MODELS.get(PURPOSE_MODEL_MAP.get("post_generation", "claude-sonnet"), "—"),
+                "latency_ms": latency_ms,
+                "quality_score": quality_score,
+                "post_text": linkedin_post,
+                "status": "ok" if linkedin_post else "empty",
+            }
+        except Exception as e:
+            return {
+                "tenant_name": t.name,
+                "industry": (t.settings or {}).get("entrepreneur", {}).get("industry", "—"),
+                "entrepreneur_name": (t.settings or {}).get("entrepreneur", {}).get("name", "—"),
+                "tone": (t.settings or {}).get("voice_profile", {}).get("tone", "—"),
+                "error": str(e)[:200],
+                "status": "error",
+            }
+
+    # Run all profiles concurrently
+    results = await _asyncio.gather(*[generate_for_profile(t) for t in configured_tenants[:3]])
+
+    return {
+        "status": "ok",
+        "item_title": source_item.title[:80] if source_item.title else "—",
+        "results": list(results),
+    }

@@ -11,7 +11,7 @@ Der Dialog-Mode ist der Kern des Kunden-Konzepts:
 import logging
 from typing import Optional
 
-from services.llm import llm_service
+from services.llm import llm_service, BudgetExceededError
 from services.brand_voice import format_voice_for_prompt
 
 logger = logging.getLogger(__name__)
@@ -95,6 +95,8 @@ Jede Variante ist ein komplett eigenstaendiger Post."""
             posts = [result.strip()]
         logger.info(f"Generated {len(posts)} LinkedIn post variants from dialog")
         return posts
+    except BudgetExceededError:
+        raise
     except Exception as e:
         logger.error(f"Dialog post generation failed: {e}")
         return None
@@ -107,6 +109,7 @@ async def generate_linkedin_post(
     title: str,
     tone: str = "professionell, informativ, mit persoenlicher Note",
     voice_profile: dict = None,
+    routing_override: Optional[dict] = None,
 ) -> Optional[str]:
     """Generate a LinkedIn post from video analysis (Quick Mode)."""
     voice_context = ""
@@ -129,7 +132,9 @@ Sprache: Deutsch
 Schreibe NUR den fertigen Post, keine Erklaerungen."""
 
     try:
-        return await llm_service.complete(prompt, model="gemini-flash")
+        return await llm_service.complete(prompt, model="gemini-flash", purpose="post_generation", routing_override=routing_override)
+    except BudgetExceededError:
+        raise
     except Exception as e:
         logger.error(f"LinkedIn post generation failed: {e}")
         return None
@@ -168,6 +173,8 @@ Schreibe den kompletten Artikel."""
 
     try:
         return await llm_service.complete(prompt, model="claude-sonnet")
+    except BudgetExceededError:
+        raise
     except Exception as e:
         logger.error(f"Blog draft generation failed: {e}")
         return None
@@ -193,6 +200,8 @@ Schreibe NUR den fertigen Newsletter-Abschnitt."""
 
     try:
         return await llm_service.complete(prompt, model="gemini-flash")
+    except BudgetExceededError:
+        raise
     except Exception as e:
         logger.error(f"Newsletter snippet generation failed: {e}")
         return None
@@ -205,9 +214,10 @@ async def generate_all_content(
     video_url: str = "",
     tone: str = "professionell, informativ, mit persoenlicher Note",
     voice_profile: dict = None,
+    routing_override: Optional[dict] = None,
 ) -> dict[str, Optional[str]]:
     """Generate content for all channels (Quick Mode)."""
-    linkedin = await generate_linkedin_post(analysis, title, tone, voice_profile)
+    linkedin = await generate_linkedin_post(analysis, title, tone, voice_profile, routing_override=routing_override)
     blog = await generate_blog_draft(analysis, title, transcript_text, tone, voice_profile)
     newsletter = await generate_newsletter_snippet(analysis, title, video_url)
 

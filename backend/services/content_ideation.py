@@ -15,32 +15,36 @@ Philosophie: "Nicht das Denken abnehmen — die Arbeit."
 import logging
 from typing import Optional
 
-from services.llm import llm_service
+from services.llm import llm_service, BudgetExceededError
 
 logger = logging.getLogger(__name__)
 
 # ── Schritt 1: Content-Ideen aus Analyse generieren ─────────────────────────
 
-IDEATION_SYSTEM_PROMPT = """Du bist ein erfahrener LinkedIn-Content-Stratege.
+IDEATION_SYSTEM_PROMPT = """Du bist ein erfahrener LinkedIn-Content-Stratege fuer den Mittelstand und Handwerk.
 Deine Aufgabe: Aus einer Video-Analyse gezielte Content-Ideen fuer einen Unternehmer ableiten.
 
 WICHTIG: Du schreibst KEINE Posts. Du generierst IDEEN, die der Unternehmer mit seiner eigenen
 Perspektive fuellen wird.
 
+KRITISCH: Wenn ein Branchenkontext angegeben ist, MUSST du alle Ideen darauf zuschneiden.
+Ideen muessen zur Branche des Unternehmers passen — KEINE generischen CIO/Enterprise-Inhalte
+wenn der Unternehmer im Handwerk, Bau, KMU oder Mittelstand taetig ist.
+
 Jede Idee braucht:
 - title: Praegnanter Arbeitstitel (max 10 Woerter)
-- description: Was ist der Kern der Idee? Warum ist sie relevant? (2-3 Saetze)
+- description: Was ist der Kern der Idee? Warum ist sie relevant fuer DIESE Branche? (2-3 Saetze)
 - angle: Einer von: meinung, howto, story, kontroverse, statistik, trend
-- hook_suggestion: Ein Vorschlag fuer den Post-Einstieg (1 Satz)
-- relevance_score: 1-10 wie relevant ist das fuer LinkedIn Business-Content
+- hook_suggestion: Ein Vorschlag fuer den Post-Einstieg (1 Satz, passt zur Branche)
+- relevance_score: 1-10 wie relevant ist das fuer die Zielgruppe des Unternehmers
 - source_quotes: 1-2 relevante Zitate aus dem Transkript die als Basis dienen
 
 Generiere 5-8 verschiedene Ideen mit unterschiedlichen Angles.
 Bevorzuge Ideen die:
-- Diskussionen ausloesen (Kontroverse, Meinung)
-- Praktischen Mehrwert bieten (How-To, Trend)
-- Persoenliche Stories ermoeglichen (Story)
-- Daten-getrieben sind (Statistik)
+- Direkt zur Branche und Zielgruppe des Unternehmers passen
+- Diskussionen in der jeweiligen Branche ausloesen
+- Praktischen Mehrwert fuer die spezifische Zielgruppe bieten
+- Persoenliche Stories aus dem Alltag des Unternehmers ermoeglichen
 
 Antworte NUR als JSON-Array. Kein Markdown, keine Erklaerung."""
 
@@ -52,8 +56,13 @@ async def generate_content_ideas(
     industry_context: str = "",
 ) -> Optional[list[dict]]:
     """Generiere Content-Ideen aus einer Transkript-Analyse."""
-    prompt = f"""Analysiere folgendes Video und generiere Content-Ideen fuer LinkedIn.
+    industry_block = f"""
+UNTERNEHMER-KONTEXT (PFLICHT — alle Ideen MUESSEN dazu passen):
+{industry_context}
+""" if industry_context else ""
 
+    prompt = f"""Analysiere folgendes Video und generiere Content-Ideen fuer LinkedIn.
+{industry_block}
 Video-Titel: {title}
 Summary: {analysis.get('summary', '')}
 Kernaussagen: {', '.join(analysis.get('key_points', []))}
@@ -64,9 +73,8 @@ Trend-Score: {analysis.get('trend_score', 5)}/10
 Transkript-Auszug (erste 5000 Zeichen):
 {transcript_excerpt[:5000]}
 
-{f'Branchenkontext: {industry_context}' if industry_context else ''}
-
-Generiere 5-8 Content-Ideen als JSON-Array."""
+Generiere 5-8 Content-Ideen als JSON-Array.
+Stelle sicher dass ALLE Ideen zur Branche/Zielgruppe des Unternehmers passen."""
 
     try:
         ideas = await llm_service.complete_json(
@@ -98,6 +106,8 @@ Generiere 5-8 Content-Ideen als JSON-Array."""
         logger.info(f"Generated {len(validated)} content ideas for '{title}'")
         return validated
 
+    except BudgetExceededError:
+        raise
     except Exception as e:
         logger.error(f"Content ideation failed: {e}")
         return None
@@ -138,9 +148,13 @@ Angle: {idea.get('angle', '')}
 Hook-Vorschlag: {idea.get('hook_suggestion', '')}
 Quell-Zitate: {', '.join(idea.get('source_quotes', []))}
 
-{f'Kontext zum Unternehmer: {brand_context}' if brand_context else ''}
+{f'Kontext zum Unternehmer (Branche/Ton beachten): {brand_context}' if brand_context else ''}
 
-Die Fragen sollen persoenliche Erfahrungen und Meinungen hervorrufen.
+Die Fragen sollen:
+- Persoenliche Erfahrungen aus der EIGENEN Branche hervorrufen
+- Praxisnah und konkret sein (nicht abstrakt/theoretisch)
+- Leicht in 2-3 Saetzen beantwortbar sein
+
 Antworte als JSON-Array."""
 
     try:
@@ -167,6 +181,8 @@ Antworte als JSON-Array."""
         logger.info(f"Generated {len(validated)} questions for idea '{idea.get('title', '')}'")
         return validated
 
+    except BudgetExceededError:
+        raise
     except Exception as e:
         logger.error(f"Question generation failed: {e}")
         return None

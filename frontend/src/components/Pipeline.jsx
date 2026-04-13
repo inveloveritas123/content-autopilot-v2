@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import TimeFilter from './TimeFilter'
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card'
 import { Button } from './ui/Button'
 import { Badge } from './ui/Badge'
@@ -6,7 +7,7 @@ import { Dialog } from './ui/Dialog'
 import { Tabs } from './ui/Tabs'
 import { Input, Select } from './ui/Input'
 import { useApi } from '../hooks/useApi'
-import { getItems, getItem, transcribeItem, analyzeItem, generateContent, syncTranscripts, updateAllViews, getPipelineProgress, getPipelineLog, getCookieStatus, batchTranscribe, retryTranscribe, bulkRetryFailed } from '../api'
+import { getItems, getItem, transcribeItem, analyzeItem, generateContent, syncTranscripts, updateAllViews, getPipelineProgress, getPipelineLog, getCookieStatus, batchTranscribe, retryTranscribe, bulkRetryFailed, bulkArchiveFailed, getSources, getActivityLog, getPipelineStatus, resetBudgetFlag, triggerAutoPipeline, queueAllAnalysis, resetStuckItems, getTranscribedBreakdown, analyzeAllSourceItems, archiveSourceItems } from '../api'
 import CookieSetup from './CookieSetup'
 
 const statusLabels = {
@@ -19,6 +20,7 @@ const statusLabels = {
   analyzed: 'Analysiert',
   generating: 'Generiert...',
   content_ready: 'Content fertig',
+  processed: 'Verarbeitet (alt)',
   approved: 'Freigegeben',
   published: 'Veroeffentlicht',
 }
@@ -28,44 +30,105 @@ export default function Pipeline() {
   const [sourceFilter, setSourceFilter] = useState('')
   const [sourceTypeFilter, setSourceTypeFilter] = useState('')
   const [archivedFilter, setArchivedFilter] = useState('false')
+  const [timeFilter, setTimeFilter] = useState({ period: 'last_30d' })
   const [sortField, setSortField] = useState('published_at')
   const [sortDir, setSortDir] = useState('desc')
   const [searchText, setSearchText] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [showLog, setShowLog] = useState(false)
+  const [logStatusGroup, setLogStatusGroup] = useState('')
+  const [logSourceId, setLogSourceId] = useState('')
+  const [logTimeFilter, setLogTimeFilter] = useState({ period: 'last_7d' })
+  const [logEntries, setLogEntries] = useState([])
+  const [logPage, setLogPage] = useState(0)
+  const [logHasMore, setLogHasMore] = useState(true)
+  const [logLoading, setLogLoading] = useState(false)
+  const [sources, setSources] = useState([])
   const [showCookieSetup, setShowCookieSetup] = useState(false)
   const [batchRunning, setBatchRunning] = useState(false)
   const autoRefreshRef = useRef(null)
   const { data: cookieStatus, refetch: refetchCookies } = useApi(getCookieStatus, [])
-  const { data: progress, refetch: refetchProgress } = useApi(getPipelineProgress, [])
-  const { data: activityLog, refetch: refetchLog } = useApi(() => getPipelineLog(30), [])
-  const { data: items, loading, refetch } = useApi(
-    () => getItems({ limit: 200, status: statusFilter || undefined, source_id: sourceFilter || undefined, source_type: sourceTypeFilter || undefined, archived: archivedFilter || undefined }),
-    [statusFilter, sourceFilter, sourceTypeFilter, archivedFilter]
+  const { data: pipelineStatus, refetch: refetchPipelineStatus } = useApi(getPipelineStatus, [])
+  const { data: progress, refetch: refetchProgress, silentRefetch: silentRefetchProgress } = useApi(getPipelineProgress, [])
+  const { data: activityLog, refetch: refetchLog, silentRefetch: silentRefetchLog } = useApi(() => getPipelineLog(30), [])
+  const { data: items, loading, refetch, silentRefetch: silentRefetchItems } = useApi(
+    () => getItems({ limit: 200, status: statusFilter || undefined, source_id: sourceFilter || undefined, source_type: sourceTypeFilter || undefined, archived: archivedFilter || undefined, period: timeFilter.period || undefined, date_from: timeFilter.date_from, date_to: timeFilter.date_to, search: debouncedSearch || undefined }),
+    [statusFilter, sourceFilter, sourceTypeFilter, archivedFilter, timeFilter, debouncedSearch]
   )
   const [selectedItem, setSelectedItem] = useState(null)
   const [detail, setDetail] = useState(null)
   const [detailTab, setDetailTab] = useState('info')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [bulkRunning, setBulkRunning] = useState(false)
+  const [transcribedBreakdown, setTranscribedBreakdown] = useState(null)
+  const [breakdownLoading, setBreakdownLoading] = useState(false)
 
-  // Auto-refresh every 10s when batch is running or items are processing
+  // Debounce search text → trigger backend search after 400ms idle
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchText), 400)
+    return () => clearTimeout(t)
+  }, [searchText])
+
+  // Auto-refresh every 15s when batch is running, items are processing, or transcribed items waiting
   useEffect(() => {
     const hasProcessing = progress && progress.processing > 0
-    if (batchRunning || hasProcessing) {
+    const hasWaiting = progress && (progress.by_status?.transcribed || 0) > 0
+    if (batchRunning || hasProcessing || hasWaiting) {
       autoRefreshRef.current = setInterval(() => {
-        refetch()
-        refetchProgress()
-        refetchLog()
-      }, 10000)
+        silentRefetchItems()
+        silentRefetchProgress()
+        silentRefetchLog()
+        refetchPipelineStatus()
+      }, 15000)
     }
     return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current) }
-  }, [batchRunning, progress?.processing])
+  }, [batchRunning, progress?.processing, progress?.by_status?.transcribed])
+
+  // Load sources for filter dropdown
+  useEffect(() => {
+    getSources().then(d => setSources(Array.isArray(d) ? d : [])).catch(() => {})
+  }, [])
+
+  // Load transcribed breakdown whenever pipeline status refreshes
+  const loadBreakdown = () => {
+    setBreakdownLoading(true)
+    getTranscribedBreakdown().then(d => setTranscribedBreakdown(d)).catch(() => {}).finally(() => setBreakdownLoading(false))
+  }
+  useEffect(() => { loadBreakdown() }, [])
+
+  // Reset and reload log when filters or visibility changes
+  useEffect(() => {
+    if (showLog) loadLog(true)
+  }, [showLog, logStatusGroup, logSourceId, logTimeFilter])
 
   const openDetail = async (item) => {
     setSelectedItem(item)
     setDetailTab('info')
     const full = await getItem(item.id)
     setDetail(full)
+  }
+
+  async function loadLog(reset = false) {
+    setLogLoading(true)
+    const page = reset ? 0 : logPage
+    const params = { limit: 30, offset: page * 30 }
+    if (logStatusGroup) params.status_group = logStatusGroup
+    if (logSourceId) params.source_id = logSourceId
+    if (logTimeFilter.period && logTimeFilter.period !== 'all') params.period = logTimeFilter.period
+    if (logTimeFilter.date_from) params.date_from = logTimeFilter.date_from
+    if (logTimeFilter.date_to) params.date_to = logTimeFilter.date_to
+    try {
+      const data = await getActivityLog(params)
+      if (reset) {
+        setLogEntries(data)
+        setLogPage(1)
+      } else {
+        setLogEntries(prev => [...prev, ...data])
+        setLogPage(p => p + 1)
+      }
+      setLogHasMore(data.length === 30)
+    } catch {}
+    setLogLoading(false)
   }
 
   const toggleSelect = (id) => {
@@ -138,7 +201,6 @@ export default function Pipeline() {
       (i.keywords || []).some(k => k.toLowerCase().includes(q))
     )
   }
-
   // Sort
   const sortedItems = filtered.sort((a, b) => {
     let va, vb
@@ -173,11 +235,76 @@ export default function Pipeline() {
 
   return (
     <div className="space-y-6">
+      {pipelineStatus?.llm_budget_exceeded && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm flex items-start gap-3">
+          <span className="text-red-600 shrink-0 mt-0.5">🔴</span>
+          <div className="flex-1">
+            <span className="font-semibold text-red-800">KI-Pipeline pausiert: Requesty.ai Portal-Budget erschöpft.</span>
+            <span className="text-red-700 ml-1">
+              Analyse und Content-Generierung sind gestoppt.
+              Bitte bei <a href="https://requesty.ai" target="_blank" rel="noopener noreferrer" className="underline font-medium">requesty.ai</a> Guthaben aufladen.
+              {pipelineStatus.llm_budget_pause_seconds > 0 && ` Automatische Wiederaufnahme in ~${Math.ceil(pipelineStatus.llm_budget_pause_seconds / 60)} Min.`}
+            </span>
+            {(() => {
+              const waiting = (pipelineStatus.counts?.transcribed || 0) + (pipelineStatus.counts?.analyzed || 0)
+              if (waiting === 0) return null
+              const minCost = (waiting * 0.0005).toFixed(2)
+              const maxCost = (waiting * 0.003).toFixed(2)
+              return (
+                <div className="mt-1.5 text-red-700">
+                  <span className="font-medium">{waiting.toLocaleString('de-DE')} Artikel</span> warten auf Verarbeitung — geschaetzte Kosten: <span className="font-medium">${minCost}–${maxCost}</span> (je nach Modell).
+                </div>
+              )
+            })()}
+          </div>
+          <div className="flex flex-col gap-1.5 shrink-0">
+            <button
+              className="px-3 py-1 bg-red-700 hover:bg-red-800 text-white text-xs font-semibold rounded-lg transition-colors"
+              onClick={async () => {
+                try {
+                  await resetBudgetFlag()
+                  await triggerAutoPipeline()
+                  refetchPipelineStatus()
+                  refetchProgress()
+                } catch(e) { alert('Fehler: ' + e.message) }
+              }}
+              title="Flag löschen + 100 Items starten"
+            >▶ Fortsetzen (100)</button>
+            <button
+              className="px-3 py-1 bg-red-800 hover:bg-red-900 text-white text-xs font-semibold rounded-lg transition-colors"
+              onClick={async () => {
+                try {
+                  const breakdown = await getTranscribedBreakdown()
+                  const lines = breakdown.sources.map(s => `  ${s.name}: ${s.count.toLocaleString('de-DE')} Items`).join('\n')
+                  const minCost = (breakdown.total * 0.0005).toFixed(2)
+                  const maxCost = (breakdown.total * 0.003).toFixed(2)
+                  if (!window.confirm(`Alle ${breakdown.total.toLocaleString('de-DE')} Items in Analyse-Queue einreihen?\n\nQuellenaufschlüsselung:\n${lines}\n\nGeschätzte Kosten: $${minCost}–$${maxCost}\n\nTipp: In den Quellen einen "Analyse (N)" Button klicken um nur eine Quelle zu verarbeiten.`)) return
+                  await resetBudgetFlag()
+                  const r = await queueAllAnalysis()
+                  alert(`${r.queued} Items eingereiht!`)
+                  refetchPipelineStatus()
+                  refetchProgress()
+                } catch(e) { alert('Fehler: ' + e.message) }
+              }}
+              title="Alle transkribierten Items auf einmal in die Queue (zeigt Aufschlüsselung)"
+            >⚡ Alle einreihen</button>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Pipeline</h2>
         <div className="flex gap-2 flex-wrap">
           <Button size="sm" variant="secondary" onClick={handleSyncTranscripts}>Transkripte sync</Button>
           <Button size="sm" variant="secondary" onClick={handleUpdateViews}>Views aktualisieren</Button>
+          <Button size="sm" variant="secondary" onClick={async () => {
+            try {
+              const r = await resetStuckItems()
+              if (r.reset > 0) { alert(`${r.reset} feststeckende Items zurückgesetzt.`); refetch() }
+              else alert('Keine feststeckenden Items gefunden.')
+            } catch(e) { alert('Fehler: ' + e.message) }
+          }} title="Items die >15min in 'transcribing/analyzing/generating' stecken zurücksetzen">
+            Stuck reset
+          </Button>
           <Button size="sm" onClick={async () => {
             setBatchRunning(true)
             try {
@@ -188,16 +315,28 @@ export default function Pipeline() {
             {batchRunning ? 'Batch laeuft...' : `Alle transkribieren (${newCount})`}
           </Button>
           {failedCount > 0 && (
-            <Button size="sm" variant="danger" onClick={async () => {
-              if (!confirm(`${failedCount} fehlgeschlagene Transkriptionen neu starten?`)) return
-              try {
-                const r = await bulkRetryFailed()
-                alert(`${r.retried} Items zurückgesetzt und neu gestartet.`)
-                setTimeout(refetch, 1500)
-              } catch (e) { alert('Fehler: ' + e.message) }
-            }}>
-              Retry Fehler ({failedCount})
-            </Button>
+            <>
+              <Button size="sm" variant="danger" onClick={async () => {
+                if (!confirm(`${failedCount} fehlgeschlagene Transkriptionen neu starten?`)) return
+                try {
+                  const r = await bulkRetryFailed()
+                  alert(`${r.retried} Items zurückgesetzt und neu gestartet.`)
+                  setTimeout(refetch, 1500)
+                } catch (e) { alert('Fehler: ' + e.message) }
+              }}>
+                Retry Fehler ({failedCount})
+              </Button>
+              <Button size="sm" variant="ghost" onClick={async () => {
+                if (!confirm(`${failedCount} dauerhaft fehlgeschlagene Items archivieren? (z.B. Spotify-Podcasts ohne Audio-Zugriff)\n\nSie bleiben in der DB, erscheinen aber nicht mehr in der Pipeline.`)) return
+                try {
+                  const r = await bulkArchiveFailed()
+                  alert(r.message)
+                  setTimeout(refetch, 1500)
+                } catch (e) { alert('Fehler: ' + e.message) }
+              }}>
+                Archivieren ({failedCount})
+              </Button>
+            </>
           )}
           <Button size="sm" variant="secondary" onClick={handleBulkAnalyze} disabled={bulkRunning || selectedIds.size === 0}>Analysieren ({selectedIds.size})</Button>
           <Button size="sm" variant="secondary" onClick={handleBulkGenerate} disabled={bulkRunning || selectedIds.size === 0}>Content ({selectedIds.size})</Button>
@@ -236,9 +375,94 @@ export default function Pipeline() {
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> Transkribiert {progress.percent_transcribed}%</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500 inline-block"></span> Analysiert {progress.percent_analyzed}%</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span> Content {progress.percent_content}%</span>
+              {pipelineStatus?.eta_hours > 0 && (
+                <span className="flex items-center gap-1 ml-auto text-gray-500">
+                  {pipelineStatus.throughput_per_hour >= 5
+                    ? `⏱ ~${pipelineStatus.eta_hours}h bis fertig · ${pipelineStatus.throughput_per_hour}/h`
+                    : `⏱ ~${pipelineStatus.eta_hours}h bis fertig (geschätzt)`}
+                </span>
+              )}
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Warteschlangen-Analyse: per-source transcribed breakdown */}
+      {transcribedBreakdown && transcribedBreakdown.total > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-amber-600 text-base">⏳</span>
+              <span className="font-semibold text-sm text-amber-900">
+                Warteschlange: {transcribedBreakdown.total.toLocaleString('de-DE')} Items warten auf Analyse
+              </span>
+              <span className="text-xs text-amber-700">
+                (~${(transcribedBreakdown.total * 0.0005).toFixed(2)}–${(transcribedBreakdown.total * 0.003).toFixed(2)} geschätzte Kosten)
+              </span>
+            </div>
+            <button onClick={loadBreakdown} className="text-xs text-amber-600 hover:text-amber-800 underline" disabled={breakdownLoading}>
+              {breakdownLoading ? '...' : 'Aktualisieren'}
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-amber-700 border-b border-amber-200">
+                  <th className="text-left pb-1.5 font-medium">Quelle</th>
+                  <th className="text-right pb-1.5 font-medium pr-3">Wartend</th>
+                  <th className="text-right pb-1.5 font-medium pr-3">Min. Kosten</th>
+                  <th className="pb-1.5"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {transcribedBreakdown.sources.map(src => (
+                  <tr key={src.id} className="border-b border-amber-100 last:border-0">
+                    <td className="py-1.5 text-amber-900 font-medium truncate max-w-[200px]">{src.name}</td>
+                    <td className="py-1.5 text-right pr-3 text-amber-800 font-mono">{src.count.toLocaleString('de-DE')}</td>
+                    <td className="py-1.5 text-right pr-3 text-amber-700">${(src.count * 0.0005).toFixed(2)}</td>
+                    <td className="py-1.5 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm(`${src.count} Items von "${src.name}" in Analyse-Queue einreihen?\n\nGeschätzte Kosten: $${(src.count * 0.0005).toFixed(2)}–$${(src.count * 0.003).toFixed(2)}`)) return
+                            try {
+                              const r = await queueAllAnalysis(src.id)
+                              alert(`${r.queued} Items eingereiht!`)
+                              loadBreakdown()
+                              refetchPipelineStatus()
+                            } catch(e) { alert('Fehler: ' + e.message) }
+                          }}
+                          className="px-2 py-0.5 text-xs bg-teal-600 hover:bg-teal-700 text-white rounded font-medium transition-colors"
+                          title="Items dieser Quelle analysieren"
+                        >
+                          Analyse starten
+                        </button>
+                        {src.count > 50 && (
+                          <button
+                            onClick={async () => {
+                              if (!window.confirm(`Alle ${src.count} Items von "${src.name}" archivieren?\n\nDie Items bleiben in der DB, werden aber nicht mehr verarbeitet.`)) return
+                              try {
+                                const r = await archiveSourceItems(src.id)
+                                alert(r.archived > 0 ? `${r.archived} Items archiviert.` : 'Keine Items archiviert.')
+                                loadBreakdown()
+                                refetchPipelineStatus()
+                                refetchProgress()
+                              } catch(e) { alert('Fehler: ' + e.message) }
+                            }}
+                            className="px-2 py-0.5 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded font-medium transition-colors"
+                            title="Items dieser Quelle archivieren (aus Pipeline entfernen)"
+                          >
+                            Archivieren
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* Cookie Status - always visible */}
@@ -277,38 +501,75 @@ export default function Pipeline() {
       />
 
       {/* Activity Log */}
-      {showLog && activityLog && (
+      {showLog && (
         <Card>
-          <CardHeader><CardTitle>Activity Log</CardTitle></CardHeader>
-          <CardContent className="p-0 max-h-64 overflow-y-auto">
-            {activityLog.length === 0 ? (
-              <p className="p-4 text-sm text-gray-500">Noch keine Aktivitaeten.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <tbody>
-                  {activityLog.map(entry => (
-                    <tr key={entry.id} className={`border-b border-gray-100 dark:border-gray-800 ${entry.is_error ? 'bg-red-50 dark:bg-red-900/10' : ''}`}>
-                      <td className="px-4 py-2 text-xs text-gray-400 whitespace-nowrap">
-                        {entry.updated_at ? new Date(entry.updated_at).toLocaleString('de-DE') : '-'}
-                      </td>
-                      <td className="px-4 py-2">
-                        <span className="text-gray-700 dark:text-gray-300 line-clamp-1">{entry.title}</span>
-                      </td>
-                      <td className="px-4 py-2">
-                        {entry.channel_name && <span className="text-xs text-gray-400">{entry.channel_name}</span>}
-                      </td>
-                      <td className="px-4 py-2">
-                        <span className={`text-xs font-medium ${entry.is_error ? 'text-red-600' : entry.is_processing ? 'text-yellow-600' : 'text-green-600'}`}>
-                          {entry.message}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-xs text-gray-400">
-                        {entry.transcript_source || ''}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <CardHeader>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle>Activity Log</CardTitle>
+              <span className="text-xs text-gray-400">{logEntries.length} Einträge</span>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Filters */}
+            <div className="flex flex-wrap gap-2 items-center">
+              {/* Status group chips */}
+              {[
+                { value: '', label: 'Alle' },
+                { value: 'success', label: '✅ Erfolgreich' },
+                { value: 'error', label: '❌ Fehler' },
+                { value: 'processing', label: '⏳ In Arbeit' },
+              ].map(opt => (
+                <button key={opt.value} onClick={() => setLogStatusGroup(opt.value)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${logStatusGroup === opt.value ? 'bg-primary-700 text-white border-primary-700' : 'bg-white text-gray-500 border-gray-200 hover:border-primary-300'}`}>
+                  {opt.label}
+                </button>
+              ))}
+              {/* Source filter */}
+              <select value={logSourceId} onChange={e => setLogSourceId(e.target.value)}
+                className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-primary-400">
+                <option value="">Alle Quellen</option>
+                {sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            {/* Time filter */}
+            <TimeFilter value={logTimeFilter} onChange={v => setLogTimeFilter(v)} label="Zeitraum" />
+            {/* Log table */}
+            <div className="max-h-[480px] overflow-y-auto rounded border border-gray-100">
+              {logLoading && logEntries.length === 0 ? (
+                <p className="p-4 text-sm text-gray-400">Lade...</p>
+              ) : logEntries.length === 0 ? (
+                <p className="p-4 text-sm text-gray-400">Keine Einträge in diesem Zeitraum / Filter.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <tbody>
+                    {logEntries.map(entry => (
+                      <tr key={entry.id} className={`border-b border-gray-100 hover:bg-gray-50 ${entry.is_error ? 'bg-red-50' : ''}`}>
+                        <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">
+                          {entry.updated_at ? new Date(entry.updated_at).toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '-'}
+                        </td>
+                        <td className="px-3 py-2 max-w-[260px]">
+                          <span className="text-gray-700 line-clamp-1 text-xs">{entry.title}</span>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">
+                          {entry.source_name || entry.channel_name || ''}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`text-xs font-medium ${entry.is_error ? 'text-red-600' : entry.is_processing ? 'text-amber-600' : 'text-emerald-600'}`}>
+                            {entry.is_error ? '❌' : entry.is_processing ? '⏳' : '✅'} {entry.message}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            {/* Load more */}
+            {logHasMore && (
+              <button onClick={() => loadLog(false)} disabled={logLoading}
+                className="w-full py-2 text-xs font-medium text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-50 disabled:opacity-50">
+                {logLoading ? 'Lade...' : '↓ Mehr laden'}
+              </button>
             )}
           </CardContent>
         </Card>
@@ -349,6 +610,9 @@ export default function Pipeline() {
             placeholder="Titel, Kanal, Schlagwoerter..." />
         </div>
       </div>
+      <div className="mt-2 px-1">
+        <TimeFilter value={timeFilter} onChange={setTimeFilter} count={filtered.length} label="Zeitraum" />
+      </div>
 
       {/* Video List */}
       <Card>
@@ -369,6 +633,7 @@ export default function Pipeline() {
                 <th className="px-3 py-3 font-medium w-16"></th>
                 <th className="px-3 py-3 font-medium">Video</th>
                 <th className="px-3 py-3 font-medium">Kanal</th>
+                <th className="px-3 py-3 font-medium">Quelle</th>
                 <th className="px-3 py-3 font-medium">Datum</th>
                 <th className="px-3 py-3 font-medium">Views</th>
                 <th className="px-3 py-3 font-medium">Status</th>
@@ -400,6 +665,19 @@ export default function Pipeline() {
                   <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
                     {item.channel_name || '-'}
                   </td>
+                  <td className="px-3 py-3 text-xs whitespace-nowrap">
+                    {(() => {
+                      const src = sources.find(s => s.id === item.source_id)
+                      if (!src) return <span className="text-gray-400">—</span>
+                      const icons = { youtube: '📺', rss: '📰', podcast: '🎙️', web: '🌐' }
+                      return (
+                        <span className="flex items-center gap-1 text-gray-600">
+                          <span>{icons[src.type] || '📄'}</span>
+                          <span className="max-w-[120px] truncate">{src.name}</span>
+                        </span>
+                      )
+                    })()}
+                  </td>
                   <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
                     {item.published_at ? new Date(item.published_at).toLocaleDateString('de-DE') : '-'}
                   </td>
@@ -411,9 +689,14 @@ export default function Pipeline() {
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex flex-wrap gap-1 max-w-[150px]">
-                      {(item.keywords || []).slice(0, 3).map((k, i) => (
-                        <span key={i} className="text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded">{k}</span>
-                      ))}
+                      {(item.keywords || []).length > 0
+                        ? (item.keywords || []).slice(0, 3).map((k, i) => (
+                            <span key={i} className="text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded">{k}</span>
+                          ))
+                        : ['new', 'transcribed', 'transcription_failed', 'content_ready'].includes(item.status)
+                          ? <span className="text-[10px] text-gray-400 italic">Analyse ausstehend</span>
+                          : null
+                      }
                     </div>
                   </td>
                   <td className="px-3 py-3">
@@ -436,7 +719,7 @@ export default function Pipeline() {
                 </tr>
               ))}
               {sortedItems.length === 0 && (
-                <tr><td colSpan={9} className="px-6 py-8 text-center text-sm text-gray-500">Keine Videos. Gehe zu Quellen und importiere Kanaele.</td></tr>
+                <tr><td colSpan={10} className="px-6 py-8 text-center text-sm text-gray-500">Keine Videos. Gehe zu Quellen und importiere Kanaele.</td></tr>
               )}
             </tbody>
           </table>
@@ -488,9 +771,12 @@ export default function Pipeline() {
             )}
 
             {detailTab === 'transcript' && (
-              <div className="max-h-96 overflow-y-auto">
+              <div className="max-h-[600px] overflow-y-auto">
                 {detail.transcript_text ? (
-                  <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">{detail.transcript_text.substring(0, 5000)}{detail.transcript_text.length > 5000 ? '\n\n[... gekuerzt ...]' : ''}</pre>
+                  <>
+                    <div className="mb-2 text-xs text-gray-400">{detail.transcript_text.length.toLocaleString()} Zeichen</div>
+                    <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">{detail.transcript_text}</pre>
+                  </>
                 ) : (
                   <p className="text-sm text-gray-500">Kein Transkript vorhanden.</p>
                 )}

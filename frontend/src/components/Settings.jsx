@@ -6,7 +6,7 @@ import { Badge } from './ui/Badge'
 import { Input, Textarea } from './ui/Input'
 import { Dialog } from './ui/Dialog'
 import { useApi } from '../hooks/useApi'
-import { getSettings, updateSettings, setApiKey, ncBrowse, ncSuggest } from '../api'
+import { getSettings, updateSettings, setApiKey, ncBrowse, ncSuggest, refreshIdeasWithProfile, getLlmRouting, getLLMCostHistory } from '../api'
 
 export default function Settings() {
   const { data, loading, refetch } = useApi(getSettings)
@@ -21,6 +21,17 @@ export default function Settings() {
   const [ncReadPaths, setNcReadPaths] = useState([])
   const [newReadPath, setNewReadPath] = useState('')
   const [saving, setSaving] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [dailyBudgetEur, setDailyBudgetEur] = useState('')
+  const [routingOverrides, setRoutingOverrides] = useState({})
+  const { data: routingData, refetch: refetchRouting } = useApi(getLlmRouting)
+  const { data: costHistory } = useApi(() => getLLMCostHistory(2))
+
+  // Entrepreneur Profile
+  const [entName, setEntName] = useState('')
+  const [entIndustry, setEntIndustry] = useState('')
+  const [entSpecialization, setEntSpecialization] = useState('')
+  const [entAudience, setEntAudience] = useState('')
 
   // NC Browser
   const [showBrowser, setShowBrowser] = useState(false)
@@ -39,6 +50,13 @@ export default function Settings() {
       setNcAnalysisPath(data.settings.nc_analysis_path || '/zukunftsbund/Projekte/Content-Autopilot/Daten/Analysen')
       setNcContentPath(data.settings.nc_content_path || '/zukunftsbund/Projekte/Content-Autopilot/Daten/Content')
       setNcReadPaths(data.settings.nc_read_paths || [])
+      if (data.settings.daily_budget_eur) setDailyBudgetEur(String(data.settings.daily_budget_eur))
+      if (data.settings.llm_routing) setRoutingOverrides(data.settings.llm_routing)
+      const ent = data.settings.entrepreneur || {}
+      setEntName(ent.name || '')
+      setEntIndustry(ent.industry || '')
+      setEntSpecialization(ent.specialization || '')
+      setEntAudience(ent.target_audience || '')
     }
   }, [data])
 
@@ -57,12 +75,34 @@ export default function Settings() {
         nc_analysis_path: ncAnalysisPath,
         nc_content_path: ncContentPath,
         nc_read_paths: ncReadPaths,
+        daily_budget_eur: dailyBudgetEur ? parseFloat(dailyBudgetEur) : undefined,
+        llm_routing: Object.keys(routingOverrides).length > 0 ? routingOverrides : undefined,
+        entrepreneur: {
+          name: entName,
+          industry: entIndustry,
+          specialization: entSpecialization,
+          target_audience: entAudience,
+        },
       })
       alert('Einstellungen gespeichert!')
+      refetchRouting()
     } catch (e) {
       alert('Fehler: ' + e.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleRefreshIdeas = async () => {
+    if (!window.confirm('Bestehende "neue" Ideen werden gelöscht und mit deinem aktuellen Unternehmer-Profil neu generiert. Fortfahren?')) return
+    setRefreshing(true)
+    try {
+      const r = await refreshIdeasWithProfile(20)
+      alert(r.message || 'Ideen werden im Hintergrund neu generiert.')
+    } catch (e) {
+      alert('Fehler: ' + (e.message || 'Unbekannter Fehler'))
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -125,9 +165,93 @@ export default function Settings() {
     }
   }
 
+  const profileComplete = !!(entName || entIndustry)
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
+
+  const handleSaveProfile = async () => {
+    setProfileSaving(true)
+    try {
+      await updateSettings({
+        entrepreneur: {
+          name: entName,
+          industry: entIndustry,
+          specialization: entSpecialization,
+          target_audience: entAudience,
+        },
+      })
+      setProfileSaved(true)
+      setTimeout(() => setProfileSaved(false), 3000)
+    } catch (e) {
+      alert('Fehler beim Speichern: ' + e.message)
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
+  const SHK_PRESETS = [
+    { label: 'SHK-Handwerker', name: '', industry: 'SHK-Handwerk (Sanitär, Heizung, Klima)', specialization: 'Sanitär-, Heizungs- und Klimatechnik', audience: 'Hausbesitzer, Bauherren, Gewerbetreibende' },
+    { label: 'Elektro-Handwerk', name: '', industry: 'Elektrohandwerk', specialization: 'Elektroinstallation, Smart Home, PV-Anlagen', audience: 'Hausbesitzer, Gewerbetreibende, Bauträger' },
+    { label: 'Bau & Ausbau', name: '', industry: 'Bauhandwerk', specialization: 'Hoch- und Tiefbau, Innenausbau', audience: 'Bauherren, Architekten, Wohnungseigentümer' },
+    { label: 'IT & Beratung', name: '', industry: 'IT-Dienstleistungen & Beratung', specialization: 'Digitalisierung, Cloud, KI', audience: 'KMU-Inhaber, Führungskräfte, IT-Entscheider' },
+  ]
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Einstellungen</h2>
+
+      {/* Entrepreneur Profile — shown prominently at top when incomplete */}
+      {!profileComplete && (
+        <div className="rounded-xl border-2 border-amber-300 bg-amber-50 overflow-hidden shadow-sm">
+          <div className="px-5 py-3 bg-amber-100 border-b border-amber-200 flex items-center gap-2">
+            <span className="text-amber-600 text-lg">⚠️</span>
+            <div className="flex-1">
+              <p className="font-bold text-amber-900 text-sm">Schritt 1: Unternehmer-Profil ausfüllen</p>
+              <p className="text-xs text-amber-700">Ohne Branche generiert die KI generische Inhalte. Das ist der wichtigste Schritt.</p>
+            </div>
+            {profileSaved && <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-1 rounded">✓ Gespeichert!</span>}
+          </div>
+          <div className="p-5 space-y-4">
+            {/* Quick presets */}
+            <div>
+              <p className="text-xs font-medium text-amber-800 mb-2">Schnell-Auswahl Branche:</p>
+              <div className="flex flex-wrap gap-2">
+                {SHK_PRESETS.map(p => (
+                  <button key={p.label}
+                    onClick={() => {
+                      if (p.name) setEntName(p.name)
+                      setEntIndustry(p.industry)
+                      setEntSpecialization(p.specialization)
+                      setEntAudience(p.audience)
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium bg-white border border-amber-200 text-amber-800 rounded-lg hover:bg-amber-50 hover:border-amber-400 transition-colors"
+                  >{p.label}</button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input label="Dein Name / Unternehmen" value={entName}
+                onChange={e => setEntName(e.target.value)}
+                placeholder="z.B. Robert Hargesheimer / Musterbau GmbH" />
+              <Input label="Branche *" value={entIndustry}
+                onChange={e => setEntIndustry(e.target.value)}
+                placeholder="z.B. SHK-Handwerk, Elektro, IT-Beratung" />
+            </div>
+            <Input label="Spezialisierung" value={entSpecialization}
+              onChange={e => setEntSpecialization(e.target.value)}
+              placeholder="z.B. Sanitär, Heizung, Klimatechnik" />
+            <Input label="Zielgruppe" value={entAudience}
+              onChange={e => setEntAudience(e.target.value)}
+              placeholder="z.B. Hausbesitzer, Bauherren, Gewerbetreibende" />
+            <div className="flex items-center gap-3 pt-1">
+              <Button onClick={handleSaveProfile} disabled={profileSaving || !entIndustry}>
+                {profileSaving ? 'Speichere...' : '💾 Profil speichern'}
+              </Button>
+              {!entIndustry && <span className="text-xs text-amber-700">Branche ist Pflichtfeld</span>}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* API Key */}
       <Card>
@@ -221,6 +345,44 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      {/* Unternehmer-Profil — shown at bottom when complete, hidden when shown at top */}
+      {profileComplete && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Unternehmer-Profil</CardTitle>
+              <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-medium">✓ Ausgefüllt</span>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input label="Dein Name / Unternehmen" value={entName}
+                onChange={e => setEntName(e.target.value)}
+                placeholder="z.B. Max Mustermann / Musterbau GmbH" />
+              <Input label="Branche" value={entIndustry}
+                onChange={e => setEntIndustry(e.target.value)}
+                placeholder="z.B. SHK-Handwerk, Elektro, IT-Beratung" />
+            </div>
+            <Input label="Spezialisierung" value={entSpecialization}
+              onChange={e => setEntSpecialization(e.target.value)}
+              placeholder="z.B. Sanitär, Heizung, Klimatechnik" />
+            <Input label="Zielgruppe" value={entAudience}
+              onChange={e => setEntAudience(e.target.value)}
+              placeholder="z.B. Hausbesitzer, Bauherren, Gewerbetreibende" />
+            <div className="flex items-center gap-3 pt-1 border-t border-gray-100">
+              <Button size="sm" onClick={handleSaveProfile} disabled={profileSaving}>
+                {profileSaving ? 'Speichere...' : profileSaved ? '✓ Gespeichert!' : '💾 Profil speichern'}
+              </Button>
+              {entIndustry && (
+                <Button size="sm" variant="secondary" onClick={handleRefreshIdeas} disabled={refreshing}>
+                  {refreshing ? 'Regeneriere...' : '🔄 Ideen neu generieren (20)'}
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Content Settings */}
       <Card>
         <CardHeader><CardTitle>Content-Einstellungen</CardTitle></CardHeader>
@@ -228,14 +390,144 @@ export default function Settings() {
           <Textarea label="Tonalitaet" value={tone} onChange={e => setTone(e.target.value)}
             placeholder="professionell, informativ, mit persoenlicher Note" rows={2} />
           <Input label="Sprache" value={language} onChange={e => setLanguage(e.target.value)} />
-          <Input label="Zielgruppe" value={targetAudience} onChange={e => setTargetAudience(e.target.value)}
+          <Input label="Zielgruppe (allgemein)" value={targetAudience} onChange={e => setTargetAudience(e.target.value)}
             placeholder="Fuehrungskraefte, KMU-Inhaber" />
         </CardContent>
       </Card>
 
-      <Button onClick={handleSave} disabled={saving} className="w-full">
-        {saving ? 'Speichern...' : 'Alle Einstellungen speichern'}
-      </Button>
+      {/* Budget & Kosten */}
+      <Card>
+        <CardHeader><CardTitle>Budget & Kosten</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Tages-Limit fuer KI-Ausgaben. Bei Ueberschreitung pausiert die Pipeline automatisch (Circuit Breaker).
+            Aktuell: Gemini Flash ~0,075$/1M Token, Mistral Medium ~0,40$/1M Token.
+          </p>
+          <div className="flex items-end gap-3">
+            <div className="w-40">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Tageslimit (EUR)
+              </label>
+              <input
+                type="number" min="0.50" max="50.00" step="0.50"
+                value={dailyBudgetEur}
+                onChange={e => setDailyBudgetEur(e.target.value)}
+                placeholder="z.B. 5.00"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            {dailyBudgetEur && (
+              <span className="text-xs text-gray-500 pb-1.5">
+                ≈ {Math.round(parseFloat(dailyBudgetEur) / 0.075 * 1000)}k Analyse-Tokens/Tag
+              </span>
+            )}
+          </div>
+          {(() => {
+            const today = new Date().toISOString().slice(0, 10)
+            const todayEntry = Array.isArray(costHistory) ? costHistory.find(e => e.date === today) : null
+            const spentEur = todayEntry ? todayEntry.total_cents / 100 : 0
+            const limitEur = dailyBudgetEur ? parseFloat(dailyBudgetEur) : 0
+            const pct = limitEur > 0 ? Math.min(100, (spentEur / limitEur) * 100) : 0
+            const barColor = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'
+            if (!todayEntry && !limitEur) return null
+            return (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">Verbrauch heute</span>
+                  <span className={`font-semibold ${pct >= 90 ? 'text-red-600' : pct >= 70 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    ${spentEur.toFixed(3)} {limitEur > 0 ? `/ $${limitEur.toFixed(2)}` : '(kein Limit gesetzt)'}
+                  </span>
+                </div>
+                {limitEur > 0 && (
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.max(pct, pct > 0 ? 3 : 0)}%` }} />
+                  </div>
+                )}
+                {todayEntry && (
+                  <p className="text-[11px] text-gray-400">{todayEntry.calls} LLM-Aufrufe · {((todayEntry.input_tokens + todayEntry.output_tokens) / 1000).toFixed(0)}k Token</p>
+                )}
+              </div>
+            )
+          })()}
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+            <p className="text-xs text-green-800 dark:text-green-200 font-medium">Aktuelles Routing (seit Cycle 86)</p>
+            <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+              Analyse/Tagging/Summary → <code>google/gemini-2.0-flash</code> (0,075$/1M, ~40x guenstiger als Sonnet)<br/>
+              Ideation/Posts/Fragen → <code>mistral/mistral-medium-latest</code> (0,40$/1M, 7x guenstiger)<br/>
+              Kein <code>anthropic/claude-*</code> mehr im Backend.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* KI-Modelle Routing */}
+      {routingData?.routing && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>KI-Modelle pro Aufgabe</CardTitle>
+              <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-1 rounded font-medium">
+                Ziel: ~25-35$/Monat
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              {routingData.note}
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="text-left py-2 pr-4 font-medium text-gray-600 dark:text-gray-400">Aufgabe</th>
+                    <th className="text-left py-2 pr-4 font-medium text-gray-600 dark:text-gray-400">Modell</th>
+                    <th className="text-right py-2 pr-4 font-medium text-gray-600 dark:text-gray-400">$/1M Token</th>
+                    <th className="text-right py-2 font-medium text-gray-600 dark:text-gray-400">max_tokens</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {routingData.routing.map(r => {
+                    const currentKey = routingOverrides[r.purpose] || r.model_key
+                    const modelOptions = [
+                      { key: 'gemini-flash', id: 'google/gemini-2.0-flash', cost: 0.075, label: 'Gemini Flash (günstig)' },
+                      { key: 'claude-sonnet', id: 'mistral/mistral-medium-latest', cost: 0.40, label: 'Mistral Medium (kreativ)' },
+                    ]
+                    const selected = modelOptions.find(o => o.key === currentKey) || modelOptions[0]
+                    return (
+                      <tr key={r.purpose} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <td className="py-1.5 pr-4 text-gray-700 dark:text-gray-300">{r.label}</td>
+                        <td className="py-1.5 pr-4">
+                          <select
+                            value={currentKey}
+                            onChange={e => setRoutingOverrides(prev => ({ ...prev, [r.purpose]: e.target.value }))}
+                            className="text-[10px] font-mono border border-gray-200 dark:border-gray-600 rounded px-1.5 py-0.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 cursor-pointer"
+                          >
+                            {modelOptions.map(o => (
+                              <option key={o.key} value={o.key}>{o.id}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="py-1.5 pr-4 text-right">
+                          <span className={`font-medium ${selected.cost <= 0.1 ? 'text-green-600' : selected.cost <= 0.5 ? 'text-yellow-600' : 'text-red-600'}`}>
+                            ${selected.cost.toFixed(3)}
+                          </span>
+                        </td>
+                        <td className="py-1.5 text-right text-gray-500 dark:text-gray-400">{r.max_tokens}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="sticky bottom-4 z-10">
+        <Button onClick={handleSave} disabled={saving} className="w-full shadow-lg">
+          {saving ? 'Speichern...' : '💾 Alle Einstellungen speichern'}
+        </Button>
+      </div>
 
       {/* NC Folder Browser Dialog */}
       <Dialog open={showBrowser} onClose={() => setShowBrowser(false)}

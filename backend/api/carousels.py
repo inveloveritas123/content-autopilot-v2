@@ -60,6 +60,27 @@ async def generate_carousel(
     )
 
 
+@router.post("/preview")
+async def preview_carousel(
+    data: GenerateRequest,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return slide JSON for preview before generating PDF."""
+    text = data.content_text
+    if not text and data.content_piece_id:
+        piece = await db.get(ContentPiece, uuid.UUID(data.content_piece_id))
+        if not piece or piece.tenant_id != tenant.id:
+            raise HTTPException(404, "Content piece not found")
+        text = piece.content_text
+
+    if not text:
+        raise HTTPException(400, "content_text or content_piece_id required")
+
+    slides = data.slides or split_text_into_slides(text)
+    return {"slides": slides, "slide_count": len(slides), "title": data.title}
+
+
 @router.get("/templates")
 async def list_templates(
     tenant: Tenant = Depends(get_tenant),

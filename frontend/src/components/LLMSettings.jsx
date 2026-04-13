@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Cpu, Plus, Trash2, Zap, CheckCircle2, XCircle, Loader2, Star, Eye, EyeOff, Pencil, Check, X } from 'lucide-react'
+import { Cpu, Plus, Trash2, Zap, CheckCircle2, XCircle, Loader2, Star, Eye, EyeOff, Pencil, Check, X, FlaskConical } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { getLLMProviders, createLLMProvider, updateLLMProvider, deleteLLMProvider, testLLMProvider, getLLMCostHistory } from '../api'
+import { getLLMProviders, createLLMProvider, updateLLMProvider, deleteLLMProvider, testLLMProvider, getLLMCostHistory, benchmarkLLM, getLlmRouting, updateSettings } from '../api'
 
 const PROVIDER_TYPES = [
   { value: 'litellm', label: 'LiteLLM Proxy', defaultUrl: 'http://host.docker.internal:4000/v1' },
@@ -19,22 +19,34 @@ const TASK_OPTIONS = [
   { value: 'transcription', label: 'Transkription' },
 ]
 
-// Aufgaben → Modell-Zuordnung (spiegelt provider_resolver.py TASK_MODEL_MAP)
-const TASK_MODEL_MAP = [
-  { task: 'Recherche / Analyse', model: 'Gemini 2.5 Flash Lite', tier: 'flash', assignment: 'analysis' },
-  { task: 'Transkription', model: 'Gemini 2.5 Flash Lite', tier: 'flash', assignment: 'analysis' },
-  { task: 'Ideen (Draft)', model: 'Gemini 2.5 Flash Lite', tier: 'flash', assignment: 'analysis' },
-  { task: 'Voice-Profil', model: 'Claude Haiku 4.5', tier: 'creative', assignment: 'creative' },
-  { task: 'Posts finalisieren', model: 'Claude Haiku 4.5', tier: 'creative', assignment: 'creative' },
-  { task: 'Content DNA', model: 'Claude Haiku 4.5', tier: 'creative', assignment: 'creative' },
+// Requesty.ai Modelle (Auswahlliste für Dropdown)
+const REQUESTY_MODELS = [
+  { value: 'vertex/gemini-2.5-flash-lite@europe-central2', label: 'Gemini 2.5 Flash Lite (0.075¢/1M) — günstigst' },
+  { value: 'mistral/mistral-small-latest', label: 'Mistral Small (0.10¢/1M) — kreativ & günstig' },
+  { value: 'mistral/mistral-large-latest', label: 'Mistral Large (2.00¢/1M) — hohe Qualität' },
+  { value: 'openai/gpt-4.1-mini', label: 'GPT-4.1 Mini (0.40¢/1M) — ausgewogen' },
+  { value: 'openai/gpt-4.1', label: 'GPT-4.1 (2.00¢/1M) — OpenAI Premium' },
+  { value: 'anthropic/claude-sonnet-4-20250514', label: 'Claude Sonnet 4 (3.00¢/1M) — beste Qualität' },
 ]
 
-function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLimit, testing }) {
+// Aufgaben → Modell-Zuordnung (Cycle 86: google/gemini-2.0-flash + mistral/mistral-medium-latest)
+const TASK_MODEL_MAP = [
+  { task: 'Analyse / Transkription', model: 'Gemini 2.0 Flash', modelId: 'google/gemini-2.0-flash', tier: 'flash', assignment: 'analysis', cost: '$0.075/1M' },
+  { task: 'Tagging / Scoring', model: 'Gemini 2.0 Flash', modelId: 'google/gemini-2.0-flash', tier: 'flash', assignment: 'analysis', cost: '$0.075/1M' },
+  { task: 'Zusammenfassung', model: 'Gemini 2.0 Flash', modelId: 'google/gemini-2.0-flash', tier: 'flash', assignment: 'analysis', cost: '$0.075/1M' },
+  { task: 'Ideation', model: 'Mistral Medium', modelId: 'mistral/mistral-medium-latest', tier: 'creative', assignment: 'creative', cost: '$0.40/1M' },
+  { task: 'Posts generieren', model: 'Mistral Medium', modelId: 'mistral/mistral-medium-latest', tier: 'creative', assignment: 'creative', cost: '$0.40/1M' },
+  { task: 'Smart-Fragen', model: 'Mistral Medium', modelId: 'mistral/mistral-medium-latest', tier: 'creative', assignment: 'creative', cost: '$0.40/1M' },
+]
+
+function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLimit, onUpdateModel, testing }) {
   const statusColor = provider.last_test_status === 'ok' ? 'text-emerald-500' : provider.last_test_status === 'error' ? 'text-red-500' : 'text-gray-400'
   const StatusIcon = provider.last_test_status === 'ok' ? CheckCircle2 : provider.last_test_status === 'error' ? XCircle : Cpu
 
   const [editingLimit, setEditingLimit] = useState(false)
   const [limitInput, setLimitInput] = useState('')
+  const [editingModel, setEditingModel] = useState(false)
+  const [modelInput, setModelInput] = useState(provider.model_name || '')
 
   const spent = provider.cost_spent_today_cents || 0
   const limit = provider.cost_limit_daily_cents || 500
@@ -131,7 +143,71 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
           <div className={`h-full rounded-full transition-all ${isBlocked ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-primary-500'}`}
             style={{ width: `${pct}%` }} />
         </div>
-        {isBlocked && <p className="text-[10px] text-red-600 mt-1 font-medium">LIMIT ERREICHT — keine LLM-Calls bis Mitternacht</p>}
+        {isBlocked && (
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            <p className="text-[10px] text-red-600 font-medium">LIMIT ERREICHT</p>
+            <div className="flex gap-1 ml-auto">
+              {[2, 5].map(eur => (
+                <button
+                  key={eur}
+                  onClick={() => onUpdateLimit(provider.id, limit + eur * 100)}
+                  className="px-2 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700 rounded-md hover:bg-red-200 border border-red-200 transition-colors"
+                  title={`Limit um +${eur}€ erhöhen`}
+                >
+                  +{eur}€
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {!isBlocked && (
+          <div className="mt-1.5 flex justify-end gap-1">
+            {[2, 5].map(eur => (
+              <button
+                key={eur}
+                onClick={() => onUpdateLimit(provider.id, limit + eur * 100)}
+                className="px-1.5 py-0.5 text-[10px] text-ink-muted hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                title={`Limit um +${eur}€ erhöhen`}
+              >
+                +{eur}€
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Model selector */}
+      <div className="mt-2 pt-2 border-t border-gray-100">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] text-ink-muted shrink-0">Modell:</span>
+          {editingModel ? (
+            <div className="flex items-center gap-1 flex-1">
+              <select
+                value={modelInput}
+                onChange={e => setModelInput(e.target.value)}
+                className="flex-1 text-[11px] border border-primary-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+              >
+                <option value="">— Freitext —</option>
+                {REQUESTY_MODELS.map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+              <button onClick={async () => { await onUpdateModel(provider.id, modelInput); setEditingModel(false) }}
+                className="text-emerald-600 hover:text-emerald-700 shrink-0"><Check className="w-3 h-3" /></button>
+              <button onClick={() => { setModelInput(provider.model_name || ''); setEditingModel(false) }}
+                className="text-gray-400 hover:text-gray-600 shrink-0"><X className="w-3 h-3" /></button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setModelInput(provider.model_name || ''); setEditingModel(true) }}
+              className="flex items-center gap-1 text-[11px] text-ink font-mono hover:text-primary-600 group truncate max-w-[200px]"
+              title={provider.model_name || 'Kein Modell'}
+            >
+              <span className="truncate">{provider.model_name || '—'}</span>
+              <Pencil className="w-2.5 h-2.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+          )}
+        </div>
       </div>
 
       {provider.last_test_error && (
@@ -179,12 +255,66 @@ function CostHistoryChart() {
   )
 }
 
+// Map TASK_MODEL_MAP rows to benchmark step keys
+const STEP_MAP = {
+  'Analyse / Transkription': 'analysis',
+  'Tagging / Scoring': null,  // no standalone benchmark
+  'Zusammenfassung': null,
+  'Ideation': 'ideation',
+  'Posts generieren': 'post_generation',
+  'Smart-Fragen': 'smart_questions',
+}
+
+function BenchmarkResult({ result, onClose }) {
+  const isOk = result.status === 'ok'
+  const isBudget = result.status === 'budget_exceeded'
+  const bgClass = isOk ? 'bg-emerald-50 border-emerald-200' : isBudget ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'
+  return (
+    <div className={`mt-2 p-3 rounded-lg text-xs border ${bgClass}`}>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {result.item_title && result.item_title !== '—' && <span className="font-medium text-ink">{result.item_title}</span>}
+          {result.latency_ms > 0 && <span className="text-ink-muted">{result.latency_ms}ms</span>}
+          {result.quality_score != null && (
+            <span className={`font-semibold px-1.5 py-0.5 rounded ${result.quality_score >= 80 ? 'bg-emerald-100 text-emerald-700' : result.quality_score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+              {result.quality_score.toFixed(0)}/100
+            </span>
+          )}
+          {result.model_used && <span className="text-ink-muted font-mono">{result.model_used}</span>}
+        </div>
+        <button onClick={onClose} className="text-ink-muted hover:text-ink shrink-0"><X className="w-3 h-3" /></button>
+      </div>
+      {result.error ? (
+        <p className={isBudget ? 'text-amber-700' : 'text-red-600'}>{result.error}</p>
+      ) : (
+        <pre className="whitespace-pre-wrap text-ink text-[10px] leading-relaxed max-h-32 overflow-y-auto">{result.result_preview}</pre>
+      )}
+    </div>
+  )
+}
+
 function TaskAssignmentTable({ providers }) {
+  const [benchmarking, setBenchmarking] = useState(null)  // step key being benchmarked
+  const [results, setResults] = useState({})  // step key → result
+
   const getProvider = (assignment) => {
     const p = providers.find(p => p.task_assignment === assignment && p.is_active)
       || providers.find(p => p.task_assignment === 'all' && p.is_default && p.is_active)
       || providers.find(p => p.is_active)
     return p?.name || '—'
+  }
+
+  const handleBenchmark = async (task) => {
+    const step = STEP_MAP[task]
+    if (!step) return
+    setBenchmarking(step)
+    try {
+      const result = await benchmarkLLM(step)
+      setResults(prev => ({ ...prev, [step]: result }))
+    } catch (e) {
+      setResults(prev => ({ ...prev, [step]: { status: 'error', error: e.message, step, item_title: '—' } }))
+    }
+    setBenchmarking(null)
   }
 
   return (
@@ -196,27 +326,171 @@ function TaskAssignmentTable({ providers }) {
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-3 py-2 text-left font-medium text-ink-muted">Aufgabe</th>
               <th className="px-3 py-2 text-left font-medium text-ink-muted">Modell</th>
+              <th className="px-3 py-2 text-left font-medium text-ink-muted">Kosten</th>
               <th className="px-3 py-2 text-left font-medium text-ink-muted">Provider</th>
+              <th className="px-3 py-2 text-left font-medium text-ink-muted">Test</th>
             </tr>
           </thead>
           <tbody>
-            {TASK_MODEL_MAP.map((row, i) => (
-              <tr key={row.task} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                <td className="px-3 py-2 text-ink">{row.task}</td>
-                <td className="px-3 py-2">
-                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                    row.tier === 'flash' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
-                  }`}>
-                    {row.model}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-ink-muted">{getProvider(row.assignment)}</td>
-              </tr>
-            ))}
+            {TASK_MODEL_MAP.map((row, i) => {
+              const step = STEP_MAP[row.task]
+              const isBenchmarking = benchmarking === step
+              const hasResult = step && results[step]
+              return (
+                <>
+                  <tr key={row.task} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                    <td className="px-3 py-2 text-ink">{row.task}</td>
+                    <td className="px-3 py-2">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        row.tier === 'flash' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
+                      }`}>
+                        {row.model}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-ink-muted text-[10px] font-mono">{row.cost || '—'}</td>
+                    <td className="px-3 py-2 text-ink-muted">{getProvider(row.assignment)}</td>
+                    <td className="px-3 py-2">
+                      {step ? (
+                        <button
+                          onClick={() => handleBenchmark(row.task)}
+                          disabled={!!benchmarking}
+                          className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded disabled:opacity-40 transition-colors"
+                          title={`${row.task} mit einem echten Item testen`}
+                        >
+                          {isBenchmarking ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <FlaskConical className="w-2.5 h-2.5" />}
+                          Testen
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-ink-muted">—</span>
+                      )}
+                    </td>
+                  </tr>
+                  {hasResult && (
+                    <tr key={`${row.task}-result`} className="bg-white">
+                      <td colSpan={5} className="px-3 pb-2">
+                        <BenchmarkResult result={results[step]} onClose={() => setResults(prev => { const n = {...prev}; delete n[step]; return n })} />
+                      </td>
+                    </tr>
+                  )}
+                </>
+              )
+            })}
           </tbody>
         </table>
       </div>
-      <p className="text-[10px] text-ink-muted mt-1.5">Routing basiert auf Provider-Aufgabenzuordnung. Flash = guenstig, Haiku = kreativ.</p>
+      <p className="text-[10px] text-ink-muted mt-1.5">Routing seit Cycle 86: Gemini 2.0 Flash = günstig ($0.075/1M), Mistral Medium = kreativ ($0.40/1M). [Testen] führt einen echten LLM-Aufruf durch — Budget wird verbraucht.</p>
+    </div>
+  )
+}
+
+// Model options available via Requesty.ai for per-task override
+const ROUTING_MODELS = [
+  { key: 'gemini-flash', label: 'Gemini Flash (0.075$/1M)', id: 'vertex/gemini-2.5-flash-lite@europe-central2' },
+  { key: 'mistral-medium', label: 'Mistral Medium (0.40$/1M)', id: 'mistral/mistral-medium-latest' },
+  { key: 'mistral-small', label: 'Mistral Small (0.10$/1M)', id: 'mistral/mistral-small-latest' },
+  { key: 'gpt4-mini', label: 'GPT-4.1 Mini (0.40$/1M)', id: 'openai/gpt-4.1-mini' },
+  { key: 'claude-sonnet', label: 'Claude Sonnet 4 (3.00$/1M)', id: 'anthropic/claude-sonnet-4-20250514' },
+]
+
+function RoutingOverridePanel() {
+  const [routing, setRouting] = useState(null)
+  const [overrides, setOverrides] = useState({})
+  const [saving, setSaving] = useState(null)
+  const [savedMsg, setSavedMsg] = useState(null)
+
+  useEffect(() => {
+    getLlmRouting().then(d => {
+      setRouting(d)
+      const cur = {}
+      ;(d?.routing || []).forEach(r => { cur[r.purpose] = r.model_key })
+      setOverrides(cur)
+    }).catch(() => {})
+  }, [])
+
+  const handleSave = async (purpose) => {
+    setSaving(purpose)
+    try {
+      const current = {}
+      Object.entries(overrides).forEach(([k, v]) => { current[k] = v })
+      await updateSettings({ llm_routing: current })
+      setSavedMsg(purpose)
+      setTimeout(() => setSavedMsg(null), 2000)
+    } catch (e) {
+      alert('Fehler: ' + e.message)
+    }
+    setSaving(null)
+  }
+
+  if (!routing) return null
+
+  return (
+    <div className="mt-5 pt-5 border-t border-gray-100">
+      <div className="flex items-center gap-2 mb-3">
+        <h3 className="text-xs font-semibold text-ink">Live Routing Override</h3>
+        <span className="text-[10px] text-ink-muted">Welches Modell wird für welchen Schritt verwendet</span>
+        {routing.daily_budget_eur && (
+          <span className="ml-auto text-[10px] text-ink-muted">Budget: {routing.daily_budget_eur}€/Tag</span>
+        )}
+      </div>
+      <div className="overflow-hidden rounded-lg border border-gray-200">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="px-3 py-2 text-left font-medium text-ink-muted">Schritt</th>
+              <th className="px-3 py-2 text-left font-medium text-ink-muted">Modell</th>
+              <th className="px-3 py-2 text-right font-medium text-ink-muted">Kosten/1M</th>
+              <th className="px-3 py-2 text-right font-medium text-ink-muted">Max Tokens</th>
+              <th className="px-3 py-2 text-right font-medium text-ink-muted"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {(routing.routing || []).map((row, i) => {
+              const changed = overrides[row.purpose] !== row.model_key
+              const isSaved = savedMsg === row.purpose
+              const isSaving = saving === row.purpose
+              const costInfo = row.cost_per_1m_usd != null ? `$${row.cost_per_1m_usd}/1M` : '—'
+              return (
+                <tr key={row.purpose} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                  <td className="px-3 py-2 font-medium text-ink">{row.label}</td>
+                  <td className="px-3 py-2">
+                    <select
+                      value={overrides[row.purpose] || row.model_key}
+                      onChange={e => setOverrides(prev => ({ ...prev, [row.purpose]: e.target.value }))}
+                      className="text-[11px] border border-gray-200 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400 max-w-[200px]"
+                    >
+                      {ROUTING_MODELS.map(m => (
+                        <option key={m.key} value={m.key}>{m.label}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-[11px] text-ink-muted">{costInfo}</td>
+                  <td className="px-3 py-2 text-right text-[11px] text-ink-muted">{row.max_tokens}</td>
+                  <td className="px-3 py-2 text-right">
+                    {isSaved ? (
+                      <span className="text-[10px] text-emerald-600 font-medium">✓ Gespeichert</span>
+                    ) : (
+                      <button
+                        onClick={() => handleSave(row.purpose)}
+                        disabled={!changed || !!saving}
+                        className={`px-2 py-0.5 text-[10px] font-medium rounded border transition-colors ${
+                          changed
+                            ? 'text-primary-700 bg-primary-50 border-primary-200 hover:bg-primary-100'
+                            : 'text-gray-300 border-gray-100 cursor-default'
+                        }`}
+                      >
+                        {isSaving ? '...' : 'Speichern'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] text-ink-muted mt-1.5">
+        Änderungen gelten sofort für neue Pipeline-Aufrufe. Günstigst: Gemini Flash (0.075$/1M). Beste Kreativität: Mistral Medium (0.40$/1M).
+      </p>
     </div>
   )
 }
@@ -259,9 +533,11 @@ export default function LLMSettings() {
     try {
       const result = await testLLMProvider(id)
       if (result.status === 'ok') {
-        alert(`Test OK (${result.latency_ms}ms)`)
+        alert(`✅ Verbindung OK! Latenz: ${result.latency_ms}ms`)
+      } else if (result.http_status === 412) {
+        alert(`🔴 Budget erschöpft!\n\n${result.error}\n\nBitte auf https://requesty.ai einloggen und Guthaben aufladen.`)
       } else {
-        alert(`Test fehlgeschlagen: ${result.error}`)
+        alert(`❌ Test fehlgeschlagen:\n${result.error}`)
       }
       await loadProviders()
     } catch (e) {
@@ -283,6 +559,11 @@ export default function LLMSettings() {
 
   const handleUpdateLimit = async (id, cents) => {
     await updateLLMProvider(id, { cost_limit_daily_cents: cents })
+    await loadProviders()
+  }
+
+  const handleUpdateModel = async (id, modelName) => {
+    await updateLLMProvider(id, { model_name: modelName })
     await loadProviders()
   }
 
@@ -319,7 +600,8 @@ export default function LLMSettings() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {providers.map(p => (
             <ProviderCard key={p.id} provider={p} onTest={handleTest} onDelete={handleDelete}
-              onToggleDefault={handleToggleDefault} onUpdateLimit={handleUpdateLimit} testing={testingId === p.id} />
+              onToggleDefault={handleToggleDefault} onUpdateLimit={handleUpdateLimit}
+              onUpdateModel={handleUpdateModel} testing={testingId === p.id} />
           ))}
         </div>
       )}
@@ -334,6 +616,9 @@ export default function LLMSettings() {
 
       {/* Task Assignment Table */}
       {providers.length > 0 && <TaskAssignmentTable providers={providers} />}
+
+      {/* Live Routing Override */}
+      {providers.length > 0 && <RoutingOverridePanel />}
 
       {showAdd && (
         <div className="mt-4 bg-white rounded-xl border border-primary-200 p-5">

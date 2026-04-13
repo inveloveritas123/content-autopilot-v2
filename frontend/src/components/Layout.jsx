@@ -8,6 +8,7 @@ import {
   Lightbulb,
   FileText,
   BarChart3,
+  PieChart,
   Fingerprint,
   Settings,
   ChevronDown,
@@ -15,6 +16,9 @@ import {
   Trash2,
   FolderOpen,
   Check,
+  CalendarDays,
+  Send,
+  MessagesSquare,
 } from 'lucide-react'
 import { getProjects, createProject, deleteProject } from '../api'
 
@@ -24,6 +28,10 @@ const navItems = [
   { to: '/sources', label: 'Quellen', icon: Radio },
   { to: '/ideas', label: 'Ideen', icon: Lightbulb },
   { to: '/posts', label: 'Posts', icon: FileText },
+  { to: '/dialogue', label: 'Dialogue', icon: MessagesSquare },
+  { to: '/publish', label: 'Posten', icon: Send },
+  { to: '/calendar', label: 'Kalender', icon: CalendarDays },
+  { to: '/analytics', label: 'Analytics', icon: PieChart },
   { to: '/feedback', label: 'Feedback', icon: BarChart3 },
   { to: '/voice', label: 'Voice-Profil', icon: Fingerprint },
   { to: '/settings', label: 'Einstellungen', icon: Settings },
@@ -232,10 +240,23 @@ export default function Layout({ children }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">
-        <div className="p-6 max-w-7xl mx-auto">
+      <main className="flex-1 overflow-auto flex flex-col">
+        <div className="flex-1 p-6 max-w-7xl mx-auto w-full">
           {children}
         </div>
+        <footer className="px-6 py-3 border-t border-surface-border">
+          <div className="max-w-7xl mx-auto flex items-center justify-center gap-2 text-[11px] text-ink-muted">
+            <span className="font-medium text-ink-light">Zukunftsbund GmbH</span>
+            <span>·</span>
+            <span>© {new Date().getFullYear()}</span>
+            <span>·</span>
+            <a href="https://zukunftsbund.de" target="_blank" rel="noopener noreferrer"
+               className="hover:text-primary-700 transition-colors">zukunftsbund.de</a>
+            <span>·</span>
+            <a href="mailto:kontakt@zukunftsbund.de"
+               className="hover:text-primary-700 transition-colors">kontakt@zukunftsbund.de</a>
+          </div>
+        </footer>
       </main>
     </div>
   )

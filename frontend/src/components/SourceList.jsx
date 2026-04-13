@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { Radio, Rss, Mic, Globe, Plus, RefreshCw, Trash2, Power, Clock, Loader2, Search, Compass, ExternalLink, Play } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Radio, Rss, Mic, Globe, Plus, RefreshCw, Trash2, Power, Clock, Loader2, Search, Compass, ExternalLink, Play, Tag, Archive, BarChart3, AlertTriangle } from 'lucide-react'
 import { useApi } from '../hooks/useApi'
-import { getSources, createSource, updateSource, deleteSource, checkSource, searchChannels, searchVideos, discoverSources } from '../api'
+import { getSources, createSource, updateSource, updateSourceKeywords, deleteSource, checkSource, searchChannels, searchVideos, discoverSources, getSourceStats, analyzeAllSourceItems, archiveSourceItems, getSourceFunnel, bulkArchiveIdeas, getSourceItems } from '../api'
 
 const SOURCE_TYPES = [
   { key: '', label: 'Alle', icon: Radio },
@@ -34,9 +34,64 @@ function relativeTime(dateStr) {
   return `vor ${Math.floor(hours / 24)} Tagen`
 }
 
-function SourceCard({ source, onCheck, onToggle, onDelete, onUpdateInterval, checking }) {
+function SourceCard({ source, onCheck, onToggle, onDelete, onUpdateInterval, onUpdateKeywords, checking, stats }) {
   const typeInfo = SOURCE_TYPES.find(t => t.key === source.type) || SOURCE_TYPES[0]
   const Icon = typeInfo.icon
+  const s = stats || {}
+  const [kwEdit, setKwEdit] = useState(false)
+  const [kwInput, setKwInput] = useState(source.keywords || '')
+  const [kwSaving, setKwSaving] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analyzeResult, setAnalyzeResult] = useState(null)
+
+  const handleAnalyzeAll = async () => {
+    if (!window.confirm(`Alle transkribierten Artikel von "${source.name}" zur Analyse einreihen?`)) return
+    setAnalyzing(true)
+    try {
+      const r = await analyzeAllSourceItems(source.id)
+      setAnalyzeResult(`${r.queued} Items eingereiht`)
+      setTimeout(() => setAnalyzeResult(null), 4000)
+    } catch (e) {
+      alert('Fehler: ' + e.message)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const handleArchiveAll = async () => {
+    if (!window.confirm(`Alle ${s.total_items} Items von "${source.name}" archivieren und Quelle deaktivieren?\n\nDie Items bleiben in der Datenbank, werden aber aus der Pipeline-Ansicht entfernt.`)) return
+    try {
+      const r = await archiveSourceItems(source.id)
+      setAnalyzeResult(`${r.archived} Items archiviert`)
+      setTimeout(() => { setAnalyzeResult(null); window.location.reload() }, 2000)
+    } catch (e) {
+      alert('Fehler: ' + e.message)
+    }
+  }
+
+  const transcribedCount = s.by_status?.transcribed || 0
+
+  const handleSaveKeywords = async () => {
+    setKwSaving(true)
+    await onUpdateKeywords(source.id, kwInput.trim())
+    setKwEdit(false)
+    setKwSaving(false)
+  }
+
+  const kwChips = (source.keywords || '').split(',').map(k => k.trim()).filter(Boolean)
+  const convColor = s.conversion_pct >= 60 ? 'text-emerald-600' : s.conversion_pct >= 30 ? 'text-amber-600' : 'text-red-500'
+
+  // Health badge logic
+  const isTop = s.total_items > 0 && s.conversion_pct === 100
+  const needsKey = s.total_items > 0 && s.conversion_pct < 20 && s.transcription_failed > 5
+  const isStale = s.is_stale && source.is_active
+  const healthBadge = isTop
+    ? <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700">★ Top</span>
+    : isStale
+    ? <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-500" title={`Letztes Item vor ${s.last_item_days_ago} Tagen`}>● Veraltet</span>
+    : needsKey
+    ? <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700">⚠ API-Key</span>
+    : null
 
   return (
     <div className={`bg-white rounded-xl border transition-colors ${source.is_active ? 'border-surface-border hover:border-primary-300' : 'border-gray-200 opacity-60'}`}>
@@ -47,7 +102,10 @@ function SourceCard({ source, onCheck, onToggle, onDelete, onUpdateInterval, che
               <Icon className={`w-4.5 h-4.5 ${source.is_active ? 'text-primary-600' : 'text-gray-400'}`} />
             </div>
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-ink truncate">{source.name}</h3>
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-sm font-semibold text-ink truncate">{source.name}</h3>
+                {healthBadge}
+              </div>
               <p className="text-xs text-ink-muted truncate mt-0.5">{source.url || source.channel_id || '—'}</p>
             </div>
           </div>
@@ -58,10 +116,95 @@ function SourceCard({ source, onCheck, onToggle, onDelete, onUpdateInterval, che
             <button onClick={() => onToggle(source)} className="p-1.5 rounded-md hover:bg-gray-100 transition-colors" title={source.is_active ? 'Deaktivieren' : 'Aktivieren'}>
               <Power className={`w-4 h-4 ${source.is_active ? 'text-emerald-500' : 'text-gray-400'}`} />
             </button>
+            {s.total_items > 100 && s.content_ready === 0 && (
+              <button onClick={handleArchiveAll} className="p-1.5 rounded-md hover:bg-orange-50 text-ink-muted hover:text-orange-600 transition-colors" title={`Alle ${s.total_items} Items archivieren + Quelle deaktivieren`}>
+                <Archive className="w-4 h-4" />
+              </button>
+            )}
             <button onClick={() => onDelete(source.id)} className="p-1.5 rounded-md hover:bg-red-50 text-ink-muted hover:text-red-500 transition-colors" title="Loeschen">
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
+        </div>
+
+        {/* Quality Stats */}
+        {s.total_items > 0 && (
+          <div className="flex items-center gap-3 mt-3 px-1">
+            <div className="text-center">
+              <p className="text-sm font-bold text-ink">{s.total_items}</p>
+              <p className="text-[10px] text-ink-muted">Items</p>
+            </div>
+            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden mx-1">
+              <div className="h-full bg-emerald-400 rounded-full transition-all"
+                style={{ width: `${Math.max(s.conversion_pct, 2)}%` }} />
+            </div>
+            <div className="text-center">
+              <p className={`text-sm font-bold ${convColor}`}>{s.conversion_pct}%</p>
+              <p className="text-[10px] text-ink-muted">→ Content</p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-bold text-emerald-600">{s.content_ready}</p>
+              <p className="text-[10px] text-ink-muted">Bereit</p>
+            </div>
+            {s.transcription_failed > 0 && (
+              <div className="text-center">
+                <p className="text-sm font-bold text-red-500">{s.transcription_failed}</p>
+                <p className="text-[10px] text-ink-muted">Fehler</p>
+              </div>
+            )}
+            {s.transcription_success_rate != null && (
+              <div className="text-center ml-auto" title="Transkriptions-Erfolgsrate">
+                <p className={`text-sm font-bold ${s.transcription_success_rate >= 70 ? 'text-emerald-600' : s.transcription_success_rate >= 40 ? 'text-amber-600' : 'text-red-500'}`}>
+                  {s.transcription_success_rate}%
+                </p>
+                <p className="text-[10px] text-ink-muted">Transkrip.</p>
+              </div>
+            )}
+            {s.last_item_days_ago != null && (
+              <div className="text-center" title={`Letztes Item vor ${s.last_item_days_ago} Tagen`}>
+                <p className={`text-sm font-bold ${s.last_item_days_ago <= 7 ? 'text-emerald-600' : s.last_item_days_ago <= 30 ? 'text-amber-600' : 'text-gray-400'}`}>
+                  {s.last_item_days_ago}d
+                </p>
+                <p className="text-[10px] text-ink-muted">Aktualität</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Keyword Filter */}
+        <div className="mt-3 pt-2 border-t border-gray-100">
+          {kwEdit ? (
+            <div className="flex items-center gap-1.5">
+              <Tag className="w-3 h-3 text-violet-500 shrink-0" />
+              <input
+                value={kwInput}
+                onChange={e => setKwInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSaveKeywords(); if (e.key === 'Escape') setKwEdit(false) }}
+                placeholder="KI, Startup, LinkedIn (kommagetrennt)"
+                className="flex-1 text-xs border border-violet-200 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                autoFocus
+              />
+              <button onClick={handleSaveKeywords} disabled={kwSaving}
+                className="text-xs px-2 py-1 bg-violet-700 text-white rounded-md hover:bg-violet-800 disabled:opacity-50 shrink-0">
+                {kwSaving ? '...' : 'OK'}
+              </button>
+              <button onClick={() => setKwEdit(false)} className="text-xs text-gray-400 hover:text-gray-600 shrink-0">✕</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Tag className="w-3 h-3 text-gray-400 shrink-0" />
+              {kwChips.length > 0
+                ? kwChips.map(kw => (
+                    <span key={kw} className="px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 text-[10px] font-medium">{kw}</span>
+                  ))
+                : <span className="text-[10px] text-gray-400">Kein Keyword-Filter</span>
+              }
+              <button onClick={() => { setKwInput(source.keywords || ''); setKwEdit(true) }}
+                className="ml-auto text-[10px] text-gray-400 hover:text-violet-600 shrink-0">
+                {kwChips.length > 0 ? 'Bearbeiten' : '+ Filter setzen'}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
@@ -78,6 +221,16 @@ function SourceCard({ source, onCheck, onToggle, onDelete, onUpdateInterval, che
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
+          {transcribedCount > 0 && (
+            <button
+              onClick={handleAnalyzeAll}
+              disabled={analyzing}
+              title={`${transcribedCount} transkribierte Artikel analysieren`}
+              className="text-[10px] px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-md font-medium transition-colors disabled:opacity-50"
+            >
+              {analyzing ? '...' : analyzeResult || `Analyse (${transcribedCount})`}
+            </button>
+          )}
           <span className={`ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${source.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
             {source.is_active ? 'Aktiv' : 'Pausiert'}
           </span>
@@ -467,12 +620,339 @@ function DiscoverTab({ sources }) {
   )
 }
 
+const STATUS_COLORS = {
+  new: 'bg-gray-100 text-gray-600',
+  transcribed: 'bg-amber-100 text-amber-700',
+  analyzing: 'bg-blue-100 text-blue-700',
+  analyzed: 'bg-indigo-100 text-indigo-700',
+  generating: 'bg-purple-100 text-purple-700',
+  content_ready: 'bg-emerald-100 text-emerald-700',
+  transcription_failed: 'bg-red-100 text-red-600',
+}
+
+function SourceItemsModal({ sourceId, sourceName, onClose }) {
+  const [items, setItems] = useState([])
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [loading, setLoading] = useState(false)
+  const LIMIT = 15
+
+  useEffect(() => {
+    if (!sourceId) return
+    setLoading(true)
+    getSourceItems(sourceId, { limit: LIMIT, offset, status: statusFilter || undefined })
+      .then(d => { setItems(d.items || []); setTotal(d.total || 0) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [sourceId, offset, statusFilter])
+
+  const pages = Math.ceil(total / LIMIT)
+  const currentPage = Math.floor(offset / LIMIT) + 1
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div>
+            <h3 className="font-semibold text-ink text-sm">{sourceName}</h3>
+            <p className="text-xs text-ink-muted mt-0.5">{total} Items in der Pipeline</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={statusFilter}
+              onChange={e => { setStatusFilter(e.target.value); setOffset(0) }}
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1 text-ink-muted bg-white"
+            >
+              <option value="">Alle Status</option>
+              <option value="transcribed">Warten auf Analyse</option>
+              <option value="analyzing">In Analyse</option>
+              <option value="analyzed">Analysiert</option>
+              <option value="content_ready">Fertig</option>
+              <option value="transcription_failed">Fehler</option>
+            </select>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-ink-muted">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-ink-muted text-sm">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" /> Lade Items…
+            </div>
+          ) : items.length === 0 ? (
+            <div className="text-center py-12 text-ink-muted text-sm">Keine Items gefunden</div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="text-left px-5 py-2.5 font-medium text-ink-muted">Titel</th>
+                  <th className="px-3 py-2.5 font-medium text-ink-muted text-right">Status</th>
+                  <th className="px-4 py-2.5 font-medium text-ink-muted text-right">Erstellt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map(item => (
+                  <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/60">
+                    <td className="px-5 py-2.5">
+                      <div className="flex items-center gap-1.5">
+                        {!item.has_transcript && (
+                          <span className="text-[9px] bg-amber-100 text-amber-600 rounded px-1 py-0.5 shrink-0" title="Kein Transkript — Titel wird als Fallback verwendet">RSS</span>
+                        )}
+                        <span className="truncate max-w-xs text-ink" title={item.title}>{item.title}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-medium ${STATUS_COLORS[item.status] || 'bg-gray-100 text-gray-600'}`}>
+                        {item.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-ink-muted whitespace-nowrap">
+                      {item.created_at ? new Date(item.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {pages > 1 && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+            <span className="text-xs text-ink-muted">Seite {currentPage} / {pages}</span>
+            <div className="flex gap-1">
+              <button
+                disabled={offset === 0}
+                onClick={() => setOffset(Math.max(0, offset - LIMIT))}
+                className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50"
+              >← Zurück</button>
+              <button
+                disabled={offset + LIMIT >= total}
+                onClick={() => setOffset(offset + LIMIT)}
+                className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50"
+              >Weiter →</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// SHK-related keywords to detect relevant sources
+const SHK_KEYWORDS = ['shk', 'handwerk', 'haustechnik', 'sanitär', 'heizung', 'klimatechnik', 'gebäudetechnik', 'profi', 'fachmagazin']
+function isSHKSource(name) {
+  const lower = (name || '').toLowerCase()
+  return SHK_KEYWORDS.some(kw => lower.includes(kw))
+}
+
+function FunnelTab({ funnelData, onArchiveIdeas, onCheckSource, onAnalyzeSource, checkingSourceId, analyzingSourceId, batchChecking, onBatchCheckSHK, onPreviewItems }) {
+  const [archiving, setArchiving] = useState(null)
+  const [archiveMsg, setArchiveMsg] = useState(null)
+
+  if (!funnelData || funnelData.length === 0) {
+    return <div className="text-center py-8 text-ink-muted text-sm">Keine Funnel-Daten verfügbar</div>
+  }
+
+  const relevant = funnelData.filter(s => isSHKSource(s.source_name))
+  const irrelevant = funnelData.filter(s => !isSHKSource(s.source_name) && (s.items > 0 || s.ideas > 0))
+  const empty = funnelData.filter(s => !isSHKSource(s.source_name) && s.items === 0 && s.ideas === 0)
+
+  const maxItems = Math.max(...funnelData.map(s => s.items), 1)
+
+  async function handleArchiveIdeas(src) {
+    if (!window.confirm(`Alle ${src.ideas} Ideen von "${src.source_name}" archivieren?`)) return
+    setArchiving(src.source_id)
+    try {
+      const r = await bulkArchiveIdeas({ source_id: src.source_id })
+      setArchiveMsg(`✓ ${r.archived} Ideen von "${src.source_name}" archiviert`)
+      setTimeout(() => { setArchiveMsg(null); if (onArchiveIdeas) onArchiveIdeas() }, 4000)
+    } catch(e) { alert('Fehler: ' + e.message) }
+    setArchiving(null)
+  }
+
+  function FunnelRow({ src, highlight }) {
+    const barW = src.items > 0 ? Math.max(4, Math.round((src.items / maxItems) * 100)) : 0
+    const hasIdeas = src.ideas > 0
+    const hasItems = src.items > 0
+    const stuck = hasItems && !hasIdeas
+    const isChecking = checkingSourceId === src.source_id
+    const isAnalyzing = analyzingSourceId === src.source_id
+    return (
+      <tr className={`border-b border-gray-100 last:border-0 ${highlight ? 'bg-emerald-50/40' : 'hover:bg-gray-50/60'}`}>
+        <td className="px-4 py-2.5">
+          <div className="flex items-center gap-1.5">
+            {stuck && !highlight && <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />}
+            {highlight && <span className="text-emerald-600 text-[10px] font-bold uppercase tracking-wide">SHK</span>}
+            <span className="text-xs font-medium text-ink truncate max-w-[180px]" title={src.source_name}>{src.source_name}</span>
+          </div>
+        </td>
+        <td className="px-3 py-2.5">
+          <div className="flex items-center gap-2">
+            <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div className="h-full bg-primary-400 rounded-full" style={{ width: `${barW}%` }} />
+            </div>
+            <span className="text-xs font-mono text-ink-muted">{src.items.toLocaleString('de')}</span>
+          </div>
+        </td>
+        <td className="px-3 py-2.5 text-right">
+          <span className={`text-xs font-mono ${hasIdeas ? 'text-blue-700 font-semibold' : stuck ? 'text-amber-600' : 'text-gray-400'}`}>
+            {src.ideas.toLocaleString('de')}
+          </span>
+        </td>
+        <td className="px-3 py-2.5 text-right">
+          <span className={`text-xs font-mono ${src.posts > 0 ? 'text-purple-700' : 'text-gray-400'}`}>
+            {src.posts.toLocaleString('de')}
+          </span>
+        </td>
+        <td className="px-3 py-2.5 text-right">
+          <span className={`text-xs font-mono ${src.approved > 0 ? 'text-emerald-700 font-semibold' : 'text-gray-400'}`}>
+            {src.approved.toLocaleString('de')}
+          </span>
+        </td>
+        <td className="px-3 py-2.5 text-right">
+          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+            {onCheckSource && highlight && (
+              <button
+                onClick={() => onCheckSource(src.source_id)}
+                disabled={isChecking || batchChecking}
+                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                title="Neue Artikel dieser Quelle abrufen"
+              >
+                {isChecking ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
+                Prüfen
+              </button>
+            )}
+            {onAnalyzeSource && stuck && (
+              <button
+                onClick={() => onAnalyzeSource(src.source_id)}
+                disabled={isAnalyzing}
+                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors disabled:opacity-50"
+                title="Items dieser Quelle analysieren und Ideen generieren (benötigt LLM-Budget)"
+              >
+                {isAnalyzing ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : '🧠'}
+                Analysieren
+              </button>
+            )}
+            {hasItems && onPreviewItems && (
+              <button
+                onClick={() => onPreviewItems(src.source_id, src.source_name)}
+                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
+                title="Items dieser Quelle in der Pipeline ansehen"
+              >
+                📋 Items
+              </button>
+            )}
+            {hasIdeas && (
+              <button
+                onClick={() => handleArchiveIdeas(src)}
+                disabled={archiving === src.source_id}
+                className="px-1.5 py-0.5 text-[9px] text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
+              >{archiving === src.source_id ? '...' : 'Ideen löschen'}</button>
+            )}
+            {stuck && !onAnalyzeSource && (
+              <span className="text-[10px] text-amber-600 font-medium">Analyse nötig</span>
+            )}
+          </div>
+        </td>
+      </tr>
+    )
+  }
+
+  return (
+    <div>
+      {archiveMsg && (
+        <div className="mb-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium">{archiveMsg}</div>
+      )}
+
+      {/* SHK sources — highlight as relevant */}
+      {relevant.length > 0 && (
+        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50/30 overflow-hidden">
+          <div className="px-4 py-2 bg-emerald-50 border-b border-emerald-200 flex items-center justify-between">
+            <div>
+              <span className="text-xs font-semibold text-emerald-800">Relevante SHK/Handwerk-Quellen</span>
+              <span className="ml-2 text-[10px] text-emerald-600">— diese sollten aktiv Ideen produzieren</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {onBatchCheckSHK && (
+                <button
+                  onClick={onBatchCheckSHK}
+                  disabled={batchChecking}
+                  className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold text-emerald-700 bg-white border border-emerald-300 rounded-lg hover:bg-emerald-50 disabled:opacity-50 transition-colors"
+                  title="Aktuelle Artikel von allen SHK-Quellen abrufen"
+                >
+                  {batchChecking ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                  {batchChecking ? 'Prüfe...' : 'Alle SHK abrufen'}
+                </button>
+              )}
+            </div>
+          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-emerald-100 bg-emerald-50/50">
+                <th className="text-left px-4 py-1.5 font-medium text-emerald-800">Quelle</th>
+                <th className="text-left px-3 py-1.5 font-medium text-emerald-800">Items</th>
+                <th className="text-right px-3 py-1.5 font-medium text-emerald-800">Ideen</th>
+                <th className="text-right px-3 py-1.5 font-medium text-emerald-800">Posts</th>
+                <th className="text-right px-3 py-1.5 font-medium text-emerald-800">Approved</th>
+                <th className="py-1.5 px-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {relevant.map(src => <FunnelRow key={src.source_id} src={src} highlight={true} />)}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Other active sources */}
+      {irrelevant.length > 0 && (
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+          <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+            <span className="text-xs font-semibold text-gray-700">Andere Quellen</span>
+            <span className="ml-2 text-[10px] text-gray-500">— prüfe ob relevant für deine Nische</span>
+          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50/50">
+                <th className="text-left px-4 py-1.5 font-medium text-ink-muted">Quelle</th>
+                <th className="text-left px-3 py-1.5 font-medium text-ink-muted">Items</th>
+                <th className="text-right px-3 py-1.5 font-medium text-ink-muted">Ideen</th>
+                <th className="text-right px-3 py-1.5 font-medium text-ink-muted">Posts</th>
+                <th className="text-right px-3 py-1.5 font-medium text-ink-muted">Approved</th>
+                <th className="py-1.5 px-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {irrelevant.map(src => <FunnelRow key={src.source_id} src={src} highlight={false} />)}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function SourceList() {
   const { data: sources, loading, refetch } = useApi(getSources)
   const [mainTab, setMainTab] = useState('sources')
   const [activeTypeTab, setActiveTypeTab] = useState('')
   const [addingType, setAddingType] = useState(null)
   const [checkingId, setCheckingId] = useState(null)
+  const [sourceStats, setSourceStats] = useState({})
+  const [funnelData, setFunnelData] = useState(null)
+  const [funnelCheckingId, setFunnelCheckingId] = useState(null)
+  const [funnelAnalyzingId, setFunnelAnalyzingId] = useState(null)
+  const [batchChecking, setBatchChecking] = useState(false)
+  const [funnelMsg, setFunnelMsg] = useState(null)
+  const [previewSource, setPreviewSource] = useState(null) // { id, name }
+
+  useEffect(() => {
+    getSourceStats().then(s => setSourceStats(s || {})).catch(() => {})
+    getSourceFunnel().then(d => setFunnelData(Array.isArray(d) ? d : null)).catch(() => {})
+  }, [])
 
   const filtered = activeTypeTab
     ? (sources || []).filter(s => s.type === activeTypeTab)
@@ -494,6 +974,53 @@ export default function SourceList() {
     try { await checkSource(id) } finally { setTimeout(() => setCheckingId(null), 2000) }
   }
 
+  const handleFunnelCheck = async (id) => {
+    setFunnelCheckingId(id)
+    try {
+      await checkSource(id)
+      setFunnelMsg('✓ Abruf gestartet — neue Artikel werden im Hintergrund geladen')
+      setTimeout(() => setFunnelMsg(null), 4000)
+    } catch(e) {
+      setFunnelMsg('Fehler: ' + e.message)
+    }
+    setTimeout(() => setFunnelCheckingId(null), 2000)
+  }
+
+  const handleBatchCheckSHK = async () => {
+    if (!funnelData) return
+    const shkSources = funnelData.filter(s => isSHKSource(s.source_name))
+    if (shkSources.length === 0) return
+    setBatchChecking(true)
+    setFunnelMsg(`Prüfe ${shkSources.length} SHK-Quellen…`)
+    try {
+      for (const src of shkSources) {
+        await checkSource(src.source_id).catch(() => {})
+      }
+      setFunnelMsg(`✓ ${shkSources.length} SHK-Quellen angestoßen — neue Artikel werden im Hintergrund geladen`)
+      setTimeout(() => setFunnelMsg(null), 6000)
+    } catch(e) {
+      setFunnelMsg('Fehler: ' + e.message)
+    }
+    setBatchChecking(false)
+  }
+
+  const handleFunnelAnalyze = async (id) => {
+    setFunnelAnalyzingId(id)
+    try {
+      await analyzeAllSourceItems(id)
+      setFunnelMsg('✓ Analyse gestartet — Ideen werden im Hintergrund generiert (LLM-Budget nötig)')
+      setTimeout(() => {
+        setFunnelMsg(null)
+        getSourceFunnel().then(d => setFunnelData(Array.isArray(d) ? d : null)).catch(() => {})
+      }, 5000)
+    } catch(e) {
+      setFunnelMsg('Fehler: ' + e.message)
+    }
+    setTimeout(() => setFunnelAnalyzingId(null), 2000)
+  }
+
+  const handlePreviewItems = (id, name) => setPreviewSource({ id, name })
+
   const handleToggle = async (source) => {
     await updateSource(source.id, { is_active: !source.is_active })
     refetch()
@@ -508,6 +1035,11 @@ export default function SourceList() {
 
   const handleUpdateInterval = async (id, minutes) => {
     await updateSource(id, { polling_interval_minutes: minutes })
+    refetch()
+  }
+
+  const handleUpdateKeywords = async (id, keywords) => {
+    await updateSourceKeywords(id, keywords)
     refetch()
   }
 
@@ -536,6 +1068,12 @@ export default function SourceList() {
           }`}>
           <Radio className="w-4 h-4" /> Meine Quellen
         </button>
+        <button onClick={() => setMainTab('funnel')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+            mainTab === 'funnel' ? 'border-primary-600 text-primary-700' : 'border-transparent text-ink-muted hover:text-ink'
+          }`}>
+          <BarChart3 className="w-4 h-4" /> Pipeline-Übersicht
+        </button>
         <button onClick={() => setMainTab('discover')}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
             mainTab === 'discover' ? 'border-primary-600 text-primary-700' : 'border-transparent text-ink-muted hover:text-ink'
@@ -546,6 +1084,29 @@ export default function SourceList() {
 
       {mainTab === 'discover' && (
         <DiscoverTab sources={sources} />
+      )}
+
+      {mainTab === 'funnel' && (
+        <div>
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">
+            <strong>Pipeline-Übersicht</strong>: Zeigt wie viele Items jede Quelle in jeder Stufe hat (Items → Ideen → Posts → Approved).
+            SHK/Handwerk-Quellen sind grün markiert. Quellen mit Items aber 0 Ideen haben ein ⚠️ (Analyse nötig).
+          </div>
+          {funnelMsg && (
+            <div className="mb-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium">{funnelMsg}</div>
+          )}
+          <FunnelTab
+            funnelData={funnelData}
+            onArchiveIdeas={() => getSourceFunnel().then(d => setFunnelData(Array.isArray(d) ? d : null)).catch(() => {})}
+            onCheckSource={handleFunnelCheck}
+            onAnalyzeSource={handleFunnelAnalyze}
+            checkingSourceId={funnelCheckingId}
+            analyzingSourceId={funnelAnalyzingId}
+            batchChecking={batchChecking}
+            onBatchCheckSHK={handleBatchCheckSHK}
+            onPreviewItems={handlePreviewItems}
+          />
+        </div>
       )}
 
       {mainTab === 'sources' && (
@@ -576,6 +1137,54 @@ export default function SourceList() {
             <YouTubeVideoSearch />
           )}
 
+          {/* Source Health Summary */}
+          {filtered.length > 0 && (() => {
+            const problemSources = filtered.filter(src => {
+              const st = sourceStats[src.id] || {}
+              return st.total_items > 50 && (st.content_ready || 0) === 0
+            })
+            const backlogSources = filtered.filter(src => {
+              const st = sourceStats[src.id] || {}
+              return (st.by_status?.transcribed || 0) > 0
+            })
+            if (problemSources.length === 0 && backlogSources.length === 0) return null
+            return (
+              <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                <div className="text-xs font-semibold text-ink-muted uppercase tracking-wide mb-2">Quellen-Status</div>
+                <div className="flex flex-col gap-1.5">
+                  {problemSources.map(src => {
+                    const st = sourceStats[src.id] || {}
+                    const items = st.total_items || 0
+                    const minCost = (items * 0.0005).toFixed(2)
+                    const maxCost = (items * 0.003).toFixed(2)
+                    return (
+                      <div key={src.id} className="flex items-center gap-2 text-xs">
+                        <span className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
+                        <span className="font-medium text-ink truncate max-w-[180px]">{src.name}</span>
+                        <span className="text-red-600">{items.toLocaleString('de-DE')} Items, 0 Content</span>
+                        <span className="text-gray-400 ml-auto shrink-0">~${minCost}–${maxCost}</span>
+                      </div>
+                    )
+                  })}
+                  {backlogSources.filter(src => !(problemSources.find(p => p.id === src.id))).map(src => {
+                    const st = sourceStats[src.id] || {}
+                    const waiting = st.by_status?.transcribed || 0
+                    const minCost = (waiting * 0.0005).toFixed(2)
+                    const maxCost = (waiting * 0.003).toFixed(2)
+                    return (
+                      <div key={src.id} className="flex items-center gap-2 text-xs">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                        <span className="font-medium text-ink truncate max-w-[180px]">{src.name}</span>
+                        <span className="text-amber-700">{waiting} transkribiert, wartet auf Analyse</span>
+                        <span className="text-gray-400 ml-auto shrink-0">~${minCost}–${maxCost}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
           {filtered.length === 0 ? (
             <div className="text-center py-12">
               <Radio className="w-10 h-10 text-gray-300 mx-auto mb-3" />
@@ -594,12 +1203,22 @@ export default function SourceList() {
                   onToggle={handleToggle}
                   onDelete={handleDelete}
                   onUpdateInterval={handleUpdateInterval}
+                  onUpdateKeywords={handleUpdateKeywords}
                   checking={checkingId === source.id}
+                  stats={sourceStats[source.id]}
                 />
               ))}
             </div>
           )}
         </>
+      )}
+
+      {previewSource && (
+        <SourceItemsModal
+          sourceId={previewSource.id}
+          sourceName={previewSource.name}
+          onClose={() => setPreviewSource(null)}
+        />
       )}
     </div>
   )

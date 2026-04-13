@@ -7,8 +7,12 @@ import Pipeline from './components/Pipeline'
 import Ideas from './components/Ideas'
 import Feedback from './components/Feedback'
 import Posts from './components/Posts'
+import Calendar from './components/Calendar'
 import VoiceProfile from './components/VoiceProfile'
 import Settings from './components/Settings'
+import Analytics from './components/Analytics'
+import PublishQueue from './components/PublishQueue'
+import Dialogue from './components/Dialogue'
 import { setApiKey } from './api'
 
 function App() {
@@ -28,7 +32,11 @@ function App() {
         <Route path="/ideas" element={<Ideas />} />
         <Route path="/feedback" element={<Feedback />} />
         <Route path="/posts" element={<Posts />} />
+        <Route path="/calendar" element={<Calendar />} />
         <Route path="/voice" element={<VoiceProfile />} />
+        <Route path="/analytics" element={<Analytics />} />
+        <Route path="/publish" element={<PublishQueue />} />
+        <Route path="/dialogue" element={<Dialogue />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

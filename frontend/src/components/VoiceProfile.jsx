@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Fingerprint, RefreshCw, TrendingUp, AlertCircle, Mic, BookOpen, RotateCcw, Save, Check } from 'lucide-react'
-import { getVoiceProfile, getFeedbackStats, updateVoiceProfile } from '../api'
+import { Fingerprint, RefreshCw, TrendingUp, AlertCircle, Mic, BookOpen, RotateCcw, Save, Check, X, Wand2, FlaskConical, Loader2 } from 'lucide-react'
+import { getVoiceProfile, getFeedbackStats, updateVoiceProfile, getVoiceProfilesList, runVoiceCompare } from '../api'
 
 const VOICE_DIMENSIONS = [
   { key: 'directness', label: 'Direktheit', desc: 'Klartext statt Drumherumreden', low: 'Diplomatisch', high: 'Klartext' },
@@ -70,6 +70,163 @@ function StatCard({ icon: Icon, label, value, sub, color = 'text-primary-600' })
   )
 }
 
+// Wizard: Maps step choices to voice dimension presets
+const WIZARD_PRESETS = {
+  style: {
+    direkt:      { directness: 8.5, warmth: 4, humor: 3, formality: 5, confidence: 7.5 },
+    herzlich:    { directness: 5, warmth: 9, humor: 5.5, formality: 3, emotion: 7.5, authenticity: 8 },
+    humorvoll:   { directness: 6, warmth: 7.5, humor: 9, formality: 2, authenticity: 8.5, emotion: 6 },
+    fachlich:    { directness: 7, competence: 9.5, technical_depth: 8.5, humor: 2, confidence: 8 },
+  },
+  goal: {
+    expertise:   { competence: 9, technical_depth: 8, confidence: 7.5, call_to_action: 5, storytelling: 5 },
+    kunden:      { call_to_action: 8.5, pragmatism: 8.5, confidence: 7, directness: 7.5 },
+    netzwerk:    { warmth: 7.5, storytelling: 8, authenticity: 8.5, emotion: 6 },
+    community:   { humor: 6.5, warmth: 8.5, emotion: 7.5, authenticity: 9, storytelling: 7 },
+  },
+}
+
+function applyWizardChoices(style, goal, formality) {
+  const dims = {}
+  const stylePre = WIZARD_PRESETS.style[style] || {}
+  const goalPre = WIZARD_PRESETS.goal[goal] || {}
+  const allKeys = [...new Set([...Object.keys(stylePre), ...Object.keys(goalPre), 'formality', 'pragmatism', 'authenticity'])]
+  allKeys.forEach(k => {
+    const vals = [stylePre[k], goalPre[k]].filter(v => v !== undefined)
+    dims[k] = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 5
+  })
+  dims.formality = formality
+  return dims
+}
+
+function WizardModal({ onClose, onApply }) {
+  const [step, setStep] = useState(1)
+  const [style, setStyle] = useState(null)
+  const [goal, setGoal] = useState(null)
+  const [formality, setFormality] = useState(4)
+
+  const styleOptions = [
+    { key: 'direkt', emoji: '🎯', label: 'Direkt & klar', desc: 'Klartext, keine Floskeln, klare Haltung' },
+    { key: 'herzlich', emoji: '🤝', label: 'Herzlich & nah', desc: 'Menschlich, empathisch, persönliche Verbindung' },
+    { key: 'humorvoll', emoji: '😄', label: 'Locker & humorvoll', desc: 'Leicht, unterhaltsam, authentisch' },
+    { key: 'fachlich', emoji: '🔬', label: 'Fachlich & tief', desc: 'Expertise, fundiert, technisch präzise' },
+  ]
+  const goalOptions = [
+    { key: 'expertise', emoji: '🏆', label: 'Expertise zeigen', desc: 'Als Fachexperte wahrgenommen werden' },
+    { key: 'kunden', emoji: '💼', label: 'Kunden gewinnen', desc: 'Leads generieren, Dienstleistungen verkaufen' },
+    { key: 'netzwerk', emoji: '🌐', label: 'Netzwerk aufbauen', desc: 'Kontakte knüpfen, Community wachsen' },
+    { key: 'community', emoji: '💬', label: 'Community aktivieren', desc: 'Engagement, Kommentare, echte Diskussionen' },
+  ]
+
+  function handleApply() {
+    const dims = applyWizardChoices(style, goal, formality)
+    onApply(dims)
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        {/* Header */}
+        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-ink">Stimm-Profil Schnell-Setup</h2>
+            <p className="text-xs text-ink-muted mt-0.5">Schritt {step} von 3 — 3 Fragen, fertig in 60 Sekunden</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Progress bar */}
+        <div className="h-1 bg-gray-100">
+          <div className="h-1 bg-primary-600 transition-all" style={{ width: `${(step / 3) * 100}%` }} />
+        </div>
+
+        <div className="p-6">
+          {step === 1 && (
+            <div>
+              <h3 className="font-semibold text-ink mb-1">Wie ist Ihr Kommunikationsstil?</h3>
+              <p className="text-xs text-ink-muted mb-4">Wählen Sie den Stil der am besten zu Ihnen passt.</p>
+              <div className="grid grid-cols-2 gap-3">
+                {styleOptions.map(o => (
+                  <button key={o.key} onClick={() => setStyle(o.key)}
+                    className={`p-4 rounded-xl border-2 text-left transition-all ${style === o.key ? 'border-primary-600 bg-primary-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}>
+                    <span className="text-2xl block mb-2">{o.emoji}</span>
+                    <span className="text-sm font-semibold text-ink block">{o.label}</span>
+                    <span className="text-xs text-ink-muted">{o.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div>
+              <h3 className="font-semibold text-ink mb-1">Was ist Ihr Hauptziel auf LinkedIn?</h3>
+              <p className="text-xs text-ink-muted mb-4">Beeinflusst den Call-to-Action Stil und die Tonalität.</p>
+              <div className="grid grid-cols-2 gap-3">
+                {goalOptions.map(o => (
+                  <button key={o.key} onClick={() => setGoal(o.key)}
+                    className={`p-4 rounded-xl border-2 text-left transition-all ${goal === o.key ? 'border-primary-600 bg-primary-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}>
+                    <span className="text-2xl block mb-2">{o.emoji}</span>
+                    <span className="text-sm font-semibold text-ink block">{o.label}</span>
+                    <span className="text-xs text-ink-muted">{o.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div>
+              <h3 className="font-semibold text-ink mb-1">Wie formell schreiben Sie?</h3>
+              <p className="text-xs text-ink-muted mb-6">Im deutschsprachigen B2B-Raum ist lockeres Du die Norm.</p>
+              <div className="px-2">
+                <input type="range" min="0" max="10" step="0.5" value={formality}
+                  onChange={e => setFormality(parseFloat(e.target.value))}
+                  className="w-full accent-primary-600" />
+                <div className="flex justify-between mt-2">
+                  <span className="text-xs text-ink-muted">Du-Form, locker</span>
+                  <span className="text-sm font-bold text-primary-700">{formality.toFixed(1)}</span>
+                  <span className="text-xs text-ink-muted">Sie-Form, formell</span>
+                </div>
+              </div>
+              <div className="mt-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                <p className="text-xs font-semibold text-ink mb-2">Vorschau Ihrer Einstellungen:</p>
+                <div className="flex flex-wrap gap-2">
+                  {style && <span className="px-2 py-1 bg-primary-100 text-primary-700 rounded-full text-xs">{styleOptions.find(o=>o.key===style)?.label}</span>}
+                  {goal && <span className="px-2 py-1 bg-primary-100 text-primary-700 rounded-full text-xs">{goalOptions.find(o=>o.key===goal)?.label}</span>}
+                  <span className="px-2 py-1 bg-gray-200 text-gray-700 rounded-full text-xs">Formalität: {formality.toFixed(1)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 pt-0 flex items-center justify-between">
+          <button onClick={() => step > 1 ? setStep(step - 1) : onClose()}
+            className="px-4 py-2 text-sm text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50">
+            {step === 1 ? 'Abbrechen' : 'Zurück'}
+          </button>
+          {step < 3 ? (
+            <button onClick={() => setStep(step + 1)} disabled={step === 1 ? !style : !goal}
+              className="px-5 py-2 text-sm font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800 disabled:opacity-40 disabled:cursor-not-allowed">
+              Weiter →
+            </button>
+          ) : (
+            <button onClick={handleApply}
+              className="px-5 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700">
+              Profil anwenden ✓
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function VoiceProfile() {
   const [profile, setProfile] = useState(null)
   const [stats, setStats] = useState(null)
@@ -80,6 +237,7 @@ export default function VoiceProfile() {
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [showWizard, setShowWizard] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
@@ -161,11 +319,26 @@ export default function VoiceProfile() {
               <Check className="w-3.5 h-3.5" /> Gespeichert
             </span>
           )}
+          <button onClick={() => setShowWizard(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100">
+            <Wand2 className="w-3.5 h-3.5" /> Schnell-Setup Wizard
+          </button>
           <button onClick={loadData} className="p-2 text-ink-muted hover:text-primary-600 rounded-lg hover:bg-gray-50">
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
       </div>
+
+      {showWizard && (
+        <WizardModal
+          onClose={() => setShowWizard(false)}
+          onApply={wizardDims => {
+            setDimensions(prev => ({ ...prev, ...wizardDims }))
+            setDirty(true)
+            setSaved(false)
+          }}
+        />
+      )}
 
       {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
 
@@ -224,6 +397,112 @@ export default function VoiceProfile() {
                   <span className="text-xs text-ink-muted">{a.count} Posts</span>
                   <span className="text-xs font-medium text-emerald-600">{((a.avg_engagement ?? 0) * 100).toFixed(1)}% Engagement</span>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Voice Profile Testmatrix */}
+      <VoiceTestmatrix />
+    </div>
+  )
+}
+
+function VoiceTestmatrix() {
+  const [profiles, setProfiles] = useState([])
+  const [comparing, setComparing] = useState(false)
+  const [results, setResults] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    getVoiceProfilesList()
+      .then(d => setProfiles(d?.profiles || []))
+      .catch(() => {})
+  }, [])
+
+  const handleCompare = async () => {
+    setComparing(true)
+    setResults(null)
+    setError(null)
+    try {
+      const data = await runVoiceCompare()
+      if (data.status === 'budget_exceeded') {
+        setError(data.error)
+      } else if (data.status === 'error') {
+        setError(data.error)
+      } else {
+        setResults(data)
+      }
+    } catch (e) {
+      setError(e.message)
+    }
+    setComparing(false)
+  }
+
+  const configuredProfiles = profiles.filter(p => p.configured)
+
+  return (
+    <div className="mt-6 pt-6 border-t border-gray-100">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+            <FlaskConical className="w-4 h-4 text-primary-600" />
+            Testmatrix: Profile vergleichen
+          </h3>
+          <p className="text-xs text-ink-muted mt-0.5">Gleiche Quelle, {configuredProfiles.length} Profile — Posts werden direkt verglichen</p>
+        </div>
+        <button
+          onClick={handleCompare}
+          disabled={comparing || configuredProfiles.length < 2}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800 disabled:opacity-50"
+        >
+          {comparing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FlaskConical className="w-3.5 h-3.5" />}
+          {comparing ? 'Generiere...' : 'Vergleich starten'}
+        </button>
+      </div>
+
+      {/* Profile list */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        {configuredProfiles.slice(0, 3).map((p, i) => (
+          <div key={p.id} className={`rounded-lg border p-2.5 text-xs ${p.is_current ? 'border-primary-300 bg-primary-50' : 'border-gray-200 bg-gray-50'}`}>
+            <div className="font-semibold text-ink">{['A', 'B', 'C'][i]} · {p.entrepreneur_name}</div>
+            <div className="text-ink-muted mt-0.5">{p.industry}</div>
+            <div className="text-[10px] text-ink-light mt-1 truncate">{p.tone}</div>
+          </div>
+        ))}
+      </div>
+
+      {configuredProfiles.length < 2 && (
+        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          Mindestens 2 konfigurierte Profile nötig. Aktuell: {configuredProfiles.length}
+        </p>
+      )}
+
+      {error && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">{error}</div>
+      )}
+
+      {results && (
+        <div className="space-y-3">
+          <p className="text-xs text-ink-muted">Item: <span className="font-medium text-ink">{results.item_title}</span></p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {results.results.map((r, i) => (
+              <div key={i} className={`rounded-lg border p-3 text-xs ${r.status === 'ok' ? 'border-gray-200' : 'border-red-200 bg-red-50'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="font-semibold text-ink">{['A', 'B', 'C'][i]} · {r.entrepreneur_name}</div>
+                  {r.quality_score != null && (
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${r.quality_score >= 80 ? 'bg-emerald-100 text-emerald-700' : r.quality_score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                      {r.quality_score.toFixed(0)}/100
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] text-ink-muted mb-2">{r.industry} · {r.latency_ms}ms</div>
+                {r.error ? (
+                  <p className="text-red-600">{r.error}</p>
+                ) : (
+                  <pre className="whitespace-pre-wrap text-ink leading-relaxed max-h-48 overflow-y-auto text-[10px]">{r.post_text}</pre>
+                )}
               </div>
             ))}
           </div>

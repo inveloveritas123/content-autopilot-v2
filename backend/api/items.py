@@ -1,9 +1,10 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import select, update, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
@@ -17,6 +18,27 @@ from tasks.views_task import update_single_item_views, update_all_views
 router = APIRouter()
 
 
+def _resolve_period(period: Optional[str], date_from: Optional[str], date_to: Optional[str]):
+    """Resolve period shortcut or date_from/date_to to (start, end) naive UTC datetimes."""
+    now = datetime.utcnow()
+    if period and period != "all":
+        periods = {
+            "last_hour": timedelta(hours=1),
+            "last_24h": timedelta(hours=24),
+            "last_7d": timedelta(days=7),
+            "last_30d": timedelta(days=30),
+        }
+        if period in periods:
+            return now - periods[period], now
+        if period == "this_year":
+            return datetime(now.year, 1, 1), now
+        if period == "last_year":
+            return datetime(now.year - 1, 1, 1), datetime(now.year, 1, 1)
+    start = datetime.fromisoformat(date_from) if date_from else None
+    end = datetime.fromisoformat(date_to) if date_to else None
+    return start, end
+
+
 @router.get("/items")
 async def list_items(
     status: Optional[str] = None,
@@ -26,6 +48,10 @@ async def list_items(
     sort: Optional[str] = "date_desc",
     limit: int = Query(50, le=200),
     offset: int = 0,
+    period: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    search: Optional[str] = Query(None, description="Full-text search in title and transcript"),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -41,6 +67,21 @@ async def list_items(
         query = query.where(SourceItem.is_archived == True)
     elif archived != "all":
         query = query.where(SourceItem.is_archived == False)
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                SourceItem.title.ilike(term),
+                SourceItem.transcript_text.ilike(term),
+                SourceItem.channel_name.ilike(term),
+            )
+        )
+
+    start_dt, end_dt = _resolve_period(period, date_from, date_to)
+    if start_dt:
+        query = query.where(SourceItem.created_at >= start_dt)
+    if end_dt:
+        query = query.where(SourceItem.created_at <= end_dt)
 
     if sort == "date_asc":
         query = query.order_by(SourceItem.created_at.asc())
@@ -127,13 +168,32 @@ async def bulk_archive(
     return {"archived": result.rowcount}
 
 
+@router.post("/items/bulk-archive-failed")
+async def bulk_archive_failed(
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Archiviert alle Items mit Status transcription_failed (dauerhaft nicht verarbeitbar)."""
+    stmt = update(SourceItem).where(
+        SourceItem.tenant_id == tenant.id,
+        SourceItem.status == "transcription_failed",
+    ).values(is_archived=True)
+    result = await db.execute(stmt)
+    await db.commit()
+    return {"archived": result.rowcount, "message": f"{result.rowcount} fehlgeschlagene Items archiviert"}
+
+
 @router.get("/items/{item_id}")
 async def get_item(
     item_id: str,
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    item = await db.get(SourceItem, uuid.UUID(item_id))
+    try:
+        item_uuid = uuid.UUID(item_id)
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=404, detail="Item not found")
+    item = await db.get(SourceItem, item_uuid)
     if not item or item.tenant_id != tenant.id:
         raise HTTPException(status_code=404, detail="Item not found")
 

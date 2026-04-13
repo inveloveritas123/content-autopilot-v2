@@ -84,6 +84,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Content-Autopilot", version="2.0.0", lifespan=lifespan)
 
+# CORS — needed for Cowork dashboard and external integrations
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
+)
+
 # Import and include routers
 from api.dashboard import router as dashboard_router
 from api.sources import router as sources_router
@@ -118,6 +127,18 @@ app.include_router(projects_router, prefix="/api", tags=["Projects"])
 
 from api.content_dna import router as content_dna_router
 app.include_router(content_dna_router, prefix="/api", tags=["ContentDNA"])
+
+from api.pipeline import router as pipeline_router
+app.include_router(pipeline_router, prefix="/api", tags=["Pipeline"])
+
+from api.dialogue import router as dialogue_router
+app.include_router(dialogue_router, prefix="/api", tags=["Dialogue"])
+
+from api.cowork import router as cowork_router
+app.include_router(cowork_router, tags=["Cowork"])
+
+from api.quality import router as quality_router
+app.include_router(quality_router, prefix="/api", tags=["Quality"])
 
 
 @app.get("/api/health")

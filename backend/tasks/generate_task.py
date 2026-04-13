@@ -13,6 +13,7 @@ from services.analyzer import analyze_transcript
 from services.content_generator import generate_all_content
 from services.campaign_matcher import match_item_to_campaigns
 from services.fact_checker import check_facts
+from services.llm import BudgetExceededError
 
 from sqlalchemy import select
 
@@ -24,9 +25,19 @@ def analyze_item(item_id: str):
     """Analyze a transcribed item — then auto-chain to ideation."""
     with sync_session_factory() as session:
         item = session.get(SourceItem, item_id)
-        if not item or not item.transcript_text:
-            logger.error(f"Item {item_id} not found or has no transcript")
+        if not item:
+            logger.error(f"Item {item_id} not found")
             return
+
+        # RSS items often have no full transcript — use title as minimal content
+        if not item.transcript_text:
+            if item.transcript_source == "rss_feed" and item.title:
+                logger.info(f"Item {item_id}: RSS item has no transcript, using title as content stub")
+                item.transcript_text = item.title
+                session.commit()
+            else:
+                logger.error(f"Item {item_id} has no transcript and no title fallback")
+                return
 
         item.status = "analyzing"
         session.commit()
@@ -35,12 +46,17 @@ def analyze_item(item_id: str):
         source = session.get(Source, item.source_id) if item.source_id else None
         source_type = source.type if source else "youtube"
 
+        # Load tenant routing overrides (if any)
+        tenant = session.get(Tenant, item.tenant_id)
+        routing_override = (tenant.settings or {}).get("llm_routing") if tenant else None
+
         try:
             analysis = asyncio.run(
                 analyze_transcript(
                     item.transcript_text,
                     source_type=source_type,
                     title=item.title or "",
+                    routing_override=routing_override,
                 )
             )
 
@@ -71,6 +87,25 @@ def analyze_item(item_id: str):
                 if match_id:
                     item.campaign_match_id = match_id
 
+                # Auto-score analysis quality
+                try:
+                    from services.quality_scorer import score_analysis
+                    from models.quality_metric import QualityMetric
+                    from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+                    scores = score_analysis(analysis)
+                    model_key = PURPOSE_MODEL_MAP.get("analysis", "gemini-flash")
+                    qm = QualityMetric(
+                        source_item_id=item.id,
+                        tenant_id=item.tenant_id,
+                        step="analysis",
+                        model_used=REQUESTY_MODELS.get(model_key, model_key),
+                        completeness_score=scores.get("completeness_score"),
+                        overall_score=scores.get("overall_score"),
+                    )
+                    session.add(qm)
+                except Exception as qe:
+                    logger.warning(f"Quality scoring failed for analysis {item_id}: {qe}")
+
                 session.commit()
                 logger.info(f"Item {item_id} analyzed successfully (source_type={source_type})")
 
@@ -81,6 +116,10 @@ def analyze_item(item_id: str):
                 from tasks.ideation_task import auto_generate_ideas
                 auto_generate_ideas.delay(item_id)
 
+                # ═══ AUTO-CHAIN: Smarte Fragen für Dialogue-Workflow ═══
+                from tasks.questions_task import generate_smart_questions_task
+                generate_smart_questions_task.delay(item_id)
+
             else:
                 item.status = "transcribed"  # Reset to allow retry
                 session.commit()
@@ -90,8 +129,22 @@ def analyze_item(item_id: str):
             logger.error(f"Analysis failed for {item_id}: {e}")
             item.status = "transcribed"
             session.commit()
+            # Circuit breaker: if budget exceeded, set a Redis flag to pause pipeline
+            if "BudgetExceededError" in type(e).__name__ or "412" in str(e):
+                try:
+                    import redis as redis_lib
+                    import os
+                    r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://redis-v2:6379/1"))
+                    r.set("llm:budget_exceeded", "1")  # persists until manual reset via dashboard
+                    logger.warning("Budget exceeded — pipeline paused (llm:budget_exceeded set, no TTL — reset manually via dashboard)")
+                except Exception:
+                    pass
 
-    return {"item_id": item_id, "status": "analyzed"}
+    # Return actual item status from DB (not hardcoded "analyzed")
+    with sync_session_factory() as session:
+        final_item = session.get(SourceItem, item_id)
+        actual_status = final_item.status if final_item else "unknown"
+    return {"item_id": item_id, "status": actual_status}
 
 
 @celery_app.task(name="tasks.generate_task.generate_content")
@@ -107,7 +160,10 @@ def generate_content(item_id: str):
         session.commit()
 
         tenant = session.get(Tenant, item.tenant_id)
-        tone = (tenant.settings or {}).get("tone", "professionell, informativ, mit persoenliche Note")
+        tenant_settings = (tenant.settings or {}) if tenant else {}
+        tone = tenant_settings.get("tone", "professionell, informativ, mit persoenliche Note")
+        routing_override = tenant_settings.get("llm_routing")
+        voice_profile = tenant_settings.get("voice_profile") or None
 
         try:
             content = asyncio.run(
@@ -117,9 +173,12 @@ def generate_content(item_id: str):
                     transcript_text=item.transcript_text or "",
                     video_url=item.url or "",
                     tone=tone,
+                    voice_profile=voice_profile,
+                    routing_override=routing_override,
                 )
             )
 
+            pieces_added = 0
             for channel, text in content.items():
                 if text:
                     piece = ContentPiece(
@@ -131,14 +190,50 @@ def generate_content(item_id: str):
                         status="draft",
                     )
                     session.add(piece)
+                    pieces_added += 1
+
+                    # Auto-score post quality (rule-based, no LLM cost)
+                    try:
+                        from services.quality_scorer import score_post_generation
+                        from models.quality_metric import QualityMetric
+                        from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+                        scores = score_post_generation(text)
+                        model_key = PURPOSE_MODEL_MAP.get("post_generation", "claude-sonnet")
+                        qm = QualityMetric(
+                            source_item_id=item.id,
+                            tenant_id=item.tenant_id,
+                            step="post_generation",
+                            model_used=REQUESTY_MODELS.get(model_key, model_key),
+                            completeness_score=scores.get("completeness_score"),
+                            accuracy_score=scores.get("accuracy_score"),
+                            overall_score=scores.get("overall_score"),
+                        )
+                        session.add(qm)
+                    except Exception as qe:
+                        logger.warning(f"Post quality scoring failed for {item_id}/{channel}: {qe}")
 
             item.status = "content_ready"
             session.commit()
-            logger.info(f"Content generated for item {item_id}: {len([t for t in content.values() if t])} pieces")
+            logger.info(f"Content generated for item {item_id}: {pieces_added} pieces")
 
+        except BudgetExceededError as e:
+            logger.error(f"Content generation failed for {item_id}: {e}")
+            item.status = "analyzed"
+            session.commit()
+            try:
+                import redis as redis_lib
+                import os
+                r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://redis-v2:6379/1"))
+                r.set("llm:budget_exceeded", "1")  # persists until manual reset
+                logger.warning("Budget exceeded in generate_content — pipeline paused for 20 minutes")
+            except Exception:
+                pass
         except Exception as e:
             logger.error(f"Content generation failed for {item_id}: {e}")
             item.status = "analyzed"
             session.commit()
 
-    return {"item_id": item_id, "status": "content_ready"}
+    with sync_session_factory() as session:
+        final_item = session.get(SourceItem, item_id)
+        actual_status = final_item.status if final_item else "unknown"
+    return {"item_id": item_id, "status": actual_status}

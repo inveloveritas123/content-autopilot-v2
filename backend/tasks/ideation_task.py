@@ -9,6 +9,7 @@ Workflow:
 """
 import logging
 import asyncio
+from services.llm import BudgetExceededError
 
 from sqlalchemy import select
 
@@ -16,6 +17,7 @@ from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from models.source_item import SourceItem
 from models.content_idea import ContentIdea
+from models.tenant import Tenant
 
 logger = logging.getLogger(__name__)
 
@@ -49,12 +51,40 @@ def auto_generate_ideas(item_id: str):
             return {"status": "already_has_ideas", "count": len(existing_ideas)}
 
         try:
+            # Tenant voice profile / entrepreneur context laden
+            tenant = session.get(Tenant, item.tenant_id)
+            tenant_settings = (tenant.settings or {}) if tenant else {}
+            entrepreneur = tenant_settings.get("entrepreneur", {})
+            voice_profile = tenant_settings.get("voice_profile", {})
+
+            industry_context = ""
+            if entrepreneur or voice_profile:
+                parts = []
+                if entrepreneur.get("name"):
+                    parts.append(f"Unternehmer: {entrepreneur['name']}")
+                if entrepreneur.get("industry"):
+                    parts.append(f"Branche: {entrepreneur['industry']}")
+                if entrepreneur.get("specialization"):
+                    parts.append(f"Spezialisierung: {entrepreneur['specialization']}")
+                if entrepreneur.get("target_audience"):
+                    parts.append(f"Zielgruppe: {entrepreneur['target_audience']}")
+                if voice_profile.get("tone"):
+                    parts.append(f"Tonalität: {voice_profile['tone']}")
+                if voice_profile.get("topics_avoid"):
+                    avoid = voice_profile["topics_avoid"] if isinstance(voice_profile["topics_avoid"], str) else ", ".join(voice_profile["topics_avoid"])
+                    parts.append(f"NICHT VERWENDEN / Vermeiden: {avoid}")
+                industry_context = "\n".join(parts)
+
+            brand_context = voice_profile.get("authentic_voice", "") or voice_profile.get("perspective", "")
+
             # Ideation-Pipeline ausführen
             ideas_data = asyncio.run(
                 run_ideation_pipeline(
                     analysis=item.analysis,
                     title=item.title or "",
-                    transcript_excerpt=(item.transcript_text or "")[:500],
+                    transcript_excerpt=(item.transcript_text or "")[:5000],
+                    industry_context=industry_context,
+                    brand_context=brand_context,
                 )
             )
 
@@ -85,12 +115,49 @@ def auto_generate_ideas(item_id: str):
             session.commit()
             logger.info(f"Auto-ideation for item {item_id}: {saved_count} ideas with questions generated")
 
+            # Auto-score ideation quality (rule-based, no LLM cost)
+            try:
+                from services.quality_scorer import score_ideation
+                from models.quality_metric import QualityMetric
+                from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+                saved_ideas_list = [
+                    {"angle": i.get("angle", ""), "title": i.get("title", "")}
+                    for i in ideas_data
+                ]
+                scores = score_ideation(saved_ideas_list)
+                model_key = PURPOSE_MODEL_MAP.get("ideation", "claude-sonnet")
+                qm = QualityMetric(
+                    source_item_id=item.id,
+                    tenant_id=item.tenant_id,
+                    step="ideation",
+                    model_used=REQUESTY_MODELS.get(model_key, model_key),
+                    completeness_score=scores.get("completeness_score"),
+                    overall_score=scores.get("overall_score"),
+                )
+                session.add(qm)
+                session.commit()
+            except Exception as qe:
+                logger.warning(f"Ideation quality scoring failed for {item_id}: {qe}")
+
             return {
                 "item_id": item_id,
                 "ideas_generated": saved_count,
                 "status": "success",
             }
 
+        except BudgetExceededError as e:
+            logger.error(f"Auto-ideation failed for item {item_id}: {e}")
+            session.rollback()
+            # Set circuit breaker flag
+            try:
+                import redis as redis_lib
+                import os
+                _r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://redis-v2:6379/1"))
+                _r.set("llm:budget_exceeded", "1")  # persists until manual reset
+                logger.warning("Budget exceeded in ideation — pipeline paused (llm:budget_exceeded flag set, no TTL)")
+            except Exception:
+                pass
+            return {"error": str(e)}
         except Exception as e:
             logger.error(f"Auto-ideation failed for item {item_id}: {e}")
             session.rollback()

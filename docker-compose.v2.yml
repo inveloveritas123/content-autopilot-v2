@@ -93,6 +93,9 @@ services:
       BACKEND_URL: http://backend-v2:8000
       API_KEY: ${DEFAULT_TENANT_KEY}
       MCP_PORT: "8080"
+      MCP_CLIENT_ID: ${MCP_CLIENT_ID:-content-autopilot}
+      MCP_CLIENT_SECRET: ${MCP_CLIENT_SECRET:-}
+      MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN:-}
     ports:
       - "${MCP_PORT:-8180}:8080"
     depends_on:

@@ -47,6 +47,29 @@ def transcribe_item(item_id: str):
             item.transcript_source = f"{source_type}_api"
             item.status = "transcribed"
             session.commit()
+
+            # Auto-score transcription quality
+            try:
+                from services.quality_scorer import score_transcription
+                from models.quality_metric import QualityMetric
+                scores = score_transcription(transcript_text)
+                # Transcription uses yt-dlp/VoiceScriptor (no LLM), mark source
+                transcript_src = item.transcript_source or "yt_auto"
+                model_label = "voicescriptor" if "voicescriptor" in transcript_src else "yt_manual" if "manual" in transcript_src else "yt_auto"
+                qm = QualityMetric(
+                    source_item_id=item.id,
+                    tenant_id=item.tenant_id,
+                    step="transcription",
+                    model_used=model_label,
+                    completeness_score=scores.get("completeness_score"),
+                    accuracy_score=scores.get("accuracy_score"),
+                    overall_score=scores.get("overall_score"),
+                )
+                session.add(qm)
+                session.commit()
+            except Exception as qe:
+                logger.warning(f"Quality scoring failed for transcription {item_id}: {qe}")
+
             # Auto-chain: analyze
             from tasks.generate_task import analyze_item
             analyze_item.delay(item_id)

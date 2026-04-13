@@ -1,0 +1,4 @@
+[2026-04-13 21:32:25] === Issue Agent gestartet fuer #99: Test Webhook ===
+[2026-04-13 21:32:26] Labels: 
+[2026-04-13 21:32:26] Starte Claude Agent fuer Issue #99...
+--dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons

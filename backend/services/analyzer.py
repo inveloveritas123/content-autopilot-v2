@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from services.llm import llm_service
+from services.llm import llm_service, BudgetExceededError
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ async def analyze_transcript(
     transcript_text: str,
     source_type: str = "youtube",
     title: str = "",
+    routing_override: Optional[dict] = None,
 ) -> Optional[dict]:
     """Analyze content using Gemini Flash and return structured analysis.
 
@@ -54,6 +55,8 @@ async def analyze_transcript(
             prompt=prompt,
             system=ANALYSIS_SYSTEM_PROMPT,
             model="gemini-flash",
+            purpose="analysis",
+            routing_override=routing_override,
         )
 
         # Validate and fill missing keys
@@ -96,6 +99,8 @@ async def analyze_transcript(
         )
         return result
 
+    except BudgetExceededError:
+        raise  # Propagate to caller for circuit breaker handling
     except Exception as e:
         logger.error(f"Analysis failed: {e}")
         return None

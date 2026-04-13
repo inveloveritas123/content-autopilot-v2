@@ -26,12 +26,16 @@ class SettingsUpdate(BaseModel):
     target_audience: Optional[str] = None
     daily_token_budget: Optional[int] = None
     monthly_token_budget: Optional[int] = None
+    daily_budget_eur: Optional[float] = None   # Daily EUR budget limit
+    llm_routing: Optional[dict] = None          # {task: model_id} overrides
     youtube_api_key: Optional[str] = None
     nc_write_path: Optional[str] = None
     nc_read_paths: Optional[list[str]] = None
     nc_transcript_path: Optional[str] = None
     nc_analysis_path: Optional[str] = None
     nc_content_path: Optional[str] = None
+    entrepreneur: Optional[dict] = None  # {name, industry, specialization, target_audience}
+    voice_profile: Optional[dict] = None  # {tone, vocabulary_level, sentence_style, ...}
 
 
 class NCBrowseRequest(BaseModel):
@@ -238,3 +242,71 @@ async def update_voice_profile(
     flag_modified(tenant, "settings")
     await db.commit()
     return {"status": "saved", "dimensions": valid_dims}
+
+
+@router.get("/settings/voice-profiles-list")
+async def list_voice_profiles(
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all tenants with their voice profiles (for testmatrix)."""
+    result = await db.execute(select(Tenant).order_by(Tenant.created_at))
+    tenants = result.scalars().all()
+    profiles = []
+    for t in tenants:
+        s = t.settings or {}
+        vp = s.get("voice_profile", {})
+        ent = s.get("entrepreneur", {})
+        profiles.append({
+            "id": str(t.id),
+            "name": t.name,
+            "is_current": t.id == tenant.id,
+            "industry": ent.get("industry", "—"),
+            "entrepreneur_name": ent.get("name", "—"),
+            "tone": vp.get("tone", "—"),
+            "configured": bool(vp.get("tone")),
+        })
+    return {"profiles": profiles}
+
+
+@router.get("/settings/llm-routing")
+async def get_llm_routing_info(tenant: Tenant = Depends(get_tenant)):
+    """Return current LLM model routing config (purpose → model)."""
+    from services.llm import PURPOSE_MODEL_MAP, REQUESTY_MODELS, PURPOSE_MAX_TOKENS
+
+    routing = []
+    task_labels = {
+        "analysis": "Analyse",
+        "transcription": "Transkription",
+        "ideation": "Ideation",
+        "questions": "Smart-Fragen",
+        "post_generation": "Post-Generierung",
+        "summary": "Zusammenfassung",
+        "tagging": "Tagging",
+        "scoring": "Bewertung",
+        "creative": "Kreativ",
+        "voice_update": "Voice-Update",
+        "onboarding": "Onboarding",
+    }
+    cost_map = {
+        "gemini-flash": {"model": REQUESTY_MODELS.get("gemini-flash", "?"), "cost_per_1m": 0.075},
+        "claude-sonnet": {"model": REQUESTY_MODELS.get("claude-sonnet", "?"), "cost_per_1m": 0.40},
+    }
+    tenant_routing = (tenant.settings or {}).get("llm_routing", {})
+
+    for purpose, model_key in PURPOSE_MODEL_MAP.items():
+        resolved = tenant_routing.get(purpose, model_key)
+        info = cost_map.get(resolved, {"model": resolved, "cost_per_1m": None})
+        routing.append({
+            "purpose": purpose,
+            "label": task_labels.get(purpose, purpose),
+            "model_key": resolved,
+            "model_id": info["model"],
+            "cost_per_1m_usd": info["cost_per_1m"],
+            "max_tokens": PURPOSE_MAX_TOKENS.get(purpose, 1500),
+        })
+    return {
+        "routing": routing,
+        "daily_budget_eur": (tenant.settings or {}).get("daily_budget_eur"),
+        "note": "Kein Claude mehr im Backend — Gemini Flash (0.075$/1M) + Mistral Medium (0.40$/1M)",
+    }

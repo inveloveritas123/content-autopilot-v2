@@ -290,6 +290,11 @@ class RSSAdapter(AbstractSourceAdapter):
             logger.warning(f"RSS feed {source.name} could not be parsed: {feed.bozo_exception}")
             return []
 
+        # Determine base URL for resolving relative links
+        from urllib.parse import urljoin, urlparse
+        parsed_feed_url = urlparse(feed_url)
+        base_url = f"{parsed_feed_url.scheme}://{parsed_feed_url.netloc}"
+
         items = []
         for entry in feed.entries:
             external_id = self._get_entry_id(entry)
@@ -308,10 +313,14 @@ class RSSAdapter(AbstractSourceAdapter):
             # Get thumbnail
             thumbnail = self._extract_thumbnail(entry)
 
+            # Resolve relative URLs to absolute
+            raw_link = entry.get("link", "")
+            item_url = urljoin(base_url, raw_link) if raw_link and not raw_link.startswith("http") else raw_link
+
             items.append({
                 "external_id": external_id,
                 "title": entry.get("title", "Ohne Titel"),
-                "url": entry.get("link", ""),
+                "url": item_url,
                 "published_at": published,
                 "thumbnail_url": thumbnail,
                 "content_text": content_text,
@@ -486,13 +495,20 @@ class PodcastAdapter(AbstractSourceAdapter):
             elif feed.feed.get("image", {}).get("href"):
                 thumbnail = feed.feed["image"]["href"]
 
+            # Save description/show-notes as fallback content if audio transcription fails
+            description = entry.get("summary", entry.get("description", ""))
+            if description:
+                import re
+                description = re.sub(r"<[^>]+>", " ", description).strip()
+                description = re.sub(r"\s+", " ", description)
+
             items.append({
                 "external_id": external_id,
                 "title": entry.get("title", ""),
                 "url": entry.get("link", audio_url),
                 "published_at": published,
                 "thumbnail_url": thumbnail,
-                "content_text": None,  # Will be transcribed via Gemini Audio API
+                "content_text": description or None,
                 "content_type": "podcast",
                 "source_type": "podcast",
                 "author": entry.get("author", feed.feed.get("title", "")),

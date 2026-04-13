@@ -1,13 +1,16 @@
 """Activity log and pipeline progress tracking."""
 from datetime import datetime, timedelta
+import uuid
+from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, func, case, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
 from models.tenant import Tenant
 from models.source_item import SourceItem
+from models.source import Source
 
 router = APIRouter()
 
@@ -24,6 +27,7 @@ async def get_pipeline_progress(
             func.count(SourceItem.id),
         )
         .where(SourceItem.tenant_id == tenant.id)
+        .where(SourceItem.is_archived == False)
         .group_by(SourceItem.status)
     )
     status_counts = dict(result.all())
@@ -56,22 +60,69 @@ async def get_pipeline_progress(
     }
 
 
+STATUS_GROUP_MAP = {
+    "success": ["transcribed", "analyzed", "content_ready", "approved"],
+    "error": ["needs_voicescriptor", "transcription_failed"],
+    "processing": ["transcribing", "analyzing", "generating"],
+    "pending": ["new"],
+}
+
+
 @router.get("/pipeline/log")
 async def get_activity_log(
     limit: int = 50,
+    offset: int = 0,
+    status_group: Optional[str] = None,
+    status: Optional[str] = None,
+    source_id: Optional[str] = None,
+    period: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """Get recent activity log - items that changed status recently."""
-    # Get recently updated items (proxy for activity)
-    result = await db.execute(
+    query = (
         select(SourceItem)
         .where(SourceItem.tenant_id == tenant.id)
         .where(SourceItem.status != "new")
-        .order_by(SourceItem.updated_at.desc())
-        .limit(limit)
+        .where(SourceItem.is_archived == False)
+    )
+    if status_group and status_group in STATUS_GROUP_MAP:
+        query = query.where(SourceItem.status.in_(STATUS_GROUP_MAP[status_group]))
+    elif status:
+        query = query.where(SourceItem.status == status)
+    if source_id:
+        try:
+            query = query.where(SourceItem.source_id == uuid.UUID(source_id))
+        except ValueError:
+            pass
+    # Time filter
+    now = datetime.utcnow()
+    if period and period != "all":
+        periods = {"last_hour": timedelta(hours=1), "last_24h": timedelta(hours=24), "last_7d": timedelta(days=7), "last_30d": timedelta(days=30)}
+        if period in periods:
+            query = query.where(SourceItem.updated_at >= now - periods[period])
+        elif period == "this_year":
+            query = query.where(SourceItem.updated_at >= datetime(now.year, 1, 1))
+        elif period == "last_year":
+            query = query.where(SourceItem.updated_at.between(datetime(now.year - 1, 1, 1), datetime(now.year, 1, 1)))
+    if date_from:
+        query = query.where(SourceItem.updated_at >= datetime.fromisoformat(date_from))
+    if date_to:
+        query = query.where(SourceItem.updated_at <= datetime.fromisoformat(date_to))
+
+    result = await db.execute(
+        query.order_by(SourceItem.updated_at.desc()).offset(offset).limit(limit)
     )
     items = result.scalars().all()
+
+    # Load source names for entries
+    source_ids = list({i.source_id for i in items if i.source_id})
+    source_names: dict = {}
+    if source_ids:
+        src_result = await db.execute(select(Source.id, Source.name).where(Source.id.in_(source_ids)))
+        source_names = {str(row.id): row.name for row in src_result.all()}
 
     log_entries = []
     for item in items:
@@ -88,6 +139,8 @@ async def get_activity_log(
                 status_msg = "Transkription erfolgreich"
         elif item.status == "needs_voicescriptor":
             status_msg = "Keine Untertitel verfuegbar (weder YT noch VoiceScriptor)"
+        elif item.status == "transcription_failed":
+            status_msg = "Transkription fehlgeschlagen"
         else:
             status_msg = {
                 "transcribing": "Transkription laeuft...",
@@ -98,7 +151,7 @@ async def get_activity_log(
                 "approved": "Freigegeben",
             }.get(item.status, item.status)
 
-        is_error = item.status == "needs_voicescriptor"
+        is_error = item.status in ("needs_voicescriptor", "transcription_failed")
         is_processing = item.status in ("transcribing", "analyzing", "generating")
 
         log_entries.append({
@@ -111,6 +164,8 @@ async def get_activity_log(
             "transcript_source": item.transcript_source,
             "updated_at": item.updated_at.isoformat() if item.updated_at else None,
             "channel_name": item.channel_name,
+            "source_id": str(item.source_id) if item.source_id else None,
+            "source_name": source_names.get(str(item.source_id)) if item.source_id else None,
         })
 
     return log_entries

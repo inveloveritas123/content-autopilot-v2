@@ -166,6 +166,47 @@ Kommunikationskanal: Gitea Issues im Repo meister/content-autopilot-v2.
 ### Wenn keine Issues offen sind:
 Lies SCOPE.md und arbeite die naechste Phase ab.
 
+## Research-Protokoll (PFLICHT vor jeder Implementierung)
+
+Kein Feature wird gebaut ohne validierten Ansatz. Ablauf:
+
+1. **WebSearch** — Suche nach aktuellen Best Practices, Papers, Official Docs
+   - Mindestens 2 hochwertige Quellen (MDN, official docs, arxiv, ACM, IEEE, web.dev, martinfowler.com)
+   - Suchoperatoren: `site:docs.python.org`, `site:react.dev`, `filetype:pdf research`
+   - Jahr beachten: bevorzuge Quellen 2023-2025
+2. **Quellen dokumentieren** — Als Issue-Kommentar VOR der Implementierung
+3. **Scope definieren** — Explizit sagen was NICHT gebaut wird
+4. **Kein Cargo-Cult** — Nur implementieren wenn du den Mechanismus verstehst
+
+## Freigabe-Workflow — Wann Robert entscheiden muss
+
+**Automatisch bearbeiten (kein Warten):**
+- UI-Aenderungen, neue Seiten, neue API-Endpoints innerhalb des bestehenden Schemas
+- Bug-Fixes, Performance-Optimierungen, neue Celery-Tasks
+- Neue DB-Spalten in bestehenden Tabellen, neue Python/JS-Pakete
+- CLAUDE.md Updates mit neuen Learnings
+
+**Robert einbeziehen — Label `freigabe-robert` setzen, dann andere Issues bearbeiten:**
+- Neue DB-Tabellen oder grosse Schema-Aenderungen
+- Neue externe API-Integrationen (neue Keys noetig)
+- Aenderungen an Ports, Netzwerk, Docker-Compose-Struktur
+- LLM-Provider oder Prompt-Strategie wechseln
+- Alles was v1 betreffen koennte
+
+**Sofort stoppen + Telegram Robert + Label `kritisch`:**
+- Firewall, iptables, UFW — irgendwelche Aenderungen
+- Auth, API-Keys, Secrets, Credentials
+- PostgreSQL-Config-Files (nicht Datenbankdaten)
+- Alles in /opt/zukunftsbund-content-autopilot/ (EINGEFROREN)
+
+## Self-Learning — CLAUDE.md automatisch aktualisieren
+
+Nach jeder erfolgreichen Issue-Bearbeitung: Pruefe ob eine neue Erkenntnis aufgenommen werden sollte.
+**Was aufnehmen:** Gotchas, nicht-offensichtliche Patterns, vermiedene Fehler.
+**Commit:** `chore: update CLAUDE.md learnings from #NR`
+
+Ergaenze den Abschnitt `## Gelernte Patterns` am Ende dieser Datei.
+
 ## GRENZEN — Was du NICHT tun darfst
 
 - KEINE Dateien ausserhalb von /opt/content-autopilot-v2/ aendern
@@ -185,3 +226,8 @@ Lies SCOPE.md und arbeite die naechste Phase ab.
 - APP_PORT=8601, MCP_PORT=8180
 - DATABASE_URL mit DB content_autopilot_v2
 - NEXTCLOUD_URL, NEXTCLOUD_USER, NEXTCLOUD_PASSWORD
+
+## Gelernte Patterns
+
+<!-- Wird automatisch durch den Issue-Agent ergaenzt -->
+<!-- Format: ### Thema (Issue #NR, Datum) / Erkenntnis / Warum wichtig / Quelle -->

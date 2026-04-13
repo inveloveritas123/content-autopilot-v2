@@ -34,6 +34,8 @@ async def get_youtube_transcript(video_id: str, languages: list[str] = None) -> 
     - Kostenlos
     - Schnell
     - Unterstützt auto-generated und manuelle Untertitel
+
+    Nutzt youtube-transcript-api v1.x API (api.fetch / api.list).
     """
     if languages is None:
         languages = ["de", "en"]
@@ -41,39 +43,52 @@ async def get_youtube_transcript(video_id: str, languages: list[str] = None) -> 
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
 
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        api = YouTubeTranscriptApi()
 
-        # Try manually created first, then auto-generated
-        transcript = None
-        for lang in languages:
-            try:
-                transcript = transcript_list.find_manually_created_transcript([lang])
-                break
-            except Exception:
+        # Strategy 1: direct fetch with preferred languages (fastest path)
+        try:
+            fetched = api.fetch(video_id, languages=languages)
+            text = " ".join(s.text for s in fetched)
+            if text and len(text) > 50:
+                logger.info(f"YouTube transcript for {video_id}: {len(text)} chars (direct fetch)")
+                return text
+        except Exception:
+            pass
+
+        # Strategy 2: list → find manually created → find generated → any
+        try:
+            transcript_list = api.list(video_id)
+            transcript = None
+
+            for lang in languages:
                 try:
-                    transcript = transcript_list.find_generated_transcript([lang])
+                    transcript = transcript_list.find_manually_created_transcript([lang])
                     break
                 except Exception:
-                    continue
-
-        if not transcript:
-            # Try any available and translate
-            for t in transcript_list:
-                try:
-                    if t.language_code in languages:
-                        transcript = t
+                    try:
+                        transcript = transcript_list.find_generated_transcript([lang])
                         break
-                except Exception:
-                    continue
+                    except Exception:
+                        continue
 
-        if not transcript:
-            logger.warning(f"No transcript found for video {video_id}")
+            if not transcript:
+                # Take any available transcript
+                for t in transcript_list:
+                    transcript = t
+                    break
+
+            if not transcript:
+                logger.warning(f"No transcript found for video {video_id}")
+                return None
+
+            fetched = api.fetch(video_id, languages=[transcript.language_code])
+            text = " ".join(s.text for s in fetched)
+            logger.info(f"YouTube transcript for {video_id}: {len(text)} chars, lang={transcript.language_code}")
+            return text if len(text) > 50 else None
+
+        except Exception as e:
+            logger.warning(f"YouTube transcript list-fetch failed for {video_id}: {e}")
             return None
-
-        fetched = transcript.fetch()
-        text = " ".join([entry["text"] for entry in fetched])
-        logger.info(f"YouTube transcript for {video_id}: {len(text)} chars, lang={transcript.language_code}")
-        return text
 
     except Exception as e:
         logger.warning(f"YouTube transcript API failed for {video_id}: {e}")
@@ -108,7 +123,7 @@ async def transcribe_youtube_with_gemini_url(
     try:
         api_url = f"{settings.litellm_base_url}/chat/completions"
         payload = {
-            "model": "google/gemini-2.0-flash",
+            "model": "vertex/gemini-2.5-flash-lite@europe-central2",
             "messages": [
                 {
                     "role": "user",
@@ -199,21 +214,19 @@ async def transcribe_with_gemini_audio(
             f"ohne Sprecherbezeichnungen. Behalte natuerliche Absaetze bei."
         )
 
-        # Call via LiteLLM Proxy (OpenAI-compatible)
+        # Call via LiteLLM Proxy — Gemini expects audio as data URI via image_url
         api_url = f"{settings.litellm_base_url}/chat/completions"
+        data_uri = f"data:{mime_type};base64,{audio_b64}"
         payload = {
-            "model": "google/gemini-2.0-flash",
+            "model": "vertex/gemini-2.5-flash-lite@europe-central2",
             "messages": [
                 {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": prompt},
                         {
-                            "type": "input_audio",
-                            "input_audio": {
-                                "data": audio_b64,
-                                "format": mime_type.split("/")[-1],
-                            },
+                            "type": "image_url",
+                            "image_url": {"url": data_uri},
                         },
                     ],
                 }
@@ -302,10 +315,17 @@ async def transcribe_content(
         return content_text or None
 
     elif source_type == "podcast":
-        # Podcast: Gemini Audio API
+        # Podcast: Gemini Audio API, with show-notes fallback
         if audio_url:
-            return await transcribe_with_gemini_audio(audio_url, language)
-        logger.warning(f"Podcast has no audio_url: {url}")
+            transcript = await transcribe_with_gemini_audio(audio_url, language)
+            if transcript:
+                return transcript
+            logger.warning(f"Audio transcription failed for podcast, checking show notes fallback")
+        # Fallback: use show notes / episode description if available (>200 chars = real content)
+        if content_text and len(content_text) > 200:
+            logger.info(f"Using show-notes as transcript for podcast ({len(content_text)} chars)")
+            return content_text
+        logger.warning(f"Podcast has no usable content: url={url}")
         return None
 
     else:

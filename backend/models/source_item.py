@@ -20,7 +20,7 @@ class SourceItem(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     source_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sources.id"), nullable=False)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
-    external_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(512), nullable=False)
     title: Mapped[Optional[str]] = mapped_column(String(500))
     url: Mapped[Optional[str]] = mapped_column(String(500))
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime)

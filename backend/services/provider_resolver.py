@@ -80,31 +80,36 @@ def get_active_provider(tenant_id=None, task: str = "all") -> Optional[dict]:
 
 # Model-specific pricing (per 1M tokens, in USD)
 MODEL_PRICING = {
+    "google/gemini-2.0-flash": {"input": 0.075, "output": 0.30},
     "vertex/gemini-2.5-flash-lite@europe-central2": {"input": 0.075, "output": 0.30},
-    "bedrock/claude-haiku-4-5@eu-central-1": {"input": 1.00, "output": 5.00},
+    "mistral/mistral-medium-latest": {"input": 0.40, "output": 1.20},
+    "mistral/mistral-small-latest": {"input": 0.10, "output": 0.30},
     "openai/gpt-4.1-mini": {"input": 0.40, "output": 1.60},
 }
 
-# Task → preferred model mapping
+# Task → preferred model mapping (Cycle 86: Gemini 2.0 Flash + Mistral Medium)
 TASK_MODEL_MAP = {
-    "research": "vertex/gemini-2.5-flash-lite@europe-central2",
-    "analysis": "vertex/gemini-2.5-flash-lite@europe-central2",
-    "transcription": "vertex/gemini-2.5-flash-lite@europe-central2",
-    "ideation": "vertex/gemini-2.5-flash-lite@europe-central2",
-    "voice_profile": "bedrock/claude-haiku-4-5@eu-central-1",
-    "post_finalize": "bedrock/claude-haiku-4-5@eu-central-1",
-    "content_dna": "bedrock/claude-haiku-4-5@eu-central-1",
-    "creative": "bedrock/claude-haiku-4-5@eu-central-1",
+    "research": "google/gemini-2.0-flash",
+    "analysis": "google/gemini-2.0-flash",
+    "transcription": "google/gemini-2.0-flash",
+    "ideation": "mistral/mistral-medium-latest",
+    "voice_profile": "mistral/mistral-medium-latest",
+    "post_finalize": "mistral/mistral-medium-latest",
+    "content_dna": "mistral/mistral-medium-latest",
+    "creative": "mistral/mistral-medium-latest",
 }
 
 
 def get_model_for_task(task: str) -> str:
     """Get the optimal model for a task type."""
-    return TASK_MODEL_MAP.get(task, "vertex/gemini-2.5-flash-lite@europe-central2")
+    return TASK_MODEL_MAP.get(task, "google/gemini-2.0-flash")
 
 
-def track_cost(provider_id: str, usage: dict, model: str = "", task_type: str = "unknown", tenant_id=None):
-    """Track LLM cost from response usage data + log the call."""
+def track_cost(provider_id, usage: dict, model: str = "", task_type: str = "unknown", tenant_id=None):
+    """Track LLM cost from response usage data + log the call.
+
+    provider_id may be None (env-config fallback path) — still logs cost.
+    """
     if not usage:
         return
 
@@ -117,28 +122,46 @@ def track_cost(provider_id: str, usage: dict, model: str = "", task_type: str = 
     cost_cents = cost_usd * 100
 
     with sync_session_factory() as session:
-        # Update provider cost
+        # Update provider cost if we have a DB provider
         if provider_id:
-            provider = session.get(LLMProvider, provider_id)
-            if provider:
-                provider.cost_spent_today_cents += max(1, int(cost_cents)) if cost_cents >= 0.01 else 0
-                if not tenant_id:
-                    tenant_id = str(provider.tenant_id)
+            try:
+                provider = session.get(LLMProvider, provider_id)
+                if provider:
+                    provider.cost_spent_today_cents += max(1, int(cost_cents)) if cost_cents >= 0.01 else 0
+                    if not tenant_id:
+                        tenant_id = str(provider.tenant_id)
+            except Exception:
+                pass
+
+        # Fallback: get default tenant for logging when no DB provider
+        if not tenant_id:
+            try:
+                from models.tenant import Tenant
+                from sqlalchemy import select
+                result = session.execute(select(Tenant).limit(1))
+                t = result.scalar_one_or_none()
+                if t:
+                    tenant_id = str(t.id)
+            except Exception:
+                pass
 
         # Log the call
         if tenant_id:
-            from models.llm_call_log import LLMCallLog
-            import uuid
-            log = LLMCallLog(
-                tenant_id=uuid.UUID(str(tenant_id)),
-                provider_id=uuid.UUID(str(provider_id)) if provider_id else None,
-                task_type=task_type,
-                model=model,
-                prompt_tokens=input_tokens,
-                completion_tokens=output_tokens,
-                cost_cents=round(cost_cents, 4),
-            )
-            session.add(log)
+            try:
+                from models.llm_call_log import LLMCallLog
+                import uuid
+                log = LLMCallLog(
+                    tenant_id=uuid.UUID(str(tenant_id)),
+                    provider_id=uuid.UUID(str(provider_id)) if provider_id else None,
+                    task_type=task_type,
+                    model=model,
+                    prompt_tokens=input_tokens,
+                    completion_tokens=output_tokens,
+                    cost_cents=round(cost_cents, 4),
+                )
+                session.add(log)
+            except Exception as e:
+                logger.warning(f"Cost log failed: {e}")
 
         session.commit()
         if cost_cents >= 0.1:

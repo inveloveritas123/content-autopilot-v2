@@ -40,6 +40,10 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.cost_reset_task.reset_daily_costs",
         "schedule": 86400.0,  # Once per day
     },
+    "pipeline-pump-every-10min": {
+        "task": "tasks.pipeline_pump_task.pump_pipeline",
+        "schedule": 600.0,  # Every 10 minutes
+    },
 }
 
 # Explicit task module imports
@@ -52,4 +56,5 @@ celery_app.conf.include = [
     "tasks.cleanup_task",
     "tasks.publish_task",
     "tasks.cost_reset_task",
+    "tasks.pipeline_pump_task",
 ]

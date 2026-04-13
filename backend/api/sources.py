@@ -6,7 +6,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
@@ -17,6 +17,8 @@ from services.youtube_search import search_youtube_channels, search_youtube_vide
 from services.rss_monitor import fetch_all_channel_videos
 from services.transcript_sync import scan_existing_transcripts
 from models.source_item import SourceItem
+from models.content_piece import ContentPiece
+from models.content_idea import ContentIdea
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,7 @@ class SourceCreate(BaseModel):
     language: str = "de"
     polling_interval_minutes: int = 15
     auto_process: bool = False
+    keywords: Optional[str] = None
 
 
 class SourceUpdate(BaseModel):
@@ -41,6 +44,7 @@ class SourceUpdate(BaseModel):
     polling_interval_minutes: Optional[int] = None
     auto_process: Optional[bool] = None
     is_active: Optional[bool] = None
+    keywords: Optional[str] = None
 
 
 @router.get("/sources")
@@ -63,11 +67,130 @@ async def list_sources(
             "polling_interval_minutes": s.polling_interval_minutes,
             "auto_process": s.auto_process,
             "is_active": s.is_active,
+            "keywords": s.keywords or "",
             "last_checked_at": s.last_checked_at.isoformat() if s.last_checked_at else None,
             "created_at": s.created_at.isoformat() if s.created_at else None,
         }
         for s in sources
     ]
+
+
+@router.get("/sources/stats")
+async def get_source_stats(
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-source item counts grouped by status — single SQL query."""
+    rows = (await db.execute(
+        select(SourceItem.source_id, SourceItem.status, func.count(SourceItem.id).label("cnt"))
+        .where(SourceItem.tenant_id == tenant.id)
+        .group_by(SourceItem.source_id, SourceItem.status)
+    )).all()
+
+    # Aggregate into {source_id: {status: count, ...}}
+    stats: dict = {}
+    for source_id, status, cnt in rows:
+        key = str(source_id)
+        if key not in stats:
+            stats[key] = {}
+        stats[key][status] = cnt
+
+    # Last item date per source (for staleness)
+    from datetime import datetime, timezone
+    last_rows = (await db.execute(
+        select(SourceItem.source_id, func.max(SourceItem.created_at).label("last_dt"))
+        .where(SourceItem.tenant_id == tenant.id)
+        .group_by(SourceItem.source_id)
+    )).all()
+    last_dates = {str(r.source_id): r.last_dt for r in last_rows}
+
+    now = datetime.utcnow()
+
+    # Compute derived fields
+    result = {}
+    for source_id, counts in stats.items():
+        total = sum(counts.values())
+        content_ready = counts.get("content_ready", 0)
+        failed = counts.get("transcription_failed", 0)
+        # All statuses downstream of successful transcription
+        successfully_transcribed = (
+            counts.get("transcribed", 0) +
+            counts.get("analyzed", 0) +
+            counts.get("generating", 0) +
+            counts.get("content_ready", 0)
+        )
+        transcription_attempted = successfully_transcribed + failed
+        success_rate = round(successfully_transcribed / transcription_attempted * 100) if transcription_attempted else None
+
+        last_dt = last_dates.get(source_id)
+        staleness_days = None
+        if last_dt:
+            if last_dt.tzinfo is not None:
+                last_dt = last_dt.replace(tzinfo=None)
+            staleness_days = (now - last_dt).days
+
+        result[source_id] = {
+            "total_items": total,
+            "content_ready": content_ready,
+            "transcription_failed": failed,
+            "conversion_pct": round(content_ready / total * 100) if total else 0,
+            "transcription_success_rate": success_rate,
+            "last_item_days_ago": staleness_days,
+            "is_stale": staleness_days is not None and staleness_days > 14,
+            "by_status": counts,
+        }
+    return result
+
+
+@router.get("/sources/funnel")
+async def get_source_funnel(
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Full content funnel per source: items → ideas → posts → approved → published."""
+    from sqlalchemy import text
+
+    sql = text("""
+        SELECT
+            s.id::text AS source_id,
+            s.name AS source_name,
+            s.type AS source_type,
+            COUNT(DISTINCT si.id) AS items_count,
+            COUNT(DISTINCT ci.id) AS ideas_count,
+            COUNT(DISTINCT cp.id) AS posts_count,
+            COUNT(DISTINCT CASE WHEN cp.status IN ('approved','published','scheduled') THEN cp.id END) AS approved_count,
+            COUNT(DISTINCT CASE WHEN cp.status = 'published' THEN cp.id END) AS published_count
+        FROM sources s
+        LEFT JOIN source_items si ON si.source_id = s.id AND si.tenant_id = :tid
+        LEFT JOIN content_ideas ci ON ci.source_item_id = si.id
+        LEFT JOIN content_pieces cp ON cp.source_item_id = si.id
+        WHERE s.tenant_id = :tid AND s.type != 'manual'
+        GROUP BY s.id, s.name, s.type
+        ORDER BY items_count DESC
+        LIMIT 20
+    """)
+    rows = (await db.execute(sql, {"tid": tenant.id})).mappings().all()
+
+    result = []
+    for r in rows:
+        items = r["items_count"] or 0
+        ideas = r["ideas_count"] or 0
+        posts = r["posts_count"] or 0
+        approved = r["approved_count"] or 0
+        published = r["published_count"] or 0
+        result.append({
+            "source_id": r["source_id"],
+            "source_name": r["source_name"],
+            "source_type": r["source_type"],
+            "items": items,
+            "ideas": ideas,
+            "posts": posts,
+            "approved": approved,
+            "published": published,
+            "approval_rate": round(approved / posts * 100) if posts else 0,
+            "idea_rate": round(ideas / items * 100) if items else 0,
+        })
+    return result
 
 
 @router.post("/sources")
@@ -94,6 +217,7 @@ async def create_source(
         language=data.language,
         polling_interval_minutes=data.polling_interval_minutes,
         auto_process=data.auto_process,
+        keywords=data.keywords,
     )
     db.add(source)
     await db.commit()
@@ -230,6 +354,63 @@ async def delete_all_sources(
     return {"deleted": count}
 
 
+@router.get("/sources/{source_id}/items")
+async def list_source_items(
+    source_id: str,
+    status: Optional[str] = Query(None, description="Filter by status (e.g. transcribed, analyzed, content_ready)"),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """List source items for a given source (paginated). Useful for inspecting pipeline queue."""
+    source = await db.get(Source, uuid.UUID(source_id))
+    if not source or source.tenant_id != tenant.id:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    q = select(SourceItem).where(
+        SourceItem.source_id == source.id,
+        SourceItem.tenant_id == tenant.id,
+        SourceItem.is_archived == False,
+    )
+    if status:
+        q = q.where(SourceItem.status == status)
+    q = q.order_by(SourceItem.created_at.desc()).offset(offset).limit(limit)
+
+    result = await db.execute(q)
+    items = result.scalars().all()
+
+    # Total count for pagination
+    count_q = select(func.count()).select_from(SourceItem).where(
+        SourceItem.source_id == source.id,
+        SourceItem.tenant_id == tenant.id,
+        SourceItem.is_archived == False,
+    )
+    if status:
+        count_q = count_q.where(SourceItem.status == status)
+    total = (await db.execute(count_q)).scalar_one()
+
+    return {
+        "source_id": source_id,
+        "source_name": source.name,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "items": [
+            {
+                "id": str(item.id),
+                "title": item.title or "(kein Titel)",
+                "status": item.status,
+                "url": item.url,
+                "transcript_source": item.transcript_source,
+                "has_transcript": bool(item.transcript_text),
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+            }
+            for item in items
+        ],
+    }
+
+
 @router.post("/sources/{source_id}/check")
 async def check_source(
     source_id: str,
@@ -305,6 +486,76 @@ async def import_all_videos(
         "with_transcript": with_transcript,
         "total_found": len(all_videos),
         "already_existed": len(all_videos) - added,
+    }
+
+
+@router.post("/sources/{source_id}/analyze-all")
+async def analyze_all_source_items(
+    source_id: str,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Queue analysis for all 'transcribed' items from this source."""
+    source = await db.get(Source, uuid.UUID(source_id))
+    if not source or source.tenant_id != tenant.id:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    result = await db.execute(
+        select(SourceItem).where(
+            SourceItem.source_id == source.id,
+            SourceItem.status == "transcribed",
+            SourceItem.is_archived == False,
+        )
+    )
+    items = result.scalars().all()
+
+    from tasks.generate_task import analyze_item
+    queued = 0
+    for item in items:
+        analyze_item.delay(str(item.id))
+        queued += 1
+
+    return {"queued": queued, "source_id": source_id, "source_name": source.name}
+
+
+@router.post("/sources/{source_id}/archive-items")
+async def archive_source_items(
+    source_id: str,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Archive ALL items from a source — removes them from the active pipeline view.
+
+    Use to clean up unwanted sources (e.g. wrong RSS feed imported thousands of articles).
+    Does NOT delete items — they can be recovered by setting is_archived=False.
+    """
+    from sqlalchemy import update as sa_update
+
+    source = await db.get(Source, uuid.UUID(source_id))
+    if not source or source.tenant_id != tenant.id:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    result = await db.execute(
+        sa_update(SourceItem)
+        .where(
+            SourceItem.source_id == source.id,
+            SourceItem.is_archived == False,
+        )
+        .values(is_archived=True)
+    )
+    await db.commit()
+    archived = result.rowcount
+
+    # Also deactivate the source so it stops collecting more
+    source.is_active = False
+    await db.commit()
+
+    return {
+        "archived": archived,
+        "source_id": source_id,
+        "source_name": source.name,
+        "deactivated": True,
+        "message": f"{archived} Items archiviert, Quelle deaktiviert.",
     }
 
 

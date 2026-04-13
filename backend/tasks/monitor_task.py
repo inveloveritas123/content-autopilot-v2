@@ -3,6 +3,7 @@ import asyncio
 from datetime import datetime, timedelta
 
 from sqlalchemy import select, or_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from tasks.celery_app import celery_app
 from models.base import sync_session_factory
@@ -49,30 +50,50 @@ def monitor_all_sources():
                     check_source_for_new_items(source, existing_ids)
                 )
 
-                for item_data in new_items:
-                    item = SourceItem(
-                        source_id=source.id,
-                        tenant_id=source.tenant_id,
-                        external_id=item_data["external_id"],
-                        title=item_data.get("title"),
-                        url=item_data.get("url"),
-                        published_at=item_data.get("published_at"),
-                        thumbnail_url=item_data.get("thumbnail_url"),
-                        audio_url=item_data.get("audio_url"),
-                        content_type=item_data.get("content_type"),
-                        status="new",
-                    )
-                    # RSS-Artikel haben content_text direkt beim Fetch
-                    if item_data.get("content_text"):
-                        item.transcript_text = item_data["content_text"]
-                        item.transcript_source = f"{source.type}_feed"
-                        item.status = "transcribed"
+                # Apply keyword filter if configured
+                if source.keywords:
+                    kws = [k.strip().lower() for k in source.keywords.split(',') if k.strip()]
+                    if kws:
+                        def _matches(item_data, kws=kws):
+                            haystack = (
+                                (item_data.get('title') or '') + ' ' +
+                                (item_data.get('content_text') or '')
+                            ).lower()
+                            return any(kw in haystack for kw in kws)
+                        before = len(new_items)
+                        new_items = [it for it in new_items if _matches(it)]
+                        logger.info(f"Keyword filter '{source.keywords}': {before} → {len(new_items)} items")
 
-                    session.add(item)
+                if new_items:
+                    rows = []
+                    for item_data in new_items:
+                        row = {
+                            "source_id": source.id,
+                            "tenant_id": source.tenant_id,
+                            "external_id": item_data["external_id"],
+                            "title": item_data.get("title"),
+                            "url": item_data.get("url"),
+                            "published_at": item_data.get("published_at"),
+                            "thumbnail_url": item_data.get("thumbnail_url"),
+                            "audio_url": item_data.get("audio_url"),
+                            "content_type": item_data.get("content_type"),
+                            "status": "new",
+                        }
+                        if item_data.get("content_text"):
+                            row["transcript_text"] = item_data["content_text"]
+                            row["transcript_source"] = f"{source.type}_feed"
+                            row["status"] = "transcribed"
+                        rows.append(row)
+
+                    stmt = pg_insert(SourceItem).values(rows).on_conflict_do_nothing(
+                        constraint="uq_source_external"
+                    )
+                    result = session.execute(stmt)
+                    inserted = result.rowcount if result.rowcount >= 0 else len(rows)
+                    total_new += inserted
 
                 source.last_checked_at = datetime.utcnow()
                 session.commit()
-                total_new += len(new_items)
 
                 # Auto-process if enabled
                 if source.auto_process and new_items:
@@ -119,27 +140,48 @@ def check_single_source(source_id: str):
             check_source_for_new_items(source, existing_ids)
         )
 
-        for item_data in new_items:
-            item = SourceItem(
-                source_id=source.id,
-                tenant_id=source.tenant_id,
-                external_id=item_data["external_id"],
-                title=item_data.get("title"),
-                url=item_data.get("url"),
-                published_at=item_data.get("published_at"),
-                thumbnail_url=item_data.get("thumbnail_url"),
-                audio_url=item_data.get("audio_url"),
-                content_type=item_data.get("content_type"),
-                status="new",
+        # Apply keyword filter if configured
+        if source.keywords:
+            kws = [k.strip().lower() for k in source.keywords.split(',') if k.strip()]
+            if kws:
+                def _matches(item_data, kws=kws):
+                    haystack = (
+                        (item_data.get('title') or '') + ' ' +
+                        (item_data.get('content_text') or '')
+                    ).lower()
+                    return any(kw in haystack for kw in kws)
+                new_items = [it for it in new_items if _matches(it)]
+
+        inserted = 0
+        if new_items:
+            rows = []
+            for item_data in new_items:
+                row = {
+                    "source_id": source.id,
+                    "tenant_id": source.tenant_id,
+                    "external_id": item_data["external_id"],
+                    "title": item_data.get("title"),
+                    "url": item_data.get("url"),
+                    "published_at": item_data.get("published_at"),
+                    "thumbnail_url": item_data.get("thumbnail_url"),
+                    "audio_url": item_data.get("audio_url"),
+                    "content_type": item_data.get("content_type"),
+                    "status": "new",
+                }
+                if item_data.get("content_text"):
+                    row["transcript_text"] = item_data["content_text"]
+                    row["transcript_source"] = f"{source.type}_feed"
+                    row["status"] = "transcribed"
+                rows.append(row)
+
+            stmt = pg_insert(SourceItem).values(rows).on_conflict_do_nothing(
+                constraint="uq_source_external"
             )
-            if item_data.get("content_text"):
-                item.transcript_text = item_data["content_text"]
-                item.transcript_source = f"{source.type}_feed"
-                item.status = "transcribed"
-            session.add(item)
+            result = session.execute(stmt)
+            inserted = result.rowcount if result.rowcount >= 0 else len(rows)
 
         source.last_checked_at = datetime.utcnow()
         session.commit()
 
-        logger.info(f"Source '{source.name}' ({source.type}): {len(new_items)} new items")
+        logger.info(f"Source '{source.name}' ({source.type}): {inserted} new items saved ({len(new_items)} candidates)")
         return {"new_items": len(new_items)}
