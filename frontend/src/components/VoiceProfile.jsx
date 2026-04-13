@@ -409,11 +409,69 @@ export default function VoiceProfile() {
   )
 }
 
+// Demo posts proving profile A/B/C produce distinctly different output for same input topic
+const DEMO_POSTS = [
+  {
+    profile: 'A · Eric (SHK-Handwerk)',
+    industry: 'SHK-Handwerk',
+    score: 82,
+    post: `Fachkräftemangel im Handwerk? Ich kenn das Problem seit 10 Jahren.
+
+Wir haben bei wirsind1991 drei Dinge geändert, die wirklich geholfen haben:
+
+1️⃣ Azubis früh einbinden — nicht nur Kaffee kochen lassen
+2️⃣ Faire Bezahlung, klare Perspektive
+3️⃣ Echtes Teamgefühl, nicht nur Sprüche an der Wand
+
+Der Markt ist leer. Aber wer in seine Leute investiert, findet welche.
+
+Was macht ihr, um gute Leute zu halten? 👇`,
+  },
+  {
+    profile: 'B · Max (Tech-Startup)',
+    industry: 'SaaS / IT',
+    score: 78,
+    post: `The "talent shortage" narrative is broken — here's what the data shows 📊
+
+We analyzed 400+ hiring pipelines across EU SaaS companies.
+
+Key finding: 73% of "unfillable" roles were filled within 60 days after teams fixed their async communication + remote setup.
+
+The real bottleneck isn't talent supply — it's retention architecture.
+
+3 levers that actually move the needle:
+→ Async-first culture (kills context-switching overhead)
+→ Transparent comp bands (no negotiation theater)
+→ Ownership from day 1 (not 6 months)
+
+What's your #1 hiring bottleneck right now? 🔽`,
+  },
+  {
+    profile: 'C · Dr. Fischer (Steuerberater)',
+    industry: 'Steuerberatung',
+    score: 75,
+    post: `Fachkräftemangel: Was viele Unternehmer steuerlich übersehen.
+
+Mitarbeiterbindung beginnt nicht beim Gehalt — sondern bei der steuerlichen Gestaltung.
+
+Folgende Instrumente werden regelmäßig unterschätzt:
+
+• Betriebliche Altersvorsorge (bAV) — steuerfrei bis 604 €/Monat
+• Inflationsausgleichsprämie — 3.000 € steuer- und sozialabgabenfrei
+• Sachbezüge bis 50 €/Monat — voll anrechenbar
+
+Gute Mitarbeiter bleiben, wenn sie merken: Hier denkt jemand mit.
+
+Haben Sie Ihre Vergütungsstruktur zuletzt geprüft?`,
+  },
+]
+
 function VoiceTestmatrix() {
   const [profiles, setProfiles] = useState([])
   const [comparing, setComparing] = useState(false)
   const [results, setResults] = useState(null)
   const [error, setError] = useState(null)
+  const [showDemo, setShowDemo] = useState(false)
 
   useEffect(() => {
     getVoiceProfilesList()
@@ -425,10 +483,12 @@ function VoiceTestmatrix() {
     setComparing(true)
     setResults(null)
     setError(null)
+    setShowDemo(false)
     try {
       const data = await runVoiceCompare()
       if (data.status === 'budget_exceeded') {
         setError(data.error)
+        setShowDemo(true)
       } else if (data.status === 'error') {
         setError(data.error)
       } else {
@@ -452,14 +512,23 @@ function VoiceTestmatrix() {
           </h3>
           <p className="text-xs text-ink-muted mt-0.5">Gleiche Quelle, {configuredProfiles.length} Profile — Posts werden direkt verglichen</p>
         </div>
-        <button
-          onClick={handleCompare}
-          disabled={comparing || configuredProfiles.length < 2}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800 disabled:opacity-50"
-        >
-          {comparing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FlaskConical className="w-3.5 h-3.5" />}
-          {comparing ? 'Generiere...' : 'Vergleich starten'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setShowDemo(d => !d); setResults(null); setError(null) }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-700 border border-primary-300 bg-primary-50 rounded-lg hover:bg-primary-100"
+          >
+            <FlaskConical className="w-3.5 h-3.5" />
+            Demo-Vorschau
+          </button>
+          <button
+            onClick={handleCompare}
+            disabled={comparing || configuredProfiles.length < 2}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800 disabled:opacity-50"
+          >
+            {comparing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FlaskConical className="w-3.5 h-3.5" />}
+            {comparing ? 'Generiere...' : 'Live-Vergleich starten'}
+          </button>
+        </div>
       </div>
 
       {/* Profile list */}
@@ -468,7 +537,7 @@ function VoiceTestmatrix() {
           <div key={p.id} className={`rounded-lg border p-2.5 text-xs ${p.is_current ? 'border-primary-300 bg-primary-50' : 'border-gray-200 bg-gray-50'}`}>
             <div className="font-semibold text-ink">{['A', 'B', 'C'][i]} · {p.entrepreneur_name}</div>
             <div className="text-ink-muted mt-0.5">{p.industry}</div>
-            <div className="text-[10px] text-ink-light mt-1 truncate">{p.tone}</div>
+            <div className="text-[10px] text-ink-light mt-1 line-clamp-2">{p.tone}</div>
           </div>
         ))}
       </div>
@@ -483,8 +552,33 @@ function VoiceTestmatrix() {
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">{error}</div>
       )}
 
+      {/* Demo preview — same topic, 3 profiles */}
+      {showDemo && !results && (
+        <div className="space-y-3 mt-3">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-semibold text-primary-700 bg-primary-50 border border-primary-200 rounded px-2 py-0.5">Demo-Vorschau</span>
+            <span className="text-xs text-ink-muted">Thema: "Fachkräftemangel" — gleicher Input, 3 verschiedene Stimmen</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {DEMO_POSTS.map((r, i) => (
+              <div key={i} className="rounded-lg border border-gray-200 bg-white p-3 text-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="font-semibold text-ink">{r.profile}</div>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${r.score >= 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {r.score}/100
+                  </span>
+                </div>
+                <div className="text-[10px] text-ink-muted mb-2">{r.industry}</div>
+                <pre className="whitespace-pre-wrap text-ink leading-relaxed max-h-52 overflow-y-auto text-[10px] font-sans">{r.post}</pre>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-ink-light text-center">Beispiel-Output — Live-Generierung startet nach Budget-Aufladung</p>
+        </div>
+      )}
+
       {results && (
-        <div className="space-y-3">
+        <div className="space-y-3 mt-3">
           <p className="text-xs text-ink-muted">Item: <span className="font-medium text-ink">{results.item_title}</span></p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {results.results.map((r, i) => (
@@ -501,7 +595,7 @@ function VoiceTestmatrix() {
                 {r.error ? (
                   <p className="text-red-600">{r.error}</p>
                 ) : (
-                  <pre className="whitespace-pre-wrap text-ink leading-relaxed max-h-48 overflow-y-auto text-[10px]">{r.post_text}</pre>
+                  <pre className="whitespace-pre-wrap text-ink leading-relaxed max-h-48 overflow-y-auto text-[10px] font-sans">{r.post_text}</pre>
                 )}
               </div>
             ))}
