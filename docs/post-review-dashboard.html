@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Content Autopilot — Post Review</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --zb-primary: #1a1a2e;
+    --zb-accent: #e94560;
+    --zb-blue: #0f3460;
+    --zb-light: #f8f9fc;
+    --zb-border: #e2e8f0;
+    --zb-text: #1a202c;
+    --zb-muted: #718096;
+    --zb-success: #38a169;
+    --zb-warning: #d69e2e;
+    --zb-danger: #e53e3e;
+    --zb-purple: #6b46c1;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--zb-light);
+    color: var(--zb-text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* HEADER */
+  .header {
+    background: var(--zb-primary);
+    color: white;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+    border-bottom: 2px solid var(--zb-accent);
+  }
+  .header-logo {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.5);
+  }
+  .header-divider { width: 1px; height: 20px; background: rgba(255,255,255,0.2); }
+  .header-title { font-size: 16px; font-weight: 600; color: white; }
+  .header-badge {
+    margin-left: auto;
+    background: var(--zb-accent);
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 99px;
+    letter-spacing: 0.05em;
+  }
+  .voice-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.85);
+  }
+  .voice-dot { width: 8px; height: 8px; border-radius: 50%; background: #68d391; }
+
+  /* MAIN LAYOUT */
+  .main {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* LEFT: ITEM LIST */
+  .sidebar {
+    background: white;
+    border-right: 1px solid var(--zb-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--zb-border);
+    flex-shrink: 0;
+  }
+  .sidebar-title { font-size: 13px; font-weight: 700; color: var(--zb-muted); text-transform: uppercase; letter-spacing: 0.07em; }
+  .sidebar-count { font-size: 22px; font-weight: 800; color: var(--zb-text); margin-top: 2px; }
+  .sidebar-sub { font-size: 12px; color: var(--zb-muted); margin-top: 2px; }
+
+  .filter-row {
+    display: flex;
+    gap: 6px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--zb-border);
+    flex-shrink: 0;
+  }
+  .filter-btn {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 99px;
+    border: 1px solid var(--zb-border);
+    background: white;
+    color: var(--zb-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-btn.active {
+    background: var(--zb-primary);
+    color: white;
+    border-color: var(--zb-primary);
+  }
+
+  .item-list { overflow-y: auto; flex: 1; }
+
+  .item-card {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--zb-border);
+    cursor: pointer;
+    transition: background 0.1s;
+    position: relative;
+  }
+  .item-card:hover { background: #f7f8fc; }
+  .item-card.active { background: #eff6ff; border-left: 3px solid var(--zb-blue); }
+  .item-card.active .item-title { color: var(--zb-blue); }
+
+  .item-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .source-icon {
+    width: 20px; height: 20px;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .source-icon.yt { background: #fee2e2; color: #dc2626; }
+  .source-icon.rss { background: #fef3c7; color: #d97706; }
+  .source-icon.pod { background: #ede9fe; color: #7c3aed; }
+
+  .source-name { font-size: 11px; color: var(--zb-muted); font-weight: 500; }
+  .item-age { font-size: 10px; color: #a0aec0; margin-left: auto; }
+
+  .item-title {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--zb-text);
+    margin-bottom: 8px;
+  }
+
+  .item-tags {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .tag {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 99px;
+    background: var(--zb-light);
+    color: var(--zb-muted);
+    border: 1px solid var(--zb-border);
+  }
+
+  .item-status {
+    position: absolute;
+    top: 14px; right: 14px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+  .status-ready { background: #68d391; }
+  .status-reviewed { background: var(--zb-blue); }
+  .status-pending { background: #fbd38d; }
+
+  /* RIGHT: DETAIL VIEW */
+  .detail {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* TABS */
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    background: white;
+    border-bottom: 1px solid var(--zb-border);
+    padding: 0 24px;
+    flex-shrink: 0;
+  }
+  .tab {
+    padding: 14px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--zb-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .tab.active {
+    color: var(--zb-blue);
+    border-bottom-color: var(--zb-blue);
+  }
+  .tab-badge {
+    display: inline-block;
+    background: var(--zb-accent);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 99px;
+    margin-left: 6px;
+  }
+
+  .tab-content { flex: 1; overflow-y: auto; }
+
+  /* TRANSCRIPT TAB */
+  .panel { padding: 24px; }
+
+  .content-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .source-badge-large {
+    width: 48px; height: 48px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+    background: #fee2e2;
+  }
+  .content-info h2 {
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.4;
+    margin-bottom: 4px;
+  }
+  .content-meta-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--zb-muted);
+  }
+  .meta-chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--zb-light);
+    padding: 2px 8px;
+    border-radius: 99px;
+    border: 1px solid var(--zb-border);
+    font-size: 11px;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--zb-muted);
+    margin-bottom: 8px;
+  }
+
+  .transcript-box {
+    background: #f9fafb;
+    border: 1px solid var(--zb-border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #2d3748;
+    margin-bottom: 20px;
+    position: relative;
+  }
+  .transcript-box .highlight {
+    background: #fef3c7;
+    padding: 1px 3px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+  .transcript-fade {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 40px;
+    background: linear-gradient(transparent, #f9fafb);
+    border-radius: 0 0 10px 10px;
+  }
+
+  .key-insights {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .insight-card {
+    background: white;
+    border: 1px solid var(--zb-border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .insight-card .insight-icon { font-size: 16px; margin-bottom: 6px; }
+  .insight-card strong { display: block; font-size: 11px; color: var(--zb-muted); margin-bottom: 3px; text-transform: uppercase; }
+
+  /* QUESTIONS TAB */
+  .question-block {
+    background: white;
+    border: 1px solid var(--zb-border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 14px;
+  }
+  .question-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .q-number {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--zb-primary);
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .q-text {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--zb-text);
+  }
+  .q-why {
+    font-size: 11px;
+    color: var(--zb-muted);
+    background: var(--zb-light);
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    border-left: 3px solid var(--zb-blue);
+  }
+  .q-angle {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 99px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+  .angle-story { background: #fef3c7; color: #92400e; }
+  .angle-opinion { background: #e9d8fd; color: #553c9a; }
+  .angle-how_to { background: #c6f6d5; color: #276749; }
+  .angle-controversy { background: #fed7d7; color: #9b2c2c; }
+
+  .answer-field {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--zb-border);
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: var(--font);
+    resize: vertical;
+    min-height: 80px;
+    color: var(--zb-text);
+    line-height: 1.5;
+    transition: border-color 0.15s;
+    background: #f9fafb;
+  }
+  .answer-field:focus {
+    outline: none;
+    border-color: var(--zb-blue);
+    background: white;
+  }
+  .answer-field.filled { background: #f0fff4; border-color: #9ae6b4; }
+
+  .answer-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+  }
+
+  /* POST TAB */
+  .post-container {
+    background: white;
+    border: 1px solid var(--zb-border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .post-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--zb-light);
+    border-bottom: 1px solid var(--zb-border);
+  }
+  .post-format-pill {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 99px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .format-story { background: #fef3c7; color: #92400e; }
+  .format-opinion { background: #e9d8fd; color: #553c9a; }
+
+  .post-voice-indicator {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--zb-muted);
+  }
+  .voice-bar {
+    display: flex;
+    gap: 2px;
+  }
+  .voice-bar-dot {
+    width: 4px; height: 12px;
+    border-radius: 2px;
+    background: var(--zb-border);
+  }
+  .voice-bar-dot.active { background: var(--zb-blue); }
+
+  .post-body {
+    padding: 20px 24px;
+    font-size: 14px;
+    line-height: 1.75;
+    color: var(--zb-text);
+    white-space: pre-wrap;
+    min-height: 200px;
+  }
+
+  .post-stats {
+    display: flex;
+    gap: 16px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--zb-border);
+    font-size: 11px;
+    color: var(--zb-muted);
+    background: var(--zb-light);
+  }
+  .stat-item { display: flex; align-items: center; gap: 4px; }
+
+  /* FORMAT SWITCHER */
+  .format-switcher {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .format-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--zb-border);
+    background: white;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--zb-muted);
+  }
+  .format-btn:hover { border-color: var(--zb-blue); color: var(--zb-blue); }
+  .format-btn.active {
+    background: var(--zb-primary);
+    color: white;
+    border-color: var(--zb-primary);
+  }
+
+  /* ACTION BAR */
+  .action-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 24px;
+    background: white;
+    border-top: 1px solid var(--zb-border);
+    flex-shrink: 0;
+  }
+
+  .btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: none;
+  }
+  .btn-primary { background: var(--zb-blue); color: white; }
+  .btn-primary:hover { background: #0a2a4a; }
+  .btn-success { background: var(--zb-success); color: white; }
+  .btn-success:hover { background: #276749; }
+  .btn-danger { background: #fff5f5; color: var(--zb-danger); border: 1px solid #feb2b2; }
+  .btn-danger:hover { background: var(--zb-danger); color: white; }
+  .btn-ghost { background: var(--zb-light); color: var(--zb-muted); border: 1px solid var(--zb-border); }
+  .btn-ghost:hover { background: #edf2f7; color: var(--zb-text); }
+  .btn-accent { background: var(--zb-accent); color: white; }
+
+  .status-indicator {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 99px;
+  }
+  .status-pill.ready { background: #f0fff4; color: var(--zb-success); border: 1px solid #9ae6b4; }
+  .status-pill.approved { background: #ebf4ff; color: var(--zb-blue); border: 1px solid #bee3f8; }
+  .status-pill.rejected { background: #fff5f5; color: var(--zb-danger); border: 1px solid #feb2b2; }
+  .status-pill.queued { background: #faf5ff; color: var(--zb-purple); border: 1px solid #d6bcfa; }
+  .status-pill.analyzed { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+
+  /* UPLOAD QUEUE */
+  .upload-queue {
+    background: white;
+    border: 1px solid var(--zb-border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .queue-header {
+    padding: 12px 16px;
+    background: var(--zb-primary);
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .queue-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--zb-border);
+    font-size: 12px;
+  }
+  .queue-item:last-child { border-bottom: none; }
+  .queue-item-title { flex: 1; font-weight: 500; }
+  .queue-item-status { font-size: 11px; }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--zb-primary);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 1000;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { background: var(--zb-success); }
+  .toast.upload { background: var(--zb-purple); }
+
+  /* EMPTY STATE */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 300px;
+    color: var(--zb-muted);
+    text-align: center;
+    gap: 12px;
+  }
+  .empty-state-icon { font-size: 48px; }
+  .empty-state h3 { font-size: 16px; font-weight: 600; color: var(--zb-text); }
+  .empty-state p { font-size: 13px; max-width: 280px; line-height: 1.6; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--zb-border); border-radius: 99px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">Zukunftsbund</div>
+  <div class="header-divider"></div>
+  <div class="header-title">Content Autopilot — Post Review</div>
+  <div class="voice-chip">
+    <div class="voice-dot"></div>
+    Eric Spielhaus · Handwerk
+  </div>
+  <div class="header-badge" id="queueBadge">0 in Warteschlange</div>
+</div>
+
+<div class="main">
+  <!-- LEFT SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">Bereit zur Prüfung</div>
+      <div class="sidebar-count">5 Items</div>
+      <div class="sidebar-sub">3 transkribiert · 2 analysiert</div>
+    </div>
+    <div class="filter-row">
+      <button class="filter-btn active" onclick="setFilter(this, 'all')">Alle</button>
+      <button class="filter-btn" onclick="setFilter(this, 'ready')">Bereit</button>
+      <button class="filter-btn" onclick="setFilter(this, 'approved')">Freigegeben</button>
+      <button class="filter-btn" onclick="setFilter(this, 'queued')">Warteschlange</button>
+    </div>
+    <div class="item-list" id="itemList"></div>
+  </div>
+
+  <!-- RIGHT DETAIL -->
+  <div class="detail">
+    <div class="tab-bar">
+      <div class="tab active" onclick="switchTab(this, 'transcript')">📄 Inhalt</div>
+      <div class="tab" onclick="switchTab(this, 'questions')">💬 Fragen <span class="tab-badge" id="qBadge">4</span></div>
+      <div class="tab" onclick="switchTab(this, 'post')">✍️ Post-Entwurf</div>
+      <div class="tab" onclick="switchTab(this, 'queue')">📤 Warteschlange</div>
+    </div>
+
+    <div class="tab-content">
+      <!-- TRANSCRIPT TAB -->
+      <div id="tab-transcript" class="panel">
+        <div id="transcriptContent"></div>
+      </div>
+
+      <!-- QUESTIONS TAB -->
+      <div id="tab-questions" class="panel" style="display:none">
+        <div id="questionsContent"></div>
+      </div>
+
+      <!-- POST TAB -->
+      <div id="tab-post" class="panel" style="display:none">
+        <div id="postContent"></div>
+      </div>
+
+      <!-- QUEUE TAB -->
+      <div id="tab-queue" class="panel" style="display:none">
+        <div id="queueContent"></div>
+      </div>
+    </div>
+
+    <div class="action-bar" id="actionBar">
+      <div class="empty-state" style="height:auto; flex-direction:row; gap:8px; color:var(--zb-muted); font-size:13px;">
+        ← Item auswählen
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────
+
+const VOICE_PROFILE = {
+  name: "Eric Spielhaus",
+  directness: 9.0,
+  expertise: 7.5,
+  warmth: 7.0,
+  pragmatism: 8.5,
+  confidence: 7.0,
+  industry: "Handwerk / Sanierung",
+  forbidden: ["Game-Changer", "in der heutigen Zeit", "revolutionär", "disruptiv"]
+};
+
+const ITEMS = [
+  {
+    id: "item-001",
+    title: "Andrej Karpathy: Software 2.0 — Wie KI das Programmieren verändert",
+    source: "Andrej Karpathy",
+    sourceType: "yt",
+    sourceIcon: "▶",
+    publishedAgo: "vor 2 Tagen",
+    tags: ["KI", "Software", "Automatisierung"],
+    status: "ready",
+    transcriptExcerpt: `Was ich in den letzten Jahren beobachte, ist fundamental: Wir befinden uns im Übergang von Software 1.0 zu Software 2.0. Das alte Paradigma — ein Entwickler schreibt explizite Regeln, Schritt für Schritt — wird abgelöst durch Systeme, die aus Beispielen lernen.
+
+Stellen Sie sich vor: <span class="highlight">Ein Handwerker schreibt heute noch sein Angebot von Hand</span>. In drei Jahren werden KI-Systeme das automatisch erledigen — basierend auf Fotos vom Objekt, früheren Aufträgen, aktuellen Materialpreisen. Die Frage ist nicht ob das kommt. Die Frage ist, wer davon profitiert und wer davon überrascht wird.
+
+Das Spannende ist, dass kleine Betriebe dabei einen Vorteil haben könnten. Sie sind agiler. Sie können diese Tools früher adaptieren als große Konzerne mit starren Strukturen.`,
+    keyInsights: [
+      { icon: "🔄", title: "Paradigmenwechsel", text: "Von expliziten Regeln zu lernenden Systemen" },
+      { icon: "⚡", title: "Tempo", text: "Kleine Betriebe können schneller adaptieren als Konzerne" },
+      { icon: "🎯", title: "Relevanz", text: "KI-Tools werden Angebotsstellung & Planung automatisieren" },
+      { icon: "⚠️", title: "Risiko", text: "Wer wartet, wird überrascht. Früh-Adaptoren gewinnen." }
+    ],
+    questions: [
+      {
+        id: "q1", angle: "story",
+        text: "Karpathy sagt: In 3 Jahren erstellt KI automatisch Angebote — aus Fotos, Auftragshistorie, Materialpreisen. Haben Sie schon mal 3 Stunden an einem Angebot gesessen das dann nichts wurde? Wie würde das Ihr Arbeitsleben verändern?",
+        why: "Konkrete Schmerz-Situation → persönliche Geschichte → hohe LinkedIn-Resonanz bei Handwerkern",
+        answer: "Oh ja, 4 Stunden für ein Badezimmer-Angebot, der Kunde hat sich nie zurückgemeldet. Wenn KI das in 10 Minuten macht und ich nur noch drüber schauen muss — das wäre Gold. Wobei: Ich muss das Objekt trotzdem sehen. Die KI kennt meinen Erfahrungsblick nicht."
+      },
+      {
+        id: "q2", angle: "opinion",
+        text: "Karpathy sagt kleine Betriebe haben einen Vorteil gegenüber großen Konzernen bei der KI-Adoption — weil sie agiler sind. Stimmen Sie zu? Oder sehen Sie das anders?",
+        why: "Meinungs-Post mit Gegenthese erzeugt Kommentare — perfekt für LinkedIn-Algorithmus",
+        answer: ""
+      },
+      {
+        id: "q3", angle: "how_to",
+        text: "Welches KI-Tool haben Sie persönlich schon mal ausprobiert, auch wenn's nur ChatGPT für eine E-Mail war? Was war der konkrete Nutzen — oder das Ergebnis das Sie dazu gebracht hat, es wieder zu lassen?",
+        why: "How-to Posts mit persönlichen Erfahrungen performen besonders gut bei Handwerk-Zielgruppe",
+        answer: ""
+      },
+      {
+        id: "q4", angle: "controversy",
+        text: "Karpathy sagt: 'Wer wartet wird überrascht.' Aber es gibt auch das Argument: 'Erst wenn's ausgereift ist.' Als Handwerker der für Qualität steht — was ist Ihre Haltung zu Early Adoption?",
+        why: "Kontroverse Frage mit zwei validen Perspektiven — ideal für Thought Leadership",
+        answer: ""
+      }
+    ],
+    posts: {
+      story: `4 Stunden.
+
+Für ein einziges Angebot. Badezimmer-Sanierung, Mittelklasse, nichts Besonderes.
+
+Ich hab alles gemacht wie immer: Objekt besichtigt, gemessen, Materialpreise gecheckt, kalkuliert, formatiert, Deckblatt, PDF. Geschickt. Nie eine Antwort bekommen.
+
+Andrej Karpathy — einer der besten KI-Forscher der Welt — sagt in seinem aktuellen Video, dass diese 4 Stunden in 3 Jahren auf 10 Minuten schrumpfen werden. KI erstellt das Angebot aus Fotos, Auftragshistorie, aktuellen Preisen. Ich schaue drüber, gebe frei, fertig.
+
+Mein erster Gedanke: Zu gut um wahr zu sein.
+
+Mein zweiter: Wir haben als kleiner Betrieb tatsächlich einen Vorteil. Kein Konzern-Beschaffungsprozess. Kein IT-Ticket. Ich lade das Tool herunter, probiere es aus, und wenn's taugt — nutze ich es ab morgen.
+
+Diese Flexibilität ist unser stärkster Trumpf im KI-Zeitalter.
+
+Was macht ihr schon mit KI im Betrieb? Bin wirklich gespannt.
+
+#Handwerk #Digitalisierung #KIimHandwerk`,
+      opinion: `Kleine Betriebe gewinnen das KI-Rennen. Und zwar gegen Konzerne.
+
+Das klingt paradox. Aber Andrej Karpathy — ehemals Tesla, jetzt OpenAI — sagt genau das in seinem neuen Video.
+
+Meine Erfahrung gibt ihm recht.
+
+Wenn ich ein neues Tool ausprobieren will: Ich lade es herunter. Morgen nutze ich es. Keine Freigaben, kein IT-Sicherheits-Check, kein Beschaffungsausschuss.
+
+Bei einem DAX-Konzern? 6 Monate bis zur Pilotphase.
+
+Für uns Handwerker bedeutet das: Wer jetzt anfängt, mit KI-Tools zu experimentieren — auch wenn sie noch nicht perfekt sind — der wird in 2 Jahren Wettbewerbe gewinnen, die die großen Firmen noch nicht mal als Wettbewerb sehen.
+
+Die Frage die ich mir täglich stelle: Was mache ich heute noch von Hand, das eine KI in 6 Monaten besser kann?
+
+Angebotsstellung ist die Antwort die mich gerade beschäftigt.
+
+#Handwerk #KI #Unternehmertum`
+    }
+  }
+];
+
+// ── STATE ─────────────────────────────────────────────────────────────
+
+let currentItem = ITEMS[0];
+let currentTab = 'transcript';
+let currentFormat = 'story';
+let itemStatuses = {};
+let uploadQueue = [];
+
+ITEMS.forEach(item => { itemStatuses[item.id] = item.status; });
+
+// ── RENDER ────────────────────────────────────────────────────────────
+
+function renderItemList() {
+  const list = document.getElementById('itemList');
+  list.innerHTML = ITEMS.map(item => {
+    const s = itemStatuses[item.id];
+    const statusClass = s === 'approved' ? 'status-reviewed' : s === 'queued' ? 'status-reviewed' : 'status-ready';
+    const isActive = currentItem && currentItem.id === item.id;
+    return `<div class="item-card ${isActive ? 'active' : ''}" onclick="selectItem('${item.id}')">
+      <div class="item-status ${statusClass}"></div>
+      <div class="item-meta">
+        <div class="source-icon ${item.sourceType}">${item.sourceIcon}</div>
+        <span class="source-name">${item.source}</span>
+        <span class="item-age">${item.publishedAgo}</span>
+      </div>
+      <div class="item-title">${item.title}</div>
+      <div class="item-tags">
+        ${item.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+        ${s === 'approved' ? '<span class="tag" style="background:#ebf4ff;color:#2b6cb0;border-color:#bee3f8">✓ Freigegeben</span>' : ''}
+        ${s === 'queued' ? '<span class="tag" style="background:#faf5ff;color:#6b46c1;border-color:#d6bcfa">📤 In Queue</span>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderTranscript() {
+  if (!currentItem) return;
+  document.getElementById('transcriptContent').innerHTML = `
+    <div class="content-header">
+      <div class="source-badge-large">${currentItem.sourceIcon}</div>
+      <div class="content-info">
+        <h2>${currentItem.title}</h2>
+        <div class="content-meta-row">
+          <span class="meta-chip">📡 ${currentItem.source}</span>
+          <span class="meta-chip">🕐 ${currentItem.publishedAgo}</span>
+          <span class="meta-chip" style="background:#f0fff4;border-color:#9ae6b4;color:#276749">✓ Transkribiert</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">Transkript-Auszug</div>
+    <div class="transcript-box">
+      <p>${currentItem.transcriptExcerpt}</p>
+      <div class="transcript-fade"></div>
+    </div>
+
+    <div class="section-label">Key Insights (KI-Analyse)</div>
+    <div class="key-insights">
+      ${currentItem.keyInsights.map(i => `
+        <div class="insight-card">
+          <div class="insight-icon">${i.icon}</div>
+          <strong>${i.title}</strong>
+          ${i.text}
+        </div>`).join('')}
+    </div>
+  `;
+}
+
+function renderQuestions() {
+  if (!currentItem) return;
+  document.getElementById('qBadge').textContent = currentItem.questions.length;
+  document.getElementById('questionsContent').innerHTML = `
+    <p style="font-size:13px;color:var(--zb-muted);margin-bottom:20px;line-height:1.6">
+      Diese Fragen wurden vom System aus dem Transkript + Erics Profil generiert.
+      Sie referenzieren konkrete Aussagen aus dem Inhalt. Beantworte sie um den Post zu personalisieren.
+    </p>
+    ${currentItem.questions.map(q => `
+      <div class="question-block">
+        <div class="question-header">
+          <div class="q-number">${q.id.replace('q','')}</div>
+          <div class="q-text">${q.text}</div>
+        </div>
+        <div class="q-why">💡 ${q.why}</div>
+        <span class="q-angle angle-${q.angle}">${q.angle.replace('_', ' ')}</span>
+        <textarea
+          id="answer-${q.id}"
+          class="answer-field ${q.answer ? 'filled' : ''}"
+          placeholder="Deine Antwort hier eingeben..."
+          oninput="saveAnswer('${currentItem.id}','${q.id}',this.value)"
+        >${q.answer}</textarea>
+      </div>
+    `).join('')}
+    <div class="answer-actions">
+      <button class="btn btn-primary" onclick="switchTab(document.querySelector('[onclick*=post]'), 'post')">
+        ✍️ Post generieren →
+      </button>
+    </div>
+  `;
+}
+
+function renderPost() {
+  if (!currentItem) return;
+  const post = currentItem.posts[currentFormat];
+  const wordCount = post ? post.trim().split(/\s+/).length : 0;
+  const charCount = post ? post.length : 0;
+
+  document.getElementById('postContent').innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <div class="section-label" style="margin:0">Format wählen:</div>
+      <div class="format-switcher" style="margin:0">
+        <button class="format-btn ${currentFormat==='story'?'active':''}" onclick="setFormat('story')">📖 Story</button>
+        <button class="format-btn ${currentFormat==='opinion'?'active':''}" onclick="setFormat('opinion')">💡 Meinung</button>
+        <button class="format-btn" onclick="setFormat('how_to')" style="opacity:0.5;cursor:not-allowed" disabled>📋 How-To (kommt)</button>
+      </div>
+    </div>
+
+    <div class="post-container">
+      <div class="post-toolbar">
+        <span class="post-format-pill format-${currentFormat}">${currentFormat === 'story' ? '📖 Story' : '💡 Meinung'}</span>
+        <span style="font-size:11px;color:var(--zb-muted);margin-left:8px">Klick zum Bearbeiten</span>
+        <div class="post-voice-indicator">
+          <span>Direktheit</span>
+          <div class="voice-bar">
+            ${[1,2,3,4,5,6,7,8,9].map(i => `<div class="voice-bar-dot ${i <= 9 ? 'active' : ''}"></div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="post-body" contenteditable="true" id="postBody">${post || '<i style="color:var(--zb-muted)">Für dieses Format noch kein Post-Entwurf — beantworte erst die Fragen</i>'}</div>
+      <div class="post-stats">
+        <span class="stat-item">📝 ${wordCount} Wörter</span>
+        <span class="stat-item">🔤 ${charCount} Zeichen</span>
+        <span class="stat-item ${charCount > 3000 ? 'color:var(--zb-danger)' : ''}">
+          ${charCount > 3000 ? '⚠️ Zu lang (LinkedIn max 3000)' : '✓ LinkedIn-konform'}
+        </span>
+        <span class="stat-item" style="margin-left:auto">Voice: Eric Spielhaus · Direktheit 9.0</span>
+      </div>
+    </div>
+
+    <div style="padding:12px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;margin-bottom:16px;font-size:12px;line-height:1.6;color:#92400e">
+      <strong>⚠️ Verbotene Phrasen geprüft:</strong> Keine gefunden.
+      Nicht erlaubt: ${VOICE_PROFILE.forbidden.map(f => `"${f}"`).join(', ')}
+    </div>
+  `;
+}
+
+function renderQueue() {
+  const content = document.getElementById('queueContent');
+  if (uploadQueue.length === 0) {
+    content.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">📤</div>
+        <h3>Warteschlange ist leer</h3>
+        <p>Freigegeben Posts erscheinen hier und können ins System hochgeladen werden.</p>
+      </div>`;
+    return;
+  }
+  content.innerHTML = `
+    <div class="upload-queue">
+      <div class="queue-header">
+        📤 Upload-Warteschlange · ${uploadQueue.length} Post${uploadQueue.length > 1 ? 's' : ''} bereit
+      </div>
+      ${uploadQueue.map(q => `
+        <div class="queue-item">
+          <span style="font-size:18px">${q.icon}</span>
+          <div class="queue-item-title">${q.title}</div>
+          <span class="status-pill queued queue-item-status">📤 Bereit</span>
+          <button class="btn btn-success" onclick="uploadPost('${q.id}')" style="padding:6px 12px;font-size:11px">
+            ↑ Hochladen
+          </button>
+        </div>`).join('')}
+    </div>
+    <button class="btn btn-accent" onclick="uploadAll()" style="width:100%">
+      ↑ Alle ${uploadQueue.length} Posts hochladen
+    </button>
+  `;
+}
+
+function renderActionBar() {
+  const status = itemStatuses[currentItem?.id];
+  document.getElementById('actionBar').innerHTML = `
+    <button class="btn btn-ghost" onclick="switchTab(document.querySelector('[onclick*=transcript]'), 'transcript')">
+      ← Zurück
+    </button>
+    <button class="btn btn-ghost" onclick="markAnalyzed()">
+      🔍 Als analysiert markieren
+    </button>
+    <button class="btn btn-danger" onclick="rejectPost()">
+      ✕ Ablehnen
+    </button>
+    <button class="btn btn-primary" onclick="switchTab(document.querySelector('[onclick*=questions]'), 'questions')">
+      💬 Fragen beantworten
+    </button>
+    <div class="status-indicator">
+      <div class="status-pill ${status === 'approved' ? 'approved' : status === 'queued' ? 'queued' : status === 'analyzed' ? 'analyzed' : 'ready'}">
+        <span style="width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block"></span>
+        ${status === 'approved' ? '✓ Freigegeben' : status === 'queued' ? '📤 In Warteschlange' : status === 'analyzed' ? '🔍 Analysiert' : '● Bereit'}
+      </div>
+      <button class="btn btn-success" onclick="approveAndQueue()">
+        ✓ Freigeben + In Warteschlange
+      </button>
+    </div>
+  `;
+}
+
+// ── ACTIONS ───────────────────────────────────────────────────────────
+
+function selectItem(id) {
+  currentItem = ITEMS.find(i => i.id === id);
+  renderItemList();
+  renderCurrentTab();
+  renderActionBar();
+}
+
+function switchTab(el, tabName) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  else {
+    document.querySelectorAll('.tab').forEach(t => {
+      if (t.getAttribute('onclick') && t.getAttribute('onclick').includes(tabName)) t.classList.add('active');
+    });
+  }
+  currentTab = tabName;
+  renderCurrentTab();
+}
+
+function renderCurrentTab() {
+  ['transcript','questions','post','queue'].forEach(t => {
+    document.getElementById(`tab-${t}`).style.display = t === currentTab ? 'block' : 'none';
+  });
+  if (currentTab === 'transcript') renderTranscript();
+  if (currentTab === 'questions') renderQuestions();
+  if (currentTab === 'post') renderPost();
+  if (currentTab === 'queue') renderQueue();
+}
+
+function setFormat(fmt) {
+  currentFormat = fmt;
+  renderPost();
+}
+
+function setFilter(btn, filter) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function saveAnswer(itemId, qId, value) {
+  const item = ITEMS.find(i => i.id === itemId);
+  if (!item) return;
+  const q = item.questions.find(q => q.id === qId);
+  if (q) {
+    q.answer = value;
+    const el = document.getElementById(`answer-${qId}`);
+    if (el) el.classList.toggle('filled', value.length > 0);
+  }
+}
+
+function markAnalyzed() {
+  if (!currentItem) return;
+  itemStatuses[currentItem.id] = 'analyzed';
+  renderItemList();
+  renderActionBar();
+  showToast('🔍 Als analysiert markiert', 'success');
+}
+
+function approveAndQueue() {
+  if (!currentItem) return;
+  itemStatuses[currentItem.id] = 'queued';
+  if (!uploadQueue.find(q => q.id === currentItem.id)) {
+    uploadQueue.push({ id: currentItem.id, title: currentItem.title, icon: currentItem.sourceIcon });
+  }
+  document.getElementById('queueBadge').textContent = `${uploadQueue.length} in Warteschlange`;
+  renderItemList();
+  renderActionBar();
+  showToast('✓ Freigegeben & in Warteschlange', 'success');
+}
+
+function rejectPost() {
+  if (!currentItem) return;
+  itemStatuses[currentItem.id] = 'ready';
+  uploadQueue = uploadQueue.filter(q => q.id !== currentItem.id);
+  document.getElementById('queueBadge').textContent = `${uploadQueue.length} in Warteschlange`;
+  renderItemList();
+  renderActionBar();
+  showToast('✕ Post abgelehnt');
+}
+
+function uploadPost(id) {
+  uploadQueue = uploadQueue.filter(q => q.id !== id);
+  itemStatuses[id] = 'approved';
+  document.getElementById('queueBadge').textContent = `${uploadQueue.length} in Warteschlange`;
+  renderQueue();
+  renderItemList();
+  showToast('↑ Post hochgeladen!', 'upload');
+}
+
+function uploadAll() {
+  const count = uploadQueue.length;
+  uploadQueue.forEach(q => { itemStatuses[q.id] = 'approved'; });
+  uploadQueue = [];
+  document.getElementById('queueBadge').textContent = '0 in Warteschlange';
+  renderQueue();
+  renderItemList();
+  showToast(`↑ ${count} Posts hochgeladen!`, 'upload');
+}
+
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  setTimeout(() => { t.className = `toast ${type}`; }, 2500);
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────
+
+renderItemList();
+renderTranscript();
+renderActionBar();
+</script>
+</body>
+</html>
