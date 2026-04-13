@@ -231,3 +231,29 @@ Ergaenze den Abschnitt `## Gelernte Patterns` am Ende dieser Datei.
 
 <!-- Wird automatisch durch den Issue-Agent ergaenzt -->
 <!-- Format: ### Thema (Issue #NR, Datum) / Erkenntnis / Warum wichtig / Quelle -->
+
+### Static Hashtag Libraries (Issue #37, 2026-04-13)
+Wenn LLM-Budget erschoepft ist, sind statisch kuratierte Datensaetze besser als nichts.
+SHK_HASHTAGS Konstante in Posts.jsx: 4 Kategorien, 40+ Hashtags, kein LLM-Call noetig.
+Warum wichtig: Budget-Ausfaelle duerfen UI-Features nicht komplett deaktivieren.
+
+### Carousel Templates: DB-Seeding via Container asyncio (Issue #37, 2026-04-13)
+Carousel-Templates werden via `async_session_factory()` direkt in DB geseeded (nicht via Alembic-Migration).
+Grund: Template-Daten sind konfigurierbar, kein Schema-Change.
+Vorgehen: `docker compose exec -T backend-v2 python3 -c "...asyncio.run(seed())"`
+
+### nginx IP-Cache nach Backend-Rebuild (Issue #37, 2026-04-13)
+Nach Docker-Build des Backends aendert sich die Container-IP im Docker-Netz.
+nginx cached die alte Backend-IP → 502 Errors bis nginx neu gestartet wird.
+Fix: Nach Backend-Rebuild immer AUCH nginx neu starten (restart, nicht recreate).
+Reihenfolge: build backend → up backend → restart nginx.
+
+### Pydantic field_validator fuer URL-Validation (Issue #37, 2026-04-13)
+`@field_validator("url")` in Pydantic v2 statt `@validator`.
+Gibt HTTP 422 zurueck wenn URL nicht mit http:// oder https:// beginnt.
+Wichtig: `@classmethod` ist Pflicht bei `field_validator` in Pydantic v2.
+
+### Carousel UI: Templates per API laden, nicht hardcoden (Issue #37, 2026-04-13)
+CarouselTemplates werden beim ersten Carousel-Click geladen und gecacht (useState).
+Im Modal: Template-Switcher zeigt alle Templates, bei Auswahl werden slides_config.slides injiziert.
+_originalSlides wird gespeichert damit "Aus Post-Text" wiederhergestellt werden kann.

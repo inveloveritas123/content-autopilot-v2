@@ -127,10 +127,17 @@ Nach Abschluss: offene Issues pruefen und weiterarbeiten bis keine mehr offen si
 
 WICHTIG: Lies zuerst /opt/content-autopilot-v2/CLAUDE.md fuer alle Grenzen und Konventionen!"
 
+# Start-Notification
+python3 "$TELEGRAM_SCRIPT" "🤖 *Content Autopilot Agent gestartet*
+
+Issue #${ISSUE_NR}: ${ISSUE_TITLE}
+
+Ich arbeite jetzt daran — Research, Implementierung, Tests.
+Melde mich wenn fertig." 2>/dev/null || true
+
 # Claude im Hintergrund starten (non-interactive, mit Permission-Bypass)
 cd /opt/content-autopilot-v2
 claude --dangerously-skip-permissions --print \
-    --max-budget-usd 2.00 \
     "$PROMPT" \
     >> "$LOGFILE" 2>&1
 
@@ -139,6 +146,11 @@ log "Claude Agent beendet mit Exit-Code: ${EXIT_CODE}"
 
 if [ $EXIT_CODE -eq 0 ]; then
     log "Issue #${ISSUE_NR} erfolgreich abgearbeitet"
+    python3 "$TELEGRAM_SCRIPT" "✅ *Issue #${ISSUE_NR} erledigt*
+
+${ISSUE_TITLE}
+
+Deployed und getestet. Log: ${LOGFILE}" 2>/dev/null || true
 else
     log "FEHLER beim Abarbeiten von Issue #${ISSUE_NR} — Log: ${LOGFILE}"
     python3 "$TELEGRAM_SCRIPT" "⚠️ Issue Agent Fehler

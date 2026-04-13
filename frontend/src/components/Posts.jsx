@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, Component } from 'react'
 import { FileText, Check, Copy, Edit3, Eye, ThumbsUp, ThumbsDown, BarChart3, Send, X, Linkedin, MessageSquare, Repeat2, ArrowUpRight, CheckSquare, Square, AlertTriangle, Download, Zap, Search, Sparkles, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
-import { getContentList, getContentPiece, approveContent, bulkApproveContent, bulkRejectContent, bulkPublishContent, submitEditDiff, submitPerformance, suggestHashtags, repurposeContent, getHookLibrary, getBestPostingTimes, generateCarousel, previewCarousel, downloadContentExport, autoSchedulePosts, updateContentPillar, updateContent, quickCreatePost, createContentSeries, postFromUrl, rewriteContent, generateVariants, repurposeFormats, predictPerformance, rateItemQuality, getSources, saveDirectPost, markPublished, updateContentTags } from '../api'
+import { getContentList, getContentPiece, approveContent, bulkApproveContent, bulkRejectContent, bulkPublishContent, submitEditDiff, submitPerformance, suggestHashtags, repurposeContent, getHookLibrary, getBestPostingTimes, generateCarousel, previewCarousel, downloadContentExport, autoSchedulePosts, updateContentPillar, updateContent, quickCreatePost, createContentSeries, postFromUrl, rewriteContent, generateVariants, repurposeFormats, predictPerformance, rateItemQuality, getSources, saveDirectPost, markPublished, updateContentTags, getCarouselTemplates } from '../api'
 
 // ── Error Boundary for PostDetail (prevents white screen on render crash) ───
 class PostDetailErrorBoundary extends Component {
@@ -31,6 +31,29 @@ const PILLAR_CONFIG = {
   personal_story:    { label: 'Persönliche Story', emoji: '📖', color: 'bg-amber-100 text-amber-800 border-amber-200' },
   industry_news:     { label: 'Branchennews',       emoji: '📰', color: 'bg-sky-100 text-sky-800 border-sky-200' },
   product_service:   { label: 'Produkt / Service',  emoji: '🎯', color: 'bg-pink-100 text-pink-800 border-pink-200' },
+}
+
+// ── SHK/Handwerk Branchen-Hashtags (statisch, kein LLM nötig) ──────────────
+const SHK_HASHTAGS = {
+  'Fachgebiet': [
+    '#Handwerk', '#SHK', '#Heizung', '#Sanitär', '#Klimatechnik',
+    '#Wärmepumpe', '#Gebäudetechnik', '#Haustechnik', '#Installateur',
+    '#Klempner', '#Heizungsbau', '#Anlagenmechaniker',
+  ],
+  'Energiewende': [
+    '#Energiewende', '#Wärmewende', '#Photovoltaik', '#Solarenergie',
+    '#Nachhaltigkeit', '#Klimaschutz', '#Gebäudesanierung',
+    '#Effizienzhaus', '#NachhaltigBauen', '#GreenBuilding',
+  ],
+  'Unternehmer': [
+    '#Mittelstand', '#Meisterbetrieb', '#Handwerksmeister', '#Fachbetrieb',
+    '#Ausbildung', '#HandwerkHatZukunft', '#Zukunftsbund',
+    '#FamilienUnternehmen', '#HandwerkDigital',
+  ],
+  'Reichweite': [
+    '#LinkedIn', '#Handwerker', '#Deutschland', '#B2B',
+    '#Innovation', '#Unternehmertum', '#Karriere',
+  ],
 }
 
 // ── LinkedIn Post Templates ─────────────────────────────────────────────────
@@ -1054,8 +1077,12 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
   const [showPreview, setShowPreview] = useState(false)
   const [hashtags, setHashtags] = useState(null)
   const [hashtagLoading, setHashtagLoading] = useState(false)
+  const [showSHKHashtags, setShowSHKHashtags] = useState(false)
+  const [shkCopied, setSHKCopied] = useState(null)
   const [carouselLoading, setCarouselLoading] = useState(false)
   const [carouselPreview, setCarouselPreview] = useState(null)
+  const [carouselTemplates, setCarouselTemplates] = useState(null)
+  const [selectedCarouselTemplate, setSelectedCarouselTemplate] = useState(null)
   const [repurposeLoading, setRepurposeLoading] = useState(false)
   const [repurposeResult, setRepurposeResult] = useState(null)
   const [pillarSaving, setPillarSaving] = useState(false)
@@ -1311,7 +1338,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
             ✅ Checklist
           </button>
           <button
-            onClick={async () => { setCarouselLoading(true); try { const p = await previewCarousel(postId, post.content_metadata?.title || 'LinkedIn Carousel'); setCarouselPreview(p) } catch(e) { setMessage({type:'error', text: 'Carousel: ' + e.message}) } setCarouselLoading(false); }}
+            onClick={async () => { setCarouselLoading(true); try { const [p, tmpl] = await Promise.all([previewCarousel(postId, post.content_metadata?.title || 'LinkedIn Carousel'), carouselTemplates ? Promise.resolve(carouselTemplates) : getCarouselTemplates()]); setCarouselPreview(p); if (!carouselTemplates) setCarouselTemplates(tmpl) } catch(e) { setMessage({type:'error', text: 'Carousel: ' + e.message}) } setCarouselLoading(false); }}
             disabled={carouselLoading}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 disabled:opacity-50">
             {carouselLoading ? '⏳' : '📄'} Karussell
@@ -1634,6 +1661,49 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
         </div>
       )}
 
+      {/* SHK Branchen-Hashtags Quick-Picker */}
+      {!editMode && !showPreview && !showTemplates && !showRewriter && !showVariants && !showMultiFormat && !showPredictor && !showChecklist && (
+        <div className="px-5 pb-4">
+          {showSHKHashtags ? (
+            <div className="p-3 bg-teal-50 rounded-lg border border-teal-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-teal-800"># SHK-Branchenhashtags</span>
+                <button onClick={() => setShowSHKHashtags(false)} className="text-xs text-teal-400 hover:text-teal-600">×</button>
+              </div>
+              {Object.entries(SHK_HASHTAGS).map(([cat, tags]) => (
+                <div key={cat} className="mb-2 last:mb-0">
+                  <span className="text-[10px] font-semibold text-teal-600 uppercase tracking-wide">{cat}</span>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {tags.map(tag => (
+                      <button
+                        key={tag}
+                        onClick={() => {
+                          navigator.clipboard.writeText(tag)
+                          setSHKCopied(tag)
+                          setTimeout(() => setSHKCopied(null), 1500)
+                        }}
+                        title="Kopieren"
+                        className={`px-2 py-0.5 rounded-full text-xs border transition-all ${shkCopied === tag ? 'bg-teal-600 text-white border-teal-600' : 'bg-white border-teal-200 text-teal-700 hover:bg-teal-600 hover:text-white hover:border-teal-600'}`}
+                      >
+                        {shkCopied === tag ? '✓ kopiert' : tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <p className="text-[10px] text-teal-400 mt-2">Klicken → in Zwischenablage · dann in Post einfügen</p>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowSHKHashtags(true)}
+              className="flex items-center gap-1.5 text-xs text-teal-600 hover:text-teal-800 font-medium"
+            >
+              # SHK-Branchenhashtags (ohne KI)
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Content Pillar Selector */}
       {!editMode && !showPreview && !showTemplates && !showRewriter && !showVariants && !showMultiFormat && !showPredictor && !showChecklist && (
         <div className="px-5 pb-4">
@@ -1735,15 +1805,45 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
 
       {/* Carousel Slide Preview */}
       {carouselPreview && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setCarouselPreview(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => { setCarouselPreview(null); setSelectedCarouselTemplate(null) }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="p-5 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
               <div>
                 <h3 className="font-semibold text-ink">📄 Karussell-Vorschau</h3>
                 <p className="text-xs text-ink-muted mt-0.5">{carouselPreview.slide_count} Slides · {carouselPreview.title}</p>
               </div>
-              <button onClick={() => setCarouselPreview(null)} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 text-xl">×</button>
+              <button onClick={() => { setCarouselPreview(null); setSelectedCarouselTemplate(null) }} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 text-xl">×</button>
             </div>
+
+            {/* Template Selector */}
+            {carouselTemplates && carouselTemplates.length > 0 && (
+              <div className="px-5 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
+                <p className="text-xs font-semibold text-ink-muted mb-2 uppercase tracking-wide">Vorlage wählen</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => { setSelectedCarouselTemplate(null); setCarouselPreview(prev => ({ ...prev, slides: prev._originalSlides || prev.slides, slide_count: (prev._originalSlides || prev.slides).length })) }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${!selectedCarouselTemplate ? 'bg-purple-700 text-white border-purple-700' : 'bg-white text-ink-muted border-gray-200 hover:border-purple-300'}`}
+                  >Aus Post-Text</button>
+                  {carouselTemplates.map(t => (
+                    <button key={t.id}
+                      onClick={() => {
+                        setSelectedCarouselTemplate(t.id)
+                        const tSlides = t.slides_config?.slides || []
+                        setCarouselPreview(prev => ({
+                          ...prev,
+                          _originalSlides: prev._originalSlides || prev.slides,
+                          slides: tSlides,
+                          slide_count: tSlides.length,
+                        }))
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${selectedCarouselTemplate === t.id ? 'bg-purple-700 text-white border-purple-700' : 'bg-white text-ink-muted border-gray-200 hover:border-purple-300'}`}
+                    >{t.name}</button>
+                  ))}
+                </div>
+                {selectedCarouselTemplate && <p className="text-[10px] text-ink-muted mt-1.5 italic">Vorlage zeigt Platzhalter — im PDF durch echten Content ersetzen</p>}
+              </div>
+            )}
+
             <div className="overflow-x-auto p-5 flex gap-3 flex-shrink-0">
               {carouselPreview.slides.map((slide, i) => (
                 <div key={i} className={`flex-shrink-0 w-48 h-48 rounded-xl border-2 flex flex-col items-center justify-center p-3 text-center ${
@@ -1761,9 +1861,19 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
               ))}
             </div>
             <div className="p-5 pt-0 flex justify-end gap-2 flex-shrink-0">
-              <button onClick={() => setCarouselPreview(null)} className="px-4 py-2 text-sm text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50">Abbrechen</button>
+              <button onClick={() => { setCarouselPreview(null); setSelectedCarouselTemplate(null) }} className="px-4 py-2 text-sm text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50">Abbrechen</button>
               <button
-                onClick={async () => { try { await generateCarousel(postId, carouselPreview.title) } catch(e) { setMessage({type:'error', text: e.message}) } setCarouselPreview(null) }}
+                onClick={async () => {
+                  try {
+                    if (selectedCarouselTemplate) {
+                      await generateCarousel(null, carouselPreview.title, carouselPreview.slides)
+                    } else {
+                      await generateCarousel(postId, carouselPreview.title)
+                    }
+                  } catch(e) { setMessage({type:'error', text: e.message}) }
+                  setCarouselPreview(null)
+                  setSelectedCarouselTemplate(null)
+                }}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-700 rounded-lg hover:bg-purple-800">
                 📥 PDF herunterladen
               </button>

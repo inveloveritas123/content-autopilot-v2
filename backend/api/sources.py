@@ -4,7 +4,7 @@ import logging
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +34,14 @@ class SourceCreate(BaseModel):
     polling_interval_minutes: int = 15
     auto_process: bool = False
     keywords: Optional[str] = None
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v):
+        if v is not None and v.strip():
+            if not (v.startswith("http://") or v.startswith("https://")):
+                raise ValueError("URL muss mit http:// oder https:// beginnen")
+        return v
 
 
 class SourceUpdate(BaseModel):

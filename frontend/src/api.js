@@ -129,11 +129,14 @@ export const cancelScheduledPost = (id) => request(`/posts/scheduled/${id}`, { m
 // Carousels
 export const previewCarousel = (contentPieceId, title) => request('/carousels/preview', { method: 'POST', body: { content_piece_id: contentPieceId, title: title || 'LinkedIn Carousel' } })
 
-export async function generateCarousel(contentPieceId, title = 'LinkedIn Carousel') {
+export async function generateCarousel(contentPieceId, title = 'LinkedIn Carousel', customSlides = null) {
+  const body = customSlides
+    ? { slides: customSlides, title }
+    : { content_piece_id: contentPieceId, title }
   const resp = await fetch(`${API_BASE}/carousels/generate`, {
     method: 'POST',
     headers: { 'X-API-Key': getApiKey(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content_piece_id: contentPieceId, title }),
+    body: JSON.stringify(body),
   })
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ detail: resp.statusText }))

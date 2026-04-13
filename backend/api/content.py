@@ -1552,3 +1552,76 @@ async def predict_performance(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/content/top-templates")
+async def get_top_templates(
+    limit: int = 9,
+    angle: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    tenant: Tenant = Depends(get_tenant),
+):
+    """Top-scoring posts as inspiration templates — grouped by angle, no LLM needed."""
+    from sqlalchemy import desc, case
+
+    query = (
+        select(ContentPiece)
+        .where(
+            ContentPiece.tenant_id == tenant.id,
+            ContentPiece.content_text.isnot(None),
+            ContentPiece.channel == "linkedin",
+        )
+    )
+    if angle:
+        query = query.where(
+            ContentPiece.content_metadata["angle"].astext == angle
+        )
+    # Order: approved first, then by text length as quality proxy (500-1500 chars = good)
+    query = query.order_by(
+        case({"approved": 0, "published": 0}, value=ContentPiece.status, else_=1).asc(),
+        ContentPiece.created_at.desc(),
+    ).limit(limit * 3)  # oversample, then client-side score
+
+    result = await db.execute(query)
+    pieces = result.scalars().all()
+
+    templates = []
+    seen_angles = {}
+    for p in pieces:
+        meta = p.content_metadata or {}
+        p_angle = meta.get("angle", "")
+        text = p.content_text or ""
+        length = len(text)
+
+        # Quick quality score: length 500-1500 + has emoji + has question
+        score = 0
+        if 400 <= length <= 1600: score += 5
+        elif 250 <= length: score += 2
+        import re
+        if re.search(r"\?", text[-200:]): score += 2
+        if re.search(r"\p{Emoji}", text, re.UNICODE): score += 1
+        if text.count("\n\n") >= 2: score += 2
+
+        if len(templates) < limit:
+            templates.append({
+                "id": str(p.id),
+                "angle": p_angle,
+                "pillar": meta.get("pillar", ""),
+                "preview": text[:200],
+                "full_text": text,
+                "chars": length,
+                "score": score,
+                "status": p.status,
+                "source_name": p.source_name,
+            })
+
+    # Sort by score desc
+    templates.sort(key=lambda x: x["score"], reverse=True)
+
+    # Collect angle distribution
+    angle_counts = {}
+    for t in templates:
+        a = t["angle"] or "other"
+        angle_counts[a] = angle_counts.get(a, 0) + 1
+
+    return {"templates": templates[:limit], "angle_counts": angle_counts, "total": len(pieces)}
