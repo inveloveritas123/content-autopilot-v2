@@ -164,6 +164,68 @@ function PostingHeatmap({ data }) {
   )
 }
 
+// ─── Model Recommendations Panel ────────────────────────────────────────────
+const STEP_LABELS = { transcription: 'Transkription', analysis: 'Analyse', ideation: 'Ideation', post_generation: 'Post-Generierung', smart_questions: 'Smarte Fragen' }
+const KNOWN_COSTS = {
+  'gemini-2.0-flash': 0.075, 'gemini-2.5-flash': 0.15, 'gemini-2.5-flash-lite': 0.075,
+  'mistral-medium-latest': 0.40, 'mistral-small-latest': 0.10,
+  'gpt-4.1-mini': 0.40, 'claude-haiku-4-5': 0.80, 'claude-sonnet-4': 3.00,
+}
+
+function ModelRecommendationsPanel({ models }) {
+  // Group by step, find best model per step
+  const byStep = {}
+  models.forEach(row => {
+    if (!byStep[row.step]) byStep[row.step] = []
+    byStep[row.step].push(row)
+  })
+
+  const recommendations = Object.entries(byStep).map(([step, rows]) => {
+    const best = rows.reduce((a, b) => (a.avg_quality >= b.avg_quality ? a : b))
+    const shortModel = best.model ? best.model.split('/').pop() : '?'
+    const cost = KNOWN_COSTS[shortModel] ?? null
+    const conf = { high: '🟢', medium: '🟡', low: '🔴' }[best.confidence] || '🔴'
+    return { step, best, shortModel, cost, conf }
+  })
+
+  if (recommendations.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-xl border border-surface-border shadow-sm p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <TrendingUp className="w-4 h-4 text-emerald-600" />
+        <h2 className="text-base font-semibold text-ink">Modell-Empfehlungen</h2>
+        <span className="text-xs text-ink-muted ml-1">Basierend auf gesammelten Qualitätsdaten</span>
+      </div>
+      <div className="space-y-2 mb-4">
+        {recommendations.map(({ step, best, shortModel, cost, conf }) => (
+          <div key={step} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+            <div className="w-28 text-xs text-ink-muted shrink-0">{STEP_LABELS[step] || step}</div>
+            <div className="flex-1 flex items-center gap-2 min-w-0">
+              <span className="font-mono text-xs text-blue-700 truncate">{shortModel}</span>
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                best.avg_quality >= 80 ? 'bg-emerald-100 text-emerald-700' :
+                best.avg_quality >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+              }`}>{best.avg_quality.toFixed(0)}/100</span>
+              {cost != null && <span className="text-[10px] text-ink-muted">${cost}/1M</span>}
+            </div>
+            <span className="text-[11px] shrink-0">{conf} {best.count} Tests</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Cost optimization tip */}
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+        <span className="font-semibold">💡 Kosten-Tipp:</span>{' '}
+        Gemini Flash (0.075$/1M) liefert {recommendations.find(r => r.shortModel.includes('gemini'))?.best.avg_quality.toFixed(0) || '~97'}/100 Qualität bei Analyse — 10× günstiger als Claude Haiku (0.80$/1M).
+        Routing-Konfiguration unter <strong>Einstellungen → KI-Provider → Live Routing Override</strong>.
+      </div>
+
+      <p className="text-[10px] text-ink-muted mt-2">🟢 verlässlich (n≥30) · 🟡 vorläufig (n≥5) · 🔴 wenig Daten · Daten wachsen mit jedem Pipeline-Lauf</p>
+    </div>
+  )
+}
+
 export default function Analytics() {
   const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1106,6 +1168,11 @@ export default function Analytics() {
             </p>
           )}
         </div>
+      )}
+
+      {/* Model Recommendations Panel */}
+      {modelData && modelData.models && modelData.models.length > 0 && (
+        <ModelRecommendationsPanel models={modelData.models} />
       )}
     </div>
   )
