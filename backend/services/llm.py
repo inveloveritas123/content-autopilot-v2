@@ -38,8 +38,8 @@ PURPOSE_MODEL_MAP = {
 # Requesty.ai model strings (direct, EU-region)
 # Cost targets: gemini-2.0-flash $0.075/1M, mistral-medium $0.40/1M (vs. Sonnet $3.00/1M)
 REQUESTY_MODELS = {
-    "gemini-flash": "google/gemini-2.0-flash",          # Analysis: $0.075/1M (~40x cheaper than Sonnet)
-    "claude-sonnet": "mistral/mistral-medium-latest",   # Creative: $0.40/1M (7x cheaper, good quality)
+    "gemini-flash": "vertex/gemini-2.5-flash-lite@europe-central2",  # Analysis: cheap, EU-hosted
+    "claude-sonnet": "mistral/mistral-medium-latest",                 # Creative: $0.40/1M (7x cheaper)
     "gpt-4o-mini": "openai/gpt-4.1-mini",
 }
 
