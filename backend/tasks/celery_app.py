@@ -57,4 +57,5 @@ celery_app.conf.include = [
     "tasks.publish_task",
     "tasks.cost_reset_task",
     "tasks.pipeline_pump_task",
+    "tasks.questions_task",
 ]
