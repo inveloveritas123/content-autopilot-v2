@@ -54,12 +54,18 @@ async def generate_content_ideas(
     title: str,
     transcript_excerpt: str = "",
     industry_context: str = "",
+    brand_context: str = "",
 ) -> Optional[list[dict]]:
     """Generiere Content-Ideen aus einer Transkript-Analyse."""
+    context_parts = []
+    if industry_context:
+        context_parts.append(industry_context)
+    if brand_context:
+        context_parts.append(f"Brand Voice:\n{brand_context}")
     industry_block = f"""
 UNTERNEHMER-KONTEXT (PFLICHT — alle Ideen MUESSEN dazu passen):
-{industry_context}
-""" if industry_context else ""
+{chr(10).join(context_parts)}
+""" if context_parts else ""
 
     prompt = f"""Analysiere folgendes Video und generiere Content-Ideen fuer LinkedIn.
 {industry_block}
@@ -202,12 +208,13 @@ async def run_ideation_pipeline(
 
     Gibt eine Liste von Ideen zurueck, jede mit entrepreneur_questions.
     """
-    # Schritt 1: Ideen generieren
+    # Schritt 1: Ideen generieren (mit vollem Voice-Kontext)
     ideas = await generate_content_ideas(
         analysis=analysis,
         title=title,
         transcript_excerpt=transcript_excerpt,
         industry_context=industry_context,
+        brand_context=brand_context,
     )
     if not ideas:
         return None

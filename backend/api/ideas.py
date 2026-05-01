@@ -28,7 +28,7 @@ from models.entrepreneur_answer import EntrepreneurAnswer
 from models.tenant import Tenant
 from services.content_ideation import run_ideation_pipeline
 from services.content_generator import generate_linkedin_post_from_dialog
-from services.brand_voice import update_voice_from_answer
+from services.brand_voice import update_voice_from_answer, format_voice_for_prompt
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ideas", tags=["ideas"])
@@ -146,15 +146,14 @@ async def generate_ideas_for_item(
             parts.append(f"Zielgruppe: {target_audience}")
         industry_context = " | ".join(parts)
 
-    brand_context = ""
-    if voice_profile or voice_dims:
-        tone = voice_profile.get("tone", "")
+    # Vollständiges Voice-Profil als brand_context (format_voice_for_prompt liefert alle Felder)
+    brand_context = format_voice_for_prompt(voice_profile) if voice_profile else ""
+    # Numerische Dimensionen ergänzen wenn voice_profile leer aber voice_dims vorhanden
+    if not brand_context and voice_dims:
         directness = voice_dims.get("directness", 0)
         warmth = voice_dims.get("warmth", 0)
         expertise = voice_dims.get("expertise", 0)
-        if tone:
-            brand_context = f"Ton: {tone}"
-        elif directness or warmth or expertise:
+        if directness or warmth or expertise:
             brand_context = f"Direktheit: {directness}/10, Wärme: {warmth}/10, Expertise: {expertise}/10"
 
     # Ideation-Pipeline ausfuehren

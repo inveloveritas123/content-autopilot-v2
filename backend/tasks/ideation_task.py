@@ -10,6 +10,7 @@ Workflow:
 import logging
 import asyncio
 from services.llm import BudgetExceededError
+from services.brand_voice import format_voice_for_prompt
 
 from sqlalchemy import select
 
@@ -58,7 +59,7 @@ def auto_generate_ideas(item_id: str):
             voice_profile = tenant_settings.get("voice_profile", {})
 
             industry_context = ""
-            if entrepreneur or voice_profile:
+            if entrepreneur:
                 parts = []
                 if entrepreneur.get("name"):
                     parts.append(f"Unternehmer: {entrepreneur['name']}")
@@ -68,14 +69,9 @@ def auto_generate_ideas(item_id: str):
                     parts.append(f"Spezialisierung: {entrepreneur['specialization']}")
                 if entrepreneur.get("target_audience"):
                     parts.append(f"Zielgruppe: {entrepreneur['target_audience']}")
-                if voice_profile.get("tone"):
-                    parts.append(f"Tonalität: {voice_profile['tone']}")
-                if voice_profile.get("topics_avoid"):
-                    avoid = voice_profile["topics_avoid"] if isinstance(voice_profile["topics_avoid"], str) else ", ".join(voice_profile["topics_avoid"])
-                    parts.append(f"NICHT VERWENDEN / Vermeiden: {avoid}")
                 industry_context = "\n".join(parts)
 
-            brand_context = voice_profile.get("authentic_voice", "") or voice_profile.get("perspective", "")
+            brand_context = format_voice_for_prompt(voice_profile) if voice_profile else ""
 
             # Ideation-Pipeline ausführen
             ideas_data = asyncio.run(
