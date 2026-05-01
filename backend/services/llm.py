@@ -45,17 +45,17 @@ REQUESTY_MODELS = {
 
 # Per-purpose max_tokens to prevent runaway token costs
 PURPOSE_MAX_TOKENS = {
-    "transcription": 500,
-    "analysis": 500,
-    "voice_update": 500,
-    "summary": 500,
-    "tagging": 300,
-    "scoring": 300,
-    "ideation": 1200,
-    "questions": 800,
-    "creative": 1200,
-    "post_generation": 1200,
-    "onboarding": 800,
+    "transcription": 800,
+    "analysis": 1200,
+    "voice_update": 800,
+    "summary": 800,
+    "tagging": 500,
+    "scoring": 500,
+    "ideation": 1500,
+    "questions": 1200,
+    "creative": 1500,
+    "post_generation": 1500,
+    "onboarding": 1000,
 }
 
 
