@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Fingerprint, RefreshCw, TrendingUp, AlertCircle, Mic, BookOpen, RotateCcw, Save, Check, X, Wand2, FlaskConical, Loader2 } from 'lucide-react'
-import { getVoiceProfile, getFeedbackStats, updateVoiceProfile, getVoiceProfilesList, runVoiceCompare } from '../api'
+import { getVoiceProfile, getFeedbackStats, updateVoiceProfile, getBrandVoiceStatus, runVoiceCompare } from '../api'
 
 const VOICE_DIMENSIONS = [
   { key: 'directness', label: 'Direktheit', desc: 'Klartext statt Drumherumreden', low: 'Diplomatisch', high: 'Klartext' },
@@ -466,17 +466,27 @@ Haben Sie Ihre Vergütungsstruktur zuletzt geprüft?`,
   },
 ]
 
+function formatSource(s) {
+  return { wizard: 'Wizard', manual_edit: 'Bearbeitet', drift_update: 'Drift-Update', md_upload: 'MD-Upload' }[s] || s || ''
+}
+function formatDate(iso) {
+  return iso ? new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }) : ''
+}
+
 function VoiceTestmatrix() {
-  const [profiles, setProfiles] = useState([])
+  const [brandVoiceData, setBrandVoiceData] = useState(null)
+  const [loadError, setLoadError] = useState(null)
+  const [selectedVersionA, setSelectedVersionA] = useState('current')
+  const [selectedVersionB, setSelectedVersionB] = useState(null)
   const [comparing, setComparing] = useState(false)
   const [results, setResults] = useState(null)
   const [error, setError] = useState(null)
   const [showDemo, setShowDemo] = useState(false)
 
   useEffect(() => {
-    getVoiceProfilesList()
-      .then(d => setProfiles(d?.profiles || []))
-      .catch(() => {})
+    getBrandVoiceStatus('me')
+      .then(d => setBrandVoiceData(d))
+      .catch(err => setLoadError(err?.message || 'Fehler beim Laden'))
   }, [])
 
   const handleCompare = async () => {
@@ -500,7 +510,22 @@ function VoiceTestmatrix() {
     setComparing(false)
   }
 
-  const configuredProfiles = profiles.filter(p => p.configured)
+  const history = brandVoiceData?.history || []
+  const activeVersion = brandVoiceData?.active_profiles?.voice_profile
+
+  const versionOptions = [
+    { value: 'current', label: `Aktuelle Version${activeVersion ? ` (v${activeVersion.version})` : ''}` },
+    ...history.map(h => ({ value: String(h.version), label: `v${h.version} — ${formatSource(h.source)} (${formatDate(h.created_at)})` }))
+  ]
+
+  function getVersionPayload(versionValue) {
+    if (versionValue === 'current') return activeVersion
+    const entry = history.find(h => String(h.version) === versionValue)
+    return entry?.payload || entry
+  }
+
+  const payloadA = getVersionPayload(selectedVersionA)
+  const payloadB = selectedVersionB ? getVersionPayload(selectedVersionB) : null
 
   return (
     <div className="mt-6 pt-6 border-t border-gray-100">
@@ -510,7 +535,7 @@ function VoiceTestmatrix() {
             <FlaskConical className="w-4 h-4 text-primary-600" />
             Testmatrix: Profile vergleichen
           </h3>
-          <p className="text-xs text-ink-muted mt-0.5">Gleiche Quelle, {configuredProfiles.length} Profile — Posts werden direkt verglichen</p>
+          <p className="text-xs text-ink-muted mt-0.5">Gleiche Quelle, Versionen vergleichen — Posts werden direkt verglichen</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -522,7 +547,7 @@ function VoiceTestmatrix() {
           </button>
           <button
             onClick={handleCompare}
-            disabled={comparing || configuredProfiles.length < 2}
+            disabled={comparing}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800 disabled:opacity-50"
           >
             {comparing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FlaskConical className="w-3.5 h-3.5" />}
@@ -531,21 +556,63 @@ function VoiceTestmatrix() {
         </div>
       </div>
 
-      {/* Profile list */}
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        {configuredProfiles.slice(0, 3).map((p, i) => (
-          <div key={p.id} className={`rounded-lg border p-2.5 text-xs ${p.is_current ? 'border-primary-300 bg-primary-50' : 'border-gray-200 bg-gray-50'}`}>
-            <div className="font-semibold text-ink">{['A', 'B', 'C'][i]} · {p.entrepreneur_name}</div>
-            <div className="text-ink-muted mt-0.5">{p.industry}</div>
-            <div className="text-[10px] text-ink-light mt-1 line-clamp-2">{p.tone}</div>
-          </div>
-        ))}
+      {/* Load error */}
+      {loadError && !brandVoiceData && (
+        <p className="text-red-500 text-sm">{loadError}</p>
+      )}
+
+      {/* Versions-Auswahl */}
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <div>
+          <label className="text-xs text-ink-muted mb-1 block">Version A</label>
+          <select
+            value={selectedVersionA}
+            onChange={e => setSelectedVersionA(e.target.value)}
+            className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-ink"
+          >
+            {versionOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-ink-muted mb-1 block">Version B (Vergleich)</label>
+          <select
+            value={selectedVersionB || ''}
+            onChange={e => setSelectedVersionB(e.target.value || null)}
+            className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-ink"
+          >
+            <option value="">— Keine —</option>
+            {versionOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
       </div>
 
-      {configuredProfiles.length < 2 && (
-        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          Mindestens 2 konfigurierte Profile nötig. Aktuell: {configuredProfiles.length}
-        </p>
+      {/* Seite-an-Seite-Vergleich wenn Version B gewählt */}
+      {selectedVersionB && (payloadA || payloadB) && (
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          {[{ label: 'Version A', payload: payloadA }, { label: 'Version B', payload: payloadB }].map(({ label, payload }) => (
+            <div key={label} className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs">
+              <div className="font-semibold text-ink mb-2">{label}</div>
+              {payload ? (
+                <div className="space-y-1.5">
+                  {['grundton', 'signalwoerter', 'verbotene_woerter'].map(field => (
+                    payload[field] !== undefined && (
+                      <div key={field}>
+                        <span className="text-[10px] text-ink-muted uppercase tracking-wide">{field}</span>
+                        <div className="text-ink mt-0.5">
+                          {Array.isArray(payload[field])
+                            ? payload[field].join(', ')
+                            : String(payload[field])}
+                        </div>
+                      </div>
+                    )
+                  ))}
+                </div>
+              ) : (
+                <span className="text-ink-light">Keine Daten</span>
+              )}
+            </div>
+          ))}
+        </div>
       )}
 
       {error && (
