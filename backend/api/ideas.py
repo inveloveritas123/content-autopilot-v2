@@ -9,6 +9,8 @@ Workflow:
 5. POST /ideas/{id}/generate-post — Post aus Antworten generieren
 6. PATCH /ideas/{id} — Status/Prioritaet aendern
 """
+import asyncio
+import json
 import uuid
 import logging
 from datetime import datetime, timedelta, timezone
@@ -62,7 +64,7 @@ class AnswerSubmit(BaseModel):
 
 
 class GeneratePostRequest(BaseModel):
-    variants: int = Field(default=2, ge=1, le=5)
+    pass  # variants-Logik entfällt — P12+P12b erzeugt immer genau 1 Post
 
 
 class IdeaStatusUpdate(BaseModel):
@@ -459,14 +461,98 @@ async def submit_answer(
     }
 
 
+def _run_p12_p12b_pipeline(tenant_id, idea_id, answers_list, voice_payload, avatar_payload):
+    """Sync-Wrapper um P12 → P12b Pipeline (läuft in asyncio.to_thread)."""
+    from tasks.p12_task import run_p12
+    from tasks.p12b_task import run_p12b
+    try:
+        from celery.exceptions import MaxRetriesExceededError
+    except ImportError:
+        MaxRetriesExceededError = Exception  # Safety-Fallback
+
+    answers_dict = {a["question_text"]: a["answer_text"] for a in answers_list}
+
+    # P12 ausführen
+    try:
+        p12_result = run_p12.apply(args=[tenant_id, idea_id, answers_dict]).get()
+    except MaxRetriesExceededError as exc:
+        logger.error("_run_p12_p12b_pipeline: P12 MaxRetriesExceeded: %s", exc)
+        return {"status": "error", "reason": "failed", "p12_run_id": None}
+
+    if p12_result.get("status") != "done":
+        return {
+            "status": "error",
+            "reason": p12_result.get("status", "unknown"),
+            "p12_run_id": p12_result.get("run_id"),
+        }
+
+    p12_output = p12_result["output"]
+    p12_run_id = p12_result["run_id"]
+    design_notes_output = p12_output  # wird bei Loop-Run überschrieben
+
+    # P12b — erste Iteration (loop_iteration=0)
+    try:
+        p12b_result = run_p12b.apply(args=[tenant_id, p12_output, voice_payload, avatar_payload, 0]).get()
+    except MaxRetriesExceededError as exc:
+        logger.warning("_run_p12_p12b_pipeline: P12b MaxRetriesExceeded, P12-Output direkt: %s", exc)
+        p12b_result = {"status": "loop_break", "final_post": p12_output.get("post", ""), "reason": "p12b_failed"}
+
+    # P12b Cost-Cap: P12-Output ohne Lektor-Pass zurückgeben
+    if p12b_result.get("status") == "paused_for_cost":
+        return {
+            "status": "ok",
+            "final_post": p12_output.get("post", ""),
+            "p12_run_id": p12_run_id,
+            "p12b_status": "paused_for_cost",
+            "design_notes": design_notes_output,
+        }
+
+    if p12b_result.get("status") == "needs_revision":
+        # Loop: P12 nochmals mit Richtungskorrektur
+        richtung = p12b_result.get("richtung_fuer_p12", "")
+        answers_with_richtung = {**answers_dict, "_richtung_fuer_p12": richtung}
+        try:
+            p12_result2 = run_p12.apply(args=[tenant_id, idea_id, answers_with_richtung]).get()
+        except MaxRetriesExceededError as exc:
+            logger.warning("_run_p12_p12b_pipeline: P12-Loop MaxRetriesExceeded: %s", exc)
+            p12_result2 = None
+
+        if p12_result2 and p12_result2.get("status") == "done":
+            p12_run_id = p12_result2["run_id"]
+            p12_loop_output = p12_result2["output"]
+            design_notes_output = p12_loop_output
+            try:
+                p12b_result = run_p12b.apply(
+                    args=[tenant_id, p12_loop_output, voice_payload, avatar_payload, 1]
+                ).get()
+            except MaxRetriesExceededError:
+                p12b_result = {"status": "loop_break", "final_post": p12_loop_output.get("post", ""), "reason": "p12b_loop_failed"}
+        else:
+            # P12 Loop-Run fehlgeschlagen → Original-P12-Output direkt zurückgeben
+            p12b_result = {
+                "status": "loop_break",
+                "final_post": p12_output.get("post", ""),
+                "reason": "p12_loop_failed",
+            }
+
+    return {
+        "status": "ok",
+        "final_post": p12b_result.get("final_post", p12_output.get("post", "")),
+        "p12_run_id": p12_run_id,
+        "p12b_status": p12b_result.get("status"),
+        "design_notes": design_notes_output,
+    }
+
+
 @router.post("/{idea_id}/generate-post")
 async def generate_post_from_answers(
     idea_id: uuid.UUID,
     body: GeneratePostRequest = GeneratePostRequest(),
+    include_design_notes: bool = Query(False),
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ):
-    """Generiere LinkedIn-Post(s) aus den Antworten des Unternehmers."""
+    """Generiere LinkedIn-Post aus den Antworten des Unternehmers (P12 → P12b Pipeline)."""
     idea = await db.get(ContentIdea, idea_id)
     if not idea or idea.tenant_id != tenant_id:
         raise HTTPException(404, "Idee nicht gefunden")
@@ -482,68 +568,112 @@ async def generate_post_from_answers(
     if not answers:
         raise HTTPException(400, "Noch keine Antworten vorhanden — bitte zuerst Fragen beantworten")
 
-    # Source Item fuer Analyse laden
-    source_item = await db.get(SourceItem, idea.source_item_id)
-    analysis = source_item.analysis if source_item else {}
+    # Voice-Profil laden (aktives Profil des Tenants)
+    voice_row = (await db.execute(
+        text("SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"),
+        {"t": str(tenant_id)},
+    )).fetchone()
+    voice_payload = (voice_row[0] if voice_row else {}) or {}
+    if isinstance(voice_payload, str):
+        voice_payload = json.loads(voice_payload)
 
-    # TODO: Voice profile aus Tenant laden (wenn vorhanden)
-    voice_profile = None
+    # Audience-Avatar laden (aktives Profil des Tenants)
+    avatar_row = (await db.execute(
+        text("SELECT payload FROM tenant_audience_avatar WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"),
+        {"t": str(tenant_id)},
+    )).fetchone()
+    avatar_payload = (avatar_row[0] if avatar_row else {}) or {}
+    if isinstance(avatar_payload, str):
+        avatar_payload = json.loads(avatar_payload)
 
-    # Posts generieren
-    posts = await generate_linkedin_post_from_dialog(
-        idea={
-            "title": idea.title,
-            "angle": idea.angle,
-            "hook_suggestion": idea.hook_suggestion,
-            "description": idea.description,
-        },
-        answers=[
-            {"question_text": a.question_text, "answer_text": a.answer_text}
-            for a in answers
-        ],
-        analysis=analysis,
-        voice_profile=voice_profile,
-        variants=body.variants,
+    answers_list = [
+        {"question_text": a.question_text, "answer_text": a.answer_text}
+        for a in answers
+    ]
+
+    # Pipeline im Thread ausführen (Celery .get() ist blocking)
+    pipeline_result = await asyncio.to_thread(
+        _run_p12_p12b_pipeline,
+        str(tenant_id), str(idea_id), answers_list, voice_payload, avatar_payload,
     )
 
-    if not posts:
-        raise HTTPException(500, "Post-Generierung fehlgeschlagen")
+    if pipeline_result["status"] == "error":
+        status_reason = pipeline_result.get("reason", "unknown")
+        if status_reason == "paused_for_cost":
+            raise HTTPException(429, "Daily-Cost-Cap erreicht — bitte morgen erneut versuchen")
+        raise HTTPException(502, f"Post-Generierung fehlgeschlagen: {status_reason}")
 
-    # Posts als ContentPieces speichern
-    created_pieces = []
-    for i, post_text in enumerate(posts):
-        piece = ContentPiece(
-            source_item_id=idea.source_item_id,
-            tenant_id=tenant_id,
-            channel="linkedin",
-            content_text=post_text,
-            content_metadata={
-                "content_idea_id": str(idea_id),
-                "variant": i + 1,
-                "mode": "dialog",
-                "angle": idea.angle,
+    final_post = pipeline_result["final_post"]
+    if not final_post:
+        raise HTTPException(500, "Post-Generierung fehlgeschlagen — kein Post-Text")
+
+    # Content-Piece aus P12-Run abrufen (P12 hat es bereits in DB gespeichert)
+    p12_run_id = pipeline_result["p12_run_id"]
+    piece_row = None
+    if p12_run_id:
+        piece_row = (await db.execute(
+            select(ContentPiece)
+            .where(
+                ContentPiece.tenant_id == tenant_id,
+                ContentPiece.content_metadata["p12_run_id"].as_string() == p12_run_id,
+            )
+            .limit(1)
+        )).scalar_one_or_none()
+
+    if piece_row:
+        # P12b-optimierten Text updaten und Metadaten erweitern
+        piece_row.content_text = final_post
+        meta = dict(piece_row.content_metadata or {})
+        meta["p12b_status"] = pipeline_result["p12b_status"]
+        piece_row.content_metadata = meta
+    else:
+        # Fallback via raw SQL (source_item_id ist nullable seit Migration 021)
+        fallback_id = str(uuid.uuid4())
+        await db.execute(
+            text(
+                "INSERT INTO content_pieces "
+                "(id, tenant_id, idea_id, channel, content_text, content_metadata, status, created_at) "
+                "VALUES (:id, :tenant_id, :idea_id, 'linkedin', :content_text, "
+                ":content_metadata::jsonb, 'draft', now())"
+            ),
+            {
+                "id": fallback_id,
+                "tenant_id": str(tenant_id),
+                "idea_id": str(idea_id),
+                "content_text": final_post,
+                "content_metadata": json.dumps({
+                    "p12_run_id": p12_run_id,
+                    "p12b_status": pipeline_result["p12b_status"],
+                    "mode": "p12_p12b_fallback",
+                }),
             },
-            status="draft",
         )
-        db.add(piece)
-        created_pieces.append(piece)
+        piece_row = await db.get(ContentPiece, uuid.UUID(fallback_id))
 
-    # Idee-Status aktualisieren
     idea.status = "content_generated"
     await db.commit()
+    await db.refresh(piece_row)
 
-    return {
-        "message": f"{len(created_pieces)} Post-Varianten generiert",
-        "posts": [
-            {
-                "id": str(p.id),
-                "content_text": p.content_text,
-                "variant": i + 1,
-                "status": p.status,
-            }
-            for i, p in enumerate(created_pieces)
-        ],
+    response = {
+        "message": "1 Post generiert",
+        "posts": [{
+            "id": str(piece_row.id),
+            "content_text": final_post,
+            "variant": 1,
+            "status": piece_row.status,
+        }],
     }
+
+    if include_design_notes:
+        design_notes = pipeline_result.get("design_notes", {})
+        response["design_notes"] = {
+            "alternative_opener": design_notes.get("alternative_opener", []),
+            "design_notizen": design_notes.get("design_notizen", ""),
+            "ki_signal_check": design_notes.get("ki_signal_check", {}),
+            "potenzielle_schwaechen": design_notes.get("potenzielle_schwaechen", []),
+        }
+
+    return response
 
 
 @router.post("/batch-generate")
