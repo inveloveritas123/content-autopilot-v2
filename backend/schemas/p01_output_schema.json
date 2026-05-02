@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["unternehmensgeschichte", "kernbotschaft", "zielgruppe", "expertise", "werte"],
+  "properties": {
+    "unternehmensgeschichte": {"type": ["string", "null"]},
+    "kernbotschaft": {"type": ["string", "null"]},
+    "zielgruppe": {"type": ["object", "null"]},
+    "expertise": {"type": ["object", "null"]},
+    "werte": {"type": ["array", "null"], "items": {"type": "string"}},
+    "wunschzustand": {"type": "null"},
+    "innenwelt": {"type": "null"}
+  },
+  "additionalProperties": true
+}

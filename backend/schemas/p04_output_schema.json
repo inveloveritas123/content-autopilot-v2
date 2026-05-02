@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["hauptperson", "kernschmerzen", "transformation"],
+  "properties": {
+    "hauptperson": {"type": ["object", "null"]},
+    "kernschmerzen": {"type": ["array", "null"]},
+    "transformation": {"type": ["object", "null"]},
+    "einwaende": {"type": ["array", "null"]},
+    "kaufmotive": {"type": ["array", "null"]},
+    "sprachmuster": {"type": ["object", "null"]}
+  },
+  "additionalProperties": true
+}

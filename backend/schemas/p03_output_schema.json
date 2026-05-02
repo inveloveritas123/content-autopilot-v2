@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["tonalitaet", "kernthemen", "stilprinzipien", "wortschatz"],
+  "properties": {
+    "tonalitaet": {"type": ["object", "null"]},
+    "kernthemen": {"type": ["array", "null"]},
+    "stilprinzipien": {"type": ["object", "null"]},
+    "wortschatz": {"type": ["object", "null"]},
+    "schreibrhythmus": {"type": ["object", "null"]},
+    "vermeidungsregeln": {"type": ["array", "null"]}
+  },
+  "additionalProperties": true
+}
