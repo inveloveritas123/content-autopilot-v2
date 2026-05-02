@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["intent", "session_context", "extracted_features", "flagged_for_review", "flag_reasons"],
+  "properties": {
+    "intent": {
+      "type": "string",
+      "enum": ["answer_to_question", "spontaneous_idea", "post_feedback", "question_to_bot", "smalltalk", "unclassified"]
+    },
+    "session_context": {
+      "type": "string",
+      "enum": ["active_response", "no_session", "session_expired"]
+    },
+    "extracted_features": {
+      "type": "object",
+      "required": ["topic_keywords", "sentiment", "has_question"],
+      "properties": {
+        "topic_keywords": {"type": "array", "items": {"type": "string"}},
+        "sentiment": {"type": "string", "enum": ["positive", "neutral", "negative"]},
+        "has_question": {"type": "boolean"},
+        "language": {"type": "string"}
+      }
+    },
+    "flagged_for_review": {"type": "boolean"},
+    "flag_reasons": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

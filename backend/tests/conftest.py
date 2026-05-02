@@ -20,9 +20,12 @@ if "google" not in sys.modules:
 if "google.generativeai" not in sys.modules:
     _stub_module("google.generativeai")
 
-# anthropic — stubbed so sensitive_detector can be imported; LLM path not called in tests
+# anthropic — stubbed so modules can be imported without a real API key.
+# Anthropic class is a MagicMock so tests can patch services.layer1_extraction.anthropic.Anthropic.
 if "anthropic" not in sys.modules:
-    _stub_module("anthropic")
+    from unittest.mock import MagicMock
+    _anthropic_stub = _stub_module("anthropic")
+    _anthropic_stub.Anthropic = MagicMock
 
 # celery — stubbed so task modules can be imported without a broker
 if "celery" not in sys.modules:
