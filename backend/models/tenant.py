@@ -1,8 +1,8 @@
+import datetime
 import uuid
-from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, DateTime, func
+from sqlalchemy import Boolean, DateTime, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,7 +17,12 @@ class Tenant(Base):
     api_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     api_key_secondary: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)
     settings: Mapped[dict] = mapped_column(JSONB, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
+
+    enabled: Mapped[bool] = mapped_column(Boolean, server_default=text('true'), nullable=False, default=True)
+    disabled_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    disabled_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    disabled_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     sources = relationship("Source", back_populates="tenant", cascade="all, delete-orphan")
     source_items = relationship("SourceItem", back_populates="tenant", cascade="all, delete-orphan")

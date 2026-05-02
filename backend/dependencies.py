@@ -20,6 +20,15 @@ async def get_tenant(x_api_key: str = Header(...), db: AsyncSession = Depends(ge
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=401, detail="Invalid API key")
+    if not tenant.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "tenant_disabled",
+                "reason": tenant.disabled_reason or "Tenant ist deaktiviert",
+                "since": tenant.disabled_at.isoformat() if tenant.disabled_at else None,
+            }
+        )
     return tenant
 
 import uuid
@@ -33,4 +42,13 @@ async def get_tenant_id(x_api_key: str = Header(...), db: AsyncSession = Depends
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=401, detail="Invalid API key")
+    if not tenant.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "tenant_disabled",
+                "reason": tenant.disabled_reason or "Tenant ist deaktiviert",
+                "since": tenant.disabled_at.isoformat() if tenant.disabled_at else None,
+            }
+        )
     return tenant.id

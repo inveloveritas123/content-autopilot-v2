@@ -174,6 +174,11 @@ def run_voice_drift(
     Returns:
         {"status": "done"|"skipped"|"paused_for_cost"|"failed", ...}
     """
+    from services.kill_switch import check_kill_switch, KillSwitchTriggered
+    try:
+        check_kill_switch(tenant_id)
+    except KillSwitchTriggered:
+        return {"status": "aborted", "reason": "tenant_disabled"}
     logger.info(
         "run_voice_drift: tenant=%s trigger_type=%s", tenant_id, trigger_type
     )

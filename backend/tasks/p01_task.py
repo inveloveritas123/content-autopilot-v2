@@ -107,6 +107,11 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None) 
     Returns:
         {"run_id": str, "status": "done"|"paused_for_cost"|"failed", "error": str|None}
     """
+    from services.kill_switch import check_kill_switch, KillSwitchTriggered
+    try:
+        check_kill_switch(tenant_id)
+    except KillSwitchTriggered:
+        return {"status": "aborted", "reason": "tenant_disabled"}
     run_id = str(uuid.uuid4())
     start_ts = time.monotonic()
 

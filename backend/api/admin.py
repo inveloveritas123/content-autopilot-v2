@@ -11,7 +11,11 @@ from dependencies import get_db
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-ADMIN_TOKEN = "admin_backtest_2026"  # TODO: move to env var
+import os as _os
+ADMIN_TOKEN = _os.environ.get("ADMIN_TOKEN", "admin_backtest_2026")
+if ADMIN_TOKEN == "admin_backtest_2026":
+    import logging as _logging
+    _logging.getLogger(__name__).warning("[Admin] ADMIN_TOKEN ist auf Standardwert gesetzt — bitte ADMIN_TOKEN env var setzen!")
 
 
 def require_admin(x_admin_token: str = Header(None)):
@@ -130,6 +134,58 @@ async def notify_tenant_model(req: TenantNotifyRequest, db=Depends(get_db)):
     await db.commit()
 
     return {"status": "sent", "message": message}
+
+
+class TenantDisableRequest(BaseModel):
+    reason: str
+
+
+@router.post("/tenants/{tenant_id}/disable", dependencies=[Depends(require_admin)])
+async def disable_tenant(tenant_id: str, req: TenantDisableRequest, db=Depends(get_db)):
+    import datetime
+    row = await db.execute(text("SELECT id FROM tenants WHERE id = :id OR api_key = :id"), {"id": tenant_id})
+    t = row.fetchone()
+    if not t:
+        raise HTTPException(404, "Tenant not found")
+
+    actual_id = str(t[0])
+    now = datetime.datetime.utcnow()
+    await db.execute(
+        text("""UPDATE tenants SET enabled=false, disabled_at=:at,
+                disabled_by='admin', disabled_reason=:reason WHERE id=:id"""),
+        {"at": now, "reason": req.reason, "id": actual_id}
+    )
+    await db.execute(
+        text("""INSERT INTO setup_pipeline_run (id, tenant_id, stage, status, error_meta, created_at)
+                VALUES (:id, :tid, 'kill_switch', 'disabled', :meta, NOW())"""),
+        {"id": str(uuid.uuid4()), "tid": actual_id,
+         "meta": json.dumps({"action": "disable", "reason": req.reason, "by": "admin"})}
+    )
+    await db.commit()
+    return {"status": "disabled", "tenant_id": actual_id, "reason": req.reason}
+
+
+@router.post("/tenants/{tenant_id}/enable", dependencies=[Depends(require_admin)])
+async def enable_tenant(tenant_id: str, db=Depends(get_db)):
+    row = await db.execute(text("SELECT id FROM tenants WHERE id = :id OR api_key = :id"), {"id": tenant_id})
+    t = row.fetchone()
+    if not t:
+        raise HTTPException(404, "Tenant not found")
+
+    actual_id = str(t[0])
+    await db.execute(
+        text("""UPDATE tenants SET enabled=true, disabled_at=null,
+                disabled_by=null, disabled_reason=null WHERE id=:id"""),
+        {"id": actual_id}
+    )
+    await db.execute(
+        text("""INSERT INTO setup_pipeline_run (id, tenant_id, stage, status, error_meta, created_at)
+                VALUES (:id, :tid, 'kill_switch', 'enabled', :meta, NOW())"""),
+        {"id": str(uuid.uuid4()), "tid": actual_id,
+         "meta": json.dumps({"action": "enable", "by": "admin"})}
+    )
+    await db.commit()
+    return {"status": "enabled", "tenant_id": actual_id}
 
 
 @router.post("/models/apply-tenant-model", dependencies=[Depends(require_admin)])

@@ -203,6 +203,11 @@ def run_p12b(
     Returns:
         {"status": "done"|"needs_revision"|"loop_break"|"paused_for_cost"|"failed", ...}
     """
+    from services.kill_switch import check_kill_switch, KillSwitchTriggered
+    try:
+        check_kill_switch(tenant_id)
+    except KillSwitchTriggered:
+        return {"status": "aborted", "reason": "tenant_disabled"}
     run_id = str(uuid.uuid4())
 
     # ------------------------------------------------------------------

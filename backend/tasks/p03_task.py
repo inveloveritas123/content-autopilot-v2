@@ -142,6 +142,11 @@ def run_p03(
     Returns:
         dict mit run_id, status und optionalem voice_profile_id.
     """
+    from services.kill_switch import check_kill_switch, KillSwitchTriggered
+    try:
+        check_kill_switch(tenant_id)
+    except KillSwitchTriggered:
+        return {"status": "aborted", "reason": "tenant_disabled"}
     run_id = str(uuid.uuid4())
 
     # ── Bypass-Pfad ────────────────────────────────────────────────────────────
