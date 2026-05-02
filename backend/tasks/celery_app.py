@@ -61,6 +61,14 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.wizard_cleanup.cleanup_abandoned_sessions",
         "schedule": 86400.0,  # täglich
     },
+    "check-random-smart-triggers-every-5min": {
+        "task": "tasks.random_smart_scheduler.check_random_smart_triggers",
+        "schedule": 300.0,  # Every 5 minutes
+    },
+    "check-reviewer-queue-backlog-daily": {
+        "task": "tasks.reviewer_queue_cron.check_reviewer_queue_backlog",
+        "schedule": crontab(hour=8, minute=30),  # täglich 08:30
+    },
 }
 
 # Explicit task module imports
@@ -83,5 +91,7 @@ celery_app.conf.include = [
     "tasks.model_check_task",
     "tasks.backtest_task",
     "tasks.wizard_cleanup",
+    "tasks.random_smart_scheduler",
+    "tasks.reviewer_queue_cron",
     "api.wizard",
 ]
