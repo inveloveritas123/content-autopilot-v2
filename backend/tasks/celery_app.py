@@ -78,6 +78,7 @@ celery_app.conf.include = [
     "tasks.setup_pipeline_task",
     "tasks.p12_task",
     "tasks.p12b_task",
+    "tasks.p12c_task",
     "tasks.voice_drift_task",
     "tasks.model_check_task",
     "tasks.backtest_task",

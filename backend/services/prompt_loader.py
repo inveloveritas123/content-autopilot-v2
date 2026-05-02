@@ -30,6 +30,7 @@ PROMPT_PATHS: dict[str, str] = {
     "P04":          _PROMPT_BASE + "P04-audience-avatar.md",
     "P12":          _PROMPT_BASE + "P12-content-generator.md",
     "P12b":         _PROMPT_BASE + "P12b-content-generator-short.md",
+    "P12c":         _PROMPT_BASE + "P12c-carousel-generator.md",
     "fragenkatalog": _PROMPT_BASE + "fragenkatalog.md",
     "hookmaster":   _PROMPT_BASE + "hookmaster.md",
 }
