@@ -75,5 +75,6 @@ celery_app.conf.include = [
     "tasks.p12_task",
     "tasks.p12b_task",
     "tasks.voice_drift_task",
+    "tasks.wizard_cleanup",
     "api.wizard",
 ]
