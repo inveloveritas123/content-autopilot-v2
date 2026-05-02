@@ -299,3 +299,7 @@ export const synthesizeWizardPhase = (sessionId, phase) =>
   request(`/brand-voice/wizard/${sessionId}/synthesize-phase`, { method: 'POST', body: { phase } })
 export const finalizeWizardSession = (sessionId) =>
   request(`/brand-voice/wizard/${sessionId}/finalize`, { method: 'POST' })
+
+export const patchBrandVoiceField = (tenantId, profileType, fieldPath, newValue) =>
+  request(`/brand-voice/${tenantId}/${profileType}/field`, { method: 'PATCH', body: { field_path: fieldPath, new_value: newValue } })
+export const getBrandVoiceHistory = (tenantId) => getBrandVoiceStatus(tenantId)

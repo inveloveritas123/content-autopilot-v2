@@ -20,6 +20,7 @@ import {
   Send,
   MessagesSquare,
   Mic2,
+  Brain,
 } from 'lucide-react'
 import { getProjects, createProject, deleteProject } from '../api'
 
@@ -36,6 +37,7 @@ const navItems = [
   { to: '/feedback', label: 'Feedback', icon: BarChart3 },
   { to: '/voice', label: 'Voice-Profil', icon: Fingerprint },
   { to: '/brand-voice', label: 'Brand Voice', icon: Mic2 },
+  { to: '/brand-voice/insights', label: 'So liest KI mich', icon: Brain },
   { to: '/settings', label: 'Einstellungen', icon: Settings },
 ]
 
