@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Mic2,
   CheckCircle2,
@@ -385,7 +386,7 @@ function PipelineRunBanner({ runId, onDone }) {
 
 // ─── StatusTile ───────────────────────────────────────────────────────────
 
-function StatusTile({ data, onRefresh }) {
+function StatusTile({ data, onRefresh, onDriftReview }) {
   if (!data) {
     return (
       <div className="bg-white rounded-xl border border-surface-border p-6">
@@ -421,8 +422,11 @@ function StatusTile({ data, onRefresh }) {
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3 text-sm text-blue-700">
           <Info className="w-4 h-4 shrink-0" />
           <span className="flex-1">Voice-Update verfügbar — Drift erkannt.</span>
-          <button className="text-xs font-medium text-blue-700 underline hover:no-underline">
-            Anschauen
+          <button
+            onClick={onDriftReview}
+            className="text-xs font-medium text-blue-700 underline hover:no-underline"
+          >
+            Voice-Updates prüfen →
           </button>
         </div>
       )}
@@ -731,6 +735,7 @@ function UploadZone({ onUploadSuccess }) {
 // ─── Main: BrandVoice ─────────────────────────────────────────────────────
 
 export default function BrandVoice() {
+  const navigate = useNavigate()
   const [statusData, setStatusData] = useState(undefined) // undefined = loading, null = error
   const [statusError, setStatusError] = useState(null)
   const [pipelineRunId, setPipelineRunId] = useState(null)
@@ -801,7 +806,7 @@ export default function BrandVoice() {
       )}
 
       {/* Status Tile — shows skeleton when statusData is undefined */}
-      <StatusTile data={statusData} onRefresh={loadStatus} />
+      <StatusTile data={statusData} onRefresh={loadStatus} onDriftReview={() => navigate('/brand-voice/drift-review')} />
 
       {/* Upload Zone */}
       <UploadZone onUploadSuccess={loadStatus} />

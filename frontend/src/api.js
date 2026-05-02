@@ -303,3 +303,17 @@ export const finalizeWizardSession = (sessionId) =>
 export const patchBrandVoiceField = (tenantId, profileType, fieldPath, newValue) =>
   request(`/brand-voice/${tenantId}/${profileType}/field`, { method: 'PATCH', body: { field_path: fieldPath, new_value: newValue } })
 export const getBrandVoiceHistory = (tenantId) => getBrandVoiceStatus(tenantId)
+
+// Drift Review (#78)
+export function getDriftObservations(tenantId = 'me', status = 'pending_review') {
+  return request('/brand-voice/drift-observations', {
+    params: { tenant_id: tenantId, status },
+  })
+}
+
+export function decideDriftObservation(observationId, changes) {
+  return request(`/brand-voice/drift-observations/${observationId}/decide`, {
+    method: 'POST',
+    body: { changes },
+  })
+}

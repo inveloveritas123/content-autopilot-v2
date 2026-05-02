@@ -260,6 +260,7 @@ async def regenerate(
 
 # ---------------------------------------------------------------------------
 # GET /brand-voice/pipeline/{run_id}  — muss VOR /{tenant_id} definiert sein
+# GET /brand-voice/drift-observations — muss VOR /{tenant_id} definiert sein
 # ---------------------------------------------------------------------------
 
 @router.get("/brand-voice/pipeline/{run_id}")
@@ -300,6 +301,52 @@ async def get_pipeline_run(
         "duration_ms": row.duration_ms,
         "error": error_detail,
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /brand-voice/drift-observations  — muss VOR /{tenant_id} definiert sein
+# ---------------------------------------------------------------------------
+
+@router.get("/brand-voice/drift-observations")
+async def get_drift_observations(
+    tenant_id: str = "me",
+    status: str = "pending_review",
+    auth_tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Drift-Beobachtungen fuer einen Tenant abrufen (gefiltert nach Status)."""
+    resolved_tenant_id = str(auth_tenant_id) if tenant_id == "me" else tenant_id
+    if resolved_tenant_id != str(auth_tenant_id):
+        raise HTTPException(status_code=403, detail="Zugriff verweigert")
+
+    rows = (
+        await db.execute(
+            text(
+                "SELECT id, tenant_id, trigger_post_ids, current_voice_version, "
+                "suggested_changes, status, user_feedback, created_at "
+                "FROM voice_drift_observation "
+                "WHERE tenant_id = :tenant_id AND status = :status "
+                "ORDER BY created_at DESC"
+            ),
+            {"tenant_id": resolved_tenant_id, "status": status},
+        )
+    ).fetchall()
+
+    observations = [
+        {
+            "id": str(row.id),
+            "tenant_id": str(row.tenant_id),
+            "trigger_post_ids": row.trigger_post_ids,
+            "current_voice_version": row.current_voice_version,
+            "suggested_changes": row.suggested_changes,
+            "status": row.status,
+            "user_feedback": row.user_feedback,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in rows
+    ]
+
+    return {"observations": observations}
 
 
 # ---------------------------------------------------------------------------
@@ -447,3 +494,164 @@ async def patch_profile_field(
         "field_path": data.field_path,
         "new_version": new_version,
     }
+
+
+# ---------------------------------------------------------------------------
+# Request-Modelle fuer Drift-Review (Issue #78)
+# ---------------------------------------------------------------------------
+
+class DriftChange(BaseModel):
+    field_path: str
+    accepted: bool
+    modified_value: Any = None
+
+
+class DriftDecideRequest(BaseModel):
+    changes: list[DriftChange]
+
+
+# ---------------------------------------------------------------------------
+# POST /brand-voice/drift-observations/{observation_id}/decide
+# ---------------------------------------------------------------------------
+
+@router.post("/brand-voice/drift-observations/{observation_id}/decide")
+async def decide_drift_observation(
+    observation_id: str,
+    data: DriftDecideRequest,
+    auth_tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Drift-Entscheidung: Vorgeschlagene Aenderungen akzeptieren oder ablehnen."""
+    # 1. Observation laden
+    obs_row = (
+        await db.execute(
+            text(
+                "SELECT id, tenant_id, suggested_changes, current_voice_version, status "
+                "FROM voice_drift_observation "
+                "WHERE id = :id"
+            ),
+            {"id": observation_id},
+        )
+    ).fetchone()
+
+    if not obs_row:
+        raise HTTPException(status_code=404, detail="Observation nicht gefunden")
+
+    # Tenant-Isolation
+    if str(obs_row.tenant_id) != str(auth_tenant_id):
+        raise HTTPException(status_code=403, detail="Zugriff verweigert")
+
+    # 2. Status pruefen
+    if obs_row.status != "pending_review":
+        raise HTTPException(status_code=400, detail="Already decided")
+
+    if not data.changes:
+        raise HTTPException(status_code=422, detail="changes darf nicht leer sein")
+
+    # 3. Accepted / rejected zaehlen
+    accepted_count = sum(1 for c in data.changes if c.accepted)
+    rejected_count = sum(1 for c in data.changes if not c.accepted)
+
+    if accepted_count == 0:
+        new_status = "rejected"
+    elif rejected_count == 0:
+        new_status = "accepted"
+    else:
+        new_status = "partial"
+
+    new_version_number = None
+
+    # 4. Fuer accepted/partial: neue Voice-Profile-Version anlegen
+    if new_status in ("accepted", "partial"):
+        active_vp_row = (
+            await db.execute(
+                text(
+                    "SELECT id, payload, version FROM tenant_voice_profile "
+                    "WHERE tenant_id = :t AND is_active = true"
+                ),
+                {"t": str(auth_tenant_id)},
+            )
+        ).fetchone()
+
+        if active_vp_row:
+            new_payload = copy.deepcopy(active_vp_row.payload)
+
+            # suggested_changes als Lookup aufbauen: field_path -> new_value
+            suggested_lookup: dict[str, Any] = {}
+            if obs_row.suggested_changes and isinstance(obs_row.suggested_changes, list):
+                for sc in obs_row.suggested_changes:
+                    if isinstance(sc, dict) and "field_path" in sc:
+                        suggested_lookup[sc["field_path"]] = sc.get("new_value")
+
+            for change in data.changes:
+                if not change.accepted:
+                    continue
+
+                # Nur Pfade anwenden, die im aktuellen Payload existieren
+                parts = change.field_path.split(".")
+                cursor: Any = new_payload
+                path_valid = True
+                for part in parts[:-1]:
+                    if not isinstance(cursor, dict) or part not in cursor:
+                        path_valid = False
+                        break
+                    cursor = cursor[part]
+                if not path_valid or not isinstance(cursor, dict) or parts[-1] not in cursor:
+                    continue  # Pfad existiert nicht — still skip
+
+                value_to_set = (
+                    change.modified_value
+                    if change.modified_value is not None
+                    else suggested_lookup.get(change.field_path)
+                )
+                cursor[parts[-1]] = value_to_set
+
+            new_version_number = active_vp_row.version + 1
+            old_vp_id = str(active_vp_row.id)
+
+            await db.execute(
+                text(
+                    "INSERT INTO tenant_voice_profile "
+                    "(tenant_id, version, is_active, source, source_meta, payload, "
+                    "prompt_version_hash, model_id) "
+                    "VALUES (:tenant_id, :version, true, 'drift_update', "
+                    ":source_meta::jsonb, :payload::jsonb, '', '')"
+                ),
+                {
+                    "tenant_id": str(auth_tenant_id),
+                    "version": new_version_number,
+                    "source_meta": json.dumps({"observation_id": observation_id}),
+                    "payload": json.dumps(new_payload),
+                },
+            )
+            await db.execute(
+                text("UPDATE tenant_voice_profile SET is_active = false WHERE id = :id"),
+                {"id": old_vp_id},
+            )
+
+    # 5. Observation aktualisieren
+    user_feedback = [
+        {
+            "field_path": c.field_path,
+            "accepted": c.accepted,
+            "modified_value": c.modified_value,
+        }
+        for c in data.changes
+    ]
+
+    await db.execute(
+        text(
+            "UPDATE voice_drift_observation "
+            "SET status = :status, user_feedback = :user_feedback::jsonb "
+            "WHERE id = :id"
+        ),
+        {
+            "status": new_status,
+            "user_feedback": json.dumps(user_feedback),
+            "id": observation_id,
+        },
+    )
+    await db.commit()
+
+    # 6. Antwort
+    return {"status": new_status, "new_version": new_version_number}
