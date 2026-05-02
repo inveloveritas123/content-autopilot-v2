@@ -53,6 +53,10 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.voice_drift_task.check_drift_triggers",
         "schedule": crontab(minute=0),  # jede volle Stunde
     },
+    "check-model-availability-daily": {
+        "task": "tasks.model_check_task.check_model_availability",
+        "schedule": crontab(hour=6, minute=0),  # täglich 06:00
+    },
     "wizard-cleanup-abandoned-daily": {
         "task": "tasks.wizard_cleanup.cleanup_abandoned_sessions",
         "schedule": 86400.0,  # täglich
@@ -75,6 +79,8 @@ celery_app.conf.include = [
     "tasks.p12_task",
     "tasks.p12b_task",
     "tasks.voice_drift_task",
+    "tasks.model_check_task",
+    "tasks.backtest_task",
     "tasks.wizard_cleanup",
     "api.wizard",
 ]

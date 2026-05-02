@@ -152,6 +152,9 @@ app.include_router(voice_feedback_router, prefix="/api", tags=["VoiceFeedback"])
 from api.wizard import router as wizard_router
 app.include_router(wizard_router, prefix="/api", tags=["Wizard"])
 
+from api.admin import router as admin_router
+app.include_router(admin_router, prefix="/api", tags=["Admin"])
+
 
 @app.get("/api/health")
 async def health():

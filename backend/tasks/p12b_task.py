@@ -317,8 +317,9 @@ def run_p12b(
 
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
+        model_id = os.environ.get("BACKTEST_MODEL_OVERRIDE") or ANTHROPIC_MODEL_ID
         response = client.messages.create(
-            model=ANTHROPIC_MODEL_ID,
+            model=model_id,
             max_tokens=2000,
             system=[
                 {

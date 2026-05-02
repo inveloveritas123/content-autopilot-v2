@@ -9,7 +9,7 @@ export function setApiKey(key) {
 }
 
 async function request(path, options = {}) {
-  const { method = 'GET', body, params } = options
+  const { method = 'GET', body, params, headers: extraHeaders } = options
   let url = `${API_BASE}${path}`
   if (params) {
     const searchParams = new URLSearchParams()
@@ -20,7 +20,7 @@ async function request(path, options = {}) {
     if (qs) url += `?${qs}`
   }
 
-  const headers = { 'X-API-Key': getApiKey() }
+  const headers = { 'X-API-Key': getApiKey(), ...extraHeaders }
   if (body) headers['Content-Type'] = 'application/json'
 
   const resp = await fetch(url, {
@@ -315,5 +315,39 @@ export function decideDriftObservation(observationId, changes) {
   return request(`/brand-voice/drift-observations/${observationId}/decide`, {
     method: 'POST',
     body: { changes },
+  })
+}
+
+// Admin Models (#80)
+
+export function listAdminModels(adminToken) {
+  return request('/admin/models', { headers: { 'X-Admin-Token': adminToken } })
+}
+
+export function startBacktest(adminToken, tenantId, candidateModelId, postCount = 10) {
+  return request('/admin/models/backtest', {
+    method: 'POST',
+    headers: { 'X-Admin-Token': adminToken },
+    body: { tenant_id: tenantId, candidate_model_id: candidateModelId, post_count: postCount },
+  })
+}
+
+export function getBacktest(adminToken, runId) {
+  return request(`/admin/models/backtest/${runId}`, { headers: { 'X-Admin-Token': adminToken } })
+}
+
+export function notifyTenantModel(adminToken, tenantId, backtestRunId) {
+  return request('/admin/models/notify-tenant', {
+    method: 'POST',
+    headers: { 'X-Admin-Token': adminToken },
+    body: { tenant_id: tenantId, backtest_run_id: backtestRunId },
+  })
+}
+
+export function applyTenantModel(adminToken, tenantId, modelId) {
+  const qs = new URLSearchParams({ tenant_id: tenantId, model_id: modelId }).toString()
+  return request(`/admin/models/apply-tenant-model?${qs}`, {
+    method: 'POST',
+    headers: { 'X-Admin-Token': adminToken },
   })
 }

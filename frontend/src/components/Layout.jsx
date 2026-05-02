@@ -41,6 +41,10 @@ const navItems = [
   { to: '/settings', label: 'Einstellungen', icon: Settings },
 ]
 
+const adminNavItems = [
+  { to: '/admin/models/backtest', label: 'Modelle', icon: Settings },
+]
+
 function ProjectSwitcher() {
   const [projects, setProjects] = useState([])
   const [open, setOpen] = useState(false)
@@ -212,26 +216,53 @@ export default function Layout({ children }) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map(item => {
-            const Icon = item.icon
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === '/'}
-                className={({ isActive }) => clsx(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-primary-50 text-primary-700 border-l-2 border-primary-700'
-                    : 'text-ink-light hover:bg-gray-50 hover:text-ink'
-                )}
-              >
-                <Icon className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={1.75} />
-                {item.label}
-              </NavLink>
-            )
-          })}
+        <nav className="flex-1 px-3 py-4 overflow-y-auto flex flex-col">
+          <div className="space-y-0.5 flex-1">
+            {navItems.map(item => {
+              const Icon = item.icon
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === '/'}
+                  className={({ isActive }) => clsx(
+                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-primary-50 text-primary-700 border-l-2 border-primary-700'
+                      : 'text-ink-light hover:bg-gray-50 hover:text-ink'
+                  )}
+                >
+                  <Icon className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={1.75} />
+                  {item.label}
+                </NavLink>
+              )
+            })}
+          </div>
+
+          {/* Admin section */}
+          <div className="mt-4 pt-3 border-t border-surface-border space-y-0.5">
+            <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+              Admin
+            </p>
+            {adminNavItems.map(item => {
+              const Icon = item.icon
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) => clsx(
+                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-primary-50 text-primary-700 border-l-2 border-primary-700'
+                      : 'text-ink-light hover:bg-gray-50 hover:text-ink'
+                  )}
+                >
+                  <Icon className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={1.75} />
+                  {item.label}
+                </NavLink>
+              )
+            })}
+          </div>
         </nav>
 
         {/* Footer */}
