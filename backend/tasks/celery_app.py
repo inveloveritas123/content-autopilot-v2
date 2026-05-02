@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 
 from config import settings
 
@@ -48,6 +49,14 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.setup_pipeline_task.resume_paused_pipelines",
         "schedule": 86400.0,  # täglich
     },
+    "check-voice-drift-triggers-hourly": {
+        "task": "tasks.voice_drift_task.check_drift_triggers",
+        "schedule": crontab(minute=0),  # jede volle Stunde
+    },
+    "wizard-cleanup-abandoned-daily": {
+        "task": "tasks.wizard_cleanup.cleanup_abandoned_sessions",
+        "schedule": 86400.0,  # täglich
+    },
 }
 
 # Explicit task module imports
@@ -63,4 +72,8 @@ celery_app.conf.include = [
     "tasks.pipeline_pump_task",
     "tasks.questions_task",
     "tasks.setup_pipeline_task",
+    "tasks.p12_task",
+    "tasks.p12b_task",
+    "tasks.voice_drift_task",
+    "api.wizard",
 ]
