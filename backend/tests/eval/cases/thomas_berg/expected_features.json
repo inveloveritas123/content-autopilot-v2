@@ -1,0 +1,10 @@
+{
+  "p01": {
+    "kernbotschaft": ["Rendite", "Lage"],
+    "zielgruppe": ["Kaeufer", "Investoren"]
+  },
+  "p03": {
+    "grundton": ["vertrauenswuerdig", "sachlich"],
+    "signalwoerter": ["Rendite", "Lage"]
+  }
+}

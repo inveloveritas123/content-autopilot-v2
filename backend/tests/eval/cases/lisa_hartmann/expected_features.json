@@ -1,0 +1,10 @@
+{
+  "p01": {
+    "kernbotschaft": ["Heilung", "Praevention"],
+    "zielgruppe": ["Patienten", "praevention"]
+  },
+  "p03": {
+    "grundton": ["empathisch", "sachlich"],
+    "signalwoerter": ["Diagnose", "Heilung"]
+  }
+}

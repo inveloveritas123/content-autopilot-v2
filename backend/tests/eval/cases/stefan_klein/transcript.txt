@@ -1,0 +1,15 @@
+Interviewer: Bitte beschreiben Sie Ihre Arbeit als IT-Berater.
+
+Stefan Klein: Ich berate mittelstaendische Unternehmen bei der Digitalisierung ihrer IT-Infrastruktur. Mein Fokus liegt auf Sicherheit und Systemstabilitaet. Viele Unternehmer denken, IT-Sicherheit sei ein Thema fuer grosse Konzerne. Das ist ein gefaehrlicher Irrtum.
+
+Interviewer: Was ist Ihr typisches Kundenproblem?
+
+Stefan Klein: Die meisten meiner Klienten wissen, dass sie ein System brauchen, aber sie wissen nicht, wo sie anfangen sollen. Sie haben vielleicht zehn verschiedene Tools im Einsatz, keiner weiss genau, wer worauf Zugriff hat, und Backups laufen seit Monaten ins Leere. Ich komme rein, schaffe Uebersicht, und baue dann ein System, das wirklich funktioniert.
+
+Interviewer: Was ist Ihre Kernbotschaft an Unternehmer?
+
+Stefan Klein: Sicherheit ist kein Luxus, es ist die Basis. Ein Unternehmen ohne funktionierende IT-Sicherheit ist wie ein Haus ohne Fundament. Man kann schoen einrichten, aber bei einem Sturm faellt alles zusammen. Das System muss stimmen, bevor man ueber Wachstum reden kann.
+
+Interviewer: Wer sind Ihre idealen Klienten?
+
+Stefan Klein: Unternehmen mit fuenf bis fuenfzig Mitarbeitern, die gewachsen sind und merken, dass die IT mitgewachsen sein muss. Oft Handwerk, Produktion, Handel. Menschen, die verstehen, dass verloren gegangene Daten echten Schaden bedeuten.

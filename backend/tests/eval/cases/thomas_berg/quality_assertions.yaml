@@ -1,0 +1,16 @@
+post:
+  min_length: 300
+  max_length: 3000
+  required_signal_words:
+    - "Rendite"
+    - "Lage"
+  forbidden_words:
+    - "Ich hoffe"
+    - "Als KI"
+    - "meiner Meinung nach"
+    - "Fazit:"
+    - "In diesem Beitrag"
+    - "Zusammenfassend"
+    - "übrigens"
+  max_question_marks: 2
+  forbidden_phrases: []

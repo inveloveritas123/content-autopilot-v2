@@ -1,0 +1,10 @@
+{
+  "p01": {
+    "kernbotschaft": ["Energie", "Ernaehrung"],
+    "zielgruppe": ["Frauen", "Vitalitaet"]
+  },
+  "p03": {
+    "grundton": ["ermutigend", "praktisch"],
+    "signalwoerter": ["Energie", "Nährwert"]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "p01": {
+    "kernbotschaft": ["Sicherheit", "System"],
+    "zielgruppe": ["Mittelstand", "Unternehmen"]
+  },
+  "p03": {
+    "grundton": ["sachlich", "direkt"],
+    "signalwoerter": ["Sicherheit", "System"]
+  }
+}

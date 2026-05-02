@@ -1,0 +1,14 @@
+[
+  {
+    "question_text": "Was ist dein persoenliches Learning aus diesem Thema?",
+    "answer_text": "Ich habe einen Klienten gehabt, der mir sagte, seine IT-Sicherheit sei gut aufgestellt. Drei Monate spaeter hatten sie einen Ransomware-Angriff. Wiederherstellung: acht Tage, Kosten: ueber achtzigtausend Euro. Das war mein persoenlichster Lehrsatz: Glauben ist nicht Wissen."
+  },
+  {
+    "question_text": "Welche konkrete Situation hat dich dazu gebracht?",
+    "answer_text": "Ein Handwerksbetrieb mit dreissig Mitarbeitern. Der Geschaeftsfuehrer war stolz auf seine neue Website, aber hatte keine einzige funktionierende Datensicherung. Ich habe das in der ersten Stunde des Erstgespraechs herausgefunden. Solche Systeme machen mir Sorgen."
+  },
+  {
+    "question_text": "Was soll der Leser als naechsten Schritt tun?",
+    "answer_text": "Heute noch pruefen: Wann lief mein letztes Backup? Kann ich es im Notfall tatsaechlich wiederherstellen? Diese zwei Fragen retten Unternehmen."
+  }
+]
