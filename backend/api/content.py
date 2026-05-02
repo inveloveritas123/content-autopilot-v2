@@ -187,7 +187,20 @@ async def update_content(
     if not piece or piece.tenant_id != tenant.id:
         raise HTTPException(status_code=404, detail="Content not found")
 
-    for field, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+
+    # Enforce final approval constraint (#85): PUT cannot bypass publish guard
+    if update_data.get("status") == "published":
+        if piece.status != "approved" or not piece.approved_by:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "unapproved_post",
+                    "message": "Post muss zuerst freigegeben werden — status 'published' via PUT nicht erlaubt ohne Approval",
+                }
+            )
+
+    for field, value in update_data.items():
         setattr(piece, field, value)
 
     await db.commit()
@@ -272,7 +285,8 @@ async def bulk_approve_content(
     for p in pieces:
         p.status = "approved"
         p.approved_at = now
-        p.approved_by = "bulk"
+        p.approved_by = "web_ui"
+        p.approval_method = "web_ui"
     await db.commit()
     return {"approved": len(pieces), "ids": [str(p.id) for p in pieces]}
 
@@ -338,6 +352,17 @@ async def bulk_publish_content(
         )
     )).scalars().all()
 
+    unapproved = [p for p in pieces if p.status != "approved" or not p.approved_by]
+    if unapproved:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "unapproved_posts",
+                "message": f"{len(unapproved)} Post(s) noch nicht freigegeben",
+                "ids": [str(p.id) for p in unapproved],
+            }
+        )
+
     now = datetime.utcnow()
     for p in pieces:
         p.status = "published"
@@ -357,6 +382,16 @@ async def mark_published(
     piece = await db.get(ContentPiece, uuid.UUID(content_id))
     if not piece or piece.tenant_id != tenant.id:
         raise HTTPException(status_code=404, detail="Content not found")
+
+    # Enforce final approval constraint (#85)
+    if piece.status != "approved" or not piece.approved_by:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "unapproved_post",
+                "message": "Post muss zuerst manuell freigegeben werden (status='approved' und approved_by gesetzt)",
+            }
+        )
 
     piece.status = "published"
     piece.approved_at = piece.approved_at or datetime.utcnow()
@@ -389,7 +424,8 @@ async def approve_content(
 
     piece.status = "approved"
     piece.approved_at = datetime.utcnow()
-    piece.approved_by = "api"
+    piece.approved_by = "web_ui"
+    piece.approval_method = "web_ui"
     await db.commit()
 
     return {"id": str(piece.id), "status": "approved"}

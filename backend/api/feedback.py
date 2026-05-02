@@ -103,6 +103,8 @@ async def submit_edit_diff(
     piece.content_text = req.final_text
     piece.status = "approved"
     piece.approved_at = datetime.utcnow()
+    piece.approved_by = "web_ui"
+    piece.approval_method = "web_ui"
 
     await db.commit()
 

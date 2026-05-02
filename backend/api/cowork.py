@@ -419,6 +419,10 @@ async def cowork_save_post(
             "user_edited": body.user_edited,
             "cowork_saved_at": datetime.utcnow().isoformat(),
         }
+        if body.approved:
+            existing.approved_at = datetime.utcnow()
+            existing.approved_by = "web_ui"
+            existing.approval_method = "web_ui"
         post_id = str(existing.id)
     else:
         piece = ContentPiece(
@@ -436,6 +440,10 @@ async def cowork_save_post(
         )
         db.add(piece)
         await db.flush()
+        if body.approved:
+            piece.approved_at = datetime.utcnow()
+            piece.approved_by = "web_ui"
+            piece.approval_method = "web_ui"
         post_id = str(piece.id)
 
     # Update item status if approved

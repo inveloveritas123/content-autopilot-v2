@@ -443,6 +443,9 @@ def run_p12b(
                 "decision": "optimiert",
                 "final_post": output_json.get("optimierter_post", p12_output["post"]),
                 "begruendung": output_json.get("begruendung", ""),
+                "content_metadata": {
+                    "telegram_approval_hint": "Bitte gib diesen Post in der App frei, bevor er auf LinkedIn veröffentlicht wird.",
+                },
             }
 
         # decision == "zurueck_an_p12" (und loop_iteration == 0)

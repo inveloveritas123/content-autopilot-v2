@@ -41,7 +41,12 @@ function PostQueueCard({ post, onPublished }) {
       setDone(true)
       onPublished(post.id)
     } catch(e) {
-      console.error(e)
+      const detail = e?.detail || e?.message || ''
+      if (typeof detail === 'object' && detail?.error === 'unapproved_post') {
+        alert('Dieser Post muss zuerst in der App freigegeben werden, bevor er veröffentlicht werden kann.')
+      } else {
+        console.error(e)
+      }
     }
     setPublishing(false)
   }
@@ -204,6 +209,14 @@ export default function PublishQueue() {
           <p className="text-2xl font-bold tabular-nums text-ink">{posts.length}</p>
           <p className="text-xs text-ink-muted mt-0.5">Gesamt eingeplant</p>
         </div>
+      </div>
+
+      {/* Approval requirement notice */}
+      <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
+        <span className="text-amber-600 text-sm shrink-0">!</span>
+        <p className="text-xs text-amber-800">
+          <strong>Freigabe erforderlich:</strong> Posts müssen zuerst in der Freigabe-Ansicht genehmigt werden (status: freigegeben) bevor sie als veröffentlicht markiert werden können.
+        </p>
       </div>
 
       {/* Workflow hint */}

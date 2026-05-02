@@ -8,6 +8,7 @@ from sqlalchemy import text
 from pydantic import BaseModel
 
 from dependencies import get_db
+from models.content_piece import ContentPiece
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -134,6 +135,37 @@ async def notify_tenant_model(req: TenantNotifyRequest, db=Depends(get_db)):
     await db.commit()
 
     return {"status": "sent", "message": message}
+
+
+class ForcePublishRequest(BaseModel):
+    content_piece_id: str
+    reason: str
+
+
+@router.post("/content/force-publish", dependencies=[Depends(require_admin)])
+async def force_publish_content(req: ForcePublishRequest, db=Depends(get_db)):
+    """Admin override: publish post without normal approval flow. Logged as admin_override."""
+    import datetime, uuid as _uuid
+    piece = await db.get(ContentPiece, _uuid.UUID(req.content_piece_id))
+    if not piece:
+        raise HTTPException(404, "Content piece not found")
+
+    piece.status = "published"
+    piece.approved_by = "admin_override"
+    piece.approval_method = "admin_override"
+    piece.approved_at = piece.approved_at or datetime.datetime.utcnow()
+
+    # Audit log
+    await db.execute(
+        text("""INSERT INTO setup_pipeline_run (id, tenant_id, stage, status, error_meta, created_at)
+                VALUES (:id, :tid, 'admin_override_publish', 'published', :meta, NOW())"""),
+        {"id": str(_uuid.uuid4()), "tid": str(piece.tenant_id),
+         "meta": json.dumps({"content_piece_id": req.content_piece_id, "reason": req.reason, "by": "admin"})}
+    )
+    await db.commit()
+    import logging as _log
+    _log.getLogger(__name__).info(f"[AdminOverride] force-publish content_piece={req.content_piece_id} reason={req.reason!r}")
+    return {"status": "published", "content_piece_id": req.content_piece_id, "approval_method": "admin_override"}
 
 
 class TenantDisableRequest(BaseModel):

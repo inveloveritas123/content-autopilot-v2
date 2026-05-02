@@ -26,6 +26,7 @@ class ContentPiece(Base):
     scheduled_for: Mapped[Optional[datetime]] = mapped_column(DateTime)
     approved_by: Mapped[Optional[str]] = mapped_column(String(100))
     approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    approval_method: Mapped[Optional[str]] = mapped_column(String(50))  # web_ui / telegram_button / admin_override
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     source_item = relationship("SourceItem", back_populates="content_pieces")
