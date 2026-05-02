@@ -19,6 +19,7 @@ import {
   CalendarDays,
   Send,
   MessagesSquare,
+  Mic2,
 } from 'lucide-react'
 import { getProjects, createProject, deleteProject } from '../api'
 
@@ -34,6 +35,7 @@ const navItems = [
   { to: '/analytics', label: 'Analytics', icon: PieChart },
   { to: '/feedback', label: 'Feedback', icon: BarChart3 },
   { to: '/voice', label: 'Voice-Profil', icon: Fingerprint },
+  { to: '/brand-voice', label: 'Brand Voice', icon: Mic2 },
   { to: '/settings', label: 'Einstellungen', icon: Settings },
 ]
 

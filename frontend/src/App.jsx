@@ -9,6 +9,7 @@ import Feedback from './components/Feedback'
 import Posts from './components/Posts'
 import Calendar from './components/Calendar'
 import VoiceProfile from './components/VoiceProfile'
+import BrandVoice from './components/BrandVoice'
 import Settings from './components/Settings'
 import Analytics from './components/Analytics'
 import PublishQueue from './components/PublishQueue'
@@ -34,6 +35,7 @@ function App() {
         <Route path="/posts" element={<Posts />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/voice" element={<VoiceProfile />} />
+        <Route path="/brand-voice" element={<BrandVoice />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/publish" element={<PublishQueue />} />
         <Route path="/dialogue" element={<Dialogue />} />

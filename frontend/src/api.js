@@ -271,3 +271,21 @@ export const submitDialogueAnswers = (itemId, answers) =>
   request(`/dialogue/items/${itemId}/answers`, { method: 'POST', body: { answers } })
 export const generateDialoguePostPrompt = (itemId, format = 'story') =>
   request(`/dialogue/items/${itemId}/generate-post`, { method: 'POST', params: { format, use_claude_direct: true } })
+
+// Brand Voice API (#59)
+export const getBrandVoiceStatus = (tenantId) => request(`/brand-voice/${tenantId}`)
+export async function uploadBrandVoiceFile(formData) {
+  const resp = await fetch(`${API_BASE}/brand-voice/upload`, {
+    method: 'POST',
+    headers: { 'X-API-Key': getApiKey() },
+    body: formData,
+  })
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: resp.statusText }))
+    throw new Error(err.detail || 'Upload fehlgeschlagen')
+  }
+  return resp.json()
+}
+export const importBrandVoiceFromNC = (tenantId, path, sourceType) =>
+  request('/brand-voice/import-source', { method: 'POST', body: { tenant_id: tenantId, source_path: path, source_type: sourceType } })
+export const getBrandVoicePipelineStatus = (runId) => request(`/brand-voice/pipeline/${runId}`)
