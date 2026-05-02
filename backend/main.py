@@ -146,6 +146,12 @@ app.include_router(ws_router, tags=["WebSocket"])
 from api.brand_voice import router as brand_voice_router
 app.include_router(brand_voice_router, prefix="/api", tags=["BrandVoice"])
 
+from api.voice_feedback import router as voice_feedback_router
+app.include_router(voice_feedback_router, prefix="/api", tags=["VoiceFeedback"])
+
+from api.wizard import router as wizard_router
+app.include_router(wizard_router, prefix="/api", tags=["Wizard"])
+
 
 @app.get("/api/health")
 async def health():
