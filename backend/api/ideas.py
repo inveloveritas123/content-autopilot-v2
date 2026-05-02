@@ -535,12 +535,32 @@ def _run_p12_p12b_pipeline(tenant_id, idea_id, answers_list, voice_payload, avat
                 "reason": "p12_loop_failed",
             }
 
+    # Sensitive-Topic-Detection (Issue #83)
+    from services.sensitive_detector import detect_sensitive_topics
+
+    final_post = p12b_result.get("final_post") or p12_output.get("post", "")
+    sensitive_result = None
+    flagged = False
+    try:
+        sensitive_result = detect_sensitive_topics(final_post, use_llm=True)
+        flagged = sensitive_result.is_sensitive
+    except Exception as _det_exc:
+        logger.warning("[SensitiveDetector] Error: %s", _det_exc)
+
     return {
         "status": "ok",
-        "final_post": p12b_result.get("final_post", p12_output.get("post", "")),
+        "final_post": final_post,
         "p12_run_id": p12_run_id,
         "p12b_status": p12b_result.get("status"),
         "design_notes": design_notes_output,
+        "flagged_for_review": flagged,
+        "sensitive_categories": sensitive_result.categories if sensitive_result else [],
+        "sensitive_phrases": [
+            {"phrase": p.phrase, "category": p.category}
+            for p in (sensitive_result.flagged_phrases if sensitive_result else [])
+        ],
+        "sensitive_severity": sensitive_result.severity if sensitive_result else "low",
+        "sensitive_confidence": sensitive_result.confidence if sensitive_result else 0.75,
     }
 
 
@@ -607,6 +627,9 @@ async def generate_post_from_answers(
     if not final_post:
         raise HTTPException(500, "Post-Generierung fehlgeschlagen — kein Post-Text")
 
+    # Status: 'flagged' wenn Sensitive-Detector angeschlagen, sonst 'draft'
+    piece_status = "flagged" if pipeline_result.get("flagged_for_review") else "draft"
+
     # Content-Piece aus P12-Run abrufen (P12 hat es bereits in DB gespeichert)
     p12_run_id = pipeline_result["p12_run_id"]
     piece_row = None
@@ -623,6 +646,7 @@ async def generate_post_from_answers(
     if piece_row:
         # P12b-optimierten Text updaten und Metadaten erweitern
         piece_row.content_text = final_post
+        piece_row.status = piece_status
         meta = dict(piece_row.content_metadata or {})
         meta["p12b_status"] = pipeline_result["p12b_status"]
         piece_row.content_metadata = meta
@@ -634,13 +658,14 @@ async def generate_post_from_answers(
                 "INSERT INTO content_pieces "
                 "(id, tenant_id, idea_id, channel, content_text, content_metadata, status, created_at) "
                 "VALUES (:id, :tenant_id, :idea_id, 'linkedin', :content_text, "
-                ":content_metadata::jsonb, 'draft', now())"
+                ":content_metadata::jsonb, :status, now())"
             ),
             {
                 "id": fallback_id,
                 "tenant_id": str(tenant_id),
                 "idea_id": str(idea_id),
                 "content_text": final_post,
+                "status": piece_status,
                 "content_metadata": json.dumps({
                     "p12_run_id": p12_run_id,
                     "p12b_status": pipeline_result["p12b_status"],
@@ -653,6 +678,31 @@ async def generate_post_from_answers(
     idea.status = "content_generated"
     await db.commit()
     await db.refresh(piece_row)
+
+    # Review-Queue-Eintrag anlegen wenn Post geflaggt wurde (Issue #83)
+    if pipeline_result.get("flagged_for_review"):
+        import uuid as _uuid
+        await db.execute(
+            text(
+                "INSERT INTO tenant_review_queue "
+                "(id, tenant_id, content_piece_id, post_text, severity, categories, "
+                "flagged_phrases, confidence, detection_layer, status) "
+                "VALUES (:id, :tid, :cpid, :post_text, :sev, :cats::jsonb, :phrases::jsonb, "
+                ":conf, :layer, 'pending')"
+            ),
+            {
+                "id": str(_uuid.uuid4()),
+                "tid": str(tenant_id),
+                "cpid": str(piece_row.id),
+                "post_text": pipeline_result["final_post"][:5000],
+                "sev": pipeline_result.get("sensitive_severity", "medium"),
+                "cats": json.dumps(pipeline_result.get("sensitive_categories", [])),
+                "phrases": json.dumps(pipeline_result.get("sensitive_phrases", [])),
+                "conf": pipeline_result.get("sensitive_confidence", 0.75),
+                "layer": "pattern",
+            },
+        )
+        await db.commit()
 
     response = {
         "message": "1 Post generiert",

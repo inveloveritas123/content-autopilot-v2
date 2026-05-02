@@ -21,6 +21,7 @@ import {
   MessagesSquare,
   Mic2,
   Brain,
+  ShieldAlert,
 } from 'lucide-react'
 import { getProjects, createProject, deleteProject } from '../api'
 
@@ -38,6 +39,7 @@ const navItems = [
   { to: '/voice', label: 'Voice-Profil', icon: Fingerprint },
   { to: '/brand-voice', label: 'Brand Voice', icon: Mic2 },
   { to: '/brand-voice/insights', label: 'So liest KI mich', icon: Brain },
+  { to: '/brand-voice/review-queue', label: 'Review-Queue', icon: ShieldAlert },
   { to: '/settings', label: 'Einstellungen', icon: Settings },
 ]
 

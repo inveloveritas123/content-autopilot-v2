@@ -318,6 +318,18 @@ export function decideDriftObservation(observationId, changes) {
   })
 }
 
+// Review Queue (#83)
+export function getReviewQueue(tenantId = 'me', status = 'pending') {
+  return request('/brand-voice/review-queue', { params: { tenant_id: tenantId, status } })
+}
+
+export function decideReviewQueueItem(queueId, action, note = '') {
+  return request(`/brand-voice/review-queue/${queueId}/decide`, {
+    method: 'POST',
+    body: { action, note },
+  })
+}
+
 // Admin Models (#80)
 
 export function listAdminModels(adminToken) {

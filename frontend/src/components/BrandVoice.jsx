@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import {
   Mic2,
   CheckCircle2,
@@ -13,6 +13,7 @@ import {
   Loader2,
   Info,
   Sparkles,
+  ShieldAlert,
 } from 'lucide-react'
 import { Dialog } from './ui/Dialog'
 import {
@@ -20,6 +21,7 @@ import {
   uploadBrandVoiceFile,
   importBrandVoiceFromNC,
   getBrandVoicePipelineStatus,
+  getReviewQueue,
 } from '../api'
 
 const TENANT_ID = 'me'
@@ -740,6 +742,7 @@ export default function BrandVoice() {
   const [statusError, setStatusError] = useState(null)
   const [pipelineRunId, setPipelineRunId] = useState(null)
   const [showNCPicker, setShowNCPicker] = useState(false)
+  const [reviewQueueCount, setReviewQueueCount] = useState(0)
 
   const loadStatus = useCallback(async () => {
     setStatusError(null)
@@ -755,6 +758,15 @@ export default function BrandVoice() {
   useEffect(() => {
     loadStatus()
   }, [loadStatus])
+
+  useEffect(() => {
+    getReviewQueue('me', 'pending')
+      .then((data) => {
+        const list = data.items || data || []
+        setReviewQueueCount(Array.isArray(list) ? list.length : 0)
+      })
+      .catch(() => {})
+  }, [])
 
   async function handleNCImport(tenantId, path, sourceType) {
     const result = await importBrandVoiceFromNC(tenantId, path, sourceType)
@@ -803,6 +815,21 @@ export default function BrandVoice() {
           <AlertCircle className="w-4 h-4 shrink-0" />
           Fehler beim Laden des Status: {statusError}
         </div>
+      )}
+
+      {/* Review-Queue warning banner */}
+      {reviewQueueCount > 0 && (
+        <Link
+          to="/brand-voice/review-queue"
+          className="flex items-center gap-3 mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 hover:bg-red-100 transition-colors"
+        >
+          <ShieldAlert className="w-4 h-4 shrink-0" />
+          <span className="flex-1">
+            <span className="font-semibold">{reviewQueueCount} {reviewQueueCount === 1 ? 'Post' : 'Posts'} in Review-Queue</span>
+            {' '}— Sensible Themen warten auf Freigabe.
+          </span>
+          <span className="text-xs font-medium underline shrink-0">Jetzt prüfen →</span>
+        </Link>
       )}
 
       {/* Status Tile — shows skeleton when statusData is undefined */}

@@ -13,6 +13,7 @@ import BrandVoice from './components/BrandVoice'
 import WizardPage from './components/WizardPage'
 import VoiceInsights from './components/VoiceInsights'
 import DriftReview from './components/DriftReview'
+import ReviewQueue from './components/ReviewQueue'
 import AdminModels from './components/AdminModels'
 import Settings from './components/Settings'
 import Analytics from './components/Analytics'
@@ -44,6 +45,7 @@ function App() {
         <Route path="/brand-voice/wizard/:sessionId" element={<WizardPage />} />
         <Route path="/brand-voice/insights" element={<VoiceInsights />} />
         <Route path="/brand-voice/drift-review" element={<DriftReview />} />
+        <Route path="/brand-voice/review-queue" element={<ReviewQueue />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/publish" element={<PublishQueue />} />
         <Route path="/dialogue" element={<Dialogue />} />

@@ -350,6 +350,133 @@ async def get_drift_observations(
 
 
 # ---------------------------------------------------------------------------
+# GET  /brand-voice/review-queue        — muss VOR /{tenant_id} definiert sein
+# POST /brand-voice/review-queue/{id}/decide
+# ---------------------------------------------------------------------------
+
+class ReviewDecideRequest(BaseModel):
+    action: Literal["approved", "rejected"]
+    note: str = ""
+
+
+@router.get("/brand-voice/review-queue")
+async def get_review_queue(
+    tenant_id: str = "me",
+    status: str = "pending",
+    auth_tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Sensible Posts in der Review-Queue abrufen (gefiltert nach Status)."""
+    resolved_tenant_id = str(auth_tenant_id) if tenant_id == "me" else tenant_id
+    if resolved_tenant_id != str(auth_tenant_id):
+        raise HTTPException(status_code=403, detail="Zugriff verweigert")
+
+    rows = (
+        await db.execute(
+            text(
+                "SELECT id, tenant_id, content_piece_id, post_text, severity, "
+                "categories, flagged_phrases, confidence, detection_layer, "
+                "status, reviewed_by, review_note, created_at, reviewed_at "
+                "FROM tenant_review_queue "
+                "WHERE tenant_id = :tenant_id AND status = :status "
+                "ORDER BY created_at DESC"
+            ),
+            {"tenant_id": resolved_tenant_id, "status": status},
+        )
+    ).fetchall()
+
+    items = [
+        {
+            "id": str(row.id),
+            "tenant_id": str(row.tenant_id),
+            "content_piece_id": str(row.content_piece_id) if row.content_piece_id else None,
+            "post_text": row.post_text,
+            "severity": row.severity,
+            "categories": row.categories,
+            "flagged_phrases": row.flagged_phrases,
+            "confidence": float(row.confidence) if row.confidence is not None else None,
+            "detection_layer": row.detection_layer,
+            "status": row.status,
+            "reviewed_by": row.reviewed_by,
+            "review_note": row.review_note,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
+        }
+        for row in rows
+    ]
+
+    return {"items": items, "count": len(items)}
+
+
+@router.post("/brand-voice/review-queue/{queue_id}/decide")
+async def decide_review_queue(
+    queue_id: str,
+    data: ReviewDecideRequest,
+    auth_tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Review-Entscheidung für einen geflaggten Post: approved oder rejected."""
+    import uuid as _uuid_mod
+    try:
+        _uuid_mod.UUID(queue_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Ungültige queue_id — muss UUID-Format sein")
+
+    # 1. Queue-Eintrag laden
+    queue_row = (
+        await db.execute(
+            text(
+                "SELECT id, tenant_id, content_piece_id, status "
+                "FROM tenant_review_queue WHERE id = :id"
+            ),
+            {"id": queue_id},
+        )
+    ).fetchone()
+
+    if not queue_row:
+        raise HTTPException(status_code=404, detail="Queue-Eintrag nicht gefunden")
+
+    # Tenant-Isolation
+    if str(queue_row.tenant_id) != str(auth_tenant_id):
+        raise HTTPException(status_code=403, detail="Zugriff verweigert")
+
+    if queue_row.status != "pending":
+        raise HTTPException(status_code=400, detail="Bereits entschieden")
+
+    if data.action not in ("approved", "rejected"):
+        raise HTTPException(status_code=422, detail="action muss 'approved' oder 'rejected' sein")
+
+    # 2. Queue-Eintrag aktualisieren
+    await db.execute(
+        text(
+            "UPDATE tenant_review_queue "
+            "SET status = :status, review_note = :note, reviewed_at = NOW() "
+            "WHERE id = :id"
+        ),
+        {"status": data.action, "note": data.note or None, "id": queue_id},
+    )
+
+    # 3. Content-Piece-Status synchronisieren
+    if queue_row.content_piece_id:
+        new_piece_status = "draft" if data.action == "approved" else "rejected"
+        await db.execute(
+            text(
+                "UPDATE content_pieces SET status = :status "
+                "WHERE id = :id AND tenant_id = :tid"
+            ),
+            {
+                "status": new_piece_status,
+                "id": str(queue_row.content_piece_id),
+                "tid": str(auth_tenant_id),
+            },
+        )
+
+    await db.commit()
+
+    return {"status": data.action, "queue_id": queue_id}
+
+
+# ---------------------------------------------------------------------------
 # GET /brand-voice/{tenant_id}
 # ---------------------------------------------------------------------------
 
