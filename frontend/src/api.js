@@ -289,3 +289,13 @@ export async function uploadBrandVoiceFile(formData) {
 export const importBrandVoiceFromNC = (tenantId, path, sourceType) =>
   request('/brand-voice/import-source', { method: 'POST', body: { tenant_id: tenantId, source_path: path, source_type: sourceType } })
 export const getBrandVoicePipelineStatus = (runId) => request(`/brand-voice/pipeline/${runId}`)
+
+// Brand Voice Wizard (#70)
+export const startWizardSession = () => request('/brand-voice/wizard/start', { method: 'POST' })
+export const getWizardSession = (sessionId) => request(`/brand-voice/wizard/${sessionId}`)
+export const answerWizardQuestion = (sessionId, phase, questionId, answer) =>
+  request(`/brand-voice/wizard/${sessionId}/answer`, { method: 'POST', body: { phase, question_id: questionId, answer } })
+export const synthesizeWizardPhase = (sessionId, phase) =>
+  request(`/brand-voice/wizard/${sessionId}/synthesize-phase`, { method: 'POST', body: { phase } })
+export const finalizeWizardSession = (sessionId) =>
+  request(`/brand-voice/wizard/${sessionId}/finalize`, { method: 'POST' })
