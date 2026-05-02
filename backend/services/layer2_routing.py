@@ -1,0 +1,136 @@
+"""
+Schicht-2 Routing — deterministisches Intent-zu-Pipeline-Mapping.
+KEIN LLM in dieser Schicht. Pure Python if-elif Logic.
+"""
+import logging
+from dataclasses import dataclass, field
+from typing import Optional
+
+from models.base import sync_session_factory
+
+logger = logging.getLogger(__name__)
+
+ALLOWED_TARGETS = frozenset({
+    "p08_response",
+    "p10_extract_post_kernel",
+    "voice_feedback_api",
+    "help_response",
+    "close_friendly",
+    "reviewer_queue",
+    "paused",
+})
+
+
+class SecurityException(Exception):
+    pass
+
+
+@dataclass
+class RoutingDecision:
+    target: str
+    payload: dict = field(default_factory=dict)
+    reason: str = ""
+
+    def __post_init__(self):
+        if self.target not in ALLOWED_TARGETS:
+            raise SecurityException(
+                f"Routing-Ziel '{self.target}' nicht in ALLOWED_TARGETS — möglicher Injection-Versuch"
+            )
+
+
+def route_telegram_intent(
+    extraction_result,
+    tenant_id: str,
+    last_post_id: Optional[str] = None,
+    current_session=None,
+) -> RoutingDecision:
+    """
+    Deterministisches Routing basierend auf dem Ergebnis der Schicht-1-Extraktion.
+    Kein LLM-Aufruf. Gibt eine RoutingDecision mit validiertem Ziel zurück.
+    """
+    # 1. Cost-Cap: pausieren
+    if extraction_result.routed_to == "paused_for_cost":
+        return RoutingDecision("paused", {}, "cost_cap_reached")
+
+    # 2. Schicht-1 hat Eintrag zur manuellen Prüfung markiert
+    if extraction_result.flagged_for_review:
+        return RoutingDecision("reviewer_queue", {}, "flagged_in_schicht_1")
+
+    # 3. Antwort auf laufende Session-Frage
+    if (
+        extraction_result.intent == "answer_to_question"
+        and current_session is not None
+        and getattr(current_session, "status", None) == "active"
+    ):
+        return RoutingDecision(
+            "p08_response",
+            {
+                "session_id": str(current_session.id),
+                "features": extraction_result.extracted_features,
+            },
+            "active_session_response",
+        )
+
+    # 4. Spontane Content-Idee
+    if extraction_result.intent == "spontaneous_idea":
+        return RoutingDecision(
+            "p10_extract_post_kernel",
+            {
+                "features": extraction_result.extracted_features,
+                "tenant_id": tenant_id,
+            },
+            "spontaneous_idea",
+        )
+
+    # 5. Feedback zu einem bestehenden Post
+    if extraction_result.intent == "post_feedback" and last_post_id:
+        return RoutingDecision(
+            "voice_feedback_api",
+            {
+                "target_post_id": last_post_id,
+                "features": extraction_result.extracted_features,
+            },
+            "post_feedback",
+        )
+
+    # 6. Frage an den Bot (Hilfe)
+    if extraction_result.intent == "question_to_bot":
+        return RoutingDecision(
+            "help_response",
+            {"template_key": "bot_help"},
+            "static_help",
+        )
+
+    # 7. Smalltalk
+    if extraction_result.intent == "smalltalk":
+        return RoutingDecision(
+            "close_friendly",
+            {"template_key": "smalltalk_close"},
+            "smalltalk",
+        )
+
+    # Default: unbekannter oder nicht gemappter Intent
+    logger.info(
+        "route_telegram_intent: kein Mapping für intent=%r tenant=%s — reviewer_queue",
+        extraction_result.intent,
+        tenant_id,
+    )
+    return RoutingDecision("reviewer_queue", {}, "unmapped_intent")
+
+
+def persist_routing_decision(message_log_id: str, decision: RoutingDecision) -> None:
+    """
+    Persistiert das Routing-Ziel in telegram_message_log.
+    Fail-open: Ausnahmen werden nur geloggt, das Routing läuft weiter.
+    """
+    try:
+        from sqlalchemy import text
+
+        with sync_session_factory() as session:
+            session.execute(
+                text("UPDATE telegram_message_log SET routed_to = :rt WHERE id = :id"),
+                {"rt": decision.target, "id": message_log_id},
+            )
+            session.commit()
+    except Exception as e:
+        logger.warning("persist_routing_decision fehlgeschlagen: %s", type(e).__name__)
