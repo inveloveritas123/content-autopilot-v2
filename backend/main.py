@@ -155,6 +155,9 @@ app.include_router(wizard_router, prefix="/api", tags=["Wizard"])
 from api.admin import router as admin_router
 app.include_router(admin_router, prefix="/api", tags=["Admin"])
 
+from api.reservoir import router as reservoir_router
+app.include_router(reservoir_router, prefix="/api", tags=["Reservoir"])
+
 
 @app.get("/api/health")
 async def health():

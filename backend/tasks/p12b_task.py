@@ -420,6 +420,66 @@ def run_p12b(
             json.dumps(output_json, sort_keys=True).encode()
         ).hexdigest()
 
+        # ------------------------------------------------------------------
+        # Quote-Validation gegen Reservoir (#86) — Pflicht-Schritt
+        # Läuft VOR _finalize_run damit Audit-Status korrekt ist.
+        # Fail-open: DB-Fehler blockieren den Post-Flow nicht.
+        # ------------------------------------------------------------------
+        if decision == "optimiert":
+            final_post_candidate = output_json.get("optimierter_post", p12_output["post"])
+            try:
+                from services.quote_validator import validate_post_quotes
+                content_texts: list = []
+                extracted_quotes_lists: list = []
+                with sync_session_factory() as _res_session:
+                    _rows = _res_session.execute(
+                        text("SELECT content_text, extracted_quotes FROM tenant_reservoir WHERE tenant_id = :tid"),
+                        {"tid": tenant_id}
+                    ).fetchall()
+                    # Materialize inside session scope to avoid detached-row issues
+                    content_texts = [r[0] for r in _rows]
+                    extracted_quotes_lists = [r[1] or [] for r in _rows]
+
+                if content_texts:
+                    val_result = validate_post_quotes(
+                        post_text=final_post_candidate,
+                        reservoir_content_texts=content_texts,
+                        reservoir_extracted_quotes=extracted_quotes_lists,
+                    )
+
+                    if not val_result.is_valid:
+                        if loop_iteration == 0:
+                            # Hallucination found — force back to P12 with hint
+                            logger.warning(
+                                "p12b run_id=%s: Quote-Halluzination gefunden: %s",
+                                run_id, val_result.hallucinated_quotes
+                            )
+                            _finalize_run(
+                                run_id=run_id, t_start=t_start,
+                                input_tokens=input_tokens, output_tokens=output_tokens,
+                                actual_cost=actual_cost,
+                                prompt_version_hash=prompt_version_hash,
+                                output_hash=output_hash,
+                                status="needs_revision",
+                            )
+                            return {
+                                "run_id": run_id,
+                                "status": "needs_revision",
+                                "decision": "zurueck_an_p12",
+                                "richtung_fuer_p12": val_result.validation_hint,
+                                "loop_iteration": loop_iteration,
+                                "quote_validation_failed": True,
+                            }
+                        else:
+                            # Loop-Schutz: bei Iteration >= 1 nicht erneut zurückweisen
+                            logger.warning(
+                                "p12b run_id=%s: Quote-Halluzination in Iteration %d — Loop-Schutz aktiv, Post wird durchgereicht",
+                                run_id, loop_iteration
+                            )
+            except Exception as ve:
+                logger.warning("p12b run_id=%s: Quote-Validierung fehlgeschlagen (ignoriert): %s", run_id, ve)
+                # Fail-open: wenn Reservoir nicht erreichbar, trotzdem weiter
+
         _finalize_run(
             run_id=run_id,
             t_start=t_start,
