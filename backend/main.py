@@ -79,6 +79,24 @@ async def lifespan(app: FastAPI):
                 await session.commit()
                 logger.info("Auto-configured Requesty.ai as default LLM provider")
 
+    # Register Telegram webhook if token configured
+    if settings.telegram_bot_token and settings.telegram_webhook_secret:
+        try:
+            import httpx, os
+            webhook_url = os.environ.get("TELEGRAM_WEBHOOK_URL", "")
+            if webhook_url:
+                resp = httpx.post(
+                    f"https://api.telegram.org/bot{settings.telegram_bot_token}/setWebhook",
+                    json={"url": webhook_url, "secret_token": settings.telegram_webhook_secret},
+                    timeout=10,
+                )
+                if resp.json().get("ok"):
+                    logger.info(f"Telegram webhook registered: {webhook_url}")
+                else:
+                    logger.warning(f"Telegram webhook registration failed: {resp.text}")
+        except Exception as e:
+            logger.warning(f"Telegram webhook setup skipped: {e}")
+
     yield
 
 
@@ -157,6 +175,9 @@ app.include_router(admin_router, prefix="/api", tags=["Admin"])
 
 from api.reservoir import router as reservoir_router
 app.include_router(reservoir_router, prefix="/api", tags=["Reservoir"])
+
+from api.telegram import router as telegram_router
+app.include_router(telegram_router, prefix="/api", tags=["Telegram"])
 
 
 @app.get("/api/health")

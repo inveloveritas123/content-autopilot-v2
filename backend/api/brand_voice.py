@@ -782,3 +782,53 @@ async def decide_drift_observation(
 
     # 6. Antwort
     return {"status": new_status, "new_version": new_version_number}
+
+
+# ---------------------------------------------------------------------------
+# POST /brand-voice/{tenant_id}/telegram/link
+# ---------------------------------------------------------------------------
+
+import secrets as _secrets
+
+
+@router.post("/brand-voice/{tenant_id}/telegram/link")
+async def generate_telegram_link(
+    tenant_id: uuid.UUID,
+    x_api_key: str = Header(..., alias="X-API-Key"),
+    auth_tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate a one-time deeplink token to connect a Telegram user to this tenant.
+    The token is valid for 30 minutes.
+    """
+    if tenant_id != auth_tenant_id:
+        raise HTTPException(status_code=403, detail="Forbidden: tenant mismatch")
+
+    token = _secrets.token_urlsafe(24)
+    tid = str(tenant_id)
+
+    # UPSERT: telegram_user_id=0 is a placeholder for pending (no user yet).
+    # The PK is (tenant_id, telegram_user_id), so a pending slot always has uid=0.
+    await db.execute(
+        text(
+            "INSERT INTO tenant_telegram_link "
+            "(tenant_id, telegram_user_id, telegram_chat_id, confirmed_via_token, status, linked_at) "
+            "VALUES (:tid, 0, 0, :token, 'pending', now()) "
+            "ON CONFLICT (tenant_id, telegram_user_id) DO UPDATE SET "
+            "  confirmed_via_token = :token, "
+            "  status = 'pending', "
+            "  linked_at = now()"
+        ),
+        {"tid": tid, "token": token},
+    )
+    await db.commit()
+
+    from config import settings as _settings
+    bot_username = _settings.telegram_bot_username or "content_autopilot_bot"
+
+    return {
+        "token": token,
+        "deeplink": f"https://t.me/{bot_username}?start={token}",
+        "expires_in_minutes": 30,
+    }

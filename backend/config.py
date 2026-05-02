@@ -23,11 +23,18 @@ class Settings(BaseSettings):
     nextcloud_password: str = ""
 
     # App
+    # Note: this is the default/fallback tenant key, unrelated to ZFB/ZKG tenant keys
+    # ZKG tenant key: ***REMOVED-TENANT-KEY-ZKG*** (old ZFB key ***REMOVED-TENANT-KEY*** kept as secondary until 2026-08-01)
     default_tenant_key: str = "default-key"
 
     # VoiceScriptor
     voicescriptor_bot_token: Optional[str] = None
     voicescriptor_chat_id: Optional[str] = None
+
+    # Telegram Bot (Content-Autopilot)
+    telegram_bot_token: Optional[str] = None
+    telegram_webhook_secret: Optional[str] = None
+    telegram_bot_username: Optional[str] = "content_autopilot_bot"
 
     class Config:
         env_file = ".env"
