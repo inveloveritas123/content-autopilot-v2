@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["post", "alternative_opener", "design_notizen", "ki_signal_check", "potenzielle_schwaechen"],
+  "properties": {
+    "post": {"type": "string"},
+    "alternative_opener": {"type": "array", "items": {"type": "string"}},
+    "design_notizen": {"type": "string"},
+    "ki_signal_check": {"type": "object"},
+    "potenzielle_schwaechen": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}
