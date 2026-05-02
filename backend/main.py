@@ -143,6 +143,9 @@ app.include_router(quality_router, prefix="/api", tags=["Quality"])
 from services.ws_manager import ws_router
 app.include_router(ws_router, tags=["WebSocket"])
 
+from api.brand_voice import router as brand_voice_router
+app.include_router(brand_voice_router, prefix="/api", tags=["BrandVoice"])
+
 
 @app.get("/api/health")
 async def health():

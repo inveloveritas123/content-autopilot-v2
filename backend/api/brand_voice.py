@@ -1,0 +1,449 @@
+"""
+Brand-Voice API Endpoints (Issue #59).
+
+POST   /api/brand-voice/upload           — MD/JSON hochladen, Pipeline triggern
+POST   /api/brand-voice/import-source    — NC-Import starten
+POST   /api/brand-voice/regenerate       — Transcript-basierte Regenerierung
+GET    /api/brand-voice/{tenant_id}      — Aktive Profile + kompakte History
+PATCH  /api/brand-voice/{tenant_id}/{profile_type}/field  — Einzelfeld editieren
+GET    /api/brand-voice/pipeline/{run_id} — Pipeline-Run-Status abrufen
+"""
+import copy
+import html
+import json
+import logging
+import uuid
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from typing import Any, Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Header
+from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from dependencies import get_db, get_tenant_id
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+# ---------------------------------------------------------------------------
+# In-Memory Rate-Limiter (pro API-Key, Upload-Endpunkte)
+# ---------------------------------------------------------------------------
+
+_upload_counter: dict[str, list[datetime]] = defaultdict(list)
+UPLOAD_RATE_LIMIT = 10  # Anfragen pro Minute
+
+
+def _check_rate_limit(api_key: str) -> None:
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(seconds=60)
+    _upload_counter[api_key] = [t for t in _upload_counter[api_key] if t >= cutoff]
+    if len(_upload_counter[api_key]) >= UPLOAD_RATE_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit: max 10 Uploads/Minute",
+        )
+    _upload_counter[api_key].append(now)
+
+
+# ---------------------------------------------------------------------------
+# Sanitizer fuer PATCH-Werte (XSS-Schutz fuer String-Felder)
+# ---------------------------------------------------------------------------
+
+def _sanitize_value(v: Any) -> Any:
+    if isinstance(v, str):
+        return html.escape(v, quote=True)
+    return v
+
+
+# ---------------------------------------------------------------------------
+# Allow-List editierbarer Felder pro Profil-Typ
+# ---------------------------------------------------------------------------
+
+EDITABLE_ROOT_KEYS: dict[str, list[str]] = {
+    "customer_context": ["kernbotschaft", "zielgruppe", "expertise", "werte"],
+    "voice_profile": [
+        "tonalitaet",
+        "kernthemen",
+        "stilprinzipien",
+        "wortschatz",
+        "schreibrhythmus",
+        "vermeidungsregeln",
+    ],
+    "audience_avatar": [
+        "hauptperson",
+        "kernschmerzen",
+        "transformation",
+        "einwaende",
+        "kaufmotive",
+        "sprachmuster",
+    ],
+}
+
+# Tabellenzuordnung pro Profil-Typ (nur Code-Konstanten, kein User-Input)
+_PROFILE_TABLE: dict[str, str] = {
+    "customer_context": "tenant_customer_context",
+    "voice_profile": "tenant_voice_profile",
+    "audience_avatar": "tenant_audience_avatar",
+}
+
+# SQL-Strings werden einmalig bei Modul-Import aus der Whitelist-Konstante gebaut —
+# zur Runtime fließt kein User-Input in Tabellennamen ein.
+_SQL: dict[str, dict[str, str]] = {
+    pt: {
+        "select_active": (
+            f"SELECT id, payload, version, created_at, source FROM {tbl} "
+            f"WHERE tenant_id = :t AND is_active = true"
+        ),
+        "select_history": (
+            f"SELECT version, created_at, source FROM {tbl} "
+            f"WHERE tenant_id = :t ORDER BY version DESC LIMIT 10"
+        ),
+        "select_active_for_edit": (
+            f"SELECT id, payload, version FROM {tbl} "
+            f"WHERE tenant_id = :t AND is_active = true"
+        ),
+        "insert": (
+            f"INSERT INTO {tbl} (tenant_id, version, is_active, source, payload, "
+            f"prompt_version_hash, model_id) "
+            f"VALUES (:tenant_id, :version, true, 'manual_edit', :payload::jsonb, '', '')"
+        ),
+        "deactivate": f"UPDATE {tbl} SET is_active = false WHERE id = :id",
+    }
+    for pt, tbl in _PROFILE_TABLE.items()
+}
+
+
+# ---------------------------------------------------------------------------
+# Request-Modelle
+# ---------------------------------------------------------------------------
+
+class UploadRequest(BaseModel):
+    type: Literal["voice", "context", "avatar"]
+    format: Literal["md", "json"]
+    content: str
+
+
+class ImportSourceRequest(BaseModel):
+    type: Literal["voice", "context", "avatar"]
+    source_adapter: Literal["nc"]
+    path: str
+
+
+class RegenerateRequest(BaseModel):
+    sources: dict
+
+
+class FieldEditRequest(BaseModel):
+    field_path: str
+    new_value: Any
+
+
+# ---------------------------------------------------------------------------
+# Hilfsfunktion: verschachteltes Feld in einem dict setzen
+# ---------------------------------------------------------------------------
+
+def _set_nested(d: dict, path: str, value: Any) -> None:
+    """Setzt `value` im dict `d` anhand eines Punkt-getrennten Pfads."""
+    parts = path.split(".")
+    cursor = d
+    for part in parts[:-1]:
+        if not isinstance(cursor, dict):
+            raise ValueError(f"Pfad '{path}' nicht navigierbar — Zwischen-Element kein dict")
+        if part not in cursor:
+            cursor[part] = {}
+        cursor = cursor[part]
+    if not isinstance(cursor, dict):
+        raise ValueError(f"Pfad '{path}' nicht navigierbar — Blatt-Eltern kein dict")
+    cursor[parts[-1]] = value
+
+
+# ---------------------------------------------------------------------------
+# POST /brand-voice/upload
+# ---------------------------------------------------------------------------
+
+@router.post("/brand-voice/upload", status_code=202)
+async def upload_brand_voice(
+    data: UploadRequest,
+    x_api_key: str = Header(..., alias="X-API-Key"),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """MD- oder JSON-Datei hochladen und Setup-Pipeline starten."""
+    _check_rate_limit(x_api_key)
+
+    # Groessenvalidierung
+    max_chars = 100 * 1024 if data.format == "json" else 50 * 1024
+    if not data.content:
+        raise HTTPException(status_code=422, detail="content darf nicht leer sein")
+    if len(data.content.encode("utf-8")) > max_chars:
+        raise HTTPException(
+            status_code=422,
+            detail=f"content zu gross: max {max_chars // 1024}KB fuer format='{data.format}'",
+        )
+
+    # JSON parsen wenn format=json
+    if data.format == "json":
+        try:
+            content_parsed = json.loads(data.content)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=422, detail=f"Ungueliges JSON: {exc}") from exc
+    else:
+        content_parsed = data.content
+
+    # Celery-Task dispatchen
+    from tasks.setup_pipeline_task import run_setup_pipeline
+
+    source = "md_upload" if data.format == "md" else "json_upload"
+    result = run_setup_pipeline.delay(
+        str(tenant_id),
+        source,
+        {"content": content_parsed, "type": data.type},
+    )
+
+    return {"task_id": result.id, "status": "queued"}
+
+
+# ---------------------------------------------------------------------------
+# POST /brand-voice/import-source
+# ---------------------------------------------------------------------------
+
+@router.post("/brand-voice/import-source", status_code=202)
+async def import_source(
+    data: ImportSourceRequest,
+    x_api_key: str = Header(..., alias="X-API-Key"),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Nextcloud-Import starten."""
+    _check_rate_limit(x_api_key)
+
+    if not data.path:
+        raise HTTPException(status_code=422, detail="path darf nicht leer sein")
+
+    from tasks.setup_pipeline_task import run_setup_pipeline
+
+    result = run_setup_pipeline.delay(
+        str(tenant_id),
+        "nc_import",
+        {"path": data.path, "type": data.type},
+    )
+
+    return {"task_id": result.id}
+
+
+# ---------------------------------------------------------------------------
+# POST /brand-voice/regenerate
+# ---------------------------------------------------------------------------
+
+@router.post("/brand-voice/regenerate", status_code=202)
+async def regenerate(
+    data: RegenerateRequest,
+    x_api_key: str = Header(..., alias="X-API-Key"),
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Transcript-basierte Regenerierung aller Profile."""
+    _check_rate_limit(x_api_key)
+
+    from tasks.setup_pipeline_task import run_setup_pipeline
+
+    result = run_setup_pipeline.delay(
+        str(tenant_id),
+        "transcript",
+        data.sources,
+    )
+
+    return {"task_id": result.id}
+
+
+# ---------------------------------------------------------------------------
+# GET /brand-voice/pipeline/{run_id}  — muss VOR /{tenant_id} definiert sein
+# ---------------------------------------------------------------------------
+
+@router.get("/brand-voice/pipeline/{run_id}")
+async def get_pipeline_run(
+    run_id: str,
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Setup-Pipeline-Run-Status abrufen."""
+    try:
+        run_uuid = uuid.UUID(run_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="run_id muss eine gueltige UUID sein")
+
+    row = (
+        await db.execute(
+            text(
+                "SELECT id, stage, status, input_tokens, output_tokens, "
+                "cost_usd, duration_ms, error_meta, created_at, finished_at "
+                "FROM setup_pipeline_run WHERE id = :id AND tenant_id = :t"
+            ),
+            {"id": str(run_uuid), "t": str(tenant_id)},
+        )
+    ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Pipeline-Run nicht gefunden")
+
+    error_detail = None
+    if row.error_meta and isinstance(row.error_meta, dict):
+        error_detail = row.error_meta.get("error")
+
+    return {
+        "run_id": str(row.id),
+        "status": row.status,
+        "stage": row.stage,
+        "cost_usd": float(row.cost_usd) if row.cost_usd is not None else None,
+        "duration_ms": row.duration_ms,
+        "error": error_detail,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /brand-voice/{tenant_id}
+# ---------------------------------------------------------------------------
+
+async def _fetch_active_and_history(
+    db: AsyncSession,
+    profile_type: str,
+    tenant_id_str: str,
+) -> tuple[dict | None, list[dict]]:
+    """Aktive Version und die letzten 10 Eintraege aus einer Profil-Tabelle laden."""
+    active_row = (
+        await db.execute(text(_SQL[profile_type]["select_active"]), {"t": tenant_id_str})
+    ).fetchone()
+
+    history_rows = (
+        await db.execute(text(_SQL[profile_type]["select_history"]), {"t": tenant_id_str})
+    ).fetchall()
+
+    active = None
+    if active_row:
+        active = {
+            "payload": active_row.payload,
+            "version": active_row.version,
+            "created_at": active_row.created_at.isoformat() if active_row.created_at else None,
+            "source": active_row.source,
+        }
+
+    history = [
+        {
+            "version": r.version,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "source": r.source,
+        }
+        for r in history_rows
+    ]
+
+    return active, history
+
+
+@router.get("/brand-voice/{tenant_id}")
+async def get_brand_voice(
+    tenant_id: str,
+    auth_tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Aktive Versionen aller drei Profile + kompakte History."""
+    # Nur eigene Daten abrufbar (Tenant-Isolation)
+    if str(auth_tenant_id) != tenant_id:
+        raise HTTPException(status_code=403, detail="Zugriff verweigert")
+
+    cc_active, cc_history = await _fetch_active_and_history(db, "customer_context", tenant_id)
+    vp_active, vp_history = await _fetch_active_and_history(db, "voice_profile", tenant_id)
+    aa_active, aa_history = await _fetch_active_and_history(db, "audience_avatar", tenant_id)
+
+    return {
+        "customer_context": cc_active,
+        "voice_profile": vp_active,
+        "audience_avatar": aa_active,
+        "history": {
+            "customer_context": cc_history,
+            "voice_profile": vp_history,
+            "audience_avatar": aa_history,
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# PATCH /brand-voice/{tenant_id}/{profile_type}/field
+# ---------------------------------------------------------------------------
+
+@router.patch("/brand-voice/{tenant_id}/{profile_type}/field")
+async def patch_profile_field(
+    tenant_id: str,
+    profile_type: str,
+    data: FieldEditRequest,
+    auth_tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Einzelnes Feld im aktiven Profil editieren (neue Version wird angelegt)."""
+    if str(auth_tenant_id) != tenant_id:
+        raise HTTPException(status_code=403, detail="Zugriff verweigert")
+
+    if profile_type not in _PROFILE_TABLE:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unbekannter profile_type '{profile_type}'. "
+                   f"Erlaubt: {list(_PROFILE_TABLE.keys())}",
+        )
+
+    # Root-Key aus field_path extrahieren und gegen Allow-List pruefen
+    root_key = data.field_path.split(".")[0]
+    allowed_keys = EDITABLE_ROOT_KEYS.get(profile_type, [])
+    if root_key not in allowed_keys:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Feld '{root_key}' nicht editierbar fuer '{profile_type}'. "
+                   f"Erlaubte Root-Keys: {allowed_keys}",
+        )
+
+    # Aktive Version laden (SQL aus vorberechneter Whitelist)
+    active_row = (
+        await db.execute(
+            text(_SQL[profile_type]["select_active_for_edit"]),
+            {"t": tenant_id},
+        )
+    ).fetchone()
+
+    if not active_row:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Kein aktives {profile_type} fuer diesen Tenant gefunden",
+        )
+
+    # Deep-Copy, Feld setzen
+    new_payload = copy.deepcopy(active_row.payload)
+    sanitized_value = _sanitize_value(data.new_value)
+    try:
+        _set_nested(new_payload, data.field_path, sanitized_value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    new_version = active_row.version + 1
+    old_id = str(active_row.id)
+
+    # Neue Version inserieren, alte deaktivieren (SQL aus vorberechneter Whitelist)
+    await db.execute(
+        text(_SQL[profile_type]["insert"]),
+        {
+            "tenant_id": tenant_id,
+            "version": new_version,
+            "payload": json.dumps(new_payload),
+        },
+    )
+    await db.execute(
+        text(_SQL[profile_type]["deactivate"]),
+        {"id": old_id},
+    )
+    await db.commit()
+
+    return {
+        "status": "updated",
+        "profile_type": profile_type,
+        "field_path": data.field_path,
+        "new_version": new_version,
+    }
