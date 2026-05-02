@@ -140,6 +140,9 @@ app.include_router(cowork_router, tags=["Cowork"])
 from api.quality import router as quality_router
 app.include_router(quality_router, prefix="/api", tags=["Quality"])
 
+from services.ws_manager import ws_router
+app.include_router(ws_router, tags=["WebSocket"])
+
 
 @app.get("/api/health")
 async def health():

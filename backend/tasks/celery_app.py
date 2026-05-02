@@ -44,6 +44,10 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.pipeline_pump_task.pump_pipeline",
         "schedule": 600.0,  # Every 10 minutes
     },
+    "resume-paused-pipelines-midnight": {
+        "task": "tasks.setup_pipeline_task.resume_paused_pipelines",
+        "schedule": 86400.0,  # täglich
+    },
 }
 
 # Explicit task module imports
@@ -58,4 +62,5 @@ celery_app.conf.include = [
     "tasks.cost_reset_task",
     "tasks.pipeline_pump_task",
     "tasks.questions_task",
+    "tasks.setup_pipeline_task",
 ]
