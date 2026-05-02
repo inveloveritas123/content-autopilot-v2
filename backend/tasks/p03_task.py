@@ -18,6 +18,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 import uuid
 
@@ -118,6 +119,63 @@ def _insert_voice_profile(
 
 
 # ---------------------------------------------------------------------------
+# LinkedIn-Post-Filter (Issue #89)
+# ---------------------------------------------------------------------------
+
+_MAX_POSTS = 20
+_MAX_CHARS_PER_POST = 3000
+
+# Injection-Schutz: Patterns die auf Prompt-Injection hindeuten
+_INJECTION_PATTERNS = [
+    re.compile(r'\b(ignore (all )?previous instructions?|vergiss (alle )?anweisungen)\b', re.IGNORECASE),
+    re.compile(r'\b(system prompt|system-prompt|<\|im_start\|>|<\|im_end\|>)\b', re.IGNORECASE),
+    re.compile(r'(##+ System|##+ Assistant|##+ User)\b', re.IGNORECASE),
+    re.compile(r'<(script|iframe|object|embed)[^>]*>', re.IGNORECASE),
+    re.compile(r'\{\{.*?\}\}', re.DOTALL),   # template injection
+]
+
+
+def _filter_linkedin_posts(posts: list) -> list:
+    """Filter und sanitize LinkedIn-Posts für P03-Input.
+
+    - Längen-Limit: max 3000 Zeichen pro Post
+    - Anzahl-Limit: max 20 Posts
+    - Injection-Schutz: Posts mit verdächtigen Patterns werden verworfen
+    - Entfernt XML-Tags und normalisiert Whitespace
+    """
+    clean: list = []
+    for raw in (posts or []):
+        if not isinstance(raw, str):
+            continue
+        post = raw.strip()
+        if not post:
+            continue
+
+        # Injection check: verwerfe den Post wenn Muster gefunden
+        if any(p.search(post) for p in _INJECTION_PATTERNS):
+            logger.warning("[P03] LinkedIn-Post mit Injection-Muster verworfen (Länge=%d)", len(post))
+            continue
+
+        # Längen-Limit
+        if len(post) > _MAX_CHARS_PER_POST:
+            post = post[:_MAX_CHARS_PER_POST] + "…"
+
+        # Entferne XML-Tags (verhindert Prompt-Injection via <transkript> etc.)
+        post = re.sub(r'<[^>]+>', '', post)
+
+        # Normalisiere Whitespace
+        post = re.sub(r'\n{3,}', '\n\n', post).strip()
+
+        if post:
+            clean.append(post)
+
+        if len(clean) >= _MAX_POSTS:
+            break
+
+    return clean
+
+
+# ---------------------------------------------------------------------------
 # Celery Task
 # ---------------------------------------------------------------------------
 
@@ -127,6 +185,7 @@ def run_p03(
     tenant_id: str,
     transcript: str,
     written_texts: list = None,
+    linkedin_posts: list = None,
     bypass_with_existing_json: bool = False,
     existing_json: dict = None,
 ) -> dict:
@@ -215,6 +274,17 @@ def run_p03(
         if written_texts:
             for i, txt in enumerate(written_texts, 1):
                 user_content += f"\n<beispieltext_{i}>{txt}</beispieltext_{i}>"
+
+        filtered_posts = _filter_linkedin_posts(linkedin_posts) if linkedin_posts else []
+        if filtered_posts:
+            user_content += "\n\n<linkedin_history>\n"
+            for i, post in enumerate(filtered_posts, 1):
+                user_content += f"--- Post {i} ---\n{post}\n\n"
+            user_content += "</linkedin_history>"
+            logger.info(
+                "P03 run_id=%s: %d LinkedIn-Posts als Voice-Quelle hinzugefügt",
+                run_id, len(filtered_posts)
+            )
 
         response = client.messages.create(
             model=ANTHROPIC_MODEL_ID,

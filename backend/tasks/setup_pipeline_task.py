@@ -126,6 +126,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
         # ------------------------------------------------------------------
         transcript_text: str | None = None
         p03_bypass_json: dict | None = None
+        linkedin_posts: list | None = None
 
         if source == "transcript":
             transcript_text = source_payload.get("transcript", "")
@@ -158,6 +159,15 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
             synthesis = source_payload.get("phase_synthesis", {})
             transcript_text = _wizard_to_transcript(answers, synthesis)
             p03_bypass_json = None
+            # LinkedIn-Posts aus Phase-5-Antworten extrahieren
+            linkedin_posts_raw = answers.get("q5_linkedin_posts")
+            if isinstance(linkedin_posts_raw, list):
+                linkedin_posts = linkedin_posts_raw
+            elif isinstance(linkedin_posts_raw, str) and linkedin_posts_raw.strip():
+                # String-Fallback: newline-separiert
+                linkedin_posts = [p.strip() for p in linkedin_posts_raw.split("\n\n") if p.strip()]
+            else:
+                linkedin_posts = None
 
         else:
             raise ValueError(f"Unbekannte source: {source!r}")
@@ -178,6 +188,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
                 transcript_text or "",
                 bypass_with_existing_json=bypass,
                 existing_json=p03_bypass_json,
+                linkedin_posts=linkedin_posts,
             )
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:

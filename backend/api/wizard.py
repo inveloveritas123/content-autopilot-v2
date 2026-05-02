@@ -79,6 +79,15 @@ WIZARD_PHASES = [
             {"id": "q5_2", "text": "Gibt es Formulierungen, die du nie verwenden würdest? Welche und warum?"},
             {"id": "q5_3", "text": "Schreib einen LinkedIn-Satz, der wirklich nach dir klingt."},
             {"id": "q5_4", "text": "Was ist der Ton, den du treffen willst — eher sachlich oder persönlich, direkt oder einladend?"},
+            {
+                "id": "q5_linkedin_posts",
+                "type": "linkedin_posts",
+                "required": False,
+                "label": "LinkedIn-Posts als Voice-Quelle (optional)",
+                "placeholder": "Füge bis zu 10 LinkedIn-Posts ein, die deinen Stil gut zeigen...",
+                "help": "Deine bestehenden Posts helfen der KI, deinen Schreibstil noch präziser zu erfassen. Trenne mehrere Posts durch eine Leerzeile.",
+                "max_items": 10,
+            },
         ],
     },
     {
