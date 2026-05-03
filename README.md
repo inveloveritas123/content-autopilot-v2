@@ -62,8 +62,33 @@ curl -X POST http://localhost:8500/api/sources \
 
 Setze `LITELLM_BASE_URL` in `.env` um alle LLM-Calls ueber einen LiteLLM-Proxy zu routen (z.B. Free Tier zum Testen).
 
+## Migrations & Backups
+
+Migrationen IMMER ueber `scripts/safe_alembic.sh`, NIE direkt via `alembic`-Befehl:
+
+```bash
+# Upgrade auf neueste Version (mit automatischem Pre-Snapshot)
+scripts/safe_alembic.sh "upgrade head"
+
+# Downgrade eine Stufe zurueck
+scripts/safe_alembic.sh "downgrade -1"
+
+# Snapshot ueberspringen (nur Dev/Test)
+scripts/safe_alembic.sh --no-snapshot "upgrade head"
+```
+
+Das Script erstellt vor jeder Migration einen pg_dump-Snapshot nach
+`/opt/backup/cap-v2-pre-migration-YYYYMMDD-HHMMSS.sql.gz`.
+
+Taeglich 03:00 Uhr laeuft `scripts/daily_backup.sh` (Cron-Einrichtung
+siehe Kommentar am Ende der Datei).
+
+Vollstaendige Restore-Anleitung (inkl. Locks killen, alembic stamp, GPG-Decrypt):
+**[docs/RESTORE.md](docs/RESTORE.md)**
+
 ## Dokumentation
 
 - [Setup-Anleitung](docs/SETUP.md) — Installation, Konfiguration, Troubleshooting
 - [Datenbank-Schema & Migrationen](docs/DATABASE.md) — Tabellen, Alembic-Workflow, Backup/Restore
 - [Migration Notes](docs/MIGRATION_NOTES.md) — Breaking Changes, Rollback-Strategie
+- [Restore-Anleitung](docs/RESTORE.md) — Pre-Migration-Snapshot, Daily Backup, Troubleshooting
