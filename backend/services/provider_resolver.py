@@ -1,5 +1,6 @@
 """Resolve active LLM provider from database — replaces hardcoded LiteLLM config."""
 import logging
+import os
 from datetime import datetime
 from typing import Optional
 
