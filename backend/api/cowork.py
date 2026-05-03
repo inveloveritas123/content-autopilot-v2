@@ -15,7 +15,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text as _text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db
@@ -209,10 +209,22 @@ async def cowork_get_context(
         for q in questions_result
     ]
 
-    # Voice profile
+    # Voice profile — prefer Wizard/P03 profile from tenant_voice_profile table
     tenant_settings = tenant.settings or {}
     voice_profile = tenant_settings.get("voice_profile", {})
     forbidden_phrases = tenant_settings.get("forbidden_phrases", [])
+    try:
+        import json as _json
+        vp_row = (await db.execute(
+            _text("SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"),
+            {"t": str(tenant.id)},
+        )).fetchone()
+        if vp_row and vp_row[0]:
+            wizard_profile = vp_row[0] if isinstance(vp_row[0], dict) else _json.loads(vp_row[0])
+            if wizard_profile:
+                voice_profile = wizard_profile
+    except Exception as _vp_err:
+        logger.warning(f"Could not load tenant_voice_profile in cowork: {_vp_err}")
 
     # Post drafts by channel/format
     posts_result = (await db.execute(

@@ -1,7 +1,10 @@
 """LLM Provider Settings — CRUD + Test."""
+import logging
 import uuid
 from datetime import datetime
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from cryptography.fernet import Fernet
 from fastapi import APIRouter, Depends, HTTPException
@@ -461,8 +464,21 @@ async def run_benchmark(
         elif data.step == "post_generation":
             from services.content_generator import generate_all_content
             from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
-            # Voice profile from tenant settings
+            # Voice profile — prefer Wizard/P03 profile from tenant_voice_profile table
             voice_profile = (tenant.settings or {}).get("voice_profile")
+            try:
+                import json as _json
+                from sqlalchemy import text as _text
+                vp_row = (await db.execute(
+                    _text("SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"),
+                    {"t": str(tenant.id)},
+                )).fetchone()
+                if vp_row and vp_row[0]:
+                    wizard_profile = vp_row[0] if isinstance(vp_row[0], dict) else _json.loads(vp_row[0])
+                    if wizard_profile:
+                        voice_profile = wizard_profile
+            except Exception as _vp_err:
+                logger.warning(f"Could not load tenant_voice_profile in llm_settings test: {_vp_err}")
             if not voice_profile:
                 voice_profile = {
                     "name": tenant.name or "Unternehmer",
