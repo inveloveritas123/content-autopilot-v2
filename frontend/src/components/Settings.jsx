@@ -201,58 +201,25 @@ export default function Settings() {
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Einstellungen</h2>
 
-      {/* Entrepreneur Profile — shown prominently at top when incomplete */}
-      {!profileComplete && (
-        <div className="rounded-xl border-2 border-amber-300 bg-amber-50 overflow-hidden shadow-sm">
-          <div className="px-5 py-3 bg-amber-100 border-b border-amber-200 flex items-center gap-2">
-            <span className="text-amber-600 text-lg">⚠️</span>
-            <div className="flex-1">
-              <p className="font-bold text-amber-900 text-sm">Schritt 1: Unternehmer-Profil ausfüllen</p>
-              <p className="text-xs text-amber-700">Ohne Branche generiert die KI generische Inhalte. Das ist der wichtigste Schritt.</p>
-            </div>
-            {profileSaved && <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-1 rounded">✓ Gespeichert!</span>}
+      {/* Brand Voice Wizard CTA — replaces old v1 profile form */}
+      <div className="rounded-xl border-2 border-primary-200 bg-primary-50 overflow-hidden shadow-sm">
+        <div className="px-5 py-3 bg-primary-100 border-b border-primary-200 flex items-center gap-2">
+          <span className="text-primary-600 text-lg">🎤</span>
+          <div className="flex-1">
+            <p className="font-bold text-primary-900 text-sm">Unternehmer-Profil — jetzt im Brand-Voice-Wizard</p>
+            <p className="text-xs text-primary-700">Branche, Zielkunde und Angebot werden geführt im Wizard erfasst — präziser und direkt für die KI nutzbar.</p>
           </div>
-          <div className="p-5 space-y-4">
-            {/* Quick presets */}
-            <div>
-              <p className="text-xs font-medium text-amber-800 mb-2">Schnell-Auswahl Branche:</p>
-              <div className="flex flex-wrap gap-2">
-                {SHK_PRESETS.map(p => (
-                  <button key={p.label}
-                    onClick={() => {
-                      if (p.name) setEntName(p.name)
-                      setEntIndustry(p.industry)
-                      setEntSpecialization(p.specialization)
-                      setEntAudience(p.audience)
-                    }}
-                    className="px-3 py-1.5 text-xs font-medium bg-white border border-amber-200 text-amber-800 rounded-lg hover:bg-amber-50 hover:border-amber-400 transition-colors"
-                  >{p.label}</button>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input label="Dein Name / Unternehmen" value={entName}
-                onChange={e => setEntName(e.target.value)}
-                placeholder="z.B. Robert Hargesheimer / Musterbau GmbH" />
-              <Input label="Branche *" value={entIndustry}
-                onChange={e => setEntIndustry(e.target.value)}
-                placeholder="z.B. SHK-Handwerk, Elektro, IT-Beratung" />
-            </div>
-            <Input label="Spezialisierung" value={entSpecialization}
-              onChange={e => setEntSpecialization(e.target.value)}
-              placeholder="z.B. Sanitär, Heizung, Klimatechnik" />
-            <Input label="Zielgruppe" value={entAudience}
-              onChange={e => setEntAudience(e.target.value)}
-              placeholder="z.B. Hausbesitzer, Bauherren, Gewerbetreibende" />
-            <div className="flex items-center gap-3 pt-1">
-              <Button onClick={handleSaveProfile} disabled={profileSaving || !entIndustry}>
-                {profileSaving ? 'Speichere...' : '💾 Profil speichern'}
-              </Button>
-              {!entIndustry && <span className="text-xs text-amber-700">Branche ist Pflichtfeld</span>}
-            </div>
-          </div>
+          {profileComplete && <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-1 rounded">✓ Wizard abgeschlossen</span>}
         </div>
-      )}
+        <div className="p-5 flex items-center gap-4">
+          <Link to="/brand-voice/wizard" className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors">
+            Brand-Voice-Wizard starten
+          </Link>
+          <Link to="/brand-voice" className="text-sm text-primary-700 hover:underline">
+            Brand Voice übersicht
+          </Link>
+        </div>
+      </div>
 
       {/* API Key */}
       <Card>
@@ -346,43 +313,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      {/* Unternehmer-Profil — shown at bottom when complete, hidden when shown at top */}
-      {profileComplete && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Unternehmer-Profil</CardTitle>
-              <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-medium">✓ Ausgefüllt</span>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input label="Dein Name / Unternehmen" value={entName}
-                onChange={e => setEntName(e.target.value)}
-                placeholder="z.B. Max Mustermann / Musterbau GmbH" />
-              <Input label="Branche" value={entIndustry}
-                onChange={e => setEntIndustry(e.target.value)}
-                placeholder="z.B. SHK-Handwerk, Elektro, IT-Beratung" />
-            </div>
-            <Input label="Spezialisierung" value={entSpecialization}
-              onChange={e => setEntSpecialization(e.target.value)}
-              placeholder="z.B. Sanitär, Heizung, Klimatechnik" />
-            <Input label="Zielgruppe" value={entAudience}
-              onChange={e => setEntAudience(e.target.value)}
-              placeholder="z.B. Hausbesitzer, Bauherren, Gewerbetreibende" />
-            <div className="flex items-center gap-3 pt-1 border-t border-gray-100">
-              <Button size="sm" onClick={handleSaveProfile} disabled={profileSaving}>
-                {profileSaving ? 'Speichere...' : profileSaved ? '✓ Gespeichert!' : '💾 Profil speichern'}
-              </Button>
-              {entIndustry && (
-                <Button size="sm" variant="secondary" onClick={handleRefreshIdeas} disabled={refreshing}>
-                  {refreshing ? 'Regeneriere...' : '🔄 Ideen neu generieren (20)'}
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* v1 Unternehmer-Profil form removed — data captured via Brand-Voice-Wizard (#122) */}
 
       {/* Content Settings */}
       <Card>
