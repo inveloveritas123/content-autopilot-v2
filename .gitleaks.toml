@@ -1,0 +1,60 @@
+# gitleaks configuration for content-autopilot-v2
+# Custom rules extend the default ruleset.
+# Run locally: gitleaks detect --config .gitleaks.toml --source .
+
+title = "content-autopilot-v2 gitleaks config"
+
+[extend]
+# Use the official gitleaks default rules as base
+useDefault = true
+
+[[rules]]
+id = "anthropic-api-key"
+description = "Anthropic API Key"
+regex = '''sk-ant-[A-Za-z0-9_-]{32,}'''
+tags = ["anthropic", "api-key", "secret"]
+
+[[rules]]
+id = "google-vertex-service-account"
+description = "Google Service Account JSON key (private_key_id field)"
+regex = '''"private_key_id"\s*:\s*"[A-Za-z0-9_-]{20,}"'''
+tags = ["google", "vertex", "secret"]
+
+[[rules]]
+id = "telegram-bot-token"
+description = "Telegram Bot Token"
+regex = '''\d{8,10}:[A-Za-z0-9_-]{35}'''
+tags = ["telegram", "secret"]
+
+[[rules]]
+id = "cap-tenant-key"
+description = "Content-Autopilot tenant API key (cap-tenant-* prefix)"
+regex = '''cap-tenant-[a-zA-Z0-9_-]{4,}'''
+tags = ["cap", "tenant-key", "secret"]
+
+[[rules]]
+id = "requesty-api-key"
+description = "Requesty.ai API key pattern"
+regex = '''req-[A-Za-z0-9_-]{20,}'''
+tags = ["requesty", "api-key", "secret"]
+
+[allowlist]
+description = "Known safe patterns — test tokens, docs, env examples"
+regexes = [
+    # Test/example values in comments and docs
+    '''cap-tenant-(zkg|zfb|default)-2026''',
+    # Placeholder in env.example
+    '''YOUR_API_KEY_HERE''',
+    '''changeme''',
+    # Migration docs and comments
+    '''admin_backtest_2026''',
+]
+paths = [
+    # Alembic migrations may reference old values in comments
+    '''backend/alembic/versions/''',
+    # Documentation files
+    '''docs/''',
+    '''\.md$''',
+    # Test fixtures
+    '''tests/''',
+]
