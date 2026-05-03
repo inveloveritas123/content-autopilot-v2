@@ -3,11 +3,13 @@ E2E-Test: BudgetExceededError — Cost-Cap-Kette verifizieren.
 
 Acceptance-Kriterium für Issue #123:
   "E2E-Test: gemockter Tenant mit teurem Modell überschreitet Cap → Hard-Stop"
+  "Robert wird über Telegram alarmiert wenn globaler Cap >50% erreicht"
 
 Testet:
   1. Global-Cap-Überschreitung → BudgetExceededError, kein HTTP-Call
   2. Per-Tenant-Cap-Überschreitung → BudgetExceededError, kein HTTP-Call
   3. 412-Status von Provider → BudgetExceededError
+  4–8. _maybe_send_global_cap_alert: Redis-Dedup, Fail-Open, Telegram-Aufruf
   4. set_llm_tenant() + ContextVar-Propagation: tenant_id landet in track_cost()
   5. Bei DB-Fehler im Cap-Check: fail-open (kein Block)
 """
@@ -238,3 +240,104 @@ class TestContextVarPropagation:
         assert "tenant-abc-123" in captured_tenant_ids, (
             f"tenant_id 'tenant-abc-123' was not passed to track_cost(). Got: {captured_tenant_ids}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Tests for _maybe_send_global_cap_alert (Issue #123 — 50% Vorwarnung)
+# ---------------------------------------------------------------------------
+
+class TestGlobalCapAlert:
+    """_maybe_send_global_cap_alert: Redis NX dedup + Telegram call + fail-open."""
+
+    def _make_redis(self, nx_result: bool):
+        """Mock Redis client where SET NX returns nx_result."""
+        r = MagicMock()
+        r.set = MagicMock(return_value=nx_result)
+        r.close = MagicMock()
+        return r
+
+    def test_alert_skipped_when_no_admin_chat_id(self):
+        """No telegram_admin_chat_id configured → skip silently, no Redis call."""
+        from services.llm import _maybe_send_global_cap_alert
+        from datetime import date
+
+        mock_redis = self._make_redis(True)
+        with patch("services.llm.settings") as mock_settings:
+            mock_settings.telegram_admin_chat_id = None
+            mock_settings.redis_url = "redis://localhost:6379/0"
+            with patch("api.telegram._send_telegram_message") as mock_send:
+                _maybe_send_global_cap_alert(11.0, 20.0, date.today())
+                mock_send.assert_not_called()
+                mock_redis.set.assert_not_called()
+
+    def test_alert_sent_on_first_trigger(self):
+        """Redis NX succeeds → Telegram message sent with spend/cap info."""
+        from services.llm import _maybe_send_global_cap_alert
+        from datetime import date
+
+        mock_redis = self._make_redis(True)  # NX succeeds = first alert today
+
+        with patch("services.llm.settings") as mock_settings:
+            mock_settings.telegram_admin_chat_id = "987654321"
+            mock_settings.redis_url = "redis://localhost:6379/0"
+            with patch("redis.from_url", return_value=mock_redis):
+                with patch("api.telegram._send_telegram_message") as mock_send:
+                    _maybe_send_global_cap_alert(11.0, 20.0, date.today())
+
+        mock_redis.set.assert_called_once()
+        call_kwargs = mock_redis.set.call_args
+        assert call_kwargs[1].get("nx") is True  # NX flag set
+        assert call_kwargs[1].get("ex") == 86400  # 24h TTL
+        mock_send.assert_called_once()
+        msg = mock_send.call_args[0][1]
+        assert "11.00" in msg
+        assert "20.00" in msg
+        assert "55%" in msg  # 11/20 = 55%
+        mock_redis.close.assert_called_once()  # connection closed
+
+    def test_alert_skipped_when_already_sent_today(self):
+        """Redis NX returns False (key already exists) → no Telegram call."""
+        from services.llm import _maybe_send_global_cap_alert
+        from datetime import date
+
+        mock_redis = self._make_redis(False)  # NX failed = already sent today
+
+        with patch("services.llm.settings") as mock_settings:
+            mock_settings.telegram_admin_chat_id = "987654321"
+            mock_settings.redis_url = "redis://localhost:6379/0"
+            with patch("redis.from_url", return_value=mock_redis):
+                with patch("api.telegram._send_telegram_message") as mock_send:
+                    _maybe_send_global_cap_alert(12.0, 20.0, date.today())
+
+        mock_redis.close.assert_called_once()
+        mock_send.assert_not_called()
+
+    def test_alert_fail_open_on_redis_error(self):
+        """Redis connection fails → exception swallowed, no crash, no Telegram."""
+        from services.llm import _maybe_send_global_cap_alert
+        from datetime import date
+
+        with patch("services.llm.settings") as mock_settings:
+            mock_settings.telegram_admin_chat_id = "987654321"
+            mock_settings.redis_url = "redis://localhost:6379/0"
+            with patch("redis.from_url", side_effect=Exception("Redis unavailable")):
+                with patch("api.telegram._send_telegram_message") as mock_send:
+                    # Must not raise
+                    _maybe_send_global_cap_alert(11.0, 20.0, date.today())
+                    mock_send.assert_not_called()
+
+    def test_alert_fail_open_on_telegram_error(self):
+        """Telegram send fails → exception swallowed, no crash."""
+        from services.llm import _maybe_send_global_cap_alert
+        from datetime import date
+
+        mock_redis = self._make_redis(True)
+
+        with patch("services.llm.settings") as mock_settings:
+            mock_settings.telegram_admin_chat_id = "987654321"
+            mock_settings.redis_url = "redis://localhost:6379/0"
+            with patch("redis.from_url", return_value=mock_redis):
+                with patch("api.telegram._send_telegram_message",
+                           side_effect=Exception("Telegram API down")):
+                    # Must not raise
+                    _maybe_send_global_cap_alert(11.0, 20.0, date.today())
