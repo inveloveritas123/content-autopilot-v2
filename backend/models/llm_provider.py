@@ -28,6 +28,7 @@ class LLMProvider(Base):
     cost_limit_daily_cents: Mapped[int] = mapped_column(Integer, default=500, server_default="500")
     cost_spent_today_cents: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     cost_reset_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    auto_cache: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     config: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

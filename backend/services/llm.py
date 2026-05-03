@@ -300,9 +300,11 @@ class LLMService:
         max_tokens = PURPOSE_MAX_TOKENS.get(purpose, 1500) if purpose else 1500
 
         # Requesty.ai Auto-Caching: saves ~90% on repeated system-prompt tokens
+        # Provider-level toggle (#127 B); fallback default = True for env-only providers
         is_requesty = "requesty.ai" in base_url
+        auto_cache_enabled = provider.get("auto_cache", True) if provider else True
         request_body = {"model": litellm_model, "messages": messages, "max_tokens": max_tokens}
-        if is_requesty:
+        if is_requesty and auto_cache_enabled:
             request_body["extra_body"] = {"requesty": {"auto_cache": True}}
 
         async with httpx.AsyncClient(timeout=120) as client:
@@ -321,7 +323,7 @@ class LLMService:
                     env_headers["Authorization"] = f"Bearer {env_key}"
                 is_requesty_fallback = "requesty.ai" in env_base
                 fallback_body = {"model": litellm_model, "messages": messages, "max_tokens": max_tokens}
-                if is_requesty_fallback:
+                if is_requesty_fallback and auto_cache_enabled:
                     fallback_body["extra_body"] = {"requesty": {"auto_cache": True}}
                 resp = await client.post(
                     f"{env_base}/chat/completions",

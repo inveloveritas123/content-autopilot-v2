@@ -76,6 +76,7 @@ def get_active_provider(tenant_id=None, task: str = "all") -> Optional[dict]:
             "model_name": provider.model_name or "google/gemini-2.0-flash-exp",
             "provider_id": str(provider.id),
             "provider_name": provider.name,
+            "auto_cache": bool(provider.auto_cache),
         }
 
 
