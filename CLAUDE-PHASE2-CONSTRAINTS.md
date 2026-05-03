@@ -165,6 +165,29 @@ Knecht antwortet idealerweise im selben Style mit "✓ behoben in <commit>" oder
 
 ---
 
+## 10. Migration-Workflow (Pflicht)
+
+Knecht muss bei **jeder** DB-Migration BEIDES tun: Migration committen UND auf der laufenden DB ausführen.
+
+### Reihenfolge (zwingend)
+
+1. **Backup** — `scripts/safe_alembic.sh` macht das automatisch vor dem Upgrade
+2. **Migration ausführen** — `scripts/safe_alembic.sh "upgrade head"` auf dem Host, NICHT im Container
+3. **Verify** — `alembic current` muss `head` zeigen
+4. **Container-Restart** — wenn der Code ein geändertes Schema voraussetzt: `docker compose restart <service>`
+
+### Bei Failure
+
+- Rollback via Snapshot aus `/opt/backup/cap-v2-pre-migration-*.sql.gz`
+- **NICHT** via `alembic downgrade` — das ist fehleranfällig und kann Datenverlust verursachen
+
+### Explizite Warnung
+
+> **Nie direkt `alembic upgrade head` im Container ausführen — immer `scripts/safe_alembic.sh`.**
+> Der direkte Aufruf überspringt das Backup und läuft unter den Container-Rechten ohne Host-Zugriff auf die Backup-Pfade.
+
+---
+
 ## 9. Vision (nicht jetzt umsetzen, aber merken)
 
 Diese Punkte stehen in der Pipeline, sind aber NICHT Teil von Phase 2/3:
@@ -174,3 +197,9 @@ Diese Punkte stehen in der Pipeline, sind aber NICHT Teil von Phase 2/3:
 - **Phase 4-8** (siehe `BACKLOG-Eric-Agenda-Restpunkte.md` lokal): Content-Kategorien, 3 Aufhänger-Auswahl, pgvector-Unternehmensgedächtnis, P05/P07-Research, LinkedIn-Performance-Loop, WhatsApp-Bridge, Mobile-Native
 
 Bis dahin: erst muss Phase 1-3 hart gut laufen.
+
+---
+
+## Neuer Acceptance-Punkt für #82
+
+Alle pending Migrations sind auf der Live-DB ausgeführt (`alembic current` zeigt `head`). Issue #82 gilt erst als abgeschlossen wenn dieser Stand verifiziert ist.
