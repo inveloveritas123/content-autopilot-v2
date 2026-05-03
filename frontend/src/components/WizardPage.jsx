@@ -470,6 +470,8 @@ export default function WizardPage() {
   const [done, setDone] = useState(false)
   const [savedToast, setSavedToast] = useState(false)
   const toastTimerRef = useRef(null)
+  // Fortsetzen-Modal: { sessionId, phase, answersCount, lastUpdated } | null
+  const [resumeModal, setResumeModal] = useState(null)
 
   // Phasen-Definition vom Backend laden (Single-Source-of-Truth)
   useEffect(() => {
@@ -494,6 +496,17 @@ export default function WizardPage() {
         } else {
           const result = await startWizardSession()
           const newId = result.session_id || result.id
+          if (result.resumed) {
+            // Offene Session gefunden — Modal anzeigen, Loading beenden
+            setResumeModal({
+              sessionId: newId,
+              phase: result.phase,
+              answersCount: result.answers_count || 0,
+              lastUpdated: result.last_updated,
+            })
+            setLoading(false)
+            return
+          }
           setSessionId(newId)
           navigate(`/brand-voice/wizard/${newId}`, { replace: true })
         }
@@ -505,6 +518,28 @@ export default function WizardPage() {
     }
     init()
   }, [urlSessionId]) // urlSessionId-Änderung (z.B. Resume-Flow) triggert Neu-Initialisierung
+
+  // Handler für Fortsetzen-Modal
+  const handleResume = useCallback(() => {
+    if (!resumeModal) return
+    setResumeModal(null)
+    navigate(`/brand-voice/wizard/${resumeModal.sessionId}`, { replace: true })
+  }, [resumeModal, navigate])
+
+  const handleStartFresh = useCallback(async () => {
+    setResumeModal(null)
+    setLoading(true)
+    try {
+      const result = await startWizardSession(true) // force_new=true
+      const newId = result.session_id || result.id
+      setSessionId(newId)
+      navigate(`/brand-voice/wizard/${newId}`, { replace: true })
+    } catch (e) {
+      setInitError(e.message || 'Fehler beim Starten des Wizards')
+    } finally {
+      setLoading(false)
+    }
+  }, [navigate])
 
   // Cleanup Toast-Timer
   useEffect(() => {
@@ -697,6 +732,41 @@ export default function WizardPage() {
             <Button variant="primary" size="sm" onClick={() => navigate('/brand-voice')}>
               Zurück zu Brand Voice
             </Button>
+          </div>
+        </div>
+        {MobileBanner}
+      </>
+    )
+  }
+
+  // Resume-Modal: offene Session gefunden
+  if (resumeModal) {
+    const lastDate = resumeModal.lastUpdated
+      ? new Date(resumeModal.lastUpdated).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : null
+    return (
+      <>
+        <div className="hidden md:flex items-center justify-center min-h-screen bg-gray-50">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-lg p-8 max-w-md w-full text-center">
+            <div className="w-12 h-12 rounded-full bg-primary-50 flex items-center justify-center mx-auto mb-4">
+              <BookmarkCheck className="w-6 h-6 text-primary-600" />
+            </div>
+            <h2 className="text-lg font-semibold text-ink mb-2">Offene Session gefunden</h2>
+            <p className="text-sm text-ink-muted mb-1">
+              Du hast bereits mit dem Brand Voice Wizard begonnen
+              {lastDate ? ` (zuletzt am ${lastDate})` : ''}.
+            </p>
+            <p className="text-sm text-ink-muted mb-6">
+              Phase {resumeModal.phase} · {resumeModal.answersCount} Antworten gespeichert
+            </p>
+            <div className="flex flex-col gap-3">
+              <Button variant="primary" onClick={handleResume}>
+                Fortsetzen →
+              </Button>
+              <Button variant="ghost" onClick={handleStartFresh}>
+                Neu starten (aktuelle Session verwerfen)
+              </Button>
+            </div>
           </div>
         </div>
         {MobileBanner}

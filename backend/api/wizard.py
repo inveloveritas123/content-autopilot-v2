@@ -403,10 +403,43 @@ class SynthesizePhaseRequest(BaseModel):
 
 @router.post("/brand-voice/wizard/start", status_code=201)
 async def wizard_start(
+    force_new: bool = False,
     tenant_id: uuid.UUID = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Neue Wizard-Session anlegen."""
+    """Neue Wizard-Session anlegen oder bestehende fortsetzen.
+
+    Wenn `force_new=true` (Query-Param), wird immer eine neue Session erstellt.
+    Sonst: wenn eine offene Session existiert, wird sie zurückgegeben
+    (resumed=true) damit das Frontend ein Fortsetzen-Modal anzeigen kann.
+    """
+    if not force_new:
+        # Prüfen ob eine offene Session existiert
+        existing = (await db.execute(
+            text(
+                "SELECT id, current_phase, answers, updated_at "
+                "FROM wizard_session "
+                "WHERE tenant_id=:t AND status='in_progress' "
+                "ORDER BY updated_at DESC LIMIT 1"
+            ),
+            {"t": str(tenant_id)},
+        )).fetchone()
+
+        if existing:
+            session_id = str(existing.id)
+            current_phase = existing.current_phase or 1
+            answers = existing.answers or {}
+            phase_data = _PHASE_BY_NUM.get(current_phase, WIZARD_PHASES[0])
+            return {
+                "session_id": session_id,
+                "phase": current_phase,
+                "phase_title": phase_data["title"],
+                "questions": phase_data["questions"],
+                "resumed": True,
+                "answers_count": len(answers),
+                "last_updated": existing.updated_at.isoformat() if existing.updated_at else None,
+            }
+
     session_id = str(uuid.uuid4())
     await db.execute(
         text(
@@ -423,6 +456,8 @@ async def wizard_start(
         "phase": 1,
         "phase_title": first_phase["title"],
         "questions": first_phase["questions"],
+        "resumed": False,
+        "answers_count": 0,
     }
 
 
