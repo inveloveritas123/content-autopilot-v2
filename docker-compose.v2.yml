@@ -40,6 +40,8 @@ services:
       BRAND_VOICE_NC_BASE_PATH: ${BRAND_VOICE_NC_BASE_PATH:-/content-autopilot/v2/Kunde/}
       PROMPT_NC_BASE_PATH: ${PROMPT_NC_BASE_PATH:-/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/}
       UVICORN_LOOP: asyncio
+      COST_CAP_USD_PER_DAY: ${COST_CAP_USD_PER_DAY:-5.0}
+      COST_CAP_USD_GLOBAL_PER_DAY: ${COST_CAP_USD_GLOBAL_PER_DAY:-10.0}
     depends_on:
       redis-v2:
         condition: service_healthy
@@ -88,6 +90,8 @@ services:
       NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       APP_ENV: ${APP_ENV:-production}
+      COST_CAP_USD_PER_DAY: ${COST_CAP_USD_PER_DAY:-5.0}
+      COST_CAP_USD_GLOBAL_PER_DAY: ${COST_CAP_USD_GLOBAL_PER_DAY:-10.0}
     depends_on:
       redis-v2:
         condition: service_healthy

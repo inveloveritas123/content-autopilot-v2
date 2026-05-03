@@ -1,6 +1,7 @@
 import json
 import logging
 import asyncio
+from contextvars import ContextVar
 from typing import Optional
 
 import httpx
@@ -10,6 +11,15 @@ import anthropic
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+# ── Tenant Context (propagated via contextvars into asyncio.run coroutines) ──
+_tenant_id_ctx: ContextVar[Optional[str]] = ContextVar("llm_tenant_id", default=None)
+
+
+def set_llm_tenant(tenant_id: Optional[str]) -> None:
+    """Set the current tenant_id for LLM cost tracking.
+    Must be called in the same thread/context before asyncio.run()."""
+    _tenant_id_ctx.set(str(tenant_id) if tenant_id else None)
 
 
 class BudgetExceededError(Exception):
@@ -289,6 +299,7 @@ class LLMService:
                     usage,
                     model=litellm_model,
                     task_type=purpose_task,
+                    tenant_id=_tenant_id_ctx.get(),
                     cache_read_tokens=cache_read,
                     cache_write_tokens=cache_write,
                 )

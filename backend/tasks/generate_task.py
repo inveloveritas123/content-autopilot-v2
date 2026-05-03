@@ -13,7 +13,7 @@ from services.analyzer import analyze_transcript
 from services.content_generator import generate_all_content
 from services.campaign_matcher import match_item_to_campaigns
 from services.fact_checker import check_facts
-from services.llm import BudgetExceededError
+from services.llm import BudgetExceededError, set_llm_tenant
 
 from sqlalchemy import select
 
@@ -50,6 +50,8 @@ def analyze_item(item_id: str):
         tenant = session.get(Tenant, item.tenant_id)
         routing_override = (tenant.settings or {}).get("llm_routing") if tenant else None
 
+        # Set tenant context so LLM cost tracking updates daily_cost_tenant
+        set_llm_tenant(str(item.tenant_id))
         try:
             analysis = asyncio.run(
                 analyze_transcript(
@@ -165,6 +167,8 @@ def generate_content(item_id: str):
         routing_override = tenant_settings.get("llm_routing")
         voice_profile = tenant_settings.get("voice_profile") or None
 
+        # Set tenant context for cost cap tracking
+        set_llm_tenant(str(item.tenant_id))
         try:
             content = asyncio.run(
                 generate_all_content(

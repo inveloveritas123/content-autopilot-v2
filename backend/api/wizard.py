@@ -32,53 +32,215 @@ ANTHROPIC_MODEL_ID = "claude-sonnet-4-6-20251022"
 # ---------------------------------------------------------------------------
 
 WIZARD_PHASES = [
+    # ── Phase 1: Ankommen & Geschichte ──────────────────────────────────────
+    # Quelle: Master-MD "Start-Fragebogen Content v2" Phase 1
     {
         "phase": 1,
         "title": "Ankommen & Geschichte",
+        "goal": "Vertrauen aufbauen, echte Geschichte rausholen, erste Voice-Signale sammeln.",
         "questions": [
-            {"id": "q1_1", "text": "Wie bist du zu dem geworden, was du heute tust? Erzähl mir deine Geschichte."},
-            {"id": "q1_2", "text": "Was war der entscheidende Moment, der dich in diese Richtung gelenkt hat?"},
-            {"id": "q1_3", "text": "Welche Erfahrung aus deiner Vergangenheit prägt deinen Blick auf deine Arbeit heute am stärksten?"},
+            {
+                "id": "q1_1",
+                "text": "Erzähl mal — wie bist du zu dem gekommen, was du heute machst? Nicht die offizielle Version, sondern die echte Geschichte.",
+                "hints": [
+                    "War das geplant oder eher Zufall?",
+                    "Gab es einen Moment, wo du gedacht hast: das ist es?",
+                    "Was hast du davor gemacht?",
+                ],
+            },
+            {
+                "id": "q1_2",
+                "text": "Gab es einen Moment, der für dich alles verändert hat? Ein Vorher-Nachher?",
+                "hints": [
+                    "Das kann eine Kündigung gewesen sein, ein Gespräch, ein Projekt das schiefging...",
+                ],
+            },
+            {
+                "id": "q1_3",
+                "text": "Welche Fehler hast du gemacht, über die du heute froh bist?",
+                "hints": [
+                    "Nicht 'Ich habe gelernt dass...' sondern konkret: 'Was genau ist passiert?'",
+                ],
+            },
         ],
     },
+    # ── Phase 2: Alltag & Antrieb ────────────────────────────────────────────
     {
         "phase": 2,
         "title": "Alltag & Antrieb",
+        "goal": "Den echten Arbeitsalltag verstehen. Daraus entsteht Relatability im Content.",
         "questions": [
-            {"id": "q2_1", "text": "Beschreibe einen typischen Arbeitstag — was macht dir dabei am meisten Freude?"},
-            {"id": "q2_2", "text": "Vervollständige: 'Ich stehe morgens auf, weil ...'"},
-            {"id": "q2_3", "text": "Vervollständige: 'Meine Arbeit ist dann am besten, wenn ...'"},
-            {"id": "q2_4", "text": "Vervollständige: 'Das treibt mich an: ...'"},
+            {
+                "id": "q2_1",
+                "text": "Beschreib mal einen normalen Arbeitstag. Wann fängst du an, was passiert zuerst, wann ist Schluss?",
+                "hints": [],
+            },
+            {
+                "id": "q2_2",
+                "text": "Vervollständige spontan (nicht nachdenken, einfach reagieren): „Den besten Teil meines Jobs finde ich: ___”",
+                "hints": ["Tipp: Kein perfekter Satz nötig — Stichwörter reichen."],
+                "completion_prefix": "Den besten Teil meines Jobs finde ich:",
+            },
+            {
+                "id": "q2_3",
+                "text": "Vervollständige: „Am meisten nervt mich: ___”",
+                "hints": [],
+                "completion_prefix": "Am meisten nervt mich:",
+            },
+            {
+                "id": "q2_4",
+                "text": "Vervollständige: „Das letzte Mal, dass ich dachte 'genau deshalb mach ich das', war als: ___”",
+                "hints": [],
+                "completion_prefix": "Das letzte Mal, dass ich dachte 'genau deshalb mach ich das', war als:",
+            },
         ],
     },
+    # ── Phase 3: Zielkunde ───────────────────────────────────────────────────
     {
         "phase": 3,
         "title": "Zielkunde",
+        "goal": "Den Kunden des Kunden so genau verstehen, dass die KI später in dessen Sprache schreiben kann.",
         "questions": [
-            {"id": "q3_1", "text": "Wer ist dein idealer Kunde? Beschreibe eine echte Person."},
-            {"id": "q3_2", "text": "Welches Problem hat dieser Kunde, das ihn nachts wach hält?"},
-            {"id": "q3_3", "text": "Was hat er schon alles versucht, bevor er zu dir kam?"},
-            {"id": "q3_4", "text": "Wie fühlt er sich, nachdem er mit dir gearbeitet hat?"},
+            {
+                "id": "q3_1",
+                "text": "Stell dir vor, dein typischer Kunde sitzt mir gegenüber. Beschreib mir die Person — nicht die Firma, sondern den Menschen.",
+                "hints": [
+                    "Wie alt ungefähr? Welche Position?",
+                    "Was ist dem/der wichtig? Wovon ist er/sie gestresst?",
+                ],
+            },
+            {
+                "id": "q3_2",
+                "text": "Woran merkst du in den ersten 5 Minuten eines Gesprächs, ob jemand ein guter Kunde wird — oder nicht?",
+                "hints": [],
+            },
+            {
+                "id": "q3_3",
+                "text": "Mit wem willst du auf keinen Fall arbeiten?",
+                "hints": [],
+            },
+            {
+                "id": "q3_4",
+                "text": "Vervollständige: „Meine Kunden glauben oft, dass ___. In Wirklichkeit ist es so: ___”",
+                "hints": [],
+                "completion_prefix": "Meine Kunden glauben oft, dass... In Wirklichkeit ist es so:",
+            },
+            {
+                "id": "q3_5",
+                "text": "Vervollständige: „Die Frage, die mir am häufigsten gestellt wird, ist: ___”",
+                "hints": [],
+                "completion_prefix": "Die Frage, die mir am häufigsten gestellt wird, ist:",
+            },
+            {
+                "id": "q3_6",
+                "text": "Vervollständige: „Was meine Kunden wirklich brauchen, ist nicht ___, sondern: ___”",
+                "hints": [],
+                "completion_prefix": "Was meine Kunden wirklich brauchen, ist nicht..., sondern:",
+            },
+            {
+                "id": "q3_7",
+                "text": "Was ändert sich konkret für deinen Kunden, wenn er mit dir arbeitet? Vorher → Nachher.",
+                "hints": [],
+            },
+            {
+                "id": "q3_8",
+                "text": "Hast du eine Erfolgsgeschichte, die du gerne erzählst?",
+                "hints": [],
+            },
+            {
+                "id": "q3_9",
+                "text": "Hast du originale Zitate von Kunden — WhatsApp-Nachrichten, Bewertungen, Mails? Falls ja, gerne hier einfügen.",
+                "hints": ["Falls nicht zur Hand: nach dem Wizard zusenden."],
+                "required": False,
+            },
         ],
     },
+    # ── Phase 4: Angebot & Markt ─────────────────────────────────────────────
     {
         "phase": 4,
         "title": "Angebot & Markt",
+        "goal": "Positionierung und Differenzierung verstehen — für strategischen Content.",
         "questions": [
-            {"id": "q4_1", "text": "Was bietest du an — in einem Satz, den dein Kunde selbst sagen würde?"},
-            {"id": "q4_2", "text": "Warum kaufen Kunden bei dir und nicht beim Wettbewerb?"},
-            {"id": "q4_3", "text": "Vervollständige: 'Andere versprechen X, ich liefere ...'"},
-            {"id": "q4_4", "text": "Was ist der eine Punkt, bei dem du kompromisslos gut sein musst?"},
+            {
+                "id": "q4_1",
+                "text": "Stell dir vor, jemand auf einer Familienfeier fragt: 'Und was machst du so?' — was sagst du?",
+                "hints": ["Kein Marketing-Speak — wie du es wirklich erklärst."],
+            },
+            {
+                "id": "q4_2",
+                "text": "Was ist das eigentliche Problem deiner Kunden — nicht das offensichtliche, sondern das darunter?",
+                "hints": [
+                    "Das offensichtliche Problem ist 'zu wenig Kunden', aber eigentlich geht es oft um Unsicherheit, fehlende Strategie, oder dass sie sich nicht trauen sichtbar zu werden.",
+                ],
+            },
+            {
+                "id": "q4_3",
+                "text": "Was machst du anders als andere in deiner Branche? Nicht 'besser' — anders.",
+                "hints": [],
+            },
+            {
+                "id": "q4_4",
+                "text": "Worauf legst du Wert, was anderen scheinbar egal ist?",
+                "hints": [],
+            },
+            {
+                "id": "q4_5",
+                "text": "Wer sind deine Mitbewerber — und was hat dein Kunde typischerweise schon probiert, bevor er zu dir kam?",
+                "hints": [],
+            },
+            {
+                "id": "q4_6",
+                "text": "Vervollständige: „Die meisten in meiner Branche machen den Fehler, dass: ___”",
+                "hints": [],
+                "completion_prefix": "Die meisten in meiner Branche machen den Fehler, dass:",
+            },
+            {
+                "id": "q4_7",
+                "text": "Vervollständige: „Was in meiner Branche total unterschätzt wird, ist: ___”",
+                "hints": [],
+                "completion_prefix": "Was in meiner Branche total unterschätzt wird, ist:",
+            },
+            {
+                "id": "q4_8",
+                "text": "Vervollständige: „Der größte Mythos in meiner Branche ist: ___”",
+                "hints": [],
+                "completion_prefix": "Der größte Mythos in meiner Branche ist:",
+            },
+            {
+                "id": "q4_9",
+                "text": "Vervollständige: „Wenn ich etwas an meiner Branche ändern könnte, wäre es: ___”",
+                "hints": [],
+                "completion_prefix": "Wenn ich etwas an meiner Branche ändern könnte, wäre es:",
+            },
         ],
     },
+    # ── Phase 5: Sprache & Stil ──────────────────────────────────────────────
     {
         "phase": 5,
         "title": "Sprache & Stil",
+        "goal": "Sprachliche Präferenzen explizit machen, um die Voice-Analyse zu ergänzen.",
         "questions": [
-            {"id": "q5_1", "text": "Welche drei Wörter würden deine besten Kunden benutzen, um dich zu beschreiben?"},
-            {"id": "q5_2", "text": "Gibt es Formulierungen, die du nie verwenden würdest? Welche und warum?"},
-            {"id": "q5_3", "text": "Schreib einen LinkedIn-Satz, der wirklich nach dir klingt."},
-            {"id": "q5_4", "text": "Was ist der Ton, den du treffen willst — eher sachlich oder persönlich, direkt oder einladend?"},
+            {
+                "id": "q5_1",
+                "text": "Gibt es Wörter oder Ausdrücke, die du besonders gerne benutzt?",
+                "hints": [],
+            },
+            {
+                "id": "q5_2",
+                "text": "Und welche vermeidest du bewusst?",
+                "hints": [],
+            },
+            {
+                "id": "q5_3",
+                "text": "Welche Fachbegriffe benutzt deine Branche, die Außenstehende nicht kennen?",
+                "hints": [],
+            },
+            {
+                "id": "q5_4",
+                "text": "Zeig mir 2–3 Posts oder Texte — von dir oder anderen — die du richtig gut findest. Was genau gefällt dir daran?",
+                "hints": ["Falls nicht sofort zur Hand: Links oder Screenshots nach dem Wizard zusenden."],
+                "required": False,
+            },
             {
                 "id": "q5_linkedin_posts",
                 "type": "linkedin_posts",
@@ -90,16 +252,57 @@ WIZARD_PHASES = [
             },
         ],
     },
+    # ── Phase 6: Vertrauenssignale & Abschluss ───────────────────────────────
     {
         "phase": 6,
         "title": "Vertrauenssignale & Abschluss",
+        "goal": "Vertrauenssignale sammeln und den Onboarding-Call abschließen.",
         "questions": [
-            {"id": "q6_1", "text": "Was ist dein bisher stärkstes Ergebnis, das du für einen Kunden erzielt hast?"},
-            {"id": "q6_2", "text": "Welche Aussage von einem Kunden hat dich am meisten berührt?"},
-            {"id": "q6_3", "text": "Wenn du in 3 Jahren zurückschaust — was soll über deine Arbeit gesagt werden?"},
+            {
+                "id": "q6_1",
+                "text": "Was könnte jemanden überzeugen, dass du weißt, wovon du sprichst?",
+                "hints": [
+                    "Anzahl Kunden/Projekte, Jahre Erfahrung, Zertifikate, Preise, Auftritte, Veröffentlichungen.",
+                ],
+            },
+            {
+                "id": "q6_2",
+                "text": "Was würdest du deinem Ich von vor 5–10 Jahren raten? Ein Satz.",
+                "hints": [],
+            },
+            {
+                "id": "q6_3",
+                "text": "Gibt es etwas, das wir nicht gefragt haben, was du aber wichtig findest?",
+                "hints": [],
+                "required": False,
+            },
+            {
+                "id": "q6_4",
+                "text": "Abschluss-Bitte: Schick uns nach dem Wizard noch — Fotos (mit Kunden, bei der Arbeit, Alltag — Handy-Fotos sind perfekt), Beispiel-Posts die dir gefallen, und Original-Kundenzitate falls vorhanden.",
+                "hints": [],
+                "required": False,
+                "type": "note",
+            },
         ],
     },
 ]
+
+# Backward-Compat: alte question IDs (vor 2026-05-03) weiterhin akzeptieren
+_LEGACY_QUESTION_IDS: set[str] = {
+    "q1_1", "q1_2", "q1_3",
+    "q2_1", "q2_2", "q2_3", "q2_4",
+    "q3_1", "q3_2", "q3_3", "q3_4",
+    "q4_1", "q4_2", "q4_3", "q4_4",
+    "q5_1", "q5_2", "q5_3", "q5_4", "q5_linkedin_posts",
+    "q6_1", "q6_2", "q6_3",
+    # auch alte frontend IDs
+    "p1_q1", "p1_q2", "p1_q3",
+    "p2_q1", "p2_q2", "p2_q3", "p2_q4",
+    "p3_q1", "p3_q2", "p3_q3", "p3_q4",
+    "p4_q1", "p4_q2", "p4_q3", "p4_q4",
+    "p5_q1", "p5_q2", "p5_q3", "p5_q4",
+    "p6_q1", "p6_q2", "p6_q3",
+}
 
 # Hilfsdicts fuer schnellen Lookup
 _PHASE_BY_NUM: dict[int, dict] = {p["phase"]: p for p in WIZARD_PHASES}
