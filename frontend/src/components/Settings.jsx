@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { Eye, EyeOff } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card'
 import { Button } from './ui/Button'
 import LLMSettings from './LLMSettings'
@@ -17,6 +18,7 @@ export default function Settings() {
   const [targetAudience, setTargetAudience] = useState('')
   const [ytApiKey, setYtApiKey] = useState('')
   const [ytKeySet, setYtKeySet] = useState(false)
+  const [showYtKey, setShowYtKey] = useState(false)
   const [ncTranscriptPath, setNcTranscriptPath] = useState('')
   const [ncAnalysisPath, setNcAnalysisPath] = useState('')
   const [ncContentPath, setNcContentPath] = useState('')
@@ -268,9 +270,26 @@ export default function Settings() {
               </button>
             </div>
           ) : (
-            <Input label="YouTube Data API Key (optional)" type="password" value={ytApiKey}
-              onChange={e => setYtApiKey(e.target.value)}
-              placeholder="AIza..." />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">YouTube Data API Key (optional)</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type={showYtKey ? 'text' : 'password'}
+                  value={ytApiKey}
+                  onChange={e => setYtApiKey(e.target.value)}
+                  placeholder="AIza..."
+                  className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowYtKey(s => !s)}
+                  className="p-2 rounded-md text-ink-muted hover:bg-gray-100 dark:hover:bg-gray-700"
+                  title={showYtKey ? 'Verbergen' : 'Anzeigen'}
+                >
+                  {showYtKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
           )}
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
             <p className="text-sm text-yellow-800 dark:text-yellow-200 font-medium">Hinweis: Volle Funktionalitaet</p>
