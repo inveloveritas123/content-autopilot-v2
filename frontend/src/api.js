@@ -420,6 +420,9 @@ export const getLLMAnalyticsSummary = (params) => request('/analytics/llm-summar
 export const getLLMAnalyticsByTask = (params) => request('/analytics/llm-by-task', { params })
 export const getLLMAnalyticsByModel = (params) => request('/analytics/llm-by-model', { params })
 export const getLLMAnalyticsByDay = (params) => request('/analytics/llm-by-day', { params })
+export const getLLMAnalyticsByHour = (params) => request('/analytics/llm-by-hour', { params })
+export const getLLMAnalyticsAnomaly = (params) => request('/analytics/llm-anomaly', { params })
+
 export const getLLMAnalyticsCSVUrl = (params) => {
   const base = window.location.origin
   const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))).toString()

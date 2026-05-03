@@ -334,3 +334,114 @@ async def llm_calls_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# --- #128 D + E: Hourly-Aggregation + Anomalie-Detection ---
+
+
+@router.get("/analytics/llm-by-hour")
+async def llm_by_hour(
+    hours: int = Query(24, ge=1, le=168, description="Lookback in Stunden (max 7 Tage)"),
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cost + Token + Calls aggregiert pro Stunde — für Cost-Spike-Debugging.
+
+    Liefert eine Liste von {hour, total_cost_cents, total_tokens, calls}.
+    """
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    bucket = sqlfunc.date_trunc("hour", LLMCallLog.created_at).label("hour")
+    rows = (await db.execute(
+        select(
+            bucket,
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens + LLMCallLog.completion_tokens), 0).label("total_tokens"),
+            sqlfunc.count().label("calls"),
+        )
+        .where(LLMCallLog.tenant_id == tenant.id, LLMCallLog.created_at >= cutoff)
+        .group_by(bucket)
+        .order_by(bucket)
+    )).all()
+    return [
+        {
+            "hour": r.hour.isoformat() if r.hour else None,
+            "total_cost_cents": round(float(r.total_cost_cents), 4),
+            "total_tokens": int(r.total_tokens or 0),
+            "calls": int(r.calls or 0),
+        }
+        for r in rows
+    ]
+
+
+@router.get("/analytics/llm-anomaly")
+async def llm_anomaly(
+    threshold_factor: float = Query(2.0, ge=1.0, le=10.0, description="X-fache des Median = Anomalie"),
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cost-Spike-Detector: aktuelle Stunde vs Median der letzten 24h.
+
+    Returns:
+        {
+          "anomaly": true|false,
+          "current_hour_cost_cents": float,
+          "median_24h_cost_cents": float,
+          "factor": float,
+          "threshold_factor": float,
+          "current_hour": "ISO-Timestamp"
+        }
+    """
+    now = datetime.utcnow()
+    current_hour_start = now.replace(minute=0, second=0, microsecond=0)
+    cutoff_24h = current_hour_start - timedelta(hours=24)
+
+    # Stündliche Cost-Buckets der letzten 24h (excl. aktuelle Stunde)
+    bucket = sqlfunc.date_trunc("hour", LLMCallLog.created_at).label("hour")
+    hist_rows = (await db.execute(
+        select(
+            bucket,
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("cost"),
+        )
+        .where(
+            LLMCallLog.tenant_id == tenant.id,
+            LLMCallLog.created_at >= cutoff_24h,
+            LLMCallLog.created_at < current_hour_start,
+        )
+        .group_by(bucket)
+        .order_by(bucket)
+    )).all()
+
+    history = sorted(float(r.cost or 0) for r in hist_rows)
+    if not history:
+        median = 0.0
+    else:
+        n = len(history)
+        median = history[n // 2] if n % 2 == 1 else (history[n // 2 - 1] + history[n // 2]) / 2.0
+
+    # Aktuelle Stunde
+    current_row = (await db.execute(
+        select(sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0))
+        .where(
+            LLMCallLog.tenant_id == tenant.id,
+            LLMCallLog.created_at >= current_hour_start,
+        )
+    )).scalar() or 0.0
+    current = float(current_row)
+
+    factor = (current / median) if median > 0 else 0.0
+    # Anomalie nur wenn historie aussagekräftig (median > 0.001 USD = 0.1 Cent) UND aktueller Wert relevant
+    is_anomaly = bool(
+        median > 0.001
+        and current > 0.001
+        and factor >= threshold_factor
+    )
+
+    return {
+        "anomaly": is_anomaly,
+        "current_hour_cost_cents": round(current, 4),
+        "median_24h_cost_cents": round(median, 4),
+        "factor": round(factor, 2) if median > 0 else None,
+        "threshold_factor": threshold_factor,
+        "current_hour": current_hour_start.isoformat(),
+        "history_buckets": len(history),
+    }

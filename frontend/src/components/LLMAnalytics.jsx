@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  DollarSign, BarChart3, Zap, Download, RefreshCw, TrendingUp, Cpu, Activity
+  DollarSign, BarChart3, Zap, Download, RefreshCw, TrendingUp, Cpu, Activity, AlertTriangle, Clock
 } from 'lucide-react'
 import {
   getLLMAnalyticsSummary,
@@ -8,6 +8,8 @@ import {
   getLLMAnalyticsByModel,
   getLLMAnalyticsByDay,
   getLLMAnalyticsCSVUrl,
+  getLLMAnalyticsByHour,
+  getLLMAnalyticsAnomaly,
 } from '../api'
 
 function fmtTokens(n) {
@@ -56,6 +58,8 @@ export default function LLMAnalytics() {
   const [byTask, setByTask] = useState([])
   const [byModel, setByModel] = useState([])
   const [byDay, setByDay] = useState([])
+  const [byHour, setByHour] = useState([])
+  const [anomaly, setAnomaly] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [dateRange, setDateRange] = useState(() => {
@@ -75,16 +79,20 @@ export default function LLMAnalytics() {
     setLoading(true)
     setError(null)
     try {
-      const [sum, task, model, day] = await Promise.all([
+      const [sum, task, model, day, hourly, anom] = await Promise.all([
         getLLMAnalyticsSummary(apiParams),
         getLLMAnalyticsByTask(apiParams),
         getLLMAnalyticsByModel(apiParams),
         getLLMAnalyticsByDay(apiParams),
+        getLLMAnalyticsByHour({ hours: 24 }).catch(() => []),
+        getLLMAnalyticsAnomaly({ threshold_factor: 2.0 }).catch(() => null),
       ])
       setSummary(sum)
       setByTask(Array.isArray(task) ? task : [])
       setByModel(Array.isArray(model) ? model : [])
       setByDay(Array.isArray(day) ? day : [])
+      setByHour(Array.isArray(hourly) ? hourly : [])
+      setAnomaly(anom)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -117,6 +125,7 @@ export default function LLMAnalytics() {
   const maxTaskCost = useMemo(() => Math.max(1, ...byTask.map(r => r.total_cost_cents || 0)), [byTask])
   const maxModelCost = useMemo(() => Math.max(1, ...byModel.map(r => r.total_cost_cents || 0)), [byModel])
   const maxDayCost = useMemo(() => Math.max(1, ...byDay.map(r => r.total_cost_cents || 0)), [byDay])
+  const maxHourCost = useMemo(() => Math.max(1, ...byHour.map(r => r.total_cost_cents || 0)), [byHour])
 
   const tabs = [
     { id: 'task', label: 'Nach Task', icon: TrendingUp },
@@ -179,6 +188,24 @@ export default function LLMAnalytics() {
           </button>
         </div>
       </div>
+
+      {/* #128 E: Anomalie-Banner (Cost-Spike-Detector) */}
+      {anomaly?.anomaly && (
+        <div className="bg-red-50 border-2 border-red-300 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-red-900">
+              Cost-Spike erkannt — aktuelle Stunde {(anomaly.factor || 0).toFixed(1)}× höher als Median
+            </p>
+            <p className="text-xs text-red-700 mt-0.5">
+              Aktuell: ${(anomaly.current_hour_cost_cents / 100).toFixed(4)} · Median 24h: ${(anomaly.median_24h_cost_cents / 100).toFixed(4)} · Schwelle: {anomaly.threshold_factor}×
+            </p>
+            <p className="text-[11px] text-red-600 mt-1">
+              Verdacht auf Burst (z.B. Cron-Job-Schleife) — bitte Logs / by-task prüfen.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -284,6 +311,33 @@ export default function LLMAnalytics() {
               ))
           )}
         </div>
+      </div>
+
+      {/* #128 D: Stündliche Cost-Verteilung (Cost-Spike-Debug) */}
+      <div className="bg-white rounded-xl border border-surface-border p-4">
+        <h3 className="text-sm font-semibold text-ink mb-3 flex items-center gap-2">
+          <Clock className="w-4 h-4" /> Stündlich (letzte 24h)
+        </h3>
+        {byHour.length === 0 ? (
+          <p className="text-xs text-ink-muted">Keine Daten in den letzten 24h</p>
+        ) : (
+          <div className="space-y-1">
+            {byHour.map(r => {
+              const t = r.hour ? new Date(r.hour) : null
+              const label = t ? t.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''
+              return (
+                <HBar
+                  key={r.hour}
+                  label={label}
+                  value={r.total_cost_cents || 0}
+                  max={maxHourCost}
+                  sub={`${r.calls || 0} calls · ${fmtTokens(r.total_tokens || 0)} Tokens`}
+                  color="bg-violet-500"
+                />
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* CSV Export */}
