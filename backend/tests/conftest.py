@@ -57,3 +57,15 @@ if "celery" not in sys.modules:
 
     schedules_mod = _stub_module("celery.schedules")
     schedules_mod.crontab = lambda *a, **kw: None
+
+    signals_mod = _stub_module("celery.signals")
+    class _FakeSignal:
+        def connect(self, *a, **kw):
+            def decorator(fn):
+                return fn
+            if len(a) == 1 and callable(a[0]):
+                return a[0]
+            return decorator
+    signals_mod.task_prerun = _FakeSignal()
+    signals_mod.task_postrun = _FakeSignal()
+    signals_mod.task_failure = _FakeSignal()

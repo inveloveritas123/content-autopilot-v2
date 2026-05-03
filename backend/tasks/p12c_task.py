@@ -23,6 +23,11 @@ from sqlalchemy import text
 
 from tasks.celery_app import celery_app
 from models.base import sync_session_factory
+from services.cost_cap import (
+    estimate_anthropic_cost,
+    CostCapExceeded,
+    CostCapMiddleware,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -153,14 +158,30 @@ def run_p12c(
     run_id = str(uuid.uuid4())
     t_start = time.time()
 
-    # Cost-cap check
+    # Cost-cap check (#123 Lücke: P12c-cap-call hatte falschen Methodennamen + fehlende DB-Session)
+    est_cost = estimate_anthropic_cost(ANTHROPIC_PRICING_KEY, 4000, 1500)
+    logger.info("P12c estimated cost=%.6f USD for tenant=%s", est_cost, tenant_id)
     try:
-        import asyncio
-        from services.cost_cap import CostCapMiddleware
-        cap = CostCapMiddleware()
-        asyncio.run(cap.check(tenant_id, ANTHROPIC_PRICING_KEY))
-    except Exception as ce:
-        logger.warning(f"[P12c] Cost-cap check fehlgeschlagen (ignoriert): {ce}")
+        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+        from sqlalchemy.orm import sessionmaker as _sm
+        from config import settings as _s
+        import asyncio as _asyncio
+
+        async def _p12c_cap_check():
+            _engine = create_async_engine(_s.database_url, pool_pre_ping=True)
+            _Session = _sm(_engine, class_=AsyncSession, expire_on_commit=False)
+            try:
+                async with _Session() as _sess:
+                    await CostCapMiddleware(_sess).check_and_record(tenant_id, est_cost)
+            finally:
+                await _engine.dispose()
+
+        _asyncio.run(_p12c_cap_check())
+    except CostCapExceeded:
+        logger.warning("P12c run_id=%s tenant=%s: daily cost cap exceeded, abort", run_id, tenant_id)
+        return {"status": "paused_for_cost", "reason": "daily_cost_cap_exceeded"}
+    except Exception as cap_err:
+        logger.warning("P12c cost-cap check failed (fail-open): %s", cap_err)
 
     # Load tenant branding for brand_colors if not provided
     if brand_colors is None:
