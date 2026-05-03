@@ -436,7 +436,7 @@ def run_p12(
                         "INSERT INTO content_pieces "
                         "(id, tenant_id, idea_id, channel, content_text, content_metadata, status, created_at) "
                         "VALUES (:id, :tenant_id, :idea_id, 'linkedin', :content_text, "
-                        ":content_metadata::jsonb, 'draft', now())"
+                        "CAST(:content_metadata AS jsonb), 'draft', now())"
                     ),
                     {
                         "id": content_piece_id,

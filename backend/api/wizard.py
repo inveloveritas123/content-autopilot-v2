@@ -750,7 +750,7 @@ async def wizard_synthesize_phase(
     await db.execute(
         text(
             "UPDATE wizard_session "
-            "SET phase_synthesis = :synthesis::jsonb, updated_at = now() "
+            "SET phase_synthesis = CAST(:synthesis AS jsonb), updated_at = now() "
             "WHERE id = :id"
         ),
         {

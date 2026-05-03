@@ -204,7 +204,7 @@ async def duplicate_project(
                 text(
                     f"INSERT INTO {tbl} "
                     f"(tenant_id, version, is_active, source, payload, prompt_version_hash, model_id, project_id, created_at) "
-                    f"VALUES (:tenant_id, :version, :is_active, :source, :payload::jsonb, :phash, :model_id, :project_id, now())"
+                    f"VALUES (:tenant_id, :version, :is_active, :source, CAST(:payload AS jsonb), :phash, :model_id, :project_id, now())"
                 ),
                 {
                     "tenant_id": str(tenant.id),

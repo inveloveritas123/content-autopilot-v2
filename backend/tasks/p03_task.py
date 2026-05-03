@@ -101,7 +101,7 @@ def _insert_voice_profile(
         text(
             "INSERT INTO tenant_voice_profile "
             "(id, tenant_id, version, is_active, source, payload, prompt_version_hash, model_id, project_id) "
-            "VALUES (:id, :tenant_id, :version, false, :source, :payload::jsonb, "
+            "VALUES (:id, :tenant_id, :version, false, :source, CAST(:payload AS jsonb), "
             ":prompt_version_hash, :model_id, :project_id)"
         ),
         {

@@ -107,7 +107,7 @@ _SQL: dict[str, dict[str, str]] = {
         "insert": (
             f"INSERT INTO {tbl} (tenant_id, version, is_active, source, payload, "
             f"prompt_version_hash, model_id) "
-            f"VALUES (:tenant_id, :version, true, 'manual_edit', :payload::jsonb, '', '')"
+            f"VALUES (:tenant_id, :version, true, 'manual_edit', CAST(:payload AS jsonb), '', '')"
         ),
         "deactivate": f"UPDATE {tbl} SET is_active = false WHERE id = :id",
     }
@@ -819,7 +819,7 @@ async def decide_drift_observation(
                     "(tenant_id, version, is_active, source, source_meta, payload, "
                     "prompt_version_hash, model_id) "
                     "VALUES (:tenant_id, :version, true, 'drift_update', "
-                    ":source_meta::jsonb, :payload::jsonb, '', '')"
+                    "CAST(:source_meta AS jsonb), CAST(:payload AS jsonb), '', '')"
                 ),
                 {
                     "tenant_id": str(auth_tenant_id),
@@ -846,7 +846,7 @@ async def decide_drift_observation(
     await db.execute(
         text(
             "UPDATE voice_drift_observation "
-            "SET status = :status, user_feedback = :user_feedback::jsonb "
+            "SET status = :status, user_feedback = CAST(:user_feedback AS jsonb) "
             "WHERE id = :id"
         ),
         {

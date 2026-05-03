@@ -291,7 +291,7 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
                     "(id, tenant_id, version, is_active, source, payload, "
                     "prompt_version_hash, model_id, project_id, created_at) "
                     "VALUES (:id, :tenant_id, :version, false, 'transcript', "
-                    ":payload::jsonb, :prompt_version_hash, :model_id, :project_id, now())"
+                    "CAST(:payload AS jsonb), :prompt_version_hash, :model_id, :project_id, now())"
                 ),
                 {
                     "id": str(uuid.uuid4()),
@@ -366,7 +366,7 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
                     text(
                         "UPDATE setup_pipeline_run SET "
                         "status='failed', "
-                        "error_meta=:error_meta::jsonb "
+                        "error_meta=CAST(:error_meta AS jsonb) "
                         "WHERE id=:id"
                     ),
                     {

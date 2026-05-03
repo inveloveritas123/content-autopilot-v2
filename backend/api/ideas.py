@@ -658,7 +658,7 @@ async def generate_post_from_answers(
                 "INSERT INTO content_pieces "
                 "(id, tenant_id, idea_id, channel, content_text, content_metadata, status, created_at) "
                 "VALUES (:id, :tenant_id, :idea_id, 'linkedin', :content_text, "
-                ":content_metadata::jsonb, :status, now())"
+                "CAST(:content_metadata AS jsonb), :status, now())"
             ),
             {
                 "id": fallback_id,
@@ -687,7 +687,7 @@ async def generate_post_from_answers(
                 "INSERT INTO tenant_review_queue "
                 "(id, tenant_id, content_piece_id, post_text, severity, categories, "
                 "flagged_phrases, confidence, detection_layer, status) "
-                "VALUES (:id, :tid, :cpid, :post_text, :sev, :cats::jsonb, :phrases::jsonb, "
+                "VALUES (:id, :tid, :cpid, :post_text, :sev, CAST(:cats AS jsonb), CAST(:phrases AS jsonb), "
                 ":conf, :layer, 'pending')"
             ),
             {

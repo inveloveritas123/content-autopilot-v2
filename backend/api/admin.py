@@ -154,7 +154,7 @@ async def notify_tenant_model(req: TenantNotifyRequest, db=Depends(get_db)):
                 SET settings = jsonb_set(
                     COALESCE(settings, '{}'),
                     '{pending_model_notification}',
-                    :val::jsonb
+                    CAST(:val AS jsonb)
                 )
                 WHERE id = :tid"""),
         {"val": json.dumps({"backtest_run_id": req.backtest_run_id, "model": model, "message": message}),
@@ -256,7 +256,7 @@ async def apply_tenant_model(tenant_id: str, model_id: str, db=Depends(get_db)):
                 SET settings = jsonb_set(
                     COALESCE(settings, '{}'),
                     '{llm_routing,post_generation}',
-                    :model::jsonb
+                    CAST(:model AS jsonb)
                 )
                 WHERE id = :tid"""),
         {"model": json.dumps(model_id), "tid": tenant_id}

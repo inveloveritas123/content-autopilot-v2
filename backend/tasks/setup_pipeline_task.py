@@ -35,7 +35,7 @@ def _update_pipeline_status(run_id: str, status: str, error: str = None):
         params = {"id": run_id, "status": status}
         extra = ""
         if error:
-            extra = ", error_meta=:error_meta::jsonb"
+            extra = ", error_meta=CAST(:error_meta AS jsonb)"
             params["error_meta"] = json.dumps({"error": error})
         session.execute(
             text(

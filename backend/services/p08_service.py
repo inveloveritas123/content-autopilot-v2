@@ -279,7 +279,7 @@ def p08_opener(tenant_id: str, mode: str, topic_idea_id: str = None) -> OpenerRe
             text(
                 "INSERT INTO bot_session "
                 "(id, tenant_id, mode, topic_idea_id, current_question_index, messages, status) "
-                "VALUES (:id, :tid, :mode, :topicid, 1, :msgs::jsonb, 'active')"
+                "VALUES (:id, :tid, :mode, :topicid, 1, CAST(:msgs AS jsonb), 'active')"
             ),
             {
                 "id": session_id,
@@ -405,7 +405,7 @@ def p08_response(session_id: str, features: dict) -> ResponseResult:
     with sync_session_factory() as s:
         s.execute(
             text(
-                "UPDATE bot_session SET messages = :msgs::jsonb, current_question_index = :idx, "
+                "UPDATE bot_session SET messages = CAST(:msgs AS jsonb), current_question_index = :idx, "
                 "status = :status, updated_at = NOW(), last_message_at = NOW() WHERE id = :id"
             ),
             {

@@ -375,8 +375,8 @@ def run_voice_drift(
                     "INSERT INTO voice_drift_observation "
                     "(id, tenant_id, trigger_post_ids, current_voice_version, "
                     "suggested_changes, status, created_at) "
-                    "VALUES (:id, :t, :post_ids::uuid[], :voice_version, "
-                    ":suggested_changes::jsonb, 'pending_review', now())"
+                    "VALUES (:id, :t, CAST(:post_ids AS uuid[]), :voice_version, "
+                    "CAST(:suggested_changes AS jsonb), 'pending_review', now())"
                 ),
                 {
                     "id": obs_id,

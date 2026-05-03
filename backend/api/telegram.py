@@ -151,7 +151,7 @@ def _store_and_dispatch(tenant_id: str, message: dict, message_type: str) -> Non
             text(
                 "INSERT INTO telegram_message_log "
                 "(tenant_id, direction, message_type, original_payload) "
-                "VALUES (:tid, 'in', :mtype, :payload::jsonb) "
+                "VALUES (:tid, 'in', :mtype, CAST(:payload AS jsonb)) "
                 "RETURNING id"
             ),
             {
