@@ -26,6 +26,39 @@ class BudgetExceededError(Exception):
     """Raised when the LLM provider returns 412 (portal-level budget exceeded)."""
     pass
 
+
+def _maybe_send_global_cap_alert(spent_usd: float, cap_usd: float, today) -> None:
+    """Send a Telegram warning once per day when global cost reaches 50% of cap.
+
+    Uses Redis NX+EX to guarantee at-most-once delivery per UTC day.
+    Fail-open: any exception is swallowed so callers are never affected.
+    """
+    try:
+        if not settings.telegram_admin_chat_id:
+            logger.warning("_maybe_send_global_cap_alert: telegram_admin_chat_id not configured, skipping")
+            return
+
+        import redis as _redis
+        r = _redis.from_url(settings.redis_url, decode_responses=True)
+        redis_key = f"llm-global-50pct-alert:{today}"
+        was_set = r.set(redis_key, "1", nx=True, ex=86400)
+        if not was_set:
+            # Already sent today
+            return
+
+        from api.telegram import _send_telegram_message
+        pct = 100 * spent_usd / cap_usd
+        msg = (
+            f"⚠️ Cost-Cap Vorwarnung: Globale Tageskosten bei "
+            f"{spent_usd:.2f}$ / {cap_usd:.2f}$ ({pct:.0f}%). "
+            f"Kein LLM-Block-Stop noch nicht erreicht, aber bitte prüfen."
+        )
+        _send_telegram_message(int(settings.telegram_admin_chat_id), msg)
+        logger.info(f"Global 50% cap alert sent: {spent_usd:.2f}/{cap_usd:.2f} USD")
+    except Exception as exc:
+        logger.warning(f"_maybe_send_global_cap_alert failed (non-fatal): {exc}")
+
+
 # ── Purpose → Model Routing ─────────────────────────────────────────
 # Gemini Flash: cheap ($0.075/1M tokens) — bulk work, structured analysis
 # Claude Sonnet: creative — ideation, empathy, storytelling
@@ -210,6 +243,9 @@ class LLMService:
                         f"Global daily cost cap exceeded: {float(g_row[0]):.2f} >= {_GLOBAL_CAP_USD:.2f} USD. "
                         "All LLM calls blocked until midnight UTC."
                     )
+                # 50% global cap Vorwarnung
+                elif g_row and float(g_row[0]) >= _GLOBAL_CAP_USD * 0.5:
+                    _maybe_send_global_cap_alert(float(g_row[0]), _GLOBAL_CAP_USD, today)
                 # Per-tenant cap — use tenant_id from ContextVar when available
                 if tid_ctx:
                     t_row = _s.execute(_t(

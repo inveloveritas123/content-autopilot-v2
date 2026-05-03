@@ -41,6 +41,7 @@ class Settings(BaseSettings):
 
     # Telegram Bot (Content-Autopilot)
     telegram_bot_token: Optional[str] = None
+    telegram_admin_chat_id: Optional[str] = None  # TELEGRAM_ADMIN_CHAT_ID env var
     telegram_webhook_secret: Optional[str] = None
     telegram_bot_username: Optional[str] = "content_autopilot_bot"
 
