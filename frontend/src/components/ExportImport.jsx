@@ -8,6 +8,7 @@ export default function ExportImport() {
   // Export state
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState(null)
+  const [exportFormat, setExportFormat] = useState('zip')
 
   // Import state
   const [selectedFile, setSelectedFile] = useState(null)
@@ -26,7 +27,7 @@ export default function ExportImport() {
     setExporting(true)
     setExportError(null)
     try {
-      await downloadTenantDataExport()
+      await downloadTenantDataExport(exportFormat)
     } catch (e) {
       setExportError(e.message)
     } finally {
@@ -111,17 +112,61 @@ export default function ExportImport() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Exportiert alle Tenant-Daten (Quellen, Items, Content, Einstellungen) als ZIP-Archiv.
+            Exportiert alle Tenant-Daten (Quellen, Items, Content, Einstellungen).
             Die Datei kann als Backup oder zur Migration genutzt werden.
           </p>
+
+          {/* Format-Selector */}
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Format</p>
+            <div className="flex flex-wrap gap-3">
+              {[
+                { value: 'zip', label: 'ZIP (JSON)', desc: 'Vollständiger JSON-Export' },
+                { value: 'excel', label: 'Excel (.xlsx)', desc: 'Tabellen als Excel-Sheets' },
+                { value: 'csv', label: 'CSV', desc: 'Komma-getrennte Tabellen' },
+                { value: 'all', label: 'Alle Formate', desc: 'JSON + Excel + CSV kombiniert' },
+              ].map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex items-start gap-2 p-3 rounded-lg border cursor-pointer transition-colors
+                    ${exportFormat === opt.value
+                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}
+                >
+                  <input
+                    type="radio"
+                    name="exportFormat"
+                    value={opt.value}
+                    checked={exportFormat === opt.value}
+                    onChange={() => setExportFormat(opt.value)}
+                    className="mt-0.5 accent-primary-500"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{opt.label}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{opt.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {exportError && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">
               Fehler: {exportError}
             </div>
           )}
-          <Button onClick={handleExport} disabled={exporting}>
-            {exporting ? 'Exportiere...' : 'Daten exportieren'}
-          </Button>
+
+          <div className="flex items-center gap-3">
+            <Button onClick={handleExport} disabled={exporting}>
+              {exporting ? 'Exportiere...' : 'Daten exportieren'}
+            </Button>
+            {exporting && (
+              <span className="text-sm text-gray-500 dark:text-gray-400 animate-pulse">
+                Download wird vorbereitet...
+              </span>
+            )}
+          </div>
         </CardContent>
       </Card>
 

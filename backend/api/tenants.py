@@ -280,17 +280,35 @@ async def list_voice_profiles(
 
 @router.get("/tenants/me/data-export")
 async def export_tenant_data(
+    format: str = Query("zip", description="Exportformat: zip | excel | csv | all"),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
-    """Erstellt einen vollständigen ZIP-Export aller Tenant-Daten."""
-    zip_bytes = await _export_service.build_export_zip(tenant, db)
+    """Erstellt einen vollständigen Export aller Tenant-Daten im gewünschten Format."""
     slug = tenant.name.lower().replace(" ", "-")
     date_str = datetime.utcnow().strftime("%Y%m%d")
-    filename = f"{slug}-export-{date_str}.zip"
+
+    if format == "excel":
+        export_bytes = await _export_service.build_export_excel(tenant, db)
+        filename = f"{slug}-export-{date_str}.xlsx"
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    elif format == "csv":
+        export_bytes = await _export_service.build_export_csv_zip(tenant, db)
+        filename = f"{slug}-export-{date_str}-csv.zip"
+        media_type = "application/zip"
+    elif format == "all":
+        export_bytes = await _export_service.build_export_all(tenant, db)
+        filename = f"{slug}-export-{date_str}-all.zip"
+        media_type = "application/zip"
+    else:
+        # default: zip (JSON)
+        export_bytes = await _export_service.build_export_zip(tenant, db)
+        filename = f"{slug}-export-{date_str}.zip"
+        media_type = "application/zip"
+
     return StreamingResponse(
-        iter([zip_bytes]),
-        media_type="application/zip",
+        iter([export_bytes]),
+        media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

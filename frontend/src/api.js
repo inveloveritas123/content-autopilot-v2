@@ -157,8 +157,8 @@ export const getCarouselTemplates = () => request('/carousels/templates')
 export const getVoiceProfile = () => request('/tenants/me/voice-profile').catch(() => null)
 export const updateVoiceProfile = (dimensions) => request('/tenants/me/voice-profile', { method: 'PATCH', body: { dimensions } })
 
-export async function downloadTenantDataExport() {
-  const resp = await fetch(`${API_BASE}/tenants/me/data-export`, {
+export async function downloadTenantDataExport(format = 'zip') {
+  const resp = await fetch(`${API_BASE}/tenants/me/data-export?format=${encodeURIComponent(format)}`, {
     headers: { 'X-API-Key': getApiKey() },
   })
   if (!resp.ok) {
@@ -166,9 +166,12 @@ export async function downloadTenantDataExport() {
     throw new Error(err.detail || 'Export fehlgeschlagen')
   }
   const blob = await resp.blob()
+  const dateStr = new Date().toISOString().slice(0, 10)
+  const extMap = { zip: '.zip', excel: '.xlsx', csv: '-csv.zip', all: '-all.zip' }
+  const ext = extMap[format] ?? '.zip'
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `cap-export-${new Date().toISOString().slice(0, 10)}.zip`
+  a.download = `cap-export-${dateStr}${ext}`
   a.click()
   URL.revokeObjectURL(a.href)
   return { downloaded: true }

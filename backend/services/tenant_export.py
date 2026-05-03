@@ -6,6 +6,7 @@ Sensible Felder werden REDACTED:
 - LLMProvider: api_key_encrypted
 - Allgemein: alle Felder die *password*, *token*, *secret* im Namen enthalten
 """
+import csv
 import io
 import json
 import re
@@ -13,6 +14,9 @@ import uuid
 import zipfile
 from datetime import date, datetime
 from typing import Any
+
+from openpyxl import Workbook
+from openpyxl.styles import Font
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -118,11 +122,9 @@ Query-Params: dry_run=true (Vorschau), merge=true (Upsert), confirm=true (Pflich
 
 
 class TenantExportService:
-    async def build_export_zip(self, tenant: Tenant, db: AsyncSession) -> bytes:
-        """Baut ZIP-File mit allen Tenant-Daten. Gibt Bytes zurück."""
+    async def _get_all_data(self, tenant: Tenant, db: AsyncSession) -> dict:
+        """Gemeinsame DB-Abfrage für alle Export-Formate."""
         tid = tenant.id
-
-        # Alle Tabellen abfragen
         sources = (await db.execute(select(Source).where(Source.tenant_id == tid))).scalars().all()
         source_items = (await db.execute(select(SourceItem).where(SourceItem.tenant_id == tid))).scalars().all()
         content_ideas = (await db.execute(select(ContentIdea).where(ContentIdea.tenant_id == tid))).scalars().all()
@@ -138,29 +140,33 @@ class TenantExportService:
         content_performances = (await db.execute(select(ContentPerformance).where(ContentPerformance.tenant_id == tid))).scalars().all()
         idea_selection_logs = (await db.execute(select(IdeaSelectionLog).where(IdeaSelectionLog.tenant_id == tid))).scalars().all()
         content_dna_profiles = (await db.execute(select(ContentDNAProfile).where(ContentDNAProfile.tenant_id == tid))).scalars().all()
-
-        counts = {
-            "sources": len(sources),
-            "source_items": len(source_items),
-            "content_ideas": len(content_ideas),
-            "entrepreneur_answers": len(entrepreneur_answers),
-            "content_pieces": len(content_pieces),
-            "campaigns": len(campaigns),
-            "carousel_templates": len(carousel_templates),
-            "dialogue_questions": len(dialogue_questions),
-            "llm_providers": len(llm_providers),
-            "llm_call_logs": len(llm_call_logs),
-            "scheduled_posts": len(scheduled_posts),
-            "quality_metrics": len(quality_metrics),
-            "content_performances": len(content_performances),
-            "idea_selection_logs": len(idea_selection_logs),
-            "content_dna_profiles": len(content_dna_profiles),
+        return {
+            "sources": sources,
+            "source_items": source_items,
+            "content_ideas": content_ideas,
+            "entrepreneur_answers": entrepreneur_answers,
+            "content_pieces": content_pieces,
+            "campaigns": campaigns,
+            "carousel_templates": carousel_templates,
+            "dialogue_questions": dialogue_questions,
+            "llm_providers": llm_providers,
+            "llm_call_logs": llm_call_logs,
+            "scheduled_posts": scheduled_posts,
+            "quality_metrics": quality_metrics,
+            "content_performances": content_performances,
+            "idea_selection_logs": idea_selection_logs,
+            "content_dna_profiles": content_dna_profiles,
         }
 
+    async def build_export_zip(self, tenant: Tenant, db: AsyncSession) -> bytes:
+        """Baut ZIP-File mit allen Tenant-Daten als JSON. Gibt Bytes zurück."""
+        data = await self._get_all_data(tenant, db)
+
+        counts = {k: len(v) for k, v in data.items()}
         manifest = {
             "schema_version": "2.0.0",
             "export_date": datetime.utcnow().isoformat(),
-            "tenant_id": str(tid),
+            "tenant_id": str(tenant.id),
             "tenant_name": tenant.name,
             "counts": counts,
         }
@@ -170,21 +176,297 @@ class TenantExportService:
             zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
             zf.writestr("README.md", _README)
             zf.writestr("tenant.json", _rows_to_json([tenant], "Tenant"))
-            zf.writestr("sources.json", _rows_to_json(sources, "Source"))
-            zf.writestr("source_items.json", _rows_to_json(source_items, "SourceItem"))
-            zf.writestr("content_ideas.json", _rows_to_json(content_ideas, "ContentIdea"))
-            zf.writestr("entrepreneur_answers.json", _rows_to_json(entrepreneur_answers, "EntrepreneurAnswer"))
-            zf.writestr("content_pieces.json", _rows_to_json(content_pieces, "ContentPiece"))
-            zf.writestr("campaigns.json", _rows_to_json(campaigns, "Campaign"))
-            zf.writestr("carousel_templates.json", _rows_to_json(carousel_templates, "CarouselTemplate"))
-            zf.writestr("dialogue_questions.json", _rows_to_json(dialogue_questions, "DialogueQuestion"))
-            zf.writestr("llm_providers.json", _rows_to_json(llm_providers, "LLMProvider"))
-            zf.writestr("llm_call_logs.json", _rows_to_json(llm_call_logs, "LLMCallLog"))
-            zf.writestr("scheduled_posts.json", _rows_to_json(scheduled_posts, "ScheduledPost"))
-            zf.writestr("quality_metrics.json", _rows_to_json(quality_metrics, "QualityMetric"))
-            zf.writestr("content_performances.json", _rows_to_json(content_performances, "ContentPerformance"))
-            zf.writestr("idea_selection_logs.json", _rows_to_json(idea_selection_logs, "IdeaSelectionLog"))
-            zf.writestr("content_dna_profiles.json", _rows_to_json(content_dna_profiles, "ContentDNAProfile"))
+            zf.writestr("sources.json", _rows_to_json(data["sources"], "Source"))
+            zf.writestr("source_items.json", _rows_to_json(data["source_items"], "SourceItem"))
+            zf.writestr("content_ideas.json", _rows_to_json(data["content_ideas"], "ContentIdea"))
+            zf.writestr("entrepreneur_answers.json", _rows_to_json(data["entrepreneur_answers"], "EntrepreneurAnswer"))
+            zf.writestr("content_pieces.json", _rows_to_json(data["content_pieces"], "ContentPiece"))
+            zf.writestr("campaigns.json", _rows_to_json(data["campaigns"], "Campaign"))
+            zf.writestr("carousel_templates.json", _rows_to_json(data["carousel_templates"], "CarouselTemplate"))
+            zf.writestr("dialogue_questions.json", _rows_to_json(data["dialogue_questions"], "DialogueQuestion"))
+            zf.writestr("llm_providers.json", _rows_to_json(data["llm_providers"], "LLMProvider"))
+            zf.writestr("llm_call_logs.json", _rows_to_json(data["llm_call_logs"], "LLMCallLog"))
+            zf.writestr("scheduled_posts.json", _rows_to_json(data["scheduled_posts"], "ScheduledPost"))
+            zf.writestr("quality_metrics.json", _rows_to_json(data["quality_metrics"], "QualityMetric"))
+            zf.writestr("content_performances.json", _rows_to_json(data["content_performances"], "ContentPerformance"))
+            zf.writestr("idea_selection_logs.json", _rows_to_json(data["idea_selection_logs"], "IdeaSelectionLog"))
+            zf.writestr("content_dna_profiles.json", _rows_to_json(data["content_dna_profiles"], "ContentDNAProfile"))
+
+        buf.seek(0)
+        return buf.read()
+
+    async def build_export_excel(self, tenant: Tenant, db: AsyncSession, data: dict | None = None) -> bytes:
+        """Erstellt eine .xlsx-Datei mit je einem Sheet pro Tabelle."""
+        if data is None:
+            data = await self._get_all_data(tenant, db)
+        bold = Font(bold=True)
+
+        wb = Workbook()
+        # Erstes (leeres) Default-Sheet entfernen
+        wb.remove(wb.active)
+
+        def _add_sheet(sheet_name: str, headers: list, rows_data: list):
+            ws = wb.create_sheet(title=sheet_name)
+            ws.append(headers)
+            for cell in ws[1]:
+                cell.font = bold
+            for row in rows_data:
+                ws.append(row)
+            # Spaltenbreiten automatisch setzen (max 60)
+            for col_cells in ws.columns:
+                max_len = max(
+                    (len(str(c.value)) if c.value is not None else 0) for c in col_cells
+                )
+                ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 2, 62)
+
+        def _dt(val):
+            if isinstance(val, (datetime, date)):
+                return val.isoformat()
+            return val
+
+        # posts (content_pieces)
+        _add_sheet(
+            "posts",
+            ["id", "status", "category", "title", "created_at"],
+            [
+                [
+                    str(r.id),
+                    r.status,
+                    getattr(r, "category", None),
+                    (r.title or "")[:100] if hasattr(r, "title") else "",
+                    _dt(r.created_at),
+                ]
+                for r in data["content_pieces"]
+            ],
+        )
+
+        # sources
+        _add_sheet(
+            "sources",
+            ["id", "url", "source_type", "is_active", "created_at"],
+            [
+                [str(r.id), r.url, r.source_type, r.is_active, _dt(r.created_at)]
+                for r in data["sources"]
+            ],
+        )
+
+        # source_items
+        _add_sheet(
+            "source_items",
+            ["id", "source_id", "title", "published_at", "fetched_at"],
+            [
+                [
+                    str(r.id),
+                    str(r.source_id),
+                    (r.title or "")[:200] if hasattr(r, "title") else "",
+                    _dt(getattr(r, "published_at", None)),
+                    _dt(getattr(r, "fetched_at", None)),
+                ]
+                for r in data["source_items"]
+            ],
+        )
+
+        # ideas (content_ideas)
+        _add_sheet(
+            "ideas",
+            ["id", "status", "hook", "pillar", "created_at"],
+            [
+                [
+                    str(r.id),
+                    r.status,
+                    (getattr(r, "hook", None) or "")[:200],
+                    getattr(r, "pillar", None),
+                    _dt(r.created_at),
+                ]
+                for r in data["content_ideas"]
+            ],
+        )
+
+        # dialogue_questions
+        _add_sheet(
+            "dialogue_questions",
+            ["id", "idea_id", "question", "answer"],
+            [
+                [
+                    str(r.id),
+                    str(getattr(r, "idea_id", None)),
+                    (getattr(r, "question", None) or "")[:200],
+                    (getattr(r, "answer", None) or "")[:200],
+                ]
+                for r in data["dialogue_questions"]
+            ],
+        )
+
+        # llm_calls (llm_call_logs)
+        _add_sheet(
+            "llm_calls",
+            ["id", "stage", "model_name", "input_tokens", "output_tokens", "cost_usd", "created_at"],
+            [
+                [
+                    str(r.id),
+                    getattr(r, "stage", None),
+                    getattr(r, "model_name", None),
+                    getattr(r, "input_tokens", None),
+                    getattr(r, "output_tokens", None),
+                    getattr(r, "cost_usd", None),
+                    _dt(r.created_at),
+                ]
+                for r in data["llm_call_logs"]
+            ],
+        )
+
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+        return out.read()
+
+    async def build_export_csv_zip(self, tenant: Tenant, db: AsyncSession, data: dict | None = None) -> bytes:
+        """Erstellt ein ZIP mit einer UTF-8-BOM CSV pro Tabelle."""
+        if data is None:
+            data = await self._get_all_data(tenant, db)
+
+        def _dt(val):
+            if isinstance(val, (datetime, date)):
+                return val.isoformat()
+            return val if val is not None else ""
+
+        def _make_csv(headers: list, rows_data: list) -> bytes:
+            buf = io.StringIO(initial_value="\ufeff")  # UTF-8-BOM als Initialwert
+            writer = csv.writer(buf)
+            writer.writerow(headers)
+            for row in rows_data:
+                writer.writerow([str(v) if v is not None else "" for v in row])
+            return buf.getvalue().encode("utf-8")
+
+        sheets = {
+            "csv/posts.csv": (
+                ["id", "status", "category", "title", "created_at"],
+                [
+                    [
+                        str(r.id),
+                        r.status,
+                        getattr(r, "category", None),
+                        (r.title or "")[:100] if hasattr(r, "title") else "",
+                        _dt(r.created_at),
+                    ]
+                    for r in data["content_pieces"]
+                ],
+            ),
+            "csv/sources.csv": (
+                ["id", "url", "source_type", "is_active", "created_at"],
+                [
+                    [str(r.id), r.url, r.source_type, r.is_active, _dt(r.created_at)]
+                    for r in data["sources"]
+                ],
+            ),
+            "csv/source_items.csv": (
+                ["id", "source_id", "title", "published_at", "fetched_at"],
+                [
+                    [
+                        str(r.id),
+                        str(r.source_id),
+                        (r.title or "")[:200] if hasattr(r, "title") else "",
+                        _dt(getattr(r, "published_at", None)),
+                        _dt(getattr(r, "fetched_at", None)),
+                    ]
+                    for r in data["source_items"]
+                ],
+            ),
+            "csv/ideas.csv": (
+                ["id", "status", "hook", "pillar", "created_at"],
+                [
+                    [
+                        str(r.id),
+                        r.status,
+                        (getattr(r, "hook", None) or "")[:200],
+                        getattr(r, "pillar", None),
+                        _dt(r.created_at),
+                    ]
+                    for r in data["content_ideas"]
+                ],
+            ),
+            "csv/dialogue_questions.csv": (
+                ["id", "idea_id", "question", "answer"],
+                [
+                    [
+                        str(r.id),
+                        str(getattr(r, "idea_id", None)),
+                        (getattr(r, "question", None) or "")[:200],
+                        (getattr(r, "answer", None) or "")[:200],
+                    ]
+                    for r in data["dialogue_questions"]
+                ],
+            ),
+            "csv/llm_calls.csv": (
+                ["id", "stage", "model_name", "input_tokens", "output_tokens", "cost_usd", "created_at"],
+                [
+                    [
+                        str(r.id),
+                        getattr(r, "stage", None),
+                        getattr(r, "model_name", None),
+                        getattr(r, "input_tokens", None),
+                        getattr(r, "output_tokens", None),
+                        getattr(r, "cost_usd", None),
+                        _dt(r.created_at),
+                    ]
+                    for r in data["llm_call_logs"]
+                ],
+            ),
+        }
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for filename, (headers, rows_data) in sheets.items():
+                zf.writestr(filename, _make_csv(headers, rows_data))
+        buf.seek(0)
+        return buf.read()
+
+    async def build_export_all(self, tenant: Tenant, db: AsyncSession) -> bytes:
+        """Baut ein ZIP mit JSON, Excel und CSV kombiniert."""
+        data = await self._get_all_data(tenant, db)
+
+        # JSON-Inhalt (aus build_export_zip übernommen, ohne erneuten DB-Aufruf)
+        counts = {k: len(v) for k, v in data.items()}
+        manifest = {
+            "schema_version": "2.0.0",
+            "export_date": datetime.utcnow().isoformat(),
+            "tenant_id": str(tenant.id),
+            "tenant_name": tenant.name,
+            "formats": ["json", "excel", "csv"],
+            "counts": counts,
+        }
+
+        # Daten einmal geladen, weiterreichen — kein extra DB-Aufruf
+        excel_bytes = await self.build_export_excel(tenant, db, data=data)
+        csv_zip_bytes = await self.build_export_csv_zip(tenant, db, data=data)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+            zf.writestr("README.md", _README)
+            # JSON-Dateien
+            zf.writestr("json/tenant.json", _rows_to_json([tenant], "Tenant"))
+            zf.writestr("json/sources.json", _rows_to_json(data["sources"], "Source"))
+            zf.writestr("json/source_items.json", _rows_to_json(data["source_items"], "SourceItem"))
+            zf.writestr("json/content_ideas.json", _rows_to_json(data["content_ideas"], "ContentIdea"))
+            zf.writestr("json/entrepreneur_answers.json", _rows_to_json(data["entrepreneur_answers"], "EntrepreneurAnswer"))
+            zf.writestr("json/content_pieces.json", _rows_to_json(data["content_pieces"], "ContentPiece"))
+            zf.writestr("json/campaigns.json", _rows_to_json(data["campaigns"], "Campaign"))
+            zf.writestr("json/carousel_templates.json", _rows_to_json(data["carousel_templates"], "CarouselTemplate"))
+            zf.writestr("json/dialogue_questions.json", _rows_to_json(data["dialogue_questions"], "DialogueQuestion"))
+            zf.writestr("json/llm_providers.json", _rows_to_json(data["llm_providers"], "LLMProvider"))
+            zf.writestr("json/llm_call_logs.json", _rows_to_json(data["llm_call_logs"], "LLMCallLog"))
+            zf.writestr("json/scheduled_posts.json", _rows_to_json(data["scheduled_posts"], "ScheduledPost"))
+            zf.writestr("json/quality_metrics.json", _rows_to_json(data["quality_metrics"], "QualityMetric"))
+            zf.writestr("json/content_performances.json", _rows_to_json(data["content_performances"], "ContentPerformance"))
+            zf.writestr("json/idea_selection_logs.json", _rows_to_json(data["idea_selection_logs"], "IdeaSelectionLog"))
+            zf.writestr("json/content_dna_profiles.json", _rows_to_json(data["content_dna_profiles"], "ContentDNAProfile"))
+            # Excel
+            zf.writestr("excel/export.xlsx", excel_bytes)
+            # CSV (CSV-ZIP entpacken und Einträge übertragen)
+            with zipfile.ZipFile(io.BytesIO(csv_zip_bytes)) as csv_zf:
+                for name in csv_zf.namelist():
+                    zf.writestr(name, csv_zf.read(name))
 
         buf.seek(0)
         return buf.read()
