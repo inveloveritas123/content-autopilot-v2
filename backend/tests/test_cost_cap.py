@@ -79,9 +79,12 @@ class TestTenantCapBlock:
     """Per-tenant daily cap triggers BudgetExceededError."""
 
     def test_tenant_cap_exceeded_raises(self):
-        from services.llm import LLMService, BudgetExceededError
+        from services.llm import LLMService, BudgetExceededError, set_llm_tenant
 
         svc = _make_litellm_service()
+        # Must set tenant_id so the per-tenant cap branch (_tenant_id_ctx.get()) is entered.
+        # Without this the cap check is skipped entirely and the code tries to reach the real DB.
+        set_llm_tenant("test-tenant-cap-block")
 
         # First DB call (global): returns 1.0 USD (under global 10 USD cap)
         # Second DB call (per-tenant): returns 6.0 USD (over per-tenant 5 USD cap)
