@@ -52,7 +52,7 @@ const TASK_MODEL_MAP = [
 // ——————————————————————————————————————————————————————
 // ProviderCard with inline Edit accordion
 // ——————————————————————————————————————————————————————
-function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLimit, onUpdateModel, onResetCost, onUpdate, testing }) {
+function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLimit, onUpdateModel, onResetCost, onUpdate, onToggleActive, testing }) {
   const statusColor = provider.last_test_status === 'ok' ? 'text-emerald-500' : provider.last_test_status === 'error' ? 'text-red-500' : 'text-gray-400'
   const StatusIcon = provider.last_test_status === 'ok' ? CheckCircle2 : provider.last_test_status === 'error' ? XCircle : Cpu
 
@@ -171,9 +171,18 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
             <button onClick={() => onToggleDefault(provider)} className="p-1.5 rounded-md hover:bg-gray-100" title="Als Default setzen">
               <Star className={`w-4 h-4 ${provider.is_default ? 'text-amber-500 fill-amber-500' : 'text-gray-300'}`} />
             </button>
-            <button onClick={() => onDelete(provider.id)} className="p-1.5 rounded-md hover:bg-red-50 text-ink-muted hover:text-red-500" title="Loeschen">
-              <Trash2 className="w-4 h-4" />
+            <button
+              onClick={() => onToggleActive(provider)}
+              className={`px-2 py-0.5 rounded-full text-[11px] font-semibold transition-colors ${provider.is_active ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+              title={provider.is_active ? 'Deaktivieren' : 'Aktivieren'}
+            >
+              {provider.is_active ? 'Aktiv' : 'Inaktiv'}
             </button>
+            {!provider.is_active && (
+              <button onClick={() => onDelete(provider.id)} className="p-1.5 rounded-md hover:bg-red-50 text-ink-muted hover:text-red-500" title="Loeschen">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -1008,6 +1017,11 @@ export default function LLMSettings() {
     await loadProviders()
   }
 
+  const handleToggleActive = async (provider) => {
+    await updateLLMProvider(provider.id, { is_active: !provider.is_active })
+    await loadProviders()
+  }
+
   if (loading) return <div className="text-center py-8 text-ink-muted">Lade Provider...</div>
 
   return (
@@ -1047,6 +1061,7 @@ export default function LLMSettings() {
               onUpdateModel={handleUpdateModel}
               onResetCost={handleResetCost}
               onUpdate={handleUpdate}
+              onToggleActive={handleToggleActive}
               testing={testingId === p.id}
             />
           ))}

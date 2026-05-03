@@ -16,6 +16,7 @@ export default function Settings() {
   const [language, setLanguage] = useState('')
   const [targetAudience, setTargetAudience] = useState('')
   const [ytApiKey, setYtApiKey] = useState('')
+  const [ytKeySet, setYtKeySet] = useState(false)
   const [ncTranscriptPath, setNcTranscriptPath] = useState('')
   const [ncAnalysisPath, setNcAnalysisPath] = useState('')
   const [ncContentPath, setNcContentPath] = useState('')
@@ -46,7 +47,13 @@ export default function Settings() {
       setTone(data.settings.tone || '')
       setLanguage(data.settings.language || 'de')
       setTargetAudience(data.settings.target_audience || '')
-      setYtApiKey(data.settings.youtube_api_key || '')
+      if (data.settings.youtube_api_key) {
+        setYtApiKey('••••••••')
+        setYtKeySet(true)
+      } else {
+        setYtApiKey('')
+        setYtKeySet(false)
+      }
       setNcTranscriptPath(data.settings.nc_transcript_path || '/zukunftsbund/Projekte/Content-Autopilot/Daten/Transkripte')
       setNcAnalysisPath(data.settings.nc_analysis_path || '/zukunftsbund/Projekte/Content-Autopilot/Daten/Analysen')
       setNcContentPath(data.settings.nc_content_path || '/zukunftsbund/Projekte/Content-Autopilot/Daten/Content')
@@ -71,7 +78,7 @@ export default function Settings() {
     try {
       await updateSettings({
         tone, language, target_audience: targetAudience,
-        youtube_api_key: ytApiKey || undefined,
+        youtube_api_key: (ytApiKey && ytApiKey !== '••••••••') ? ytApiKey : undefined,
         nc_transcript_path: ncTranscriptPath,
         nc_analysis_path: ncAnalysisPath,
         nc_content_path: ncContentPath,
@@ -243,9 +250,28 @@ export default function Settings() {
       <Card>
         <CardHeader><CardTitle>YouTube API</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <Input label="YouTube Data API Key (optional)" type="password" value={ytApiKey}
-            onChange={e => setYtApiKey(e.target.value)}
-            placeholder="AIza..." />
+          {ytKeySet && ytApiKey === '••••••••' ? (
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">YouTube Data API Key (optional)</label>
+                <div className="flex items-center gap-2 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-gray-50 dark:bg-gray-800">
+                  <span className="text-sm font-mono text-gray-500 flex-1">••••••••</span>
+                  <span className="text-xs text-emerald-600 font-medium">Gespeichert</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setYtApiKey(''); setYtKeySet(false) }}
+                className="mt-6 px-3 py-2 text-xs font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg transition-colors"
+              >
+                Aendern
+              </button>
+            </div>
+          ) : (
+            <Input label="YouTube Data API Key (optional)" type="password" value={ytApiKey}
+              onChange={e => setYtApiKey(e.target.value)}
+              placeholder="AIza..." />
+          )}
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
             <p className="text-sm text-yellow-800 dark:text-yellow-200 font-medium">Hinweis: Volle Funktionalitaet</p>
             <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
