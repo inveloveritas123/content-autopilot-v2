@@ -7,7 +7,6 @@ import Ideas from './components/Ideas'
 import Feedback from './components/Feedback'
 import Posts from './components/Posts'
 import Calendar from './components/Calendar'
-import VoiceProfile from './components/VoiceProfile'
 import BrandVoice from './components/BrandVoice'
 import WizardPage from './components/WizardPage'
 import VoiceInsights from './components/VoiceInsights'
@@ -30,7 +29,7 @@ function App() {
         <Route path="/feedback" element={<Feedback />} />
         <Route path="/posts" element={<Posts />} />
         <Route path="/calendar" element={<Calendar />} />
-        <Route path="/voice" element={<VoiceProfile />} />
+        <Route path="/voice" element={<Navigate to="/brand-voice" replace />} />
         <Route path="/brand-voice" element={<BrandVoice />} />
         <Route path="/brand-voice/wizard" element={<WizardPage />} />
         <Route path="/brand-voice/wizard/:sessionId" element={<WizardPage />} />

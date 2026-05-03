@@ -189,10 +189,17 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
         `${API_BASE}/nc/list?path=${encodeURIComponent(path)}`,
         { headers: { 'X-API-Key': apiKey } }
       )
+      const TEMPLATE_PATH = '/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/'
       if (!resp.ok) {
         if (resp.status === 404) {
-          setError('Pfad nicht gefunden. Bitte navigieren Sie zu den Vorlagen.')
-          setItems([])
+          if (path !== TEMPLATE_PATH) {
+            setCurrentPath(TEMPLATE_PATH)
+          } else {
+            setError('Pfad nicht gefunden.')
+            setItems([])
+          }
+          setLoading(false)
+          return
         } else {
           const err = await resp.json().catch(() => ({ detail: resp.statusText }))
           throw new Error(err.detail || 'Fehler beim Laden')
@@ -238,6 +245,20 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
     <Dialog open={open} onClose={onClose} title="Datei aus Nextcloud importieren" className="max-w-xl">
       <div className="mb-3">
         <Breadcrumb path={currentPath} onNavigate={setCurrentPath} />
+      </div>
+
+      <div className="mb-3">
+        <p className="text-xs text-ink-muted mb-1.5">Vorlagen direkt:</p>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { label: 'Vorlagen-Ordner', path: '/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/' },
+          ].map(q => (
+            <button key={q.path} onClick={() => setCurrentPath(q.path)}
+              className="text-xs px-2.5 py-1 bg-primary-50 text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-100">
+              {q.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error && (
@@ -388,7 +409,7 @@ function PipelineRunBanner({ runId, onDone }) {
 
 // ─── StatusTile ───────────────────────────────────────────────────────────
 
-function StatusTile({ data, onRefresh, onDriftReview }) {
+function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
   if (!data) {
     return (
       <div className="bg-white rounded-xl border border-surface-border p-6">
@@ -508,17 +529,17 @@ function StatusTile({ data, onRefresh, onDriftReview }) {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {allPresent && (
-              <button className="px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100">
+              <button onClick={onSetup} className="px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100">
                 Neu generieren
               </button>
             )}
             {!allPresent && !nonePresent && (
-              <button className="px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100">
+              <button onClick={onSetup} className="px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100">
                 Profil vervollständigen
               </button>
             )}
             {nonePresent && (
-              <button className="px-4 py-2 text-xs font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600 flex items-center gap-1.5">
+              <button onClick={onSetup} className="px-4 py-2 text-xs font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600 flex items-center gap-1.5">
                 Jetzt einrichten <ChevronRight className="w-3.5 h-3.5" />
               </button>
             )}
@@ -833,7 +854,7 @@ export default function BrandVoice() {
       )}
 
       {/* Status Tile — shows skeleton when statusData is undefined */}
-      <StatusTile data={statusData} onRefresh={loadStatus} onDriftReview={() => navigate('/brand-voice/drift-review')} />
+      <StatusTile data={statusData} onRefresh={loadStatus} onDriftReview={() => navigate('/brand-voice/drift-review')} onSetup={() => navigate('/brand-voice/wizard')} />
 
       {/* Upload Zone */}
       <UploadZone onUploadSuccess={loadStatus} />
