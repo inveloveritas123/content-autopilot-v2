@@ -371,9 +371,10 @@ def sync_brand_voice_to_nc(
 
     try:
         with sync_session_factory() as session:
-            # Resolve tenant name → slug
+            # Resolve tenant slug — prefer dedicated slug column (migration 034),
+            # fall back to _slugify(name) for backward-compat before migration runs.
             tenant_row = session.execute(
-                _text("SELECT name FROM tenants WHERE id = :t"),
+                _text("SELECT name, slug FROM tenants WHERE id = :t"),
                 {"t": str(tenant_id)},
             ).fetchone()
             if not tenant_row:
@@ -382,7 +383,8 @@ def sync_brand_voice_to_nc(
                     "skipped": [],
                     "errors": [f"Tenant {tenant_id} not found"],
                 }
-            tenant_slug = _slugify(tenant_row[0])
+            # Use dedicated slug if present (non-empty); fall back to _slugify(name)
+            tenant_slug = (tenant_row[1] or "").strip() or _slugify(tenant_row[0])
 
             # Resolve project slug
             if project_id is not None:
