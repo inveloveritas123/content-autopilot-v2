@@ -1139,6 +1139,9 @@ export default function LLMSettings() {
   const [providers, setProviders] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
+  // #124: Multi-Provider-Test
+  const [allTestRunning, setAllTestRunning] = useState(false)
+  const [allTestResults, setAllTestResults] = useState(null)  // [{providerId, name, status, latency_ms, error}]
   const [testingId, setTestingId] = useState(null)
 
   useEffect(() => { loadProviders() }, [])
@@ -1167,6 +1170,30 @@ export default function LLMSettings() {
     }
     await createLLMProvider(payload)
     await loadProviders()
+  }
+
+
+  const runTestAll = async () => {
+    setAllTestRunning(true)
+    const results = []
+    for (const p of providers) {
+      try {
+        const t0 = Date.now()
+        const r = await testLLMProvider(p.id)
+        results.push({
+          providerId: p.id,
+          name: p.name,
+          status: r.status,
+          latency_ms: r.latency_ms ?? (Date.now() - t0),
+          error: r.error || null,
+          http_status: r.http_status || null,
+        })
+      } catch (e) {
+        results.push({ providerId: p.id, name: p.name, status: 'error', error: e.message })
+      }
+    }
+    setAllTestResults(results)
+    setAllTestRunning(false)
   }
 
   const handleTest = async (id) => {
@@ -1235,13 +1262,73 @@ export default function LLMSettings() {
           </h2>
           <p className="text-xs text-ink-muted mt-0.5">{providers.length} Provider konfiguriert</p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800"
-        >
-          <Plus className="w-3.5 h-3.5" /> Provider
-        </button>
+        <div className="flex items-center gap-2">
+          {providers.length > 0 && (
+            <button
+              onClick={runTestAll}
+              disabled={allTestRunning}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg disabled:opacity-50"
+              title="Test aller konfigurierten Provider mit minimalem Probe-Call"
+            >
+              {allTestRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FlaskConical className="w-3.5 h-3.5" />}
+              Alle testen
+            </button>
+          )}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800"
+          >
+            <Plus className="w-3.5 h-3.5" /> Provider
+          </button>
+        </div>
       </div>
+
+      {/* #124: Multi-Provider-Test Result Tabelle */}
+      {allTestResults && (
+        <div className="mb-4 bg-white rounded-xl border border-surface-border p-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold text-ink">Test-Ergebnisse aller Provider</h3>
+            <button
+              onClick={() => setAllTestResults(null)}
+              className="text-[11px] text-ink-muted hover:text-ink"
+            >
+              Schließen
+            </button>
+          </div>
+          <table className="w-full text-xs">
+            <thead className="text-[10px] text-ink-muted uppercase tracking-wide">
+              <tr>
+                <th className="text-left py-1">Provider</th>
+                <th className="text-right py-1">Status</th>
+                <th className="text-right py-1">Latenz</th>
+                <th className="text-left py-1 pl-3">Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allTestResults.map(r => (
+                <tr key={r.providerId} className="border-t border-gray-100">
+                  <td className="py-1.5 font-medium text-ink">{r.name}</td>
+                  <td className="py-1.5 text-right">
+                    {r.status === 'ok' ? (
+                      <span className="text-emerald-700 inline-flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> ok
+                      </span>
+                    ) : (
+                      <span className="text-red-700 inline-flex items-center gap-1">
+                        <XCircle className="w-3 h-3" /> {r.http_status || 'fail'}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-1.5 text-right text-ink-muted">{r.latency_ms ? `${r.latency_ms}ms` : '—'}</td>
+                  <td className="py-1.5 pl-3 text-ink-muted truncate max-w-[300px]" title={r.error || ''}>
+                    {r.status === 'ok' ? '—' : (r.error || 'unbekannt')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {providers.length === 0 ? (
         <div className="text-center py-8 bg-gray-50 rounded-xl">
