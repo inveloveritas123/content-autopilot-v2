@@ -272,14 +272,23 @@ async def test_provider(
     except httpx.HTTPStatusError as e:
         provider.last_test_at = datetime.utcnow()
         provider.last_test_status = "error"
-        if e.response.status_code == 412:
+        try:
+            body = e.response.json()
+            body_msg = body.get("error", {}).get("message") or body.get("message") or body.get("detail") or ""
+        except Exception:
+            body_msg = e.response.text[:200] if e.response.text else ""
+        if e.response.status_code in (403, 412) and ("spend" in body_msg.lower() or "budget" in body_msg.lower() or "limit" in body_msg.lower()):
+            msg = f"🔴 Budget/Spend-Limit erreicht ({e.response.status_code}) — Bitte Guthaben beim Provider aufladen. Details: {body_msg[:120]}"
+        elif e.response.status_code == 412:
             msg = "🔴 Portal-Budget erschöpft (412) — Bitte Guthaben bei requesty.ai aufladen."
-        elif e.response.status_code == 401:
-            msg = "🔴 Authentifizierung fehlgeschlagen (401) — API-Key ungültig oder abgelaufen."
+        elif e.response.status_code in (401, 403):
+            detail = f" ({body_msg[:80]})" if body_msg else ""
+            msg = f"🔴 Zugriff verweigert ({e.response.status_code}){detail} — API-Key prüfen oder Guthaben aufladen."
         elif e.response.status_code == 429:
             msg = "🟡 Rate-Limit erreicht (429) — kurz warten und nochmal versuchen."
         else:
-            msg = f"HTTP {e.response.status_code}: {str(e)[:150]}"
+            detail = f" — {body_msg[:100]}" if body_msg else ""
+            msg = f"HTTP {e.response.status_code}{detail}"
         provider.last_test_error = msg
         await db.commit()
         return {"status": "error", "error": msg, "http_status": e.response.status_code}
