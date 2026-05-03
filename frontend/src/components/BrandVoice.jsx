@@ -14,6 +14,7 @@ import {
   Info,
   Sparkles,
   ShieldAlert,
+  RotateCcw,
 } from 'lucide-react'
 import { Dialog } from './ui/Dialog'
 import {
@@ -25,6 +26,7 @@ import {
 } from '../api'
 
 const TENANT_ID = 'me'
+const getActiveProjectId = () => localStorage.getItem('activeProjectId') || null
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -799,7 +801,7 @@ export default function BrandVoice() {
   const loadStatus = useCallback(async () => {
     setStatusError(null)
     try {
-      const data = await getBrandVoiceStatus(TENANT_ID)
+      const data = await getBrandVoiceStatus(TENANT_ID, getActiveProjectId())
       setStatusData(data)
     } catch (e) {
       setStatusError(e.message)
@@ -841,13 +843,24 @@ export default function BrandVoice() {
             Stimm-Profil, Kundenkontext und Zielgruppen-Avatar verwalten.
           </p>
         </div>
-        <button
-          onClick={() => setShowNCPicker(true)}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100"
-        >
-          <FolderOpen className="w-4 h-4" />
-          Aus Nextcloud importieren
-        </button>
+        <div className="flex items-center gap-2">
+          {statusData?.voice_profile?.status === 'active' && (
+            <Link
+              to="/brand-voice/wizard"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-muted bg-white border border-surface-border rounded-lg hover:bg-gray-50"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Wizard erneut
+            </Link>
+          )}
+          <button
+            onClick={() => setShowNCPicker(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100"
+          >
+            <FolderOpen className="w-4 h-4" />
+            Aus Nextcloud importieren
+          </button>
+        </div>
       </div>
 
       {/* Pipeline Banner */}

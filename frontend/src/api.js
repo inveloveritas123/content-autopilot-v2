@@ -236,6 +236,7 @@ export const runVoiceCompare = (item_id) => request('/settings/voice-compare', {
 // Projects
 export const getProjects = () => request('/projects')
 export const createProject = (data) => request('/projects', { method: 'POST', body: data })
+export const updateProject = (id, data) => request(`/projects/${id}`, { method: 'PATCH', body: data })
 export const deleteProject = (id) => request(`/projects/${id}`, { method: 'DELETE' })
 
 // Nextcloud
@@ -308,7 +309,7 @@ export const generateDialoguePostPrompt = (itemId, format = 'story') =>
   request(`/dialogue/items/${itemId}/generate-post`, { method: 'POST', params: { format, use_claude_direct: true } })
 
 // Brand Voice API (#59)
-export const getBrandVoiceStatus = (tenantId) => request(`/brand-voice/${tenantId}`)
+export const getBrandVoiceStatus = (tenantId, projectId) => request(`/brand-voice/${tenantId}`, { params: projectId ? { project_id: projectId } : undefined })
 export async function uploadBrandVoiceFile(formData) {
   const resp = await fetch(`${API_BASE}/brand-voice/upload`, {
     method: 'POST',

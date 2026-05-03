@@ -21,8 +21,9 @@ import {
   Mic2,
   Brain,
   ShieldAlert,
+  Pencil,
 } from 'lucide-react'
-import { getProjects, createProject, deleteProject } from '../api'
+import { getProjects, createProject, deleteProject, updateProject } from '../api'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -57,6 +58,8 @@ function ProjectSwitcher() {
   const [showNewForm, setShowNewForm] = useState(false)
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
+  const [renamingId, setRenamingId] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
   const dropdownRef = useRef(null)
 
   useEffect(() => {
@@ -113,6 +116,28 @@ function ProjectSwitcher() {
     }
   }
 
+  const startRename = (e, p) => {
+    e.stopPropagation()
+    setRenamingId(p.id)
+    setRenameValue(p.name)
+    setShowNewForm(false)
+  }
+
+  const handleRename = async (id) => {
+    if (!renameValue.trim()) { setRenamingId(null); return }
+    try {
+      await updateProject(id, { name: renameValue.trim() })
+      if (activeId === id) {
+        setActiveName(renameValue.trim())
+        localStorage.setItem('activeProjectName', renameValue.trim())
+      }
+      setRenamingId(null)
+      await loadProjects()
+    } catch (e) {
+      alert('Umbenennen fehlgeschlagen: ' + e.message)
+    }
+  }
+
   const handleDelete = async (e, id) => {
     e.stopPropagation()
     if (!confirm('Projekt wirklich loeschen?')) return
@@ -148,18 +173,30 @@ function ProjectSwitcher() {
           {projects.map(p => (
             <div key={p.id}
               className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer group"
-              onClick={() => selectProject(p)}
+              onClick={() => renamingId !== p.id && selectProject(p)}
             >
               {activeId === p.id
                 ? <Check className="w-3.5 h-3.5 text-primary-600 shrink-0" />
                 : <div className="w-3.5 h-3.5 shrink-0" />
               }
-              <span className={`flex-1 text-xs truncate ${activeId === p.id ? 'font-semibold text-primary-700' : 'text-ink'}`}>
-                {p.name}
-              </span>
-              {p.source_count !== undefined && (
-                <span className="text-[10px] text-ink-muted">{p.source_count} Quellen</span>
+              {renamingId === p.id ? (
+                <input
+                  value={renameValue}
+                  onChange={e => setRenameValue(e.target.value)}
+                  onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') handleRename(p.id); if (e.key === 'Escape') setRenamingId(null) }}
+                  onClick={e => e.stopPropagation()}
+                  className="flex-1 text-xs border border-primary-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  autoFocus
+                />
+              ) : (
+                <span className={`flex-1 text-xs truncate ${activeId === p.id ? 'font-semibold text-primary-700' : 'text-ink'}`}>
+                  {p.name}
+                </span>
               )}
+              <button onClick={(e) => startRename(e, p)}
+                className="p-0.5 rounded text-gray-300 hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Pencil className="w-3 h-3" />
+              </button>
               {projects.length > 1 && (
                 <button onClick={(e) => handleDelete(e, p.id)}
                   className="p-0.5 rounded text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
