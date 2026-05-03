@@ -194,11 +194,20 @@ neue authenticity_markers."""
 # ── Voice-Profil als Prompt-Kontext formatieren ─────────────────────────────
 
 def format_voice_for_prompt(profile: dict) -> str:
-    """Formatiere das Brand-Voice-Profil als Kontext fuer Content-Generierung."""
+    """Formatiere das Brand-Voice-Profil als Kontext fuer Content-Generierung.
+
+    Unterstuetzt zwei Formate:
+    - v1 (English keys): tone, vocabulary_level, sentence_style, perspective,
+      favorite_phrases, formatting_style, emoji_usage, authenticity_markers, topics_avoid
+    - P03/Wizard (German keys): tonalitaet, kernthemen, stilprinzipien, wortschatz,
+      schreibrhythmus, vermeidungsregeln
+    """
     if not profile:
         return ""
 
     parts = []
+
+    # ── v1 English keys ──────────────────────────────────────────────────────
     if profile.get("tone"):
         parts.append(f"Tonalitaet: {profile['tone']}")
     if profile.get("vocabulary_level"):
@@ -223,5 +232,66 @@ def format_voice_for_prompt(profile: dict) -> str:
             parts.append(f"VERMEIDE: {', '.join(str(a) for a in avoids)}")
         else:
             parts.append(f"VERMEIDE: {avoids}")
+
+    # ── P03/Wizard German keys (fallbacks when English keys absent) ──────────
+    if not profile.get("tone") and profile.get("tonalitaet"):
+        ton = profile["tonalitaet"]
+        if isinstance(ton, dict):
+            grundton = ton.get("grundton") or ton.get("energie") or ""
+            rest = {k: v for k, v in ton.items() if k not in ("grundton",)}
+            beschreibung = grundton
+            if rest:
+                extra = ", ".join(f"{k}: {v}" for k, v in rest.items())
+                beschreibung = f"{grundton} ({extra})" if grundton else extra
+            if beschreibung:
+                parts.append(f"Tonalitaet: {beschreibung}")
+        else:
+            parts.append(f"Tonalitaet: {ton}")
+
+    if profile.get("kernthemen"):
+        themen = profile["kernthemen"]
+        if isinstance(themen, list):
+            parts.append(f"Kernthemen: {', '.join(str(t) for t in themen)}")
+        else:
+            parts.append(f"Kernthemen: {themen}")
+
+    if not profile.get("sentence_style") and profile.get("stilprinzipien"):
+        stil = profile["stilprinzipien"]
+        if isinstance(stil, dict):
+            stil_parts = [f"{k}: {v}" for k, v in stil.items()]
+            parts.append(f"Stilprinzipien: {', '.join(stil_parts)}")
+        else:
+            parts.append(f"Stilprinzipien: {stil}")
+
+    if not profile.get("favorite_phrases") and profile.get("wortschatz"):
+        ws = profile["wortschatz"]
+        if isinstance(ws, dict):
+            if ws.get("bevorzugt"):
+                bevorzugt = ws["bevorzugt"]
+                if isinstance(bevorzugt, list):
+                    parts.append(f"Typische Redewendungen: {', '.join(str(w) for w in bevorzugt[:8])}")
+                else:
+                    parts.append(f"Typische Redewendungen: {bevorzugt}")
+            if ws.get("vermieden"):
+                vermieden = ws["vermieden"]
+                if isinstance(vermieden, list):
+                    parts.append(f"Vermeide Woerter: {', '.join(str(w) for w in vermieden)}")
+                else:
+                    parts.append(f"Vermeide Woerter: {vermieden}")
+
+    if profile.get("schreibrhythmus"):
+        rhythmus = profile["schreibrhythmus"]
+        if isinstance(rhythmus, dict):
+            rhythmus_parts = [f"{k}: {v}" for k, v in rhythmus.items()]
+            parts.append(f"Schreibrhythmus: {', '.join(rhythmus_parts)}")
+        else:
+            parts.append(f"Schreibrhythmus: {rhythmus}")
+
+    if not profile.get("topics_avoid") and profile.get("vermeidungsregeln"):
+        regeln = profile["vermeidungsregeln"]
+        if isinstance(regeln, list):
+            parts.append(f"VERMEIDE: {', '.join(str(r) for r in regeln)}")
+        else:
+            parts.append(f"VERMEIDE: {regeln}")
 
     return "\n".join(parts)

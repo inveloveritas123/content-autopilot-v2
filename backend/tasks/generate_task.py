@@ -15,7 +15,9 @@ from services.campaign_matcher import match_item_to_campaigns
 from services.fact_checker import check_facts
 from services.llm import BudgetExceededError, set_llm_tenant
 
-from sqlalchemy import select
+import json as _json
+
+from sqlalchemy import select, text as _text
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +168,29 @@ def generate_content(item_id: str):
         tone = tenant_settings.get("tone", "professionell, informativ, mit persoenliche Note")
         routing_override = tenant_settings.get("llm_routing")
         voice_profile = tenant_settings.get("voice_profile") or None
+
+        # Prefer Wizard/P03 voice profile from tenant_voice_profile table
+        try:
+            vp_row = session.execute(
+                _text(
+                    "SELECT payload FROM tenant_voice_profile"
+                    " WHERE tenant_id=:t AND is_active=true"
+                    " ORDER BY version DESC LIMIT 1"
+                ),
+                {"t": str(item.tenant_id)},
+            ).fetchone()
+            if vp_row and vp_row[0]:
+                wizard_profile = (
+                    vp_row[0]
+                    if isinstance(vp_row[0], dict)
+                    else _json.loads(vp_row[0])
+                )
+                if wizard_profile:
+                    voice_profile = wizard_profile
+                    logger.info(f"Using Wizard voice profile for item {item_id}")
+        except Exception as vp_err:
+            logger.warning(f"Could not load tenant_voice_profile for {item_id}: {vp_err}")
+            # Fall through to v1 settings already set above
 
         # Set tenant context for cost cap tracking
         set_llm_tenant(str(item.tenant_id))
