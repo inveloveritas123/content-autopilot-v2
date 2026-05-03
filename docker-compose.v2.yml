@@ -10,6 +10,7 @@ services:
       - cap-v2-net
 
   backend-v2:
+    image: ${REGISTRY:-10.10.0.1:3000}/meister/content-autopilot-v2/backend:${IMAGE_TAG:-main}
     build: ./backend
     # privileged required on this Proxmox LXC host — LXC user-namespace nesting
     # restricts AF_UNIX socketpair without it. read_only added for FS hardening.
@@ -54,6 +55,7 @@ services:
       - cap-v2-net
 
   celery-worker-v2:
+    image: ${REGISTRY:-10.10.0.1:3000}/meister/content-autopilot-v2/backend:${IMAGE_TAG:-main}
     build: ./backend
     privileged: true
     security_opt:
@@ -99,6 +101,7 @@ services:
       - cap-v2-net
 
   celery-beat-v2:
+    image: ${REGISTRY:-10.10.0.1:3000}/meister/content-autopilot-v2/backend:${IMAGE_TAG:-main}
     build: ./backend
     privileged: true
     security_opt:
@@ -135,6 +138,7 @@ services:
       - cap-v2-net
 
   mcp-server-v2:
+    image: ${REGISTRY:-10.10.0.1:3000}/meister/content-autopilot-v2/mcp-server:${IMAGE_TAG:-main}
     build: ./mcp-server
     privileged: true
     security_opt:
@@ -165,6 +169,7 @@ services:
       - cap-v2-net
 
   nginx-v2:
+    image: ${REGISTRY:-10.10.0.1:3000}/meister/content-autopilot-v2/nginx:${IMAGE_TAG:-main}
     build:
       context: .
       dockerfile: nginx/Dockerfile.v2
