@@ -23,10 +23,13 @@ step() { echo -e "${BLUE}[STEP]${NC} $1"; }
 
 # ─── Argumente parsen ────────────────────────────────────────────
 SKIP_SNAPSHOT=0
+SKIP_ROLLBACK=${SKIP_ROLLBACK:-0}
 ALEMBIC_ARGS=()
 
 for arg in "$@"; do
-    if [ "$arg" = "--no-snapshot" ]; then
+    if [ "$arg" = "--no-rollback" ]; then
+        SKIP_ROLLBACK=1
+    elif [ "$arg" = "--no-snapshot" ]; then
         SKIP_SNAPSHOT=1
     else
         ALEMBIC_ARGS+=("$arg")
@@ -35,7 +38,7 @@ done
 
 if [ ${#ALEMBIC_ARGS[@]} -eq 0 ]; then
     fail "Kein Alembic-Befehl angegeben."
-    echo "Aufruf: $0 [--no-snapshot] \"upgrade head\""
+    echo "Aufruf: $0 [--no-snapshot] [--no-rollback] \"upgrade head\""
     echo "        $0 [--no-snapshot] \"downgrade -1\""
     exit 1
 fi
@@ -148,6 +151,47 @@ step "STEP 3: Alembic current pruefen..."
 
 CURRENT_REV=$(docker compose -f "$COMPOSE_FILE" exec -T backend-v2 alembic current 2>/dev/null | head -1 || echo "unbekannt")
 ok "Aktuelle Revision: $CURRENT_REV"
+
+# ─── STEP 3.5: Backend-Container restart + Health-Curl (Constraint #10) ──
+step "STEP 3.5: Backend-Restart + Health-Check..."
+
+if docker compose -f "$COMPOSE_FILE" ps -q backend-v2 >/dev/null 2>&1; then
+    info "Backend-v2 + Celery restart..."
+    docker compose -f "$COMPOSE_FILE" restart backend-v2 celery-worker-v2 celery-beat-v2 >/dev/null 2>&1 || true
+    info "Warte 12s auf Bootup..."
+    sleep 12
+fi
+
+HEALTH_URL="${HEALTH_URL:-http://localhost:8601/api/health}"
+HEALTH_HTTP=$(curl -sS -o /dev/null -w '%{http_code}' "$HEALTH_URL" || echo "000")
+
+if [ "$HEALTH_HTTP" = "200" ]; then
+    ok "Health-Check $HEALTH_URL → HTTP 200"
+else
+    fail "Health-Check $HEALTH_URL → HTTP $HEALTH_HTTP"
+    if [ "$SKIP_SNAPSHOT" -eq 0 ] && [ -n "${SNAPSHOT_FILE:-}" ] && [ -f "$SNAPSHOT_FILE" ]; then
+        if [ "$SKIP_ROLLBACK" = "1" ]; then
+            fail "--no-rollback gesetzt — manueller Restore: $SNAPSHOT_FILE"
+        else
+            step "AUTO-ROLLBACK: alembic downgrade -1..."
+            if docker compose -f "$COMPOSE_FILE" exec -T backend-v2 alembic downgrade -1 2>&1 | tail -3; then
+                docker compose -f "$COMPOSE_FILE" restart backend-v2 >/dev/null 2>&1 || true
+                sleep 8
+                ROLL_HTTP=$(curl -sS -o /dev/null -w '%{http_code}' "$HEALTH_URL" || echo "000")
+                if [ "$ROLL_HTTP" = "200" ]; then
+                    ok "Auto-Rollback erfolgreich, Backend wieder GREEN"
+                else
+                    fail "Auto-Rollback nicht erfolgreich, Health $ROLL_HTTP — manueller Restore: $SNAPSHOT_FILE"
+                fi
+            else
+                fail "alembic downgrade fehlgeschlagen — manueller Restore notwendig: $SNAPSHOT_FILE"
+            fi
+        fi
+    else
+        fail "Kein Snapshot für Rollback verfügbar — Backend bleibt im fehlerhaften Zustand!"
+    fi
+    exit 1
+fi
 
 # ─── STEP 4: Alte Snapshots rotieren (>30 Tage) ──────────────────
 step "STEP 4: Snapshot-Rotation (>30 Tage)..."
