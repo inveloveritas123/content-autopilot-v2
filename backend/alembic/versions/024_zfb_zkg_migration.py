@@ -21,15 +21,15 @@ def upgrade():
     #    Subquery resolves while api_key is still '***REMOVED-TENANT-KEY***'
     op.execute("""
         DELETE FROM tenant_voice_profile
-        WHERE tenant_id IN (SELECT id FROM tenants WHERE api_key = '***REMOVED-TENANT-KEY***' OR api_key = '***REMOVED-TENANT-KEY-ZKG***')
+        WHERE tenant_id IN (SELECT id::text FROM tenants WHERE api_key = '***REMOVED-TENANT-KEY***' OR api_key = '***REMOVED-TENANT-KEY-ZKG***')
     """)
     op.execute("""
         DELETE FROM tenant_customer_context
-        WHERE tenant_id IN (SELECT id FROM tenants WHERE api_key = '***REMOVED-TENANT-KEY***' OR api_key = '***REMOVED-TENANT-KEY-ZKG***')
+        WHERE tenant_id IN (SELECT id::text FROM tenants WHERE api_key = '***REMOVED-TENANT-KEY***' OR api_key = '***REMOVED-TENANT-KEY-ZKG***')
     """)
     op.execute("""
         DELETE FROM tenant_audience_avatar
-        WHERE tenant_id IN (SELECT id FROM tenants WHERE api_key = '***REMOVED-TENANT-KEY***' OR api_key = '***REMOVED-TENANT-KEY-ZKG***')
+        WHERE tenant_id IN (SELECT id::text FROM tenants WHERE api_key = '***REMOVED-TENANT-KEY***' OR api_key = '***REMOVED-TENANT-KEY-ZKG***')
     """)
 
     # 3. Clear voice_profile_id refs in content_pieces (profiles are now gone)
