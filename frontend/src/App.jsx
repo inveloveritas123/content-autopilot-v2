@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './components/Dashboard'
@@ -19,16 +18,7 @@ import Settings from './components/Settings'
 import Analytics from './components/Analytics'
 import PublishQueue from './components/PublishQueue'
 import Dialogue from './components/Dialogue'
-import { setApiKey } from './api'
-
 function App() {
-  // Set default API key if not configured
-  useEffect(() => {
-    if (!localStorage.getItem('apiKey')) {
-      setApiKey('***REMOVED-TENANT-KEY-ZKG***')
-    }
-  }, [])
-
   return (
     <Layout>
       <Routes>
