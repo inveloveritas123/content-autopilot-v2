@@ -547,8 +547,8 @@ async def wizard_answer(
     except ValueError:
         raise HTTPException(status_code=422, detail="session_id muss eine gueltige UUID sein")
 
-    # Frage-ID validieren
-    if data.question_id not in _ALL_QUESTION_IDS:
+    # Frage-ID validieren (aktuelle + Legacy-IDs akzeptieren)
+    if data.question_id not in _ALL_QUESTION_IDS and data.question_id not in _LEGACY_QUESTION_IDS:
         raise HTTPException(status_code=422, detail=f"Unbekannte question_id: {data.question_id!r}")
 
     # Antwort sanitizen
