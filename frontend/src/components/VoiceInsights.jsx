@@ -450,7 +450,7 @@ export default function VoiceInsights() {
 
   // Daten-State
   const [activeProfiles, setActiveProfiles] = useState({})
-  const [history, setHistory] = useState([])
+  const [historyByPillar, setHistoryByPillar] = useState({})
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -458,7 +458,9 @@ export default function VoiceInsights() {
     try {
       const data = await getBrandVoiceStatus(TENANT_ID)
       setActiveProfiles(data?.active_profiles || {})
-      setHistory(data?.history || [])
+      // history is an object {voice_profile: [], customer_context: [], audience_avatar: []}
+      const h = data?.history
+      setHistoryByPillar(h && typeof h === 'object' && !Array.isArray(h) ? h : {})
     } catch (e) {
       setError(e.message || 'Laden fehlgeschlagen.')
     } finally {
@@ -487,6 +489,8 @@ export default function VoiceInsights() {
       }
     })
   }
+
+  const history = historyByPillar[activeTab] || []
 
   // Vergleichs-Payload aus History ermitteln
   const compareEntry = compareVersion !== null
@@ -570,7 +574,7 @@ export default function VoiceInsights() {
               {TABS.map((tab) => (
                 <button
                   key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
+                  onClick={() => { setActiveTab(tab.key); setCompareVersion(null) }}
                   className={`px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
                     activeTab === tab.key
                       ? 'text-primary-700 border-primary-700 bg-primary-50'

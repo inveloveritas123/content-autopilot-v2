@@ -317,7 +317,7 @@ export default function WizardPage() {
   const currentPhaseData = WIZARD_PHASES.find((p) => p.id === currentPhase)
   const questions = currentPhaseData
     ? currentPhaseData.questions.map((text, idx) => ({
-        id: `p${currentPhase}_q${idx}`,
+        id: `q${currentPhase}_${idx + 1}`,
         text,
         phase: currentPhase,
         phase_name: currentPhaseData.name,
