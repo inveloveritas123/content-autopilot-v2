@@ -593,10 +593,15 @@ async def patch_profile_field(
     tenant_id: str,
     profile_type: str,
     data: FieldEditRequest,
+    project_id: Optional[str] = Query(None, description="Projekt-ID für project-scoped Profile (None = globaler Slot)"),
     auth_tenant_id: uuid.UUID = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Einzelnes Feld im aktiven Profil editieren (neue Version wird angelegt)."""
+    """Einzelnes Feld im aktiven Profil editieren (neue Version wird angelegt).
+
+    Mit project_id-Query-Parameter wird das Profil des jeweiligen Projekts
+    editiert. Ohne project_id wird der globale Tenant-Slot bearbeitet.
+    """
     resolved_id = str(auth_tenant_id) if tenant_id == "me" else tenant_id
     if resolved_id != str(auth_tenant_id):
         raise HTTPException(status_code=403, detail="Zugriff verweigert")
@@ -619,18 +624,28 @@ async def patch_profile_field(
                    f"Erlaubte Root-Keys: {allowed_keys}",
         )
 
-    # Aktive Version laden (SQL aus vorberechneter Whitelist)
-    active_row = (
-        await db.execute(
-            text(_SQL[profile_type]["select_active_for_edit"]),
-            {"t": tenant_id},
+    tbl = _PROFILE_TABLE[profile_type]
+    # Project-scoped SELECT: COALESCE-Sentinel-Pattern aus Migration 032
+    if project_id:
+        select_sql = (
+            f"SELECT id, payload, version FROM {tbl} "
+            f"WHERE tenant_id = :t AND project_id = :pid AND is_active = true"
         )
-    ).fetchone()
+        select_params: dict = {"t": tenant_id, "pid": project_id}
+    else:
+        select_sql = (
+            f"SELECT id, payload, version FROM {tbl} "
+            f"WHERE tenant_id = :t AND project_id IS NULL AND is_active = true"
+        )
+        select_params = {"t": tenant_id}
+
+    active_row = (await db.execute(text(select_sql), select_params)).fetchone()
 
     if not active_row:
         raise HTTPException(
             status_code=404,
-            detail=f"Kein aktives {profile_type} fuer diesen Tenant gefunden",
+            detail=f"Kein aktives {profile_type} fuer diesen Tenant"
+                   + (f" (Projekt {project_id})" if project_id else "") + " gefunden",
         )
 
     # Deep-Copy, Feld setzen
@@ -644,15 +659,32 @@ async def patch_profile_field(
     new_version = active_row.version + 1
     old_id = str(active_row.id)
 
-    # Neue Version inserieren, alte deaktivieren (SQL aus vorberechneter Whitelist)
-    await db.execute(
-        text(_SQL[profile_type]["insert"]),
-        {
+    # Neue Version inserieren (project_id-aware), alte deaktivieren
+    if project_id:
+        insert_sql = (
+            f"INSERT INTO {tbl} (tenant_id, project_id, version, is_active, source, payload, "
+            f"prompt_version_hash, model_id) "
+            f"VALUES (:tenant_id, :project_id, :version, true, 'manual_edit', CAST(:payload AS jsonb), '', '')"
+        )
+        insert_params: dict = {
+            "tenant_id": tenant_id,
+            "project_id": project_id,
+            "version": new_version,
+            "payload": json.dumps(new_payload),
+        }
+    else:
+        insert_sql = (
+            f"INSERT INTO {tbl} (tenant_id, version, is_active, source, payload, "
+            f"prompt_version_hash, model_id) "
+            f"VALUES (:tenant_id, :version, true, 'manual_edit', CAST(:payload AS jsonb), '', '')"
+        )
+        insert_params = {
             "tenant_id": tenant_id,
             "version": new_version,
             "payload": json.dumps(new_payload),
-        },
-    )
+        }
+
+    await db.execute(text(insert_sql), insert_params)
     await db.execute(
         text(_SQL[profile_type]["deactivate"]),
         {"id": old_id},
@@ -664,6 +696,7 @@ async def patch_profile_field(
         "profile_type": profile_type,
         "field_path": data.field_path,
         "new_version": new_version,
+        "project_id": project_id,
     }
 
 
