@@ -20,9 +20,10 @@ describe('PostPreview', () => {
 
   test('renders three device tabs', () => {
     render(<PostPreview text={shortText} />)
-    expect(screen.getByText(/Desktop/)).toBeTruthy()
-    expect(screen.getByText(/Tablet/)).toBeTruthy()
-    expect(screen.getByText(/Mobile/)).toBeTruthy()
+    // getAllByText weil "Mobile" auch im Hint-Text unten vorkommt
+    expect(screen.getAllByText(/Desktop/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Tablet/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Mobile/).length).toBeGreaterThan(0)
   })
 
   test('truncates long text with Mehr anzeigen button on mobile', () => {
@@ -95,7 +96,8 @@ describe('PostPreview', () => {
     fireEvent.click(screen.getByText('Mehr anzeigen'))
     expect(screen.getByText('Weniger anzeigen')).toBeTruthy()
     // Switch to Desktop tab — desktop has its own LinkedInPost instance with own state
-    fireEvent.click(screen.getByText(/Desktop/))
+    // Desktop-Tab ist der erste mit /Desktop/ — Hint-Text kommt später
+    fireEvent.click(screen.getAllByText(/Desktop/)[0])
     // After switching, desktop starts collapsed (180 chars > 210 cutoff? no — 300 > 210, so truncated)
     expect(screen.getByText('Mehr anzeigen')).toBeTruthy()
   })
