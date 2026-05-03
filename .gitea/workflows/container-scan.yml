@@ -1,0 +1,111 @@
+name: Trivy Security Scan
+
+on:
+  push:
+    paths:
+      - "**/Dockerfile*"
+      - "**/requirements.txt"
+      - "**/package*.json"
+      - "docker-compose*.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/Dockerfile*"
+      - "**/requirements.txt"
+      - "**/package*.json"
+  schedule:
+    - cron: '0 4 * * *'  # nightly 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  trivy-fs-scan:
+    name: Filesystem & Dependency Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy filesystem scan
+        id: trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: 0           # collect results, fail separately below
+          ignore-unfixed: true   # skip CVEs with no fix yet
+          vuln-type: library
+        continue-on-error: true
+
+      - name: Run Trivy config scan (Dockerfile misconfigurations)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: .
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: 0
+        continue-on-error: true
+
+      - name: Generate SBOM
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: cyclonedx
+          output: sbom.json
+          exit-code: 0
+        continue-on-error: true
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: sbom.json
+          retention-days: 30
+
+      - name: Check for CRITICAL CVEs
+        id: check-critical
+        run: |
+          # Re-run with JSON output to check for CRITICAL
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/src" aquasec/trivy:latest fs --format json \
+            --severity CRITICAL --ignore-unfixed --vuln-type library /src \
+            > trivy-critical.json 2>/dev/null || true
+          CRITICAL_COUNT=$(python3 -c "
+          import json, sys
+          try:
+              data = json.load(open('trivy-critical.json'))
+              count = sum(len(r.get('Vulnerabilities') or []) for r in data.get('Results', []))
+              print(count)
+          except: print(0)
+          ")
+          echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
+          echo "CRITICAL CVEs found: $CRITICAL_COUNT"
+        continue-on-error: true
+
+      - name: Auto-create nightly issue if CRITICAL CVEs found
+        if: >
+          github.event_name == 'schedule' &&
+          steps.check-critical.outputs.critical_count != '0' &&
+          steps.check-critical.outputs.critical_count != ''
+        run: |
+          curl -s -X POST \
+            -H "Authorization: token ${{ secrets.GITEA_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"title\": \"🔴 [SEC] Trivy: CRITICAL CVEs in Dependencies (${{ github.sha }})\",
+              \"body\": \"Trivy Nightly-Scan hat **${{ steps.check-critical.outputs.critical_count }} CRITICAL CVE(s)** in Dependencies gefunden.\n\nBranch: \`main\`  \nCommit: \`${{ github.sha }}\`  \nWorkflow-Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n**SBOM** als Artefakt im Workflow-Run downloadbar.\n\n**Maßnahmen:**\n1. \`pip-audit\` oder \`npm audit\` lokal ausführen\n2. Betroffene Packages updaten\n3. Trivy erneut ausführen\",
+              \"labels\": [\"security\"]
+            }" \
+            "${{ github.server_url }}/api/v1/repos/${{ github.repository }}/issues"
+
+      - name: Fail PR on CRITICAL CVEs
+        if: >
+          github.event_name == 'pull_request' &&
+          steps.check-critical.outputs.critical_count != '0' &&
+          steps.check-critical.outputs.critical_count != ''
+        run: |
+          echo "::error::${{ steps.check-critical.outputs.critical_count }} CRITICAL CVE(s) found — PR blocked. Check the Trivy scan output above."
+          exit 1
