@@ -867,7 +867,7 @@ export default function BrandVoice() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {statusData?.voice_profile?.status === 'active' && (
+          {statusData?.voice_profile && (
             <Link
               to="/brand-voice/wizard"
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-muted bg-white border border-surface-border rounded-lg hover:bg-gray-50"
