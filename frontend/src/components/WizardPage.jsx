@@ -5,6 +5,7 @@ import { clsx } from 'clsx'
 import { QuestionEngine } from './QuestionEngine'
 import { Button } from './ui/Button'
 import {
+  getWizardQuestions,
   startWizardSession,
   getWizardSession,
   answerWizardQuestion,
@@ -454,6 +455,9 @@ export default function WizardPage() {
   const urlSessionId = urlSessionIdRaw && UUID_RE.test(urlSessionIdRaw) ? urlSessionIdRaw : null
   const navigate = useNavigate()
 
+  const [wizardPhases, setWizardPhases] = useState(null)
+  const [phasesLoading, setPhasesLoading] = useState(true)
+
   const [sessionId, setSessionId] = useState(null)
   const [currentPhase, setCurrentPhase] = useState(1)
   const [phaseProgress, setPhaseProgress] = useState({}) // { 1: 'done', 2: 'active', 3: 'pending' }
@@ -466,6 +470,14 @@ export default function WizardPage() {
   const [done, setDone] = useState(false)
   const [savedToast, setSavedToast] = useState(false)
   const toastTimerRef = useRef(null)
+
+  // Phasen-Definition vom Backend laden (Single-Source-of-Truth)
+  useEffect(() => {
+    getWizardQuestions()
+      .then(setWizardPhases)
+      .catch(() => setWizardPhases(WIZARD_PHASES))  // fallback to hardcoded
+      .finally(() => setPhasesLoading(false))
+  }, [])
 
   // Initialisierung: URL-Param prüfen oder neue Session starten
   useEffect(() => {
@@ -500,7 +512,7 @@ export default function WizardPage() {
   }, [])
 
   // Fragen für die aktuelle Phase aufbauen
-  const currentPhaseData = WIZARD_PHASES.find((p) => p.id === currentPhase)
+  const currentPhaseData = (wizardPhases ?? WIZARD_PHASES).find((p) => p.id === currentPhase)
   const questions = currentPhaseData
     ? currentPhaseData.questions.map((q) => ({
         ...q,
@@ -584,7 +596,7 @@ export default function WizardPage() {
     setPhaseProgress((prev) => ({ ...prev, [currentPhase]: 'done' }))
     setPhaseSynthesisData(null)
     const nextPhase = currentPhase + 1
-    if (nextPhase > WIZARD_PHASES.length) {
+    if (nextPhase > (wizardPhases ?? WIZARD_PHASES).length) {
       // Letzte Phase abgeschlossen — Pipeline starten (auch wenn Backend phase_complete statt session_complete schickt)
       setFinalizing(true)
       finalizeWizardSession(sessionId)
@@ -653,6 +665,14 @@ export default function WizardPage() {
   // -------------------------------------------------------------------------
   // Loading / Error States
   // -------------------------------------------------------------------------
+  if (phasesLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <>
@@ -735,7 +755,7 @@ export default function WizardPage() {
         {/* Horizontal Stepper (Tablet, < lg) */}
         <div className="lg:hidden px-6 pt-5">
           <HorizontalStepper
-            phases={WIZARD_PHASES}
+            phases={wizardPhases ?? WIZARD_PHASES}
             currentPhase={currentPhase}
             progress={phaseProgress}
           />
@@ -746,7 +766,7 @@ export default function WizardPage() {
           {/* Desktop-Stepper (Sidebar, >= lg) */}
           <div className="hidden lg:block pt-1">
             <PhaseStepper
-              phases={WIZARD_PHASES}
+              phases={wizardPhases ?? WIZARD_PHASES}
               currentPhase={currentPhase}
               progress={phaseProgress}
               onPhaseClick={handlePhaseClick}

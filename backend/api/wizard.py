@@ -427,6 +427,30 @@ async def wizard_start(
 
 
 # ---------------------------------------------------------------------------
+# GET /brand-voice/wizard/questions
+# ---------------------------------------------------------------------------
+
+@router.get("/brand-voice/wizard/questions")
+async def wizard_get_questions():
+    """Gibt alle Wizard-Phasen mit Fragen zurück (Single-Source-of-Truth)."""
+    phases = []
+    for p in WIZARD_PHASES:
+        phases.append({
+            "id": p["phase"],
+            "name": p["title"],
+            "goal": p["goal"],
+            "questions": [
+                {
+                    **q,
+                    "nachhaken": q.get("hints", []),
+                }
+                for q in p["questions"]
+            ],
+        })
+    return {"phases": phases}
+
+
+# ---------------------------------------------------------------------------
 # GET /brand-voice/wizard/{session_id}
 # ---------------------------------------------------------------------------
 

@@ -327,6 +327,10 @@ export const importBrandVoiceFromNC = (tenantId, path, sourceType) =>
 export const getBrandVoicePipelineStatus = (runId) => request(`/brand-voice/pipeline/${runId}`)
 
 // Brand Voice Wizard (#70)
+export async function getWizardQuestions() {
+  const res = await request('/brand-voice/wizard/questions')
+  return res.phases
+}
 export const startWizardSession = () => request('/brand-voice/wizard/start', { method: 'POST' })
 export const getWizardSession = (sessionId) => request(`/brand-voice/wizard/${sessionId}`)
 export const answerWizardQuestion = (sessionId, phase, questionId, answer) =>
