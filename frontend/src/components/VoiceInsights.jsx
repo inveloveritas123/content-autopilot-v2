@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Component } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Brain,
   Pencil,
@@ -15,6 +16,39 @@ import { Dialog } from './ui/Dialog'
 import { getBrandVoiceStatus, patchBrandVoiceField } from '../api'
 
 const TENANT_ID = 'me'
+
+// ─── Error Boundary ───────────────────────────────────────────────────────────
+
+class InsightsErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, message: '' }
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, message: error?.message || String(error) }
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center px-4">
+          <AlertCircle className="w-8 h-8 text-red-400" />
+          <p className="text-sm font-semibold text-red-700">Unerwarteter Fehler</p>
+          <p className="text-xs text-ink-muted max-w-sm">{this.state.message}</p>
+          <div className="flex gap-3">
+            <button onClick={() => this.setState({ hasError: false })}
+              className="px-3 py-1.5 text-xs bg-gray-100 rounded-lg hover:bg-gray-200 text-ink">
+              Erneut versuchen
+            </button>
+            <Link to="/brand-voice" className="px-3 py-1.5 text-xs bg-primary-700 text-white rounded-lg hover:bg-primary-800">
+              Zur Brand Voice
+            </Link>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 // ─── Allow-List editierbarer Felder (clientseitige Spiegelung vom Backend) ─────
 
@@ -441,7 +475,7 @@ const TABS = [
 
 // ─── Main: VoiceInsights ──────────────────────────────────────────────────────
 
-export default function VoiceInsights() {
+function VoiceInsights() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('voice_profile')
@@ -565,7 +599,22 @@ export default function VoiceInsights() {
         </div>
       )}
 
-      {!loading && !error && (
+      {!loading && !error && Object.keys(activeProfiles).length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center px-4">
+          <Brain className="w-10 h-10 text-primary-200" />
+          <h2 className="text-base font-semibold text-ink">Noch kein Brand Voice eingerichtet</h2>
+          <p className="text-sm text-ink-muted max-w-sm">
+            Durchlaufe den Brand Voice Wizard, damit die KI deinen Stil, deine Zielgruppe und deine Positionierung versteht.
+          </p>
+          <Link to="/brand-voice/wizard"
+            className="mt-2 px-4 py-2 text-sm font-semibold bg-primary-700 text-white rounded-xl hover:bg-primary-800 flex items-center gap-2">
+            <ChevronRight className="w-4 h-4" />
+            Wizard starten
+          </Link>
+        </div>
+      )}
+
+      {!loading && !error && Object.keys(activeProfiles).length > 0 && (
         <div className="flex gap-4 items-start">
           {/* Haupt-Content */}
           <div className="flex-1 min-w-0">
@@ -610,5 +659,13 @@ export default function VoiceInsights() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function VoiceInsightsPage() {
+  return (
+    <InsightsErrorBoundary>
+      <VoiceInsights />
+    </InsightsErrorBoundary>
   )
 }
