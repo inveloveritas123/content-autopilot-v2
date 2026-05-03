@@ -2,7 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 import logging_config
 logging_config.setup_logging()
@@ -200,7 +200,53 @@ app.include_router(telegram_router, prefix="/api", tags=["Telegram"])
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "2.0.0"}
+    import asyncio
+    import redis as redis_lib
+    from models.base import async_engine
+    from fastapi.responses import JSONResponse
+
+    checks = {}
+    overall = "ok"
+
+    # DB check
+    try:
+        async with async_engine.connect() as conn:
+            await asyncio.wait_for(conn.execute(text("SELECT 1")), timeout=3.0)
+        checks["db"] = "ok"
+    except Exception as e:
+        logger.warning("DB health check failed: %s", e)
+        checks["db"] = "error: connection failed"
+        overall = "degraded"
+
+    # Redis check (async — kein Event-Loop-Blocking)
+    try:
+        import redis.asyncio as aioredis
+        r = aioredis.from_url(settings.redis_url, socket_connect_timeout=3)
+        await asyncio.wait_for(r.ping(), timeout=3.0)
+        await r.aclose()
+        checks["redis"] = "ok"
+    except Exception as e:
+        logger.warning("Redis health check failed: %s", e)
+        checks["redis"] = "error: connection failed"
+        overall = "degraded"
+
+    # NC Storage check (optional, timeout 5s)
+    try:
+        from services.brand_voice_storage import get_default_nc_adapter
+        adapter = get_default_nc_adapter()
+        # stat() the root path — fast check without reading file content
+        adapter.stat("/")
+        checks["storage_adapter"] = "ok"
+    except Exception as e:
+        logger.warning("Storage health check failed: %s", e)
+        checks["storage_adapter"] = "degraded: unreachable"
+        # NC degraded does NOT make overall status degraded (NC can be down without breaking core)
+
+    status_code = 200 if overall == "ok" else 503
+    return JSONResponse(
+        {"status": overall, "version": "2.0.0", "checks": checks},
+        status_code=status_code,
+    )
 
 
 @app.get("/api/csrf-token")

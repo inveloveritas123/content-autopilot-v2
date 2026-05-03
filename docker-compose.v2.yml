@@ -42,6 +42,12 @@ services:
     depends_on:
       redis-v2:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     volumes:
       - ./data:/app/data
     networks:
@@ -83,6 +89,12 @@ services:
     depends_on:
       redis-v2:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A tasks.celery_app inspect ping -d celery@$$HOSTNAME --timeout 5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     networks:
       - cap-v2-net
 
@@ -113,6 +125,12 @@ services:
     depends_on:
       redis-v2:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'celery.*beat' > /dev/null"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     networks:
       - cap-v2-net
 
@@ -137,6 +155,12 @@ services:
       - "${MCP_PORT:-8180}:8080"
     depends_on:
       - backend-v2
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     networks:
       - cap-v2-net
 
@@ -156,6 +180,11 @@ services:
       - "${APP_PORT:-8601}:8080"
     depends_on:
       - backend-v2
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     networks:
       - cap-v2-net
 
