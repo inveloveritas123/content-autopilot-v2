@@ -135,7 +135,7 @@ services:
       redis-v2:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'celery.*beat' > /dev/null"]
+      test: ["CMD-SHELL", "test -f /tmp/celerybeat-schedule && cat /proc/1/cmdline | grep -q beat"]
       interval: 60s
       timeout: 5s
       retries: 3
