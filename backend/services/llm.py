@@ -239,10 +239,16 @@ class LLMService:
         # Use purpose-based max_tokens limit (default 1500 if purpose unknown)
         max_tokens = PURPOSE_MAX_TOKENS.get(purpose, 1500) if purpose else 1500
 
+        # Requesty.ai Auto-Caching: saves ~90% on repeated system-prompt tokens
+        is_requesty = "requesty.ai" in base_url
+        request_body = {"model": litellm_model, "messages": messages, "max_tokens": max_tokens}
+        if is_requesty:
+            request_body["extra_body"] = {"requesty": {"auto_cache": True}}
+
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 f"{base_url}/chat/completions",
-                json={"model": litellm_model, "messages": messages, "max_tokens": max_tokens},
+                json=request_body,
                 headers=headers,
             )
             # 401 from DB provider → fall back to env config (expired key)
@@ -253,9 +259,13 @@ class LLMService:
                 env_headers = {"Content-Type": "application/json"}
                 if env_key:
                     env_headers["Authorization"] = f"Bearer {env_key}"
+                is_requesty_fallback = "requesty.ai" in env_base
+                fallback_body = {"model": litellm_model, "messages": messages, "max_tokens": max_tokens}
+                if is_requesty_fallback:
+                    fallback_body["extra_body"] = {"requesty": {"auto_cache": True}}
                 resp = await client.post(
                     f"{env_base}/chat/completions",
-                    json={"model": litellm_model, "messages": messages, "max_tokens": max_tokens},
+                    json=fallback_body,
                     headers=env_headers,
                 )
             if resp.status_code == 412:
@@ -268,11 +278,19 @@ class LLMService:
 
             # Track cost — always, even for env-config fallback
             if data.get("usage"):
+                usage = data["usage"]
+                # Extract Requesty.ai cache token telemetry
+                cache_read = int(usage.get("cache_read_input_tokens", 0) or usage.get("cached_tokens", 0) or 0)
+                cache_write = int(usage.get("cache_creation_input_tokens", 0) or 0)
+                if cache_read > 0:
+                    logger.info(f"Cache HIT: {cache_read} read tokens saved (model={litellm_model})")
                 track_cost(
                     provider["provider_id"] if provider else None,
-                    data["usage"],
+                    usage,
                     model=litellm_model,
                     task_type=purpose_task,
+                    cache_read_tokens=cache_read,
+                    cache_write_tokens=cache_write,
                 )
 
             return data["choices"][0]["message"]["content"]

@@ -23,4 +23,6 @@ class LLMCallLog(Base):
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     success: Mapped[bool] = mapped_column(default=True)
     error_message: Mapped[Optional[str]] = mapped_column(String(500))
+    cache_read_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cache_write_tokens: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

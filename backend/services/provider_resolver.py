@@ -127,7 +127,7 @@ def _check_global_cap(session, today) -> None:
         pass
 
 
-def track_cost(provider_id, usage: dict, model: str = "", task_type: str = "unknown", tenant_id=None):
+def track_cost(provider_id, usage: dict, model: str = "", task_type: str = "unknown", tenant_id=None, cache_read_tokens: int = 0, cache_write_tokens: int = 0):
     """Track LLM cost from response usage data + log the call.
 
     provider_id may be None (env-config fallback path) — still logs cost.
@@ -183,6 +183,8 @@ def track_cost(provider_id, usage: dict, model: str = "", task_type: str = "unkn
                     prompt_tokens=input_tokens,
                     completion_tokens=output_tokens,
                     cost_cents=round(cost_cents, 4),
+                    cache_read_tokens=cache_read_tokens,
+                    cache_write_tokens=cache_write_tokens,
                 )
                 session.add(log)
             except Exception as e:
