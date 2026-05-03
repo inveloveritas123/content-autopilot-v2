@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, func as sqlfunc
+from sqlalchemy import select, text, func as sqlfunc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
@@ -445,3 +445,29 @@ async def llm_anomaly(
         "current_hour": current_hour_start.isoformat(),
         "history_buckets": len(history),
     }
+
+
+# --- #145 Phase 4.1: Kategorie-Verteilung ---
+
+
+@router.get("/analytics/content-by-category")
+async def content_by_category(
+    days: int = Query(30, ge=1, le=365),
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Anzahl Posts pro Kategorie (Christophs 4-Modell) für die letzten N Tage."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    rows = (await db.execute(
+        text(
+            "SELECT COALESCE(category, 'unkategorisiert') AS cat, "
+            "       COUNT(*) AS cnt "
+            "FROM content_pieces "
+            "WHERE tenant_id = :tid AND created_at >= :cut "
+            "GROUP BY cat "
+            "ORDER BY cnt DESC"
+        ),
+        {"tid": tenant.id, "cut": cutoff},
+    )).all()
+    return [{"category": r.cat, "count": int(r.cnt)} for r in rows]
+

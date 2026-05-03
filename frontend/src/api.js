@@ -421,6 +421,7 @@ export const getLLMAnalyticsByTask = (params) => request('/analytics/llm-by-task
 export const getLLMAnalyticsByModel = (params) => request('/analytics/llm-by-model', { params })
 export const getLLMAnalyticsByDay = (params) => request('/analytics/llm-by-day', { params })
 export const getLLMAnalyticsByHour = (params) => request('/analytics/llm-by-hour', { params })
+export const getContentByCategory = (params) => request('/analytics/content-by-category', { params })
 export const getLLMAnalyticsAnomaly = (params) => request('/analytics/llm-anomaly', { params })
 
 export const getLLMAnalyticsCSVUrl = (params) => {

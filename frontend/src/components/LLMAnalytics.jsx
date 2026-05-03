@@ -10,6 +10,7 @@ import {
   getLLMAnalyticsCSVUrl,
   getLLMAnalyticsByHour,
   getLLMAnalyticsAnomaly,
+  getContentByCategory,
 } from '../api'
 
 function fmtTokens(n) {
@@ -59,6 +60,7 @@ export default function LLMAnalytics() {
   const [byModel, setByModel] = useState([])
   const [byDay, setByDay] = useState([])
   const [byHour, setByHour] = useState([])
+  const [byCategory, setByCategory] = useState([])
   const [anomaly, setAnomaly] = useState(null)
   // #128 B-5: Provider-Reconciliation (manuelle Requesty-Side-Werte)
   const [manualRequestyCost, setManualRequestyCost] = useState(() => localStorage.getItem('reconcile_requesty_usd') || '')
@@ -83,13 +85,14 @@ export default function LLMAnalytics() {
     setLoading(true)
     setError(null)
     try {
-      const [sum, task, model, day, hourly, anom] = await Promise.all([
+      const [sum, task, model, day, hourly, anom, categories] = await Promise.all([
         getLLMAnalyticsSummary(apiParams),
         getLLMAnalyticsByTask(apiParams),
         getLLMAnalyticsByModel(apiParams),
         getLLMAnalyticsByDay(apiParams),
         getLLMAnalyticsByHour({ hours: 24 }).catch(() => []),
         getLLMAnalyticsAnomaly({ threshold_factor: 2.0 }).catch(() => null),
+        getContentByCategory({ days: 30 }).catch(() => []),
       ])
       setSummary(sum)
       setByTask(Array.isArray(task) ? task : [])
@@ -97,6 +100,7 @@ export default function LLMAnalytics() {
       setByDay(Array.isArray(day) ? day : [])
       setByHour(Array.isArray(hourly) ? hourly : [])
       setAnomaly(anom)
+      setByCategory(Array.isArray(categories) ? categories : [])
     } catch (e) {
       setError(e.message)
     } finally {
@@ -322,6 +326,40 @@ export default function LLMAnalytics() {
           )}
         </div>
       </div>
+
+      {/* #145 Phase 4.1: Kategorie-Verteilung (letzte 30 Tage) */}
+      {byCategory.length > 0 && (
+        <div className="bg-white rounded-xl border border-surface-border p-4">
+          <h3 className="text-sm font-semibold text-ink mb-3 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4" /> Posts nach Kategorie (30 Tage)
+          </h3>
+          <div className="space-y-2">
+            {(() => {
+              const max = Math.max(1, ...byCategory.map(r => r.count || 0))
+              const colors = {
+                news: 'bg-blue-500', persoenlich: 'bg-amber-500',
+                trust: 'bg-emerald-500', praxis: 'bg-violet-500',
+                unkategorisiert: 'bg-gray-400',
+              }
+              const labels = {
+                news: 'News', persoenlich: 'Persönlich',
+                trust: 'Trust', praxis: 'Praxis',
+                unkategorisiert: 'Unkategorisiert',
+              }
+              return byCategory.map(r => (
+                <HBar
+                  key={r.category}
+                  label={labels[r.category] || r.category}
+                  value={r.count || 0}
+                  max={max}
+                  sub={`${r.count} Posts`}
+                  color={colors[r.category] || 'bg-gray-400'}
+                />
+              ))
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* #128 D: Stündliche Cost-Verteilung (Cost-Spike-Debug) */}
       <div className="bg-white rounded-xl border border-surface-border p-4">
