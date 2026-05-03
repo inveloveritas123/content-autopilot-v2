@@ -14,65 +14,251 @@ import {
 } from '../api'
 
 // ---------------------------------------------------------------------------
-// Phasen-Definition (statisch, kein DB-Fetch nötig)
+// Phasen-Definition (1:1 aus Master-MD "Start-Fragebogen Content v2")
 // ---------------------------------------------------------------------------
 const WIZARD_PHASES = [
   {
     id: 1,
     name: 'Ankommen & Geschichte',
+    goal: 'Vertrauen aufbauen, echte Geschichte rausholen, erste Voice-Signale sammeln.',
     questions: [
-      'Wer bist du und was machst du?',
-      'Was war dein Wendepunkt?',
-      'Was hat dich bewegt, den Weg zu gehen den du gehst?',
+      {
+        id: 'q1_1',
+        text: 'Erzähl mal — wie bist du zu dem gekommen, was du heute machst? Nicht die offizielle Version, sondern die echte Geschichte.',
+        nachhaken: [
+          'War das geplant oder eher Zufall?',
+          'Gab es einen Moment, wo du gedacht hast: das ist es?',
+          'Was hast du davor gemacht?',
+        ],
+      },
+      {
+        id: 'q1_2',
+        text: 'Gab es einen Moment, der für dich alles verändert hat? Ein Vorher-Nachher?',
+        nachhaken: [
+          'Das kann eine Kündigung gewesen sein, ein Gespräch, ein Projekt das schiefging...',
+        ],
+      },
+      {
+        id: 'q1_3',
+        text: 'Welche Fehler hast du gemacht, über die du heute froh bist?',
+        nachhaken: [
+          "Nicht 'Ich habe gelernt dass...' sondern konkret: 'Was genau ist passiert?'",
+        ],
+      },
     ],
   },
   {
     id: 2,
     name: 'Alltag & Antrieb',
+    goal: 'Den echten Arbeitsalltag verstehen. Daraus entsteht Relatability im Content.',
     questions: [
-      'Beschreib einen typischen Arbeitstag.',
-      'Was treibt dich täglich an?',
-      'Welche Momente in der Arbeit geben dir Energie?',
-      'Ich arbeite, weil…',
+      {
+        id: 'q2_1',
+        text: 'Beschreib mal einen normalen Arbeitstag. Wann fängst du an, was passiert zuerst, wann ist Schluss?',
+        nachhaken: [],
+      },
+      {
+        id: 'q2_2',
+        text: 'Vervollständige spontan (nicht nachdenken, einfach reagieren): „Den besten Teil meines Jobs finde ich: ___"',
+        nachhaken: ['Tipp: Kein perfekter Satz nötig — Stichwörter reichen.'],
+        completion_prefix: 'Den besten Teil meines Jobs finde ich:',
+      },
+      {
+        id: 'q2_3',
+        text: 'Vervollständige: „Am meisten nervt mich: ___"',
+        nachhaken: [],
+        completion_prefix: 'Am meisten nervt mich:',
+      },
+      {
+        id: 'q2_4',
+        text: 'Vervollständige: \u201EDas letzte Mal, dass ich dachte \u2018genau deshalb mach ich das\u2019, war als: ___\u201D',
+        nachhaken: [],
+        completion_prefix: "Das letzte Mal, dass ich dachte 'genau deshalb mach ich das', war als:",
+      },
     ],
   },
   {
     id: 3,
     name: 'Zielkunde',
+    goal: 'Den Kunden des Kunden so genau verstehen, dass die KI später in dessen Sprache schreiben kann.',
     questions: [
-      'Wer ist dein Lieblingskunde?',
-      'Was ist das größte Problem deines Kunden?',
-      'Was verändert sich für deinen Kunden nach der Zusammenarbeit?',
-      'Wer ist NICHT dein Kunde?',
+      {
+        id: 'q3_1',
+        text: 'Stell dir vor, dein typischer Kunde sitzt mir gegenüber. Beschreib mir die Person — nicht die Firma, sondern den Menschen.',
+        nachhaken: [
+          'Wie alt ungefähr? Welche Position?',
+          'Was ist dem/der wichtig? Wovon ist er/sie gestresst?',
+        ],
+      },
+      {
+        id: 'q3_2',
+        text: 'Woran merkst du in den ersten 5 Minuten eines Gesprächs, ob jemand ein guter Kunde wird — oder nicht?',
+        nachhaken: [],
+      },
+      {
+        id: 'q3_3',
+        text: 'Mit wem willst du auf keinen Fall arbeiten?',
+        nachhaken: [],
+      },
+      {
+        id: 'q3_4',
+        text: 'Vervollständige: „Meine Kunden glauben oft, dass ___. In Wirklichkeit ist es so: ___"',
+        nachhaken: [],
+        completion_prefix: 'Meine Kunden glauben oft, dass... In Wirklichkeit ist es so:',
+      },
+      {
+        id: 'q3_5',
+        text: 'Vervollständige: „Die Frage, die mir am häufigsten gestellt wird, ist: ___"',
+        nachhaken: [],
+        completion_prefix: 'Die Frage, die mir am häufigsten gestellt wird, ist:',
+      },
+      {
+        id: 'q3_6',
+        text: 'Vervollständige: „Was meine Kunden wirklich brauchen, ist nicht ___, sondern: ___"',
+        nachhaken: [],
+        completion_prefix: 'Was meine Kunden wirklich brauchen, ist nicht..., sondern:',
+      },
+      {
+        id: 'q3_7',
+        text: 'Was ändert sich konkret für deinen Kunden, wenn er mit dir arbeitet? Vorher → Nachher.',
+        nachhaken: [],
+      },
+      {
+        id: 'q3_8',
+        text: 'Hast du eine Erfolgsgeschichte, die du gerne erzählst?',
+        nachhaken: [],
+      },
+      {
+        id: 'q3_9',
+        text: 'Hast du originale Zitate von Kunden — WhatsApp-Nachrichten, Bewertungen, Mails? Falls ja, gerne hier einfügen.',
+        nachhaken: ['Falls nicht zur Hand: nach dem Wizard zusenden.'],
+        required: false,
+      },
     ],
   },
   {
     id: 4,
     name: 'Angebot & Markt',
+    goal: 'Positionierung und Differenzierung verstehen — für strategischen Content.',
     questions: [
-      'Was bietest du an?',
-      'Was unterscheidet dich vom Wettbewerb?',
-      'Was ist dein Preispunkt und warum?',
-      'Ich helfe meinen Kunden dabei…',
+      {
+        id: 'q4_1',
+        text: "Stell dir vor, jemand auf einer Familienfeier fragt: 'Und was machst du so?' — was sagst du?",
+        nachhaken: ['Kein Marketing-Speak — wie du es wirklich erklärst.'],
+      },
+      {
+        id: 'q4_2',
+        text: 'Was ist das eigentliche Problem deiner Kunden — nicht das offensichtliche, sondern das darunter?',
+        nachhaken: [
+          "Das offensichtliche Problem ist 'zu wenig Kunden', aber eigentlich geht es oft um Unsicherheit, fehlende Strategie, oder dass sie sich nicht trauen sichtbar zu werden.",
+        ],
+      },
+      {
+        id: 'q4_3',
+        text: "Was machst du anders als andere in deiner Branche? Nicht 'besser' — anders.",
+        nachhaken: [],
+      },
+      {
+        id: 'q4_4',
+        text: 'Worauf legst du Wert, was anderen scheinbar egal ist?',
+        nachhaken: [],
+      },
+      {
+        id: 'q4_5',
+        text: 'Wer sind deine Mitbewerber — und was hat dein Kunde typischerweise schon probiert, bevor er zu dir kam?',
+        nachhaken: [],
+      },
+      {
+        id: 'q4_6',
+        text: 'Vervollständige: „Die meisten in meiner Branche machen den Fehler, dass: ___"',
+        nachhaken: [],
+        completion_prefix: 'Die meisten in meiner Branche machen den Fehler, dass:',
+      },
+      {
+        id: 'q4_7',
+        text: 'Vervollständige: „Was in meiner Branche total unterschätzt wird, ist: ___"',
+        nachhaken: [],
+        completion_prefix: 'Was in meiner Branche total unterschätzt wird, ist:',
+      },
+      {
+        id: 'q4_8',
+        text: 'Vervollständige: „Der größte Mythos in meiner Branche ist: ___"',
+        nachhaken: [],
+        completion_prefix: 'Der größte Mythos in meiner Branche ist:',
+      },
+      {
+        id: 'q4_9',
+        text: 'Vervollständige: „Wenn ich etwas an meiner Branche ändern könnte, wäre es: ___"',
+        nachhaken: [],
+        completion_prefix: 'Wenn ich etwas an meiner Branche ändern könnte, wäre es:',
+      },
     ],
   },
   {
     id: 5,
     name: 'Sprache & Stil',
+    goal: 'Sprachliche Präferenzen explizit machen, um die Voice-Analyse zu ergänzen.',
     questions: [
-      'Welche Wörter nutzt du nie?',
-      'Wie klingst du in einem Gespräch mit einem Kunden?',
-      'Drei Adjektive die deinen Stil beschreiben:',
-      'Was nervt dich an anderen LinkedIn-Posts?',
+      {
+        id: 'q5_1',
+        text: 'Gibt es Wörter oder Ausdrücke, die du besonders gerne benutzt?',
+        nachhaken: [],
+      },
+      {
+        id: 'q5_2',
+        text: 'Und welche vermeidest du bewusst?',
+        nachhaken: [],
+      },
+      {
+        id: 'q5_3',
+        text: 'Welche Fachbegriffe benutzt deine Branche, die Außenstehende nicht kennen?',
+        nachhaken: [],
+      },
+      {
+        id: 'q5_4',
+        text: 'Zeig mir 2–3 Posts oder Texte — von dir oder anderen — die du richtig gut findest. Was genau gefällt dir daran?',
+        nachhaken: ['Falls nicht sofort zur Hand: Links oder Screenshots nach dem Wizard zusenden.'],
+        required: false,
+      },
+      {
+        id: 'q5_linkedin_posts',
+        type: 'linkedin_posts',
+        text: 'LinkedIn-Posts als Voice-Quelle (optional) — füge bis zu 10 Posts ein, die deinen Stil gut zeigen.',
+        nachhaken: [],
+        required: false,
+      },
     ],
   },
   {
     id: 6,
-    name: 'Vertrauenssignale',
+    name: 'Vertrauenssignale & Abschluss',
+    goal: 'Vertrauenssignale sammeln und den Onboarding-Call abschließen.',
     questions: [
-      'Deine größte Erfolgsgeschichte in einem Satz:',
-      'Was sagen Kunden nach der Zusammenarbeit?',
-      'Was kannst du belegen?',
+      {
+        id: 'q6_1',
+        text: 'Was könnte jemanden überzeugen, dass du weißt, wovon du sprichst?',
+        nachhaken: [
+          'Anzahl Kunden/Projekte, Jahre Erfahrung, Zertifikate, Preise, Auftritte, Veröffentlichungen.',
+        ],
+      },
+      {
+        id: 'q6_2',
+        text: 'Was würdest du deinem Ich von vor 5–10 Jahren raten? Ein Satz.',
+        nachhaken: [],
+      },
+      {
+        id: 'q6_3',
+        text: 'Gibt es etwas, das wir nicht gefragt haben, was du aber wichtig findest?',
+        nachhaken: [],
+        required: false,
+      },
+      {
+        id: 'q6_4',
+        text: 'Abschluss-Bitte: Schick uns nach dem Wizard noch — Fotos (mit Kunden, bei der Arbeit, Alltag — Handy-Fotos sind perfekt), Beispiel-Posts die dir gefallen, und Original-Kundenzitate falls vorhanden.',
+        nachhaken: [],
+        required: false,
+        type: 'note',
+      },
     ],
   },
 ]
@@ -316,11 +502,11 @@ export default function WizardPage() {
   // Fragen für die aktuelle Phase aufbauen
   const currentPhaseData = WIZARD_PHASES.find((p) => p.id === currentPhase)
   const questions = currentPhaseData
-    ? currentPhaseData.questions.map((text, idx) => ({
-        id: `q${currentPhase}_${idx + 1}`,
-        text,
+    ? currentPhaseData.questions.map((q) => ({
+        ...q,
         phase: currentPhase,
         phase_name: currentPhaseData.name,
+        goal: currentPhaseData.goal,
       }))
     : []
 
@@ -580,15 +766,25 @@ export default function WizardPage() {
                 <p className="text-sm">KI analysiert deine Antworten…</p>
               </div>
             ) : (
-              <QuestionEngine
-                source="wizard"
-                appearance="form"
-                questions={questions}
-                onAnswer={handleAnswer}
-                inlineHints={getInlineHints}
-                phaseSynthesis={phaseSynthesisProp}
-                onSaveAndContinue={handleSaveAndContinue}
-              />
+              <>
+                {currentPhaseData?.goal && (
+                  <div className="mb-4 px-3 py-2 bg-primary-50 border border-primary-100 rounded-lg">
+                    <p className="text-xs text-primary-700 leading-relaxed">
+                      <span className="font-semibold">Ziel dieser Phase: </span>
+                      {currentPhaseData.goal}
+                    </p>
+                  </div>
+                )}
+                <QuestionEngine
+                  source="wizard"
+                  appearance="form"
+                  questions={questions}
+                  onAnswer={handleAnswer}
+                  inlineHints={getInlineHints}
+                  phaseSynthesis={phaseSynthesisProp}
+                  onSaveAndContinue={handleSaveAndContinue}
+                />
+              </>
             )}
           </div>
         </div>

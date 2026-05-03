@@ -345,6 +345,22 @@ export function QuestionEngine({
                   error ? 'border-red-300' : 'border-gray-200'
                 )}
               />
+              {/* Nachhaken — statische Hilfe-Fragen aus MD */}
+              {currentQuestion.nachhaken && currentQuestion.nachhaken.length > 0 && (
+                <details className="mt-2 group">
+                  <summary className="text-xs text-ink-muted cursor-pointer hover:text-ink select-none list-none flex items-center gap-1">
+                    <span className="text-base leading-none">💡</span>
+                    <span className="underline decoration-dotted">Hilfe wenn du nicht weiterweißt</span>
+                  </summary>
+                  <ul className="mt-2 space-y-1 pl-1 border-l-2 border-primary-100 ml-1">
+                    {currentQuestion.nachhaken.map((hint, i) => (
+                      <li key={i} className="text-xs text-ink-muted pl-2 leading-relaxed">
+                        → {hint}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               {/* Inline-Hints */}
               <HintChips hints={hints} onSelect={handleHintSelect} />
             </div>
