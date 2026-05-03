@@ -398,3 +398,14 @@ export function applyTenantModel(adminToken, tenantId, modelId) {
     headers: { 'X-Admin-Token': adminToken },
   })
 }
+
+// LLM Analytics
+export const getLLMAnalyticsSummary = (params) => request('/analytics/llm-summary', { params })
+export const getLLMAnalyticsByTask = (params) => request('/analytics/llm-by-task', { params })
+export const getLLMAnalyticsByModel = (params) => request('/analytics/llm-by-model', { params })
+export const getLLMAnalyticsByDay = (params) => request('/analytics/llm-by-day', { params })
+export const getLLMAnalyticsCSVUrl = (params) => {
+  const base = window.location.origin
+  const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))).toString()
+  return `${base}/api/analytics/llm-calls.csv${qs ? '?' + qs : ''}`
+}

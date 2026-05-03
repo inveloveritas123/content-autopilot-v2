@@ -36,6 +36,7 @@ const navItems = [
   { to: '/analytics', label: 'Analytics', icon: PieChart },
   { to: '/feedback', label: 'Feedback', icon: BarChart3 },
   { to: '/settings', label: 'Einstellungen', icon: Settings },
+  { to: '/settings/analytics', label: 'LLM Analytics', icon: BarChart3 },
 ]
 
 const brandVoiceNavItems = [

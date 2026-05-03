@@ -197,6 +197,9 @@ app.include_router(reservoir_router, prefix="/api", tags=["Reservoir"])
 from api.telegram import router as telegram_router
 app.include_router(telegram_router, prefix="/api", tags=["Telegram"])
 
+from api.analytics import router as analytics_router
+app.include_router(analytics_router, prefix="/api", tags=["Analytics"])
+
 
 @app.get("/api/health")
 async def health():
