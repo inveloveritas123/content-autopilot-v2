@@ -75,6 +75,11 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
   const [editSaving, setEditSaving] = useState(false)
   const [editTesting, setEditTesting] = useState(false)
 
+  // #124: structured Test-Result + Connection-Log statt alert()
+  const [editTestResult, setEditTestResult] = useState(null)
+  const [editLogEntries, setEditLogEntries] = useState([])
+  const editAppendLog = (entry) => setEditLogEntries(prev => [...prev, { ts: new Date(), ...entry }])
+
   const spent = provider.cost_spent_today_cents || 0
   const limit = provider.cost_limit_daily_cents || 500
   const pct = Math.min((spent / limit) * 100, 100)
@@ -103,6 +108,8 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
       cost_limit_daily_cents: ((provider.cost_limit_daily_cents || 500) / 100).toFixed(2),
     })
     setShowEditKey(false)
+    setEditTestResult(null)
+    setEditLogEntries([])
     setEditOpen(true)
   }
 
@@ -126,17 +133,21 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
 
   const handleEditTest = async () => {
     setEditTesting(true)
+    setEditTestResult(null)
+    editAppendLog({ level: 'info', msg: `Test-Call gegen gespeicherten Provider…` })
     try {
       const result = await testLLMProvider(provider.id)
+      setEditTestResult(result)
       if (result.status === 'ok') {
-        alert(`Verbindung OK! Latenz: ${result.latency_ms}ms`)
+        editAppendLog({ level: 'ok', msg: `✓ Verbindung OK — Latenz ${result.latency_ms}ms` })
       } else if (result.http_status === 412) {
-        alert(`Budget erschoepft!\n\n${result.error}\n\nBitte auf https://requesty.ai einloggen und Guthaben aufladen.`)
+        editAppendLog({ level: 'error', msg: `🔴 Budget erschöpft (412) — auf requesty.ai aufladen` })
       } else {
-        alert(`Test fehlgeschlagen:\n${result.error}`)
+        editAppendLog({ level: 'error', msg: `✗ Test fehlgeschlagen: ${result.error}` })
       }
     } catch (e) {
-      alert('Test-Fehler: ' + e.message)
+      setEditTestResult({ status: 'error', error: e.message })
+      editAppendLog({ level: 'error', msg: `✗ Test-Aufruf-Fehler: ${e.message}` })
     }
     setEditTesting(false)
   }
@@ -405,6 +416,43 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
               <span className="text-sm text-ink">Prompt-Caching aktivieren</span>
               <span className="text-[11px] text-ink-muted">(spart Token bei wiederholten Prompts)</span>
             </label>
+
+            {/* #124: Test-Result Pill */}
+            {editTestResult && (
+              <div className="flex items-center gap-2 text-xs">
+                {editTestResult.status === 'ok' ? (
+                  <span className="text-emerald-700 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Verbindung OK · {editTestResult.latency_ms}ms
+                  </span>
+                ) : (
+                  <span className="text-red-700 flex items-center gap-1 truncate" title={editTestResult.error}>
+                    <XCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="truncate">{editTestResult.error}</span>
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* #124: Connection-Log */}
+            {editLogEntries.length > 0 && (
+              <details className="text-[11px]" open={editLogEntries.some(e => e.level === 'error')}>
+                <summary className="cursor-pointer text-ink-muted hover:text-ink select-none">
+                  Verbindungs-Log ({editLogEntries.length})
+                </summary>
+                <div className="mt-1 max-h-40 overflow-y-auto bg-white rounded p-2 space-y-0.5 font-mono border border-gray-100">
+                  {editLogEntries.map((e, i) => {
+                    const colorMap = { ok: 'text-emerald-700', error: 'text-red-700', warn: 'text-amber-700', info: 'text-ink-muted' }
+                    const ts = e.ts.toTimeString().slice(0, 8)
+                    return (
+                      <div key={i} className={colorMap[e.level] || 'text-ink-muted'}>
+                        <span className="text-ink-muted">{ts}</span> {e.msg}
+                      </div>
+                    )
+                  })}
+                </div>
+              </details>
+            )}
 
             {/* Action Buttons */}
             <div className="flex gap-2 justify-between pt-1">
