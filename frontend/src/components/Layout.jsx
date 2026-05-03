@@ -298,3 +298,5 @@ export default function Layout({ children }) {
     </div>
   )
 }
+
+export default Layout
