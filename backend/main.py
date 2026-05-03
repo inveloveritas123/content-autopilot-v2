@@ -1,7 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from sqlalchemy import select
 
 import logging_config
@@ -118,8 +118,12 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-CSRF-Token"],
 )
+
+# CSRF — Double-Submit Cookie pattern (exempt: X-API-Key requests, Telegram webhook)
+from middleware.csrf_middleware import CSRFMiddleware
+app.add_middleware(CSRFMiddleware)
 
 # Structured JSON logging middleware — sets correlation_id / tenant_id context
 from middleware.logging_middleware import LoggingMiddleware
@@ -197,6 +201,26 @@ app.include_router(telegram_router, prefix="/api", tags=["Telegram"])
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "version": "2.0.0"}
+
+
+@app.get("/api/csrf-token")
+async def get_csrf_token(response: Response):
+    """Issue a CSRF token — sets cookie + returns token in body.
+
+    Frontend: call once on load, store token, include as X-CSRF-Token header
+    on state-changing requests. Cookie is SameSite=Strict to prevent leakage.
+    """
+    from middleware.csrf_middleware import generate_csrf_token, CSRF_COOKIE, TOKEN_TTL
+    token = generate_csrf_token()
+    response.set_cookie(
+        key=CSRF_COOKIE,
+        value=token,
+        max_age=TOKEN_TTL,
+        httponly=False,       # Frontend JS needs to read it
+        samesite="strict",
+        secure=False,         # Set to True when HTTPS is enabled
+    )
+    return {"csrf_token": token}
 
 
 @app.get("/api/_test/sentry-error")
