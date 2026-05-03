@@ -40,8 +40,11 @@ def _maybe_send_global_cap_alert(spent_usd: float, cap_usd: float, today) -> Non
 
         import redis as _redis
         r = _redis.from_url(settings.redis_url, decode_responses=True)
-        redis_key = f"llm-global-50pct-alert:{today}"
-        was_set = r.set(redis_key, "1", nx=True, ex=86400)
+        try:
+            redis_key = f"llm-global-50pct-alert:{today}"
+            was_set = r.set(redis_key, "1", nx=True, ex=86400)
+        finally:
+            r.close()
         if not was_set:
             # Already sent today
             return
@@ -51,7 +54,7 @@ def _maybe_send_global_cap_alert(spent_usd: float, cap_usd: float, today) -> Non
         msg = (
             f"⚠️ Cost-Cap Vorwarnung: Globale Tageskosten bei "
             f"{spent_usd:.2f}$ / {cap_usd:.2f}$ ({pct:.0f}%). "
-            f"Kein LLM-Block-Stop noch nicht erreicht, aber bitte prüfen."
+            f"LLM-Block-Stop noch nicht erreicht, aber bitte prüfen."
         )
         _send_telegram_message(int(settings.telegram_admin_chat_id), msg)
         logger.info(f"Global 50% cap alert sent: {spent_usd:.2f}/{cap_usd:.2f} USD")
