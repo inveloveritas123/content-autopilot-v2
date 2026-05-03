@@ -79,6 +79,40 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
   const [editTestResult, setEditTestResult] = useState(null)
   const [editLogEntries, setEditLogEntries] = useState([])
   const editAppendLog = (entry) => setEditLogEntries(prev => [...prev, { ts: new Date(), ...entry }])
+  // #124: Modell-Discovery im Edit-Modus
+  const [editModels, setEditModels] = useState([])
+  const [editModelsLoading, setEditModelsLoading] = useState(false)
+  const [editSupportsListing, setEditSupportsListing] = useState(false)
+
+  const handleEditLoadModels = async () => {
+    setEditModelsLoading(true)
+    editAppendLog({ level: 'info', msg: 'Modelle abrufen…' })
+    const apiKey = editForm.api_key || ''
+    const baseUrl = provider.base_url || ''
+    if (!apiKey) {
+      editAppendLog({ level: 'warn', msg: '⚠ API-Key leer — bitte erst eingeben oder leer lassen für gespeicherten Key' })
+      setEditModelsLoading(false)
+      return
+    }
+    try {
+      const res = await listProviderModels(apiKey, baseUrl)
+      if (res.supports_listing) {
+        setEditModels(res.models || [])
+        setEditSupportsListing(true)
+        editAppendLog({ level: 'ok', msg: `✓ ${res.models.length} Modelle gefunden` })
+      } else {
+        setEditModels([])
+        setEditSupportsListing(false)
+        editAppendLog({ level: 'warn', msg: `⚠ Provider unterstützt /models nicht (${res.error || 'unbekannt'}) — Free-Text bleibt` })
+      }
+    } catch (e) {
+      setEditModels([])
+      setEditSupportsListing(false)
+      editAppendLog({ level: 'error', msg: `✗ Modell-Liste fehlgeschlagen: ${e.message}` })
+    } finally {
+      setEditModelsLoading(false)
+    }
+  }
 
   const spent = provider.cost_spent_today_cents || 0
   const limit = provider.cost_limit_daily_cents || 500
@@ -110,6 +144,8 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
     setShowEditKey(false)
     setEditTestResult(null)
     setEditLogEntries([])
+    setEditModels([])
+    setEditSupportsListing(false)
     setEditOpen(true)
   }
 
@@ -363,19 +399,42 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
               </div>
             </div>
 
-            {/* Model Name */}
+            {/* Model Name (#124: mit Live-Discovery, fallback REQUESTY_MODELS) */}
             <div>
-              <label className="block text-xs text-ink-muted mb-1">Modell</label>
-              <select
-                value={editForm.model_name}
-                onChange={e => setEditForm({ ...editForm, model_name: e.target.value })}
-                className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-              >
-                <option value="">— Freitext / kein Modell —</option>
-                {REQUESTY_MODELS.map(m => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs text-ink-muted">Modell</label>
+                <button
+                  type="button"
+                  onClick={handleEditLoadModels}
+                  disabled={editModelsLoading || !editForm.api_key}
+                  title={!editForm.api_key ? 'API-Key oben eingeben — sonst kein Lookup gegen Provider möglich' : ''}
+                  className="text-[11px] text-primary-700 hover:text-primary-900 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  {editModelsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                  Modelle laden
+                </button>
+              </div>
+              {editSupportsListing && editModels.length > 0 ? (
+                <select
+                  value={editForm.model_name}
+                  onChange={e => setEditForm({ ...editForm, model_name: e.target.value })}
+                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                >
+                  <option value="">— bitte wählen —</option>
+                  {editModels.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              ) : (
+                <select
+                  value={editForm.model_name}
+                  onChange={e => setEditForm({ ...editForm, model_name: e.target.value })}
+                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                >
+                  <option value="">— Freitext / kein Modell —</option>
+                  {REQUESTY_MODELS.map(m => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
