@@ -271,7 +271,7 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
 
       <div className="mb-3">
         <p className="text-xs text-ink-muted mb-1.5">Schnell-Navigation:</p>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 mb-2">
           {[
             { label: '📋 Vorlagen-Ordner', path: '/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/' },
             { label: '📁 Meine Voice-Dateien', path: `/content-autopilot/v2/Kunde/${tenantSlug || 'default'}/voice/` },
@@ -281,6 +281,29 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
               {q.label}
             </button>
           ))}
+        </div>
+        <p className="text-xs text-ink-muted mb-1.5">Vorlage direkt auswählen:</p>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { label: '🏢 P01 Kundenkontext', name: 'P01-kundenkontext-extraktion.md' },
+            { label: '🎙️ P03 Voice-Profil', name: 'P03-voice-profile.md' },
+            { label: '👤 P04 Audience-Avatar', name: 'P04-audience-avatar.md' },
+            { label: '📦 1-main-linkedin-ki', name: '1-main-notion-file-linkedin-ki-assets-prompts.md' },
+          ].map(t => {
+            const filePath = `/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/${t.name}`
+            const isSelected = selectedFile?.path === filePath
+            return (
+              <button key={t.name}
+                onClick={() => setSelectedFile({ name: t.name, path: filePath })}
+                className={`text-xs px-2.5 py-1 border rounded-lg transition-colors ${
+                  isSelected
+                    ? 'bg-primary-700 text-white border-primary-700'
+                    : 'bg-gray-50 text-ink border-gray-200 hover:bg-primary-50 hover:text-primary-700 hover:border-primary-200'
+                }`}>
+                {t.label}
+              </button>
+            )
+          })}
         </div>
       </div>
 
