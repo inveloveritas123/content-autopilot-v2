@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Radio, FileText, Lightbulb, CheckCircle2, TrendingUp, Clock, ArrowRight, Sparkles, AlertCircle, Zap, BarChart3, CalendarDays, Flame, Play, Target, Award, TrendingDown } from 'lucide-react'
-import { getDashboard, getIdeas, getFeedbackStats, triggerAutoPipeline, getScheduledPosts, getSourceFunnel, getContentList, getTodayBrief, autoSchedulePosts, resetBudgetFlag, getSettings, bulkArchiveIdeas, getIdeasSourceBreakdown } from '../api'
+import { getDashboard, getIdeas, getFeedbackStats, triggerAutoPipeline, getScheduledPosts, getSourceFunnel, getContentList, getTodayBrief, autoSchedulePosts, resetBudgetFlag, getSettings, bulkArchiveIdeas, getIdeasSourceBreakdown, getBrandVoiceStatus } from '../api'
 
 function FrequencyAdvisor({ approved, drafts }) {
   const [freq, setFreq] = useState(5)
@@ -586,6 +586,7 @@ export default function Dashboard() {
   const [autoPumping, setAutoPumping] = useState(false)
   const [pumpResult, setPumpResult] = useState(null)
   const [profileSettings, setProfileSettings] = useState(null)
+  const [brandVoiceData, setBrandVoiceData] = useState(null)
   const [ideaBreakdown, setIdeaBreakdown] = useState(null)
   const [cleaningUp, setCleaningUp] = useState(false)
   const [cleanupMsg, setCleanupMsg] = useState(null)
@@ -600,7 +601,7 @@ export default function Dashboard() {
   async function loadAll() {
     setLoading(true)
     try {
-      const [dash, ideasData, fbStats, sched, funnel, posts, brief, settingsData, breakdown] = await Promise.all([
+      const [dash, ideasData, fbStats, sched, funnel, posts, brief, settingsData, breakdown, bvData] = await Promise.all([
         getDashboard().catch(() => null),
         getIdeas({ status: '' }).catch(() => []),
         getFeedbackStats().catch(() => null),
@@ -610,6 +611,7 @@ export default function Dashboard() {
         getTodayBrief().catch(() => null),
         getSettings().catch(() => null),
         getIdeasSourceBreakdown().catch(() => null),
+        getBrandVoiceStatus('me').catch(() => null),
       ])
       if (breakdown) setIdeaBreakdown(breakdown)
       setData(dash)
@@ -620,6 +622,7 @@ export default function Dashboard() {
       setRecentPosts(Array.isArray(posts) ? posts : (posts?.items || []))
       setTodayBrief(brief || null)
       setProfileSettings(settingsData?.settings || null)
+      setBrandVoiceData(bvData || null)
     } catch (e) {
       setError(e.message)
     }
@@ -684,22 +687,35 @@ export default function Dashboard() {
 
       {/* Setup Checklist — shown when profile is incomplete */}
       {(() => {
-        const ent = profileSettings?.entrepreneur || {}
-        const hasProfile = !!(ent.name || ent.industry)
+        // v2 Brand Voice check: all 3 pillars must be active
+        const bvContext = brandVoiceData?.customer_context
+        const bvVoice = brandVoiceData?.voice_profile
+        const bvAvatar = brandVoiceData?.audience_avatar
+        const bvPillarsCount = [bvContext, bvVoice, bvAvatar].filter(Boolean).length
+        const hasBrandVoice = bvPillarsCount === 3
         const hasSources = (data?.active_sources?.length || 0) > 0
         const hasIdeas = ideas.length > 0
         const hasContent = (data?.stats?.drafts || 0) + (data?.stats?.approved || 0) > 0
-        const allDone = hasProfile && hasSources && hasIdeas && hasContent
+        const allDone = hasBrandVoice && hasSources && hasIdeas && hasContent
         if (allDone) return null
+
+        // Check for old v1 profile data (migration hint)
+        const ent = profileSettings?.entrepreneur || {}
+        const hasOldProfile = !!(ent.name || ent.industry)
+
         const steps = [
           {
-            done: hasProfile,
-            title: 'Unternehmer-Profil ausfüllen',
-            desc: hasProfile
-              ? `${ent.name || ent.industry} · ${ent.specialization || ''}`
-              : 'Branche, Name, Zielgruppe — steuert Themen & Tonalität der KI',
-            action: () => navigate('/settings'),
-            actionLabel: 'Profil einrichten →',
+            done: hasBrandVoice,
+            title: 'Brand Voice einrichten',
+            desc: hasBrandVoice
+              ? `${bvContext?.payload?.person?.name || brandVoiceData?.tenant_name || ''} · Brand Voice vollständig`
+              : bvPillarsCount > 0
+              ? `${bvPillarsCount}/3 Säulen fertig — Wizard fortsetzen`
+              : hasOldProfile
+              ? `Altes Profil gefunden (${ent.name || ent.industry}) — Brand Voice Wizard starten`
+              : 'Branche, Tonalität, Zielgruppe — KI-Basis für alle Posts',
+            action: () => navigate('/brand-voice'),
+            actionLabel: 'Brand Voice einrichten →',
             urgent: true,
           },
           {
