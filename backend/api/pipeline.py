@@ -126,6 +126,20 @@ async def auto_trigger_pipeline(
                         t_settings = (t.settings or {}) if t else {}
                         entrepreneur = t_settings.get("entrepreneur", {})
                         voice_profile = t_settings.get("voice_profile", {})
+                        # Prefer Wizard voice profile from tenant_voice_profile table
+                        from sqlalchemy import text as _sa_text
+                        import json as _json
+                        try:
+                            _vp_row = (await session.execute(
+                                _sa_text("SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"),
+                                {"t": str(item.tenant_id)},
+                            )).fetchone()
+                            if _vp_row and _vp_row[0]:
+                                _wp = _vp_row[0] if isinstance(_vp_row[0], dict) else _json.loads(_vp_row[0])
+                                if _wp:
+                                    voice_profile = _wp
+                        except Exception:
+                            pass
                         industry_parts = []
                         if entrepreneur.get("name"):
                             industry_parts.append(f"Unternehmer: {entrepreneur['name']}")
@@ -135,10 +149,17 @@ async def auto_trigger_pipeline(
                             industry_parts.append(f"Spezialisierung: {entrepreneur['specialization']}")
                         if entrepreneur.get("target_audience"):
                             industry_parts.append(f"Zielgruppe: {entrepreneur['target_audience']}")
-                        if voice_profile.get("tone"):
-                            industry_parts.append(f"Tonalität: {voice_profile['tone']}")
-                        if voice_profile.get("topics_avoid"):
-                            avoid = voice_profile["topics_avoid"] if isinstance(voice_profile["topics_avoid"], str) else ", ".join(voice_profile["topics_avoid"])
+                        _tone_val = (voice_profile.get('tone') or
+                                     (voice_profile.get('tonalitaet', {}).get('grundton', '') if isinstance(voice_profile.get('tonalitaet'), dict) else '') or
+                                     '')
+                        if _tone_val:
+                            industry_parts.append(f"Tonalität: {_tone_val}")
+                        _avoid_val = voice_profile.get("topics_avoid") or (
+                            voice_profile.get("vermeidungsregeln")
+                            if isinstance(voice_profile.get("vermeidungsregeln"), (str, list)) else None
+                        )
+                        if _avoid_val:
+                            avoid = _avoid_val if isinstance(_avoid_val, str) else ", ".join(str(x) for x in _avoid_val)
                             industry_parts.append(f"Vermeiden: {avoid}")
                         industry_context = "\n".join(industry_parts)
                         ideas_data = await run_ideation_pipeline(

@@ -154,6 +154,20 @@ async def dialogue_get_context(
 
     # Voice profile from tenant settings
     voice_profile = tenant.settings.get("voice_profile", {})
+    # Prefer Wizard voice profile from tenant_voice_profile table
+    from sqlalchemy import text as _sa_text
+    import json as _json
+    try:
+        _vp_row = (await db.execute(
+            _sa_text("SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"),
+            {"t": str(tenant.id)},
+        )).fetchone()
+        if _vp_row and _vp_row[0]:
+            _wp = _vp_row[0] if isinstance(_vp_row[0], dict) else _json.loads(_vp_row[0])
+            if _wp:
+                voice_profile = _wp
+    except Exception:
+        pass
     entrepreneur = tenant.settings.get("entrepreneur", {})
     forbidden_phrases = tenant.settings.get("forbidden_phrases", [])
 
@@ -315,6 +329,20 @@ async def dialogue_generate_post(
 
     analysis = item.analysis or {}
     voice_profile = tenant.settings.get("voice_profile", {})
+    # Prefer Wizard voice profile from tenant_voice_profile table
+    from sqlalchemy import text as _sa_text
+    import json as _json
+    try:
+        _vp_row = (await db.execute(
+            _sa_text("SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"),
+            {"t": str(tenant.id)},
+        )).fetchone()
+        if _vp_row and _vp_row[0]:
+            _wp = _vp_row[0] if isinstance(_vp_row[0], dict) else _json.loads(_vp_row[0])
+            if _wp:
+                voice_profile = _wp
+    except Exception:
+        pass
     entrepreneur = tenant.settings.get("entrepreneur", {})
     forbidden_phrases = tenant.settings.get("forbidden_phrases", [])
 
@@ -344,9 +372,12 @@ async def dialogue_generate_post(
             prompt_parts.append(f"  Antwort: {qa['answer']}")
             prompt_parts.append("")
 
+        _tone = (voice_profile.get('tone') or
+                 (voice_profile.get('tonalitaet', {}).get('grundton', '') if isinstance(voice_profile.get('tonalitaet'), dict) else '') or
+                 'professionell, direkt, authentisch')
         prompt_parts.extend([
             f"STIMME & STIL:",
-            f"  Ton: {voice_profile.get('tone', 'professionell, direkt, authentisch')}",
+            f"  Ton: {_tone}",
             f"  Unternehmer: {entrepreneur.get('name', 'Robert')}, {entrepreneur.get('industry', '')}",
             f"  Zielgruppe: {entrepreneur.get('target_audience', 'LinkedIn-Entscheider')}",
         ])
@@ -374,7 +405,9 @@ async def dialogue_generate_post(
                 "source": item.title,
                 "answered_questions": len(answered_qas),
                 "format": format,
-                "voice": voice_profile.get("tone", "nicht konfiguriert"),
+                "voice": (voice_profile.get('tone') or
+                          (voice_profile.get('tonalitaet', {}).get('grundton', '') if isinstance(voice_profile.get('tonalitaet'), dict) else '') or
+                          'nicht konfiguriert'),
             },
         }
     else:
