@@ -1,7 +1,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import { Cpu, Plus, Trash2, Zap, CheckCircle2, XCircle, Loader2, Star, Eye, EyeOff, Pencil, Check, X, FlaskConical, RotateCcw } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { getLLMProviders, createLLMProvider, updateLLMProvider, deleteLLMProvider, testLLMProvider, getLLMCostHistory, benchmarkLLM, getLlmRouting, updateSettings, resetLLMProviderCost } from '../api'
+import { getLLMProviders, createLLMProvider, updateLLMProvider, deleteLLMProvider, testLLMProvider, getLLMCostHistory, benchmarkLLM, getLlmRouting, updateSettings, resetLLMProviderCost, listProviderModels, probeTestProvider } from '../api'
 
 const PROVIDER_TYPES = [
   { value: 'litellm', label: 'LiteLLM Proxy', defaultUrl: 'http://host.docker.internal:4000/v1' },
@@ -743,6 +743,64 @@ function AddProviderModal({ onClose, onSave }) {
   const [showKey, setShowKey] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  // #136: Live-Modell-Discovery + Probe-Test + Connection-Log
+  const [models, setModels] = useState([])
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [supportsListing, setSupportsListing] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState(null)  // { ok, latency_ms, error, ... }
+  const [forceSave, setForceSave] = useState(false)   // override "speichern nur wenn Test ok"
+  const [logEntries, setLogEntries] = useState([])
+  const appendLog = (entry) => setLogEntries(prev => [...prev, { ts: new Date(), ...entry }])
+
+  const handleLoadModels = async () => {
+    if (!form.api_key || !form.base_url) return
+    setModelsLoading(true)
+    appendLog({ level: 'info', msg: 'Modelle abrufen…' })
+    try {
+      const res = await listProviderModels(form.api_key, form.base_url)
+      if (res.supports_listing) {
+        setModels(res.models || [])
+        setSupportsListing(true)
+        appendLog({ level: 'ok', msg: `✓ ${res.models.length} Modelle gefunden` })
+      } else {
+        setModels([])
+        setSupportsListing(false)
+        appendLog({ level: 'warn', msg: `⚠ Provider unterstützt /models nicht (${res.error || 'unbekannt'}) — Free-Text` })
+      }
+    } catch (e) {
+      setModels([])
+      setSupportsListing(false)
+      appendLog({ level: 'error', msg: `✗ Modell-Liste fehlgeschlagen: ${e.message}` })
+    } finally {
+      setModelsLoading(false)
+    }
+  }
+
+  const handleTest = async () => {
+    if (!form.api_key || !form.base_url) {
+      appendLog({ level: 'error', msg: '✗ API-Key + Base-URL erforderlich' })
+      return
+    }
+    setTesting(true)
+    setTestResult(null)
+    appendLog({ level: 'info', msg: `Test-Call (1 Token, max 5 Output)…` })
+    try {
+      const res = await probeTestProvider(form.api_key, form.base_url, form.model_name || null)
+      setTestResult(res)
+      if (res.ok) {
+        appendLog({ level: 'ok', msg: `✓ Test ok: ${res.latency_ms}ms, model=${res.model_responded || form.model_name}, tokens=${res.tokens_used || 0}` })
+      } else {
+        appendLog({ level: 'error', msg: `✗ Test fehlgeschlagen (HTTP ${res.http_status || '?'}): ${res.error}` })
+      }
+    } catch (e) {
+      setTestResult({ ok: false, error: e.message })
+      appendLog({ level: 'error', msg: `✗ Test-Call-Fehler: ${e.message}` })
+    } finally {
+      setTesting(false)
+    }
+  }
+
   const handleSelectProvider = (opt) => {
     setSelectedType(opt)
     setForm(f => ({
@@ -756,7 +814,12 @@ function AddProviderModal({ onClose, onSave }) {
   }
 
   const handleSave = async () => {
+    if (!testResult?.ok && !forceSave) {
+      appendLog({ level: 'warn', msg: '⚠ Bitte erst „Verbindung testen" oder „Trotzdem speichern" aktivieren' })
+      return
+    }
     setSaving(true)
+    appendLog({ level: 'info', msg: 'Provider speichern…' })
     try {
       const payload = {
         name: form.name,
@@ -765,11 +828,15 @@ function AddProviderModal({ onClose, onSave }) {
         base_url: form.base_url,
         model_name: form.model_name,
         task_assignment: form.task_assignment,
+        auto_cache: !!form.caching,
+        cost_limit_daily_cents: Math.round(parseFloat(form.cost_limit_daily_cents || '5') * 100),
         config: { caching: form.caching },
       }
       await onSave(payload)
+      appendLog({ level: 'ok', msg: '✓ Provider angelegt' })
       onClose()
     } catch (e) {
+      appendLog({ level: 'error', msg: `✗ Speichern fehlgeschlagen: ${e.message}` })
       alert('Fehler: ' + e.message)
     }
     setSaving(false)
@@ -853,26 +920,51 @@ function AddProviderModal({ onClose, onSave }) {
                 </div>
               </div>
 
-              {/* Model + Base URL */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-ink-muted mb-1">Modell</label>
+              {/* Base URL */}
+              <div>
+                <label className="block text-xs text-ink-muted mb-1">Base URL</label>
+                <input
+                  value={form.base_url}
+                  onChange={e => setForm({ ...form, base_url: e.target.value })}
+                  placeholder="https://api.openai.com/v1"
+                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+
+              {/* #136: Modell-Auswahl mit Live-Discovery */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs text-ink-muted">Modell</label>
+                  <button
+                    type="button"
+                    onClick={handleLoadModels}
+                    disabled={modelsLoading || !form.api_key || !form.base_url}
+                    className="text-[11px] text-primary-700 hover:text-primary-900 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                  >
+                    {modelsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                    Modelle laden
+                  </button>
+                </div>
+                {supportsListing && models.length > 0 ? (
+                  <select
+                    value={form.model_name}
+                    onChange={e => setForm({ ...form, model_name: e.target.value })}
+                    className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">— bitte wählen —</option>
+                    {models.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                ) : (
                   <input
                     value={form.model_name}
                     onChange={e => setForm({ ...form, model_name: e.target.value })}
-                    placeholder="z.B. gpt-4o-mini"
+                    placeholder="z.B. gpt-4o-mini oder vertex/gemini-2.5-flash-lite@..."
                     className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
-                </div>
-                <div>
-                  <label className="block text-xs text-ink-muted mb-1">Base URL</label>
-                  <input
-                    value={form.base_url}
-                    onChange={e => setForm({ ...form, base_url: e.target.value })}
-                    placeholder="https://api.openai.com/v1"
-                    className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                </div>
+                )}
+                {!supportsListing && logEntries.some(e => e.msg?.includes('unterstützt /models nicht')) && (
+                  <p className="text-[10px] text-ink-muted mt-1">Provider hat keinen /models-Endpoint — Modellname manuell eintragen.</p>
+                )}
               </div>
 
               {/* Task Assignment + Cost Cap */}
@@ -911,12 +1003,73 @@ function AddProviderModal({ onClose, onSave }) {
                 <span className="text-sm text-ink">Prompt-Caching aktivieren</span>
               </label>
 
+              {/* #136: Verbindung-testen-Button */}
+              <div className="border-t border-gray-100 pt-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={handleTest}
+                    disabled={testing || !form.api_key || !form.base_url}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg disabled:opacity-50"
+                  >
+                    {testing ? <Loader2 className="w-3 h-3 animate-spin" /> : <FlaskConical className="w-3 h-3" />}
+                    Verbindung testen
+                  </button>
+                  {testResult?.ok && (
+                    <span className="text-[11px] text-emerald-700 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      {testResult.latency_ms}ms · {testResult.tokens_used || 0} Tokens
+                    </span>
+                  )}
+                  {testResult && !testResult.ok && (
+                    <span className="text-[11px] text-red-700 flex items-center gap-1 truncate max-w-[280px]" title={testResult.error}>
+                      <XCircle className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">{testResult.error}</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Trotzdem-speichern-Override (sichtbar nur wenn Test fehlgeschlagen) */}
+                {testResult && !testResult.ok && (
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-ink-muted">
+                    <input
+                      type="checkbox"
+                      checked={forceSave}
+                      onChange={e => setForceSave(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-primary-600"
+                    />
+                    Trotz Fehler speichern (z.B. wenn Provider gerade aufgeladen werden muss)
+                  </label>
+                )}
+
+                {/* Connection-Log */}
+                {logEntries.length > 0 && (
+                  <details className="text-[11px]" open={logEntries.some(e => e.level === 'error')}>
+                    <summary className="cursor-pointer text-ink-muted hover:text-ink select-none">
+                      Verbindungs-Log ({logEntries.length})
+                    </summary>
+                    <div className="mt-1 max-h-40 overflow-y-auto bg-gray-50 rounded p-2 space-y-0.5 font-mono">
+                      {logEntries.map((e, i) => {
+                        const colorMap = { ok: 'text-emerald-700', error: 'text-red-700', warn: 'text-amber-700', info: 'text-ink-muted' }
+                        const ts = e.ts.toTimeString().slice(0, 8)
+                        return (
+                          <div key={i} className={colorMap[e.level] || 'text-ink-muted'}>
+                            <span className="text-ink-muted">{ts}</span> {e.msg}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </details>
+                )}
+              </div>
+
               {/* Footer Buttons */}
               <div className="flex gap-2 justify-end pt-1">
                 <button onClick={onClose} className="px-3 py-1.5 text-sm text-ink-muted hover:text-ink">Abbrechen</button>
                 <button
                   onClick={handleSave}
-                  disabled={saving || !form.name}
+                  disabled={saving || !form.name || (!testResult?.ok && !forceSave)}
+                  title={!testResult?.ok && !forceSave ? 'Erst Verbindung testen oder „Trotz Fehler speichern"' : ''}
                   className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800 disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}

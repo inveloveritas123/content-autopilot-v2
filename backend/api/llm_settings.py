@@ -319,6 +319,137 @@ async def test_provider(
         return {"status": "error", "error": str(e)[:200]}
 
 
+
+# --- #136: list-models + probe-test (ohne saved provider, vor erstem Speichern) ---
+
+class ProbePayload(BaseModel):
+    api_key: str
+    base_url: Optional[str] = None
+    model: Optional[str] = None
+
+
+@router.post("/llm-providers/list-models")
+async def list_provider_models(
+    payload: ProbePayload,
+    tenant: Tenant = Depends(get_tenant),
+):
+    """Lade verfügbare Modelle vom Provider — vor dem Speichern.
+
+    Wird vom Add-Provider-Modal genutzt, um den Modell-Dropdown zu befüllen.
+    """
+    import httpx
+
+    base_url = (payload.base_url or "").rstrip("/")
+    if not base_url:
+        return {"models": [], "error": "no base_url", "supports_listing": False}
+
+    if not payload.api_key:
+        return {"models": [], "error": "no api_key", "supports_listing": False}
+
+    headers = {"Authorization": f"Bearer {payload.api_key}"}
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.get(f"{base_url}/models", headers=headers)
+        if resp.status_code == 404:
+            # Provider ohne Models-Endpoint (z.B. Vertex direkt) — Free-Text-Fallback
+            return {"models": [], "error": "endpoint_not_supported", "supports_listing": False}
+        if resp.status_code in (401, 403):
+            return {"models": [], "error": f"auth_failed_{resp.status_code}", "supports_listing": False}
+        resp.raise_for_status()
+        data = resp.json()
+        # OpenAI/Requesty-Format: {"data": [{"id": "..."}, ...]}
+        items = data.get("data") if isinstance(data, dict) else data
+        if not isinstance(items, list):
+            return {"models": [], "error": "unexpected_response", "supports_listing": False}
+        models = []
+        for it in items:
+            if isinstance(it, dict):
+                mid = it.get("id") or it.get("name")
+                if mid:
+                    models.append(str(mid))
+            elif isinstance(it, str):
+                models.append(it)
+        return {"models": sorted(models), "supports_listing": True}
+    except httpx.HTTPStatusError as e:
+        return {"models": [], "error": f"http_{e.response.status_code}", "supports_listing": False}
+    except (httpx.TimeoutException, httpx.RequestError) as e:
+        return {"models": [], "error": f"network: {str(e)[:80]}", "supports_listing": False}
+    except Exception as e:
+        return {"models": [], "error": str(e)[:120], "supports_listing": False}
+
+
+@router.post("/llm-providers/probe-test")
+async def probe_test_provider(
+    payload: ProbePayload,
+    tenant: Tenant = Depends(get_tenant),
+):
+    """Minimaler 1-Token-Probe-Call — vor dem Speichern, ohne daily_cost-Tracking.
+
+    Constraint #5: Test-Call darf den Cost-Cap NICHT triggern + nicht in der
+    Tagessumme landen. Hier nur direkter HTTP-Call ohne LLMService-Pfad.
+    """
+    import httpx
+
+    base_url = (payload.base_url or "").rstrip("/")
+    if not base_url or not payload.api_key:
+        return {"ok": False, "error": "missing api_key or base_url"}
+
+    model = payload.model or "vertex/gemini-2.5-flash-lite@europe-central2"
+    headers = {
+        "Authorization": f"Bearer {payload.api_key}",
+        "Content-Type": "application/json",
+    }
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": "ping"}],
+        "max_tokens": 5,
+    }
+    try:
+        start = datetime.utcnow()
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{base_url}/chat/completions",
+                json=body,
+                headers=headers,
+            )
+        latency_ms = int((datetime.utcnow() - start).total_seconds() * 1000)
+        if resp.status_code == 200:
+            data = resp.json()
+            usage = data.get("usage", {})
+            choice = (data.get("choices") or [{}])[0]
+            msg_resp = (choice.get("message", {}) or {}).get("content", "")[:80]
+            return {
+                "ok": True,
+                "latency_ms": latency_ms,
+                "model_responded": data.get("model"),
+                "tokens_used": usage.get("total_tokens", 0),
+                "response_preview": msg_resp,
+            }
+        # Map known errors to messages
+        try:
+            err_body = resp.json()
+            err_msg = err_body.get("error", {}).get("message") or err_body.get("message") or ""
+        except Exception:
+            err_msg = resp.text[:200]
+        if resp.status_code == 412:
+            return {"ok": False, "http_status": 412,
+                    "error": f"🔴 Portal-Budget erschöpft — bitte Guthaben aufladen. {err_msg[:120]}"}
+        if resp.status_code in (401, 403):
+            return {"ok": False, "http_status": resp.status_code,
+                    "error": f"🔴 Zugriff verweigert ({resp.status_code}) — API-Key prüfen. {err_msg[:120]}"}
+        if resp.status_code == 429:
+            return {"ok": False, "http_status": 429,
+                    "error": f"🟡 Rate-Limit erreicht — kurz warten. {err_msg[:120]}"}
+        return {"ok": False, "http_status": resp.status_code,
+                "error": f"HTTP {resp.status_code}: {err_msg[:160]}"}
+    except (httpx.TimeoutException, httpx.RequestError) as e:
+        return {"ok": False, "error": f"network: {str(e)[:120]}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+
+
 class BenchmarkRequest(BaseModel):
     step: str  # analysis | ideation | post_generation | smart_questions
     item_id: Optional[str] = None  # specific item, or pick most recent

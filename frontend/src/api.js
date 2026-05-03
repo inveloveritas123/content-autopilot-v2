@@ -233,6 +233,11 @@ export const resetLLMProviderCost = (id) => request(`/settings/llm-providers/${i
 export const getVoiceProfilesList = () => request('/settings/voice-profiles-list')
 export const runVoiceCompare = (item_id) => request('/settings/voice-compare', { method: 'POST', body: JSON.stringify({ item_id: item_id || undefined }) })
 
+export const listProviderModels = (api_key, base_url) =>
+  request('/settings/llm-providers/list-models', { method: 'POST', body: { api_key, base_url } })
+export const probeTestProvider = (api_key, base_url, model) =>
+  request('/settings/llm-providers/probe-test', { method: 'POST', body: { api_key, base_url, model } })
+
 // Projects
 export const getProjects = () => request('/projects')
 export const createProject = (data) => request('/projects', { method: 'POST', body: data })
