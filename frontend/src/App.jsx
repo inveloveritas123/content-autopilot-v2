@@ -25,7 +25,7 @@ function App() {
   // Set default API key if not configured
   useEffect(() => {
     if (!localStorage.getItem('apiKey')) {
-      setApiKey('***REMOVED-TENANT-KEY***')
+      setApiKey('***REMOVED-TENANT-KEY-ZKG***')
     }
   }, [])
 

@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from dependencies import get_db, get_tenant_id
+from dependencies import get_db, get_tenant_id, get_tenant
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -518,19 +518,22 @@ async def _fetch_active_and_history(
 @router.get("/brand-voice/{tenant_id}")
 async def get_brand_voice(
     tenant_id: str,
-    auth_tenant_id: uuid.UUID = Depends(get_tenant_id),
+    auth_tenant=Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """Aktive Versionen aller drei Profile + kompakte History."""
+    # Resolve 'me' shorthand
+    resolved_id = str(auth_tenant.id) if tenant_id == "me" else tenant_id
     # Nur eigene Daten abrufbar (Tenant-Isolation)
-    if str(auth_tenant_id) != tenant_id:
+    if resolved_id != str(auth_tenant.id):
         raise HTTPException(status_code=403, detail="Zugriff verweigert")
 
-    cc_active, cc_history = await _fetch_active_and_history(db, "customer_context", tenant_id)
-    vp_active, vp_history = await _fetch_active_and_history(db, "voice_profile", tenant_id)
-    aa_active, aa_history = await _fetch_active_and_history(db, "audience_avatar", tenant_id)
+    cc_active, cc_history = await _fetch_active_and_history(db, "customer_context", resolved_id)
+    vp_active, vp_history = await _fetch_active_and_history(db, "voice_profile", resolved_id)
+    aa_active, aa_history = await _fetch_active_and_history(db, "audience_avatar", resolved_id)
 
     return {
+        "tenant_name": auth_tenant.name,
         "customer_context": cc_active,
         "voice_profile": vp_active,
         "audience_avatar": aa_active,
@@ -555,8 +558,10 @@ async def patch_profile_field(
     db: AsyncSession = Depends(get_db),
 ):
     """Einzelnes Feld im aktiven Profil editieren (neue Version wird angelegt)."""
-    if str(auth_tenant_id) != tenant_id:
+    resolved_id = str(auth_tenant_id) if tenant_id == "me" else tenant_id
+    if resolved_id != str(auth_tenant_id):
         raise HTTPException(status_code=403, detail="Zugriff verweigert")
+    tenant_id = resolved_id
 
     if profile_type not in _PROFILE_TABLE:
         raise HTTPException(

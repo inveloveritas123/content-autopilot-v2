@@ -843,7 +843,7 @@ export default function BrandVoice() {
         open={showNCPicker}
         onClose={() => setShowNCPicker(false)}
         onImport={handleNCImport}
-        tenantSlug="zfb"
+        tenantSlug={statusData?.tenant_name || 'default'}
       />
     </div>
   )
