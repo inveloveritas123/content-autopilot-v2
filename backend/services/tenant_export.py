@@ -245,7 +245,7 @@ class TenantExportService:
             "sources",
             ["id", "url", "source_type", "is_active", "created_at"],
             [
-                [str(r.id), r.url, r.source_type, r.is_active, _dt(r.created_at)]
+                [str(r.id), r.url, r.type, r.is_active, _dt(r.created_at)]
                 for r in data["sources"]
             ],
         )
@@ -355,7 +355,7 @@ class TenantExportService:
             "csv/sources.csv": (
                 ["id", "url", "source_type", "is_active", "created_at"],
                 [
-                    [str(r.id), r.url, r.source_type, r.is_active, _dt(r.created_at)]
+                    [str(r.id), r.url, r.type, r.is_active, _dt(r.created_at)]
                     for r in data["sources"]
                 ],
             ),

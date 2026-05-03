@@ -59,6 +59,7 @@ class ProviderCreate(BaseModel):
     is_default: bool = False
     cost_limit_daily_cents: Optional[int] = None
     config: Optional[dict] = None
+    auto_cache: Optional[bool] = None
 
 
 class ProviderUpdate(BaseModel):
@@ -71,6 +72,7 @@ class ProviderUpdate(BaseModel):
     is_default: Optional[bool] = None
     cost_limit_daily_cents: Optional[int] = None
     config: Optional[dict] = None
+    auto_cache: Optional[bool] = None
 
 
 # Endpoints
@@ -101,6 +103,7 @@ async def list_providers(
             "cost_limit_daily_cents": p.cost_limit_daily_cents,
             "cost_spent_today_cents": p.cost_spent_today_cents,
             "cost_reset_at": p.cost_reset_at.isoformat() if p.cost_reset_at else None,
+            "auto_cache": p.auto_cache,
             "config": p.config or {},
         }
         for p in providers
@@ -123,6 +126,7 @@ async def create_provider(
         task_assignment=data.task_assignment,
         is_default=data.is_default,
         cost_limit_daily_cents=data.cost_limit_daily_cents if data.cost_limit_daily_cents is not None else 500,
+        auto_cache=data.auto_cache if data.auto_cache is not None else True,
         config=data.config or {},
     )
     db.add(provider)
@@ -158,6 +162,8 @@ async def update_provider(
         provider.is_default = data.is_default
     if data.cost_limit_daily_cents is not None:
         provider.cost_limit_daily_cents = max(0, data.cost_limit_daily_cents)
+    if data.auto_cache is not None:
+        provider.auto_cache = data.auto_cache
     if data.config is not None:
         existing = provider.config or {}
         existing.update(data.config)
