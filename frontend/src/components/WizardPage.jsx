@@ -263,7 +263,9 @@ function DoneView({ onGoToBrandVoice }) {
 // Haupt-Komponente: WizardPage
 // ---------------------------------------------------------------------------
 export default function WizardPage() {
-  const { sessionId: urlSessionId } = useParams()
+  const { sessionId: urlSessionIdRaw } = useParams()
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const urlSessionId = urlSessionIdRaw && UUID_RE.test(urlSessionIdRaw) ? urlSessionIdRaw : null
   const navigate = useNavigate()
 
   const [sessionId, setSessionId] = useState(null)

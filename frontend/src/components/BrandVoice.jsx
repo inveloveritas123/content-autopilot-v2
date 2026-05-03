@@ -158,6 +158,7 @@ function Breadcrumb({ path, onNavigate }) {
 function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
   const defaultPath = `/content-autopilot/v2/Kunde/${tenantSlug || 'default'}/voice/`
   const [currentPath, setCurrentPath] = useState(defaultPath)
+  const [pathInput, setPathInput] = useState(defaultPath)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -167,12 +168,14 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
   useEffect(() => {
     if (open) {
       setCurrentPath(defaultPath)
+      setPathInput(defaultPath)
       setSelectedFile(null)
     }
   }, [open, defaultPath])
 
   useEffect(() => {
     if (open) {
+      setPathInput(currentPath)
       loadPath(currentPath)
     }
   }, [open, currentPath])
@@ -243,15 +246,33 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
 
   return (
     <Dialog open={open} onClose={onClose} title="Datei aus Nextcloud importieren" className="max-w-xl">
+      {/* Manueller Pfad-Input */}
+      <div className="mb-2 flex gap-1.5">
+        <input
+          value={pathInput}
+          onChange={e => setPathInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') setCurrentPath(pathInput.endsWith('/') ? pathInput : pathInput + '/') }}
+          placeholder="Pfad eingeben..."
+          className="flex-1 text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500 font-mono"
+        />
+        <button
+          onClick={() => setCurrentPath(pathInput.endsWith('/') ? pathInput : pathInput + '/')}
+          className="px-2.5 py-1.5 text-xs bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 text-ink-muted"
+        >
+          ↵
+        </button>
+      </div>
+
       <div className="mb-3">
         <Breadcrumb path={currentPath} onNavigate={setCurrentPath} />
       </div>
 
       <div className="mb-3">
-        <p className="text-xs text-ink-muted mb-1.5">Vorlagen direkt:</p>
+        <p className="text-xs text-ink-muted mb-1.5">Schnell-Navigation:</p>
         <div className="flex flex-wrap gap-1.5">
           {[
-            { label: 'Vorlagen-Ordner', path: '/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/' },
+            { label: '📋 Vorlagen-Ordner', path: '/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/' },
+            { label: '📁 Meine Voice-Dateien', path: `/content-autopilot/v2/Kunde/${tenantSlug || 'default'}/voice/` },
           ].map(q => (
             <button key={q.path} onClick={() => setCurrentPath(q.path)}
               className="text-xs px-2.5 py-1 bg-primary-50 text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-100">
@@ -276,9 +297,19 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
             <Loader2 className="w-4 h-4 animate-spin mr-2" /> Lade...
           </div>
         ) : items.length === 0 && !error ? (
-          <div className="flex flex-col items-center justify-center py-12 text-ink-muted text-sm">
+          <div className="flex flex-col items-center justify-center py-10 text-ink-muted text-sm px-4 text-center">
             <FolderOpen className="w-8 h-8 mb-2 text-gray-300" />
-            Kein Inhalt gefunden
+            <p className="text-xs font-medium text-ink-light mb-1">Verzeichnis leer oder nicht gefunden</p>
+            <p className="text-[11px]">
+              Klicke{' '}
+              <button
+                onClick={() => setCurrentPath('/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/')}
+                className="text-primary-700 underline hover:no-underline"
+              >
+                Vorlagen-Ordner
+              </button>
+              {' '}für Beispiel-Dateien.
+            </p>
           </div>
         ) : (
           items.map((item) => {

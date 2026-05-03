@@ -32,6 +32,7 @@ function App() {
         <Route path="/voice" element={<Navigate to="/brand-voice" replace />} />
         <Route path="/brand-voice" element={<BrandVoice />} />
         <Route path="/brand-voice/wizard" element={<WizardPage />} />
+        <Route path="/brand-voice/wizard/start" element={<Navigate to="/brand-voice/wizard" replace />} />
         <Route path="/brand-voice/wizard/:sessionId" element={<WizardPage />} />
         <Route path="/brand-voice/insights" element={<VoiceInsights />} />
         <Route path="/brand-voice/drift-review" element={<DriftReview />} />
