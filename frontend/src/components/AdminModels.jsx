@@ -509,6 +509,10 @@ export default function AdminModels() {
         >
           Anmelden
         </button>
+        <p className="mt-3 text-xs text-gray-500">
+          Admin-Token steht in <code className="bg-gray-100 px-1 rounded">.env</code> unter <code className="bg-gray-100 px-1 rounded">ADMIN_TOKEN=...</code>.<br/>
+          Standard (falls nicht gesetzt): <code className="bg-gray-100 px-1 rounded">admin_backtest_2026</code>
+        </p>
       </div>
     )
   }

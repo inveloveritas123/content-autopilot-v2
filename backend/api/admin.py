@@ -1,5 +1,8 @@
 """Admin API — Model management + Backtest"""
+import hashlib
 import json
+import os
+import secrets
 import uuid
 from typing import Optional
 
@@ -12,16 +15,41 @@ from models.content_piece import ContentPiece
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-import os as _os
-ADMIN_TOKEN = _os.environ.get("ADMIN_TOKEN", "admin_backtest_2026")
-if ADMIN_TOKEN == "admin_backtest_2026":
+_ADMIN_TOKEN_ENV = os.environ.get("ADMIN_TOKEN", "admin_backtest_2026")
+_ADMIN_TOKEN_FILE = "/app/data/.admin_token_hash"
+
+if _ADMIN_TOKEN_ENV == "admin_backtest_2026":
     import logging as _logging
-    _logging.getLogger(__name__).warning("[Admin] ADMIN_TOKEN ist auf Standardwert gesetzt — bitte ADMIN_TOKEN env var setzen!")
+    _logging.getLogger(__name__).warning(
+        "[Admin] ADMIN_TOKEN ist auf Standardwert gesetzt — "
+        "bitte ADMIN_TOKEN in .env setzen oder /api/admin/admin-token/rotate aufrufen!"
+    )
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _get_file_token_hash() -> Optional[str]:
+    """Return stored token hash from file, or None if not set."""
+    try:
+        with open(_ADMIN_TOKEN_FILE) as f:
+            return f.read().strip() or None
+    except FileNotFoundError:
+        return None
 
 
 def require_admin(x_admin_token: str = Header(None)):
-    if x_admin_token != ADMIN_TOKEN:
+    if not x_admin_token:
         raise HTTPException(status_code=403, detail="Admin access required")
+    # Accept file-based rotated token first (takes precedence after rotation)
+    file_hash = _get_file_token_hash()
+    if file_hash and _hash_token(x_admin_token) == file_hash:
+        return
+    # Fall back to ENV token (valid until first rotation)
+    if x_admin_token == _ADMIN_TOKEN_ENV:
+        return
+    raise HTTPException(status_code=403, detail="Admin access required")
 
 
 class BacktestStartRequest(BaseModel):
@@ -235,3 +263,28 @@ async def apply_tenant_model(tenant_id: str, model_id: str, db=Depends(get_db)):
     )
     await db.commit()
     return {"status": "ok", "tenant_id": tenant_id, "model_id": model_id}
+
+
+@router.post("/admin-token/rotate", dependencies=[Depends(require_admin)])
+async def rotate_admin_token():
+    """Generate a new admin token and persist its hash to disk.
+
+    Returns the new plain-text token ONCE. After rotation the ENV token
+    is no longer valid — use the new token.
+    Store the returned token securely (e.g. in .env as ADMIN_TOKEN).
+    """
+    new_token = secrets.token_urlsafe(32)
+    new_hash = _hash_token(new_token)
+    try:
+        os.makedirs(os.path.dirname(_ADMIN_TOKEN_FILE), exist_ok=True)
+        with open(_ADMIN_TOKEN_FILE, "w") as f:
+            f.write(new_hash)
+    except Exception as e:
+        raise HTTPException(500, f"Token-Rotation fehlgeschlagen: {e}")
+
+    import logging
+    logging.getLogger(__name__).info("[Admin] Admin-Token wurde rotiert")
+    return {
+        "token": new_token,
+        "note": "Diesen Token sicher speichern — er wird nur einmal angezeigt. In .env unter ADMIN_TOKEN eintragen.",
+    }
