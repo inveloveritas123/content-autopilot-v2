@@ -51,7 +51,7 @@ def _load_p01_payload(tenant_id: str, project_id: str | None = None) -> dict:
         if project_id is None:
             row = session.execute(
                 text(
-                    "SELECT payload FROM tenant_customer_context"
+                    "SELECT payload FROM tenant_customer_context "
                     "WHERE tenant_id=:t AND project_id IS NULL AND is_active=false "
                     "ORDER BY version DESC LIMIT 1"
                 ),
@@ -60,7 +60,7 @@ def _load_p01_payload(tenant_id: str, project_id: str | None = None) -> dict:
         else:
             row = session.execute(
                 text(
-                    "SELECT payload FROM tenant_customer_context"
+                    "SELECT payload FROM tenant_customer_context "
                     "WHERE tenant_id=:t AND project_id=:pid AND is_active=false "
                     "ORDER BY version DESC LIMIT 1"
                 ),
