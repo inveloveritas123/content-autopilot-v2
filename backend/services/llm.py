@@ -186,11 +186,21 @@ class LLMService:
         from datetime import datetime, timezone
 
         # Pre-call cap check (sync DB read — fast, protects against runaway)
+        # Advisory lock serializes per-tenant checks so two workers can't both
+        # read the same $4.90 and both proceed past the $5.00 cap. (#131)
         try:
             from models.base import sync_session_factory
             from sqlalchemy import text as _t
             today = datetime.now(timezone.utc).date()
+            tid_ctx = _tenant_id_ctx.get()
             with sync_session_factory() as _s:
+                # Advisory lock: per-tenant-per-day to serialise cap reads (#131)
+                if tid_ctx:
+                    lock_key = f"llm-cap:{tid_ctx}:{today}"
+                    _s.execute(_t(
+                        "SELECT pg_advisory_xact_lock(('x' || md5(:key))::bit(64)::bigint)"
+                    ), {"key": lock_key})
+
                 # Global cap
                 g_row = _s.execute(_t(
                     "SELECT COALESCE(SUM(cost_usd), 0) FROM daily_cost_tenant WHERE date = :today"
@@ -200,16 +210,17 @@ class LLMService:
                         f"Global daily cost cap exceeded: {float(g_row[0]):.2f} >= {_GLOBAL_CAP_USD:.2f} USD. "
                         "All LLM calls blocked until midnight UTC."
                     )
-                # Per-tenant cap (best-effort — tenant_id not always available here)
-                t_row = _s.execute(_t(
-                    "SELECT COALESCE(SUM(cost_usd), 0) FROM daily_cost_tenant WHERE date = :today"
-                    " GROUP BY tenant_id ORDER BY 1 DESC LIMIT 1"
-                ), {"today": today}).fetchone()
-                if t_row and float(t_row[0]) >= _DAILY_CAP_USD:
-                    raise BudgetExceededError(
-                        f"Tenant daily cost cap exceeded: {float(t_row[0]):.2f} >= {_DAILY_CAP_USD:.2f} USD. "
-                        "Pipeline paused until midnight UTC."
-                    )
+                # Per-tenant cap — use tenant_id from ContextVar when available
+                if tid_ctx:
+                    t_row = _s.execute(_t(
+                        "SELECT COALESCE(cost_usd, 0) FROM daily_cost_tenant "
+                        "WHERE tenant_id = :tid AND date = :today"
+                    ), {"tid": tid_ctx, "today": today}).fetchone()
+                    if t_row and float(t_row[0]) >= _DAILY_CAP_USD:
+                        raise BudgetExceededError(
+                            f"Tenant daily cost cap exceeded: {float(t_row[0]):.2f} >= {_DAILY_CAP_USD:.2f} USD. "
+                            "Pipeline paused until midnight UTC."
+                        )
         except BudgetExceededError:
             raise
         except Exception:
