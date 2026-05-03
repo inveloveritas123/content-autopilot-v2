@@ -7,6 +7,9 @@ from sqlalchemy import select
 import logging_config
 logging_config.setup_logging()
 
+import sentry_config
+sentry_config.init_sentry()
+
 from config import settings
 from models import async_session_factory, Tenant
 
@@ -194,3 +197,13 @@ app.include_router(telegram_router, prefix="/api", tags=["Telegram"])
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "version": "2.0.0"}
+
+
+@app.get("/api/_test/sentry-error")
+async def sentry_test_error():
+    """Dev-only: Trigger a test Sentry event to verify integration."""
+    from config import settings as _s
+    if _s.app_env not in ("dev", "development", "staging"):
+        from fastapi import HTTPException
+        raise HTTPException(404, "Not found")
+    raise RuntimeError("Sentry test error — intentional from /api/_test/sentry-error")

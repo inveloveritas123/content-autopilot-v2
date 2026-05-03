@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # ZKG tenant key: ***REMOVED-TENANT-KEY-ZKG*** (old ZFB key ***REMOVED-TENANT-KEY*** kept as secondary until 2026-08-01)
     default_tenant_key: str = "default-key"
 
+    # Sentry
+    sentry_dsn: str = ""  # Empty = disabled
+    app_env: str = "production"  # dev | staging | production
+
     # VoiceScriptor
     voicescriptor_bot_token: Optional[str] = None
     voicescriptor_chat_id: Optional[str] = None

@@ -4,6 +4,13 @@ from celery.signals import task_prerun
 
 from config import settings
 
+# Initialize Sentry early (before any tasks are registered)
+try:
+    import sentry_config
+    sentry_config.init_sentry()
+except Exception:
+    pass
+
 celery_app = Celery("content_autopilot", broker=settings.redis_url, backend=settings.redis_url)
 
 celery_app.conf.update(

@@ -34,6 +34,8 @@ services:
       NEXTCLOUD_USER: ${NEXTCLOUD_USER:-}
       NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:-}
       DEFAULT_TENANT_KEY: ${DEFAULT_TENANT_KEY}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      APP_ENV: ${APP_ENV:-production}
       UVICORN_LOOP: asyncio
     depends_on:
       redis-v2:
@@ -74,6 +76,8 @@ services:
       NEXTCLOUD_URL: ${NEXTCLOUD_URL:-}
       NEXTCLOUD_USER: ${NEXTCLOUD_USER:-}
       NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      APP_ENV: ${APP_ENV:-production}
     depends_on:
       redis-v2:
         condition: service_healthy
