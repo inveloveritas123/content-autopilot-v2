@@ -1,0 +1,166 @@
+# Global settings
+global:
+  registry: "10.10.0.1:3000"
+  imageTag: "main"
+  imagePullPolicy: IfNotPresent
+
+# Backend (FastAPI)
+backend:
+  image:
+    repository: meister/content-autopilot-v2/backend
+  replicaCount: 1
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+
+# Celery Worker
+celeryWorker:
+  replicaCount: 2
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+# Celery Beat
+celeryBeat:
+  replicaCount: 1
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
+# MCP Server
+mcpServer:
+  image:
+    repository: meister/content-autopilot-v2/mcp-server
+  replicaCount: 1
+  service:
+    port: 8080
+    type: ClusterIP
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
+# Nginx (Frontend / Reverse Proxy)
+nginx:
+  image:
+    repository: meister/content-autopilot-v2/nginx
+  replicaCount: 1
+  service:
+    port: 8080
+    type: ClusterIP
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "200m"
+
+# Redis
+redis:
+  image:
+    repository: redis
+    tag: "7-alpine"
+  service:
+    port: 6379
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
+# PostgreSQL
+postgresql:
+  image:
+    repository: postgres
+    tag: "15-alpine"
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+  auth:
+    username: autopilot
+    database: content_autopilot_v2
+    existingSecret: content-autopilot-secrets
+    secretKey: db-password
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# Ingress
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  host: "cap.example.com"
+  tls:
+    enabled: true
+    secretName: content-autopilot-tls
+
+# Application secrets (set these externally — never commit values here!)
+secrets:
+  dbPassword: ""
+  defaultTenantKey: ""
+  anthropicApiKey: ""
+  geminiApiKey: ""
+  litellmBaseUrl: ""
+  litellmApiKey: ""
+  requestyApiKey: ""
+  nextcloudUrl: ""
+  nextcloudUser: ""
+  nextcloudPassword: ""
+  adminToken: ""
+  sentryDsn: ""
+  mcpClientId: ""
+  mcpClientSecret: ""
+  mcpBearerToken: ""
+
+# App config
+config:
+  appEnv: production
+  brandVoiceNcBasePath: "/content-autopilot/v2/Kunde/"
+  promptNcBasePath: "/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/"
+  uvicornLoop: asyncio
+
+# Network Policies (optional, Phase 4)
+networkPolicy:
+  enabled: false

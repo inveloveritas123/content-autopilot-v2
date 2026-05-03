@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "content-autopilot.fullname" . }}-nginx
+  labels:
+    {{- include "content-autopilot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nginx
+spec:
+  replicas: {{ .Values.nginx.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "content-autopilot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: nginx
+  template:
+    metadata:
+      labels:
+        {{- include "content-autopilot.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: {{ include "content-autopilot.nginxImage" . }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.nginx.resources | nindent 12 }}

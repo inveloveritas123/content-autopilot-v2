@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "content-autopilot.fullname" . }}-celery-beat
+  labels:
+    {{- include "content-autopilot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-beat
+spec:
+  # Beat scheduler must run as a single instance — never scale above 1
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "content-autopilot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: celery-beat
+  template:
+    metadata:
+      labels:
+        {{- include "content-autopilot.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: celery-beat
+    spec:
+      containers:
+        - name: celery-beat
+          image: {{ include "content-autopilot.backendImage" . }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          # Schedule file in /tmp (writable tmpfs) — image filesystem is read-only
+          command: ["celery", "-A", "tasks.celery_app", "beat", "-l", "info", "-s", "/tmp/celerybeat-schedule"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "content-autopilot.fullname" . }}-config
+            - secretRef:
+                name: {{ include "content-autopilot.fullname" . }}-secrets
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: db-password
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "pgrep -f 'celery.*beat' > /dev/null"
+            initialDelaySeconds: 20
+            periodSeconds: 60
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.celeryBeat.resources | nindent 12 }}

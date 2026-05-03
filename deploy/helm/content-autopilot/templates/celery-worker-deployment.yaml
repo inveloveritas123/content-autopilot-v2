@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "content-autopilot.fullname" . }}-celery-worker
+  labels:
+    {{- include "content-autopilot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-worker
+spec:
+  replicas: {{ .Values.celeryWorker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "content-autopilot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: celery-worker
+  template:
+    metadata:
+      labels:
+        {{- include "content-autopilot.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: celery-worker
+    spec:
+      containers:
+        - name: celery-worker
+          image: {{ include "content-autopilot.backendImage" . }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: ["celery", "-A", "tasks.celery_app", "worker", "-l", "info", "-c", "2"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "content-autopilot.fullname" . }}-config
+            - secretRef:
+                name: {{ include "content-autopilot.fullname" . }}-secrets
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: db-password
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: anthropic-api-key
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: gemini-api-key
+            - name: LITELLM_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: litellm-base-url
+            - name: LITELLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: litellm-api-key
+            - name: REQUESTY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: requesty-api-key
+            - name: NEXTCLOUD_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: nextcloud-url
+            - name: NEXTCLOUD_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: nextcloud-user
+            - name: NEXTCLOUD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: nextcloud-password
+            - name: SENTRY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: sentry-dsn
+          livenessProbe:
+            exec:
+              command:
+                - celery
+                - -A
+                - tasks.celery_app
+                - inspect
+                - ping
+                - -d
+                - celery@$(HOSTNAME)
+                - --timeout
+                - "5"
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.celeryWorker.resources | nindent 12 }}

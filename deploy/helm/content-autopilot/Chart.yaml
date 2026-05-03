@@ -1,0 +1,13 @@
+apiVersion: v2
+name: content-autopilot
+description: Content Autopilot v2 — Multi-Tenant LinkedIn Content Automation
+type: application
+version: 0.1.0
+appVersion: "2.0.0"
+keywords:
+  - content
+  - automation
+  - llm
+home: https://github.com/meister/content-autopilot-v2
+maintainers:
+  - name: meister

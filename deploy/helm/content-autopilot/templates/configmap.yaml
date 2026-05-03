@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "content-autopilot.fullname" . }}-config
+  labels:
+    {{- include "content-autopilot.labels" . | nindent 4 }}
+data:
+  APP_ENV: {{ .Values.config.appEnv | quote }}
+  BRAND_VOICE_NC_BASE_PATH: {{ .Values.config.brandVoiceNcBasePath | quote }}
+  PROMPT_NC_BASE_PATH: {{ .Values.config.promptNcBasePath | quote }}
+  UVICORN_LOOP: {{ .Values.config.uvicornLoop | quote }}
+  REDIS_URL: "redis://{{ include "content-autopilot.fullname" . }}-redis:{{ .Values.redis.service.port }}/1"
+  DATABASE_URL: "postgresql+asyncpg://{{ .Values.postgresql.auth.username }}@{{ include "content-autopilot.fullname" . }}-postgresql:{{ .Values.postgresql.service.port }}/{{ .Values.postgresql.auth.database }}"
+  SYNC_DATABASE_URL: "postgresql://{{ .Values.postgresql.auth.username }}@{{ include "content-autopilot.fullname" . }}-postgresql:{{ .Values.postgresql.service.port }}/{{ .Values.postgresql.auth.database }}"
+  BACKEND_URL: "http://{{ include "content-autopilot.fullname" . }}-backend:8000"

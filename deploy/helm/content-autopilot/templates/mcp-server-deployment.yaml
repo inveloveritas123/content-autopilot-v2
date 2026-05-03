@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "content-autopilot.fullname" . }}-mcp-server
+  labels:
+    {{- include "content-autopilot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp-server
+spec:
+  replicas: {{ .Values.mcpServer.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "content-autopilot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mcp-server
+  template:
+    metadata:
+      labels:
+        {{- include "content-autopilot.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mcp-server
+    spec:
+      containers:
+        - name: mcp-server
+          image: {{ include "content-autopilot.mcpServerImage" . }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "content-autopilot.fullname" . }}-config
+            - secretRef:
+                name: {{ include "content-autopilot.fullname" . }}-secrets
+          env:
+            - name: MCP_PORT
+              value: "8080"
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: default-tenant-key
+            - name: MCP_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: mcp-client-id
+            - name: MCP_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: mcp-client-secret
+            - name: MCP_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "content-autopilot.fullname" . }}-secrets
+                  key: mcp-bearer-token
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.mcpServer.resources | nindent 12 }}

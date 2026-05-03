@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "content-autopilot.fullname" . }}-redis
+  labels:
+    {{- include "content-autopilot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "content-autopilot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "content-autopilot.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: ["redis-server", "--databases", "4"]
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          {{- if .Values.redis.persistence.enabled }}
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+          {{- end }}
+      {{- if .Values.redis.persistence.enabled }}
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: {{ include "content-autopilot.fullname" . }}-redis-data
+      {{- end }}
