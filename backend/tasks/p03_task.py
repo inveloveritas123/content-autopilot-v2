@@ -85,9 +85,8 @@ def _insert_voice_profile(
     source: str,
     prompt_version_hash: str,
     model_id: str,
+    project_id: str | None = None,
 ) -> str:
-    """Inseriert einen neuen voice_profile-Eintrag und gibt die neue ID zurück."""
-    # Nächste Versionsnummer ermitteln
     row = session.execute(
         text(
             "SELECT COALESCE(MAX(version), 0) + 1 AS next_version "
@@ -101,9 +100,9 @@ def _insert_voice_profile(
     session.execute(
         text(
             "INSERT INTO tenant_voice_profile "
-            "(id, tenant_id, version, is_active, source, payload, prompt_version_hash, model_id) "
+            "(id, tenant_id, version, is_active, source, payload, prompt_version_hash, model_id, project_id) "
             "VALUES (:id, :tenant_id, :version, false, :source, :payload::jsonb, "
-            ":prompt_version_hash, :model_id)"
+            ":prompt_version_hash, :model_id, :project_id)"
         ),
         {
             "id": new_id,
@@ -113,6 +112,7 @@ def _insert_voice_profile(
             "payload": json.dumps(payload),
             "prompt_version_hash": prompt_version_hash,
             "model_id": model_id,
+            "project_id": project_id,
         },
     )
     return new_id
@@ -188,6 +188,7 @@ def run_p03(
     linkedin_posts: list = None,
     bypass_with_existing_json: bool = False,
     existing_json: dict = None,
+    project_id: str | None = None,
 ) -> dict:
     """P03 Voice-Profile Extraktion.
 
@@ -225,6 +226,7 @@ def run_p03(
                     source="md_upload",
                     prompt_version_hash="bypass",
                     model_id="bypass",
+                    project_id=project_id,
                 )
                 session.commit()
             except Exception:
@@ -330,6 +332,7 @@ def run_p03(
                     source="transcript",
                     prompt_version_hash=prompt_version_hash,
                     model_id=ANTHROPIC_MODEL_ID,
+                    project_id=project_id,
                 )
                 # 7. Audit-Update
                 session.execute(

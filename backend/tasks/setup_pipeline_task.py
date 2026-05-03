@@ -46,17 +46,26 @@ def _update_pipeline_status(run_id: str, status: str, error: str = None):
         session.commit()
 
 
-def _load_p01_payload(tenant_id: str) -> dict:
-    """Letzte noch-nicht-aktive P01-Version holen (frisch von P01 geschrieben)."""
+def _load_p01_payload(tenant_id: str, project_id: str | None = None) -> dict:
     with sync_session_factory() as session:
-        row = session.execute(
-            text(
-                "SELECT context_data FROM tenant_customer_context "
-                "WHERE tenant_id=:t AND is_active=false "
-                "ORDER BY version DESC LIMIT 1"
-            ),
-            {"t": tenant_id},
-        ).fetchone()
+        if project_id is None:
+            row = session.execute(
+                text(
+                    "SELECT context_data FROM tenant_customer_context "
+                    "WHERE tenant_id=:t AND project_id IS NULL AND is_active=false "
+                    "ORDER BY version DESC LIMIT 1"
+                ),
+                {"t": tenant_id},
+            ).fetchone()
+        else:
+            row = session.execute(
+                text(
+                    "SELECT context_data FROM tenant_customer_context "
+                    "WHERE tenant_id=:t AND project_id=:pid AND is_active=false "
+                    "ORDER BY version DESC LIMIT 1"
+                ),
+                {"t": tenant_id, "pid": project_id},
+            ).fetchone()
     if row and row[0]:
         return row[0] if isinstance(row[0], dict) else json.loads(row[0])
     return {}
@@ -102,6 +111,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
     """
     pipeline_run_id = str(uuid.uuid4())
     start_ts = time.monotonic()
+    project_id: str | None = source_payload.get("project_id")
 
     # ------------------------------------------------------------------
     # A. Pipeline-Run erstellen
@@ -179,7 +189,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
         from tasks.p03_task import run_p03
 
         def _run_p01_sync():
-            return run_p01.run(tenant_id, transcript_text or "", mini_form_data=None)
+            return run_p01.run(tenant_id, transcript_text or "", mini_form_data=None, project_id=project_id)
 
         def _run_p03_sync():
             bypass = p03_bypass_json is not None
@@ -189,6 +199,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
                 bypass_with_existing_json=bypass,
                 existing_json=p03_bypass_json,
                 linkedin_posts=linkedin_posts,
+                project_id=project_id,
             )
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
@@ -210,10 +221,10 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
             return {"pipeline_run_id": pipeline_run_id, "status": "paused_for_cost"}
 
         # P04 braucht P01-Payload aus DB
-        p01_payload = _load_p01_payload(tenant_id)
+        p01_payload = _load_p01_payload(tenant_id, project_id=project_id)
 
         from tasks.p04_task import run_p04
-        p04_result = run_p04.run(tenant_id, p01_payload, transcript=transcript_text)
+        p04_result = run_p04.run(tenant_id, p01_payload, transcript=transcript_text, project_id=project_id)
 
         logger.info("setup_pipeline tenant=%s: P04=%s", tenant_id, p04_result.get("status"))
 
@@ -224,20 +235,34 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
         # ------------------------------------------------------------------
         # D. Atomarer is_active-Wechsel
         # ------------------------------------------------------------------
-        # CTE: deaktivieren + aktivieren in einer einzigen Anweisung pro Tabelle (atomar)
         with sync_session_factory() as session:
             for table in ["tenant_customer_context", "tenant_voice_profile", "tenant_audience_avatar"]:
-                session.execute(
-                    text(
-                        f"WITH deactivate AS ("
-                        f"  UPDATE {table} SET is_active=false WHERE tenant_id=:t"
-                        f") "
-                        f"UPDATE {table} SET is_active=true "
-                        f"WHERE tenant_id=:t "
-                        f"AND version=(SELECT MAX(version) FROM {table} WHERE tenant_id=:t)"
-                    ),
-                    {"t": tenant_id},
-                )
+                if project_id is None:
+                    session.execute(
+                        text(
+                            f"WITH deactivate AS ("
+                            f"  UPDATE {table} SET is_active=false"
+                            f"  WHERE tenant_id=:t AND project_id IS NULL"
+                            f") "
+                            f"UPDATE {table} SET is_active=true "
+                            f"WHERE tenant_id=:t AND project_id IS NULL "
+                            f"AND version=(SELECT MAX(version) FROM {table} WHERE tenant_id=:t AND project_id IS NULL)"
+                        ),
+                        {"t": tenant_id},
+                    )
+                else:
+                    session.execute(
+                        text(
+                            f"WITH deactivate AS ("
+                            f"  UPDATE {table} SET is_active=false"
+                            f"  WHERE tenant_id=:t AND project_id=:pid"
+                            f") "
+                            f"UPDATE {table} SET is_active=true "
+                            f"WHERE tenant_id=:t AND project_id=:pid "
+                            f"AND version=(SELECT MAX(version) FROM {table} WHERE tenant_id=:t AND project_id=:pid)"
+                        ),
+                        {"t": tenant_id, "pid": project_id},
+                    )
             session.commit()
 
         logger.info("setup_pipeline tenant=%s: is_active-Wechsel abgeschlossen", tenant_id)

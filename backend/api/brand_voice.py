@@ -15,9 +15,9 @@ import logging
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -166,6 +166,7 @@ def _set_nested(d: dict, path: str, value: Any) -> None:
 @router.post("/brand-voice/upload", status_code=202)
 async def upload_brand_voice(
     data: UploadRequest,
+    project_id: Optional[str] = Query(None),
     x_api_key: str = Header(..., alias="X-API-Key"),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -196,10 +197,13 @@ async def upload_brand_voice(
     from tasks.setup_pipeline_task import run_setup_pipeline
 
     source = "md_upload" if data.format == "md" else "json_upload"
+    payload: dict[str, Any] = {"content": content_parsed, "type": data.type}
+    if project_id is not None:
+        payload["project_id"] = project_id
     result = run_setup_pipeline.delay(
         str(tenant_id),
         source,
-        {"content": content_parsed, "type": data.type},
+        payload,
     )
 
     return {"task_id": result.id, "status": "queued"}
@@ -212,6 +216,7 @@ async def upload_brand_voice(
 @router.post("/brand-voice/import-source", status_code=202)
 async def import_source(
     data: ImportSourceRequest,
+    project_id: Optional[str] = Query(None),
     x_api_key: str = Header(..., alias="X-API-Key"),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -224,10 +229,13 @@ async def import_source(
 
     from tasks.setup_pipeline_task import run_setup_pipeline
 
+    payload: dict[str, Any] = {"path": data.path, "type": data.type}
+    if project_id is not None:
+        payload["project_id"] = project_id
     result = run_setup_pipeline.delay(
         str(tenant_id),
         "nc_import",
-        {"path": data.path, "type": data.type},
+        payload,
     )
 
     return {"task_id": result.id}
@@ -240,6 +248,7 @@ async def import_source(
 @router.post("/brand-voice/regenerate", status_code=202)
 async def regenerate(
     data: RegenerateRequest,
+    project_id: Optional[str] = Query(None),
     x_api_key: str = Header(..., alias="X-API-Key"),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -249,10 +258,13 @@ async def regenerate(
 
     from tasks.setup_pipeline_task import run_setup_pipeline
 
+    sources_payload: dict[str, Any] = dict(data.sources)
+    if project_id is not None:
+        sources_payload["project_id"] = project_id
     result = run_setup_pipeline.delay(
         str(tenant_id),
         "transcript",
-        data.sources,
+        sources_payload,
     )
 
     return {"task_id": result.id}
@@ -484,14 +496,40 @@ async def _fetch_active_and_history(
     db: AsyncSession,
     profile_type: str,
     tenant_id_str: str,
+    project_id: str | None = None,
 ) -> tuple[dict | None, list[dict]]:
     """Aktive Version und die letzten 10 Eintraege aus einer Profil-Tabelle laden."""
+    tbl = _PROFILE_TABLE[profile_type]
+
+    if project_id is None:
+        active_sql = (
+            f"SELECT id, payload, version, created_at, source FROM {tbl} "
+            f"WHERE tenant_id = :t AND project_id IS NULL AND is_active = true"
+        )
+        history_sql = (
+            f"SELECT version, created_at, source FROM {tbl} "
+            f"WHERE tenant_id = :t AND project_id IS NULL ORDER BY version DESC LIMIT 10"
+        )
+        params_active = {"t": tenant_id_str}
+        params_history = {"t": tenant_id_str}
+    else:
+        active_sql = (
+            f"SELECT id, payload, version, created_at, source FROM {tbl} "
+            f"WHERE tenant_id = :t AND project_id = :pid AND is_active = true"
+        )
+        history_sql = (
+            f"SELECT version, created_at, source FROM {tbl} "
+            f"WHERE tenant_id = :t AND project_id = :pid ORDER BY version DESC LIMIT 10"
+        )
+        params_active = {"t": tenant_id_str, "pid": project_id}
+        params_history = {"t": tenant_id_str, "pid": project_id}
+
     active_row = (
-        await db.execute(text(_SQL[profile_type]["select_active"]), {"t": tenant_id_str})
+        await db.execute(text(active_sql), params_active)
     ).fetchone()
 
     history_rows = (
-        await db.execute(text(_SQL[profile_type]["select_history"]), {"t": tenant_id_str})
+        await db.execute(text(history_sql), params_history)
     ).fetchall()
 
     active = None
@@ -518,6 +556,7 @@ async def _fetch_active_and_history(
 @router.get("/brand-voice/{tenant_id}")
 async def get_brand_voice(
     tenant_id: str,
+    project_id: Optional[str] = Query(None),
     auth_tenant=Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -528,9 +567,9 @@ async def get_brand_voice(
     if resolved_id != str(auth_tenant.id):
         raise HTTPException(status_code=403, detail="Zugriff verweigert")
 
-    cc_active, cc_history = await _fetch_active_and_history(db, "customer_context", resolved_id)
-    vp_active, vp_history = await _fetch_active_and_history(db, "voice_profile", resolved_id)
-    aa_active, aa_history = await _fetch_active_and_history(db, "audience_avatar", resolved_id)
+    cc_active, cc_history = await _fetch_active_and_history(db, "customer_context", resolved_id, project_id)
+    vp_active, vp_history = await _fetch_active_and_history(db, "voice_profile", resolved_id, project_id)
+    aa_active, aa_history = await _fetch_active_and_history(db, "audience_avatar", resolved_id, project_id)
 
     return {
         "tenant_name": auth_tenant.name,

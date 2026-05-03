@@ -94,7 +94,7 @@ async def _record_actual_cost(tenant_id: str, actual_cost: float) -> None:
 # ---------------------------------------------------------------------------
 
 @celery_app.task(name="tasks.p04_task.run_p04", bind=True, max_retries=2)
-def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None) -> dict:
+def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, project_id: str | None = None) -> dict:
     """P04-Avatar-Vertiefung: Psychologisches Audience-Avatar aus P01-Kontext.
 
     Args:
@@ -289,9 +289,9 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None) -> 
                 text(
                     "INSERT INTO tenant_audience_avatar "
                     "(id, tenant_id, version, is_active, source, payload, "
-                    "prompt_version_hash, model_id, created_at) "
+                    "prompt_version_hash, model_id, project_id, created_at) "
                     "VALUES (:id, :tenant_id, :version, false, 'transcript', "
-                    ":payload::jsonb, :prompt_version_hash, :model_id, now())"
+                    ":payload::jsonb, :prompt_version_hash, :model_id, :project_id, now())"
                 ),
                 {
                     "id": str(uuid.uuid4()),
@@ -300,6 +300,7 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None) -> 
                     "payload": json.dumps(output_json, ensure_ascii=False),
                     "prompt_version_hash": prompt_version_hash,
                     "model_id": ANTHROPIC_MODEL_ID,
+                    "project_id": project_id,
                 },
             )
             session.commit()

@@ -1,11 +1,12 @@
 """Projects API — Multi-project management."""
+import json
 import uuid
 import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
@@ -59,6 +60,7 @@ async def list_projects(
             "description": p.description,
             "slug": p.slug,
             "is_active": p.is_active,
+            "is_default": p.is_default,
             "source_count": counts.get(p.id, 0),
             "created_at": p.created_at.isoformat() if p.created_at else None,
         }
@@ -99,6 +101,7 @@ async def get_project(
         "description": project.description,
         "slug": project.slug,
         "is_active": project.is_active,
+        "is_default": project.is_default,
     }
 
 
@@ -135,3 +138,85 @@ async def delete_project(
     await db.delete(project)
     await db.commit()
     return {"deleted": True}
+
+
+@router.put("/{project_id}/set-default")
+async def set_default_project(
+    project_id: str,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    project = await db.get(Project, uuid.UUID(project_id))
+    if not project or project.tenant_id != tenant.id:
+        raise HTTPException(404, "Project not found")
+
+    await db.execute(
+        update(Project)
+        .where(Project.tenant_id == tenant.id, Project.id != uuid.UUID(project_id))
+        .values(is_default=False)
+    )
+    project.is_default = True
+    await db.commit()
+    return {"updated": True}
+
+
+@router.post("/{project_id}/duplicate")
+async def duplicate_project(
+    project_id: str,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    source = await db.get(Project, uuid.UUID(project_id))
+    if not source or source.tenant_id != tenant.id:
+        raise HTTPException(404, "Project not found")
+
+    new_id = uuid.uuid4()
+    new_name = source.name + " (Kopie)"
+    new_slug = _slugify(new_name)
+
+    new_project = Project(
+        id=new_id,
+        tenant_id=tenant.id,
+        name=new_name,
+        description=source.description,
+        slug=new_slug,
+        is_active=source.is_active,
+        is_default=False,
+    )
+    db.add(new_project)
+    await db.flush()
+
+    source_id_str = str(source.id)
+    new_id_str = str(new_id)
+
+    for tbl in ("tenant_customer_context", "tenant_voice_profile", "tenant_audience_avatar"):
+        rows = (
+            await db.execute(
+                text(
+                    f"SELECT version, is_active, source, payload, prompt_version_hash, model_id "
+                    f"FROM {tbl} WHERE tenant_id = :tid AND project_id = :pid"
+                ),
+                {"tid": str(tenant.id), "pid": source_id_str},
+            )
+        ).fetchall()
+        for row in rows:
+            await db.execute(
+                text(
+                    f"INSERT INTO {tbl} "
+                    f"(tenant_id, version, is_active, source, payload, prompt_version_hash, model_id, project_id, created_at) "
+                    f"VALUES (:tenant_id, :version, :is_active, :source, :payload::jsonb, :phash, :model_id, :project_id, now())"
+                ),
+                {
+                    "tenant_id": str(tenant.id),
+                    "version": row.version,
+                    "is_active": row.is_active,
+                    "source": row.source,
+                    "payload": json.dumps(row.payload) if not isinstance(row.payload, str) else row.payload,
+                    "phash": row.prompt_version_hash,
+                    "model_id": row.model_id,
+                    "project_id": new_id_str,
+                },
+            )
+
+    await db.commit()
+    return {"id": new_id_str, "name": new_name}
