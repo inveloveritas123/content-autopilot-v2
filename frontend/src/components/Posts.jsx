@@ -2302,6 +2302,7 @@ export default function Posts() {
   const [sourcesList, setSourcesList] = useState([])
   const [sortBy, setSortBy] = useState('newest')
   const [tagFilter, setTagFilter] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')  // #145 Phase 4.1
   const [autoScheduling, setAutoScheduling] = useState(false)
   const [showQuickCreate, setShowQuickCreate] = useState(false)
   const [qcTab, setQcTab] = useState('topic') // 'topic' | 'url'
@@ -2355,6 +2356,9 @@ export default function Posts() {
     if (tagFilter) {
       list = list.filter(p => (p.content_metadata?.tags || []).includes(tagFilter))
     }
+    if (categoryFilter) {
+      list = list.filter(p => p.category === categoryFilter)
+    }
     // Sort
     list = [...list]
     if (sortBy === 'oldest') {
@@ -2368,7 +2372,7 @@ export default function Posts() {
       list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
     }
     return list
-  }, [posts, search, angleFilter, pillarFilter, sourceFilter, tagFilter, sortBy])
+  }, [posts, search, angleFilter, pillarFilter, sourceFilter, tagFilter, categoryFilter, sortBy])
 
   useEffect(() => {
     loadPosts()
@@ -2711,12 +2715,52 @@ export default function Posts() {
           <option value="score_desc">★ Bester Score</option>
           <option value="score_asc">☆ Schlechtester Score</option>
         </select>
-        {(search || angleFilter || pillarFilter || sourceFilter) && (
+        {/* #145 Phase 4.1: Kategorie-Filter */}
+        <div className="flex items-center gap-1 flex-wrap">
+          <span className="text-[11px] text-ink-muted mr-1">Kategorie:</span>
+          {[
+            { value: '', label: 'Alle', color: 'bg-gray-100 text-gray-700' },
+            { value: 'news', label: 'News', color: 'bg-blue-100 text-blue-700' },
+            { value: 'persoenlich', label: 'Persönlich', color: 'bg-amber-100 text-amber-700' },
+            { value: 'trust', label: 'Trust', color: 'bg-emerald-100 text-emerald-700' },
+            { value: 'praxis', label: 'Praxis', color: 'bg-violet-100 text-violet-700' },
+          ].map(opt => (
+            <button
+              key={opt.value || 'alle'}
+              onClick={() => setCategoryFilter(opt.value)}
+              className={`px-2.5 py-1 text-[11px] rounded-full transition-colors ${categoryFilter === opt.value ? `${opt.color} ring-1 ring-current` : 'bg-white text-ink-muted hover:bg-gray-50 border border-gray-200'}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {(search || angleFilter || pillarFilter || sourceFilter || categoryFilter) && (
           <span className="text-xs text-ink-muted">
             {filteredPosts.length} von {posts.length} Posts
           </span>
         )}
-        {(search || angleFilter || pillarFilter || sourceFilter) && (
+        {/* #145 Phase 4.1: Kategorie-Filter */}
+        <div className="flex items-center gap-1 flex-wrap">
+          <span className="text-[11px] text-ink-muted mr-1">Kategorie:</span>
+          {[
+            { value: '', label: 'Alle', color: 'bg-gray-100 text-gray-700' },
+            { value: 'news', label: 'News', color: 'bg-blue-100 text-blue-700' },
+            { value: 'persoenlich', label: 'Persönlich', color: 'bg-amber-100 text-amber-700' },
+            { value: 'trust', label: 'Trust', color: 'bg-emerald-100 text-emerald-700' },
+            { value: 'praxis', label: 'Praxis', color: 'bg-violet-100 text-violet-700' },
+          ].map(opt => (
+            <button
+              key={opt.value || 'alle'}
+              onClick={() => setCategoryFilter(opt.value)}
+              className={`px-2.5 py-1 text-[11px] rounded-full transition-colors ${categoryFilter === opt.value ? `${opt.color} ring-1 ring-current` : 'bg-white text-ink-muted hover:bg-gray-50 border border-gray-200'}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {(search || angleFilter || pillarFilter || sourceFilter || categoryFilter) && (
           <button onClick={() => { setSearch(''); setAngleFilter(''); setPillarFilter(''); setSourceFilter('') }} className="text-xs text-gray-400 hover:text-gray-600">
             Filter zurücksetzen
           </button>

@@ -428,21 +428,29 @@ def run_p12(
             json.dumps(output_json, sort_keys=True).encode()
         ).hexdigest()
 
+        # #145 Phase 4.1: Kategorie aus LLM-Output validieren (NULL bei Drift)
+        _ALLOWED_CATEGORIES = {"news", "persoenlich", "trust", "praxis"}
+        _raw_cat = (output_json.get("kategorie") or "").strip().lower()
+        category = _raw_cat if _raw_cat in _ALLOWED_CATEGORIES else None
+        if _raw_cat and category is None:
+            logger.warning("p12 run_id=%s: ungültige LLM-Kategorie '%s' — auf NULL gesetzt", run_id, _raw_cat)
+
         content_piece_id = str(uuid.uuid4())
         with sync_session_factory() as session:
             try:
                 session.execute(
                     text(
                         "INSERT INTO content_pieces "
-                        "(id, tenant_id, idea_id, channel, content_text, content_metadata, status, created_at) "
+                        "(id, tenant_id, idea_id, channel, content_text, content_metadata, status, category, created_at) "
                         "VALUES (:id, :tenant_id, :idea_id, 'linkedin', :content_text, "
-                        "CAST(:content_metadata AS jsonb), 'draft', now())"
+                        "CAST(:content_metadata AS jsonb), 'draft', :category, now())"
                     ),
                     {
                         "id": content_piece_id,
                         "tenant_id": tenant_id,
                         "idea_id": idea_id,
                         "content_text": post_text,
+                        "category": category,
                         "content_metadata": json.dumps(
                             {
                                 "p12_run_id": run_id,
@@ -450,6 +458,7 @@ def run_p12(
                                 "design_notizen": output_json.get("design_notizen", ""),
                                 "ki_signal_check": output_json.get("ki_signal_check", {}),
                                 "potenzielle_schwaechen": output_json.get("potenzielle_schwaechen", []),
+                                "kategorie_raw": _raw_cat,
                                 "output_hash": output_hash,
                             },
                             ensure_ascii=False,
