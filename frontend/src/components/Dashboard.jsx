@@ -795,9 +795,9 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
-            {!hasProfile && (
+            {!hasBrandVoice && (
               <div className="mt-3 px-3 py-2 bg-amber-100 border border-amber-200 rounded-lg text-xs text-amber-800">
-                ⚠️ <strong>Profil nicht ausgefüllt</strong> — die KI generiert generische Inhalte ohne Branchenbezug. Bitte zuerst Branche und Name eintragen.
+                ⚠️ <strong>Brand Voice nicht eingerichtet</strong> — die KI generiert generische Inhalte ohne Branchenbezug. Bitte Brand Voice Wizard starten.
               </div>
             )}
           </div>
