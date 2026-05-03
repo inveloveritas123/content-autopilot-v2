@@ -61,3 +61,9 @@ curl -X POST http://localhost:8500/api/sources \
 ## API-Testen mit LiteLLM
 
 Setze `LITELLM_BASE_URL` in `.env` um alle LLM-Calls ueber einen LiteLLM-Proxy zu routen (z.B. Free Tier zum Testen).
+
+## Dokumentation
+
+- [Setup-Anleitung](docs/SETUP.md) — Installation, Konfiguration, Troubleshooting
+- [Datenbank-Schema & Migrationen](docs/DATABASE.md) — Tabellen, Alembic-Workflow, Backup/Restore
+- [Migration Notes](docs/MIGRATION_NOTES.md) — Breaking Changes, Rollback-Strategie
