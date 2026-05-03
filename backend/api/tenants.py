@@ -1,7 +1,9 @@
 import secrets
+from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,13 @@ from dependencies import get_db, get_tenant, get_tenant_id
 from models.tenant import Tenant
 from models.content_performance import ContentPerformance
 from services.nextcloud import nextcloud_client
+from services.tenant_export import TenantExportService
+from services.tenant_import import TenantImportService
+
+_export_service = TenantExportService()
+_import_service = TenantImportService()
+
+_MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
 
 router = APIRouter()
 
@@ -267,6 +276,74 @@ async def list_voice_profiles(
             "configured": bool(vp.get("tone")),
         })
     return {"profiles": profiles}
+
+
+@router.get("/tenants/me/data-export")
+async def export_tenant_data(
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Erstellt einen vollständigen ZIP-Export aller Tenant-Daten."""
+    zip_bytes = await _export_service.build_export_zip(tenant, db)
+    slug = tenant.name.lower().replace(" ", "-")
+    date_str = datetime.utcnow().strftime("%Y%m%d")
+    filename = f"{slug}-export-{date_str}.zip"
+    return StreamingResponse(
+        iter([zip_bytes]),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/tenants/me/data-import")
+async def import_tenant_data(
+    file: UploadFile = File(...),
+    dry_run: bool = Query(False, description="Nur Validierung, kein echter Import"),
+    merge: bool = Query(True, description="True=Upsert, False=Delete+Insert"),
+    confirm: bool = Query(False, description="Pflichtparameter für echten Import (Schutz gegen Versehen)"),
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Importiert Tenant-Daten aus einem ZIP-Export.
+
+    - dry_run=true: Nur Validierung + Preview, keine DB-Änderungen
+    - confirm=true: Pflicht für echten Import (dry_run=false)
+    - merge=true: Upsert (Standard), merge=false: Delete+Insert
+    - Max. Upload-Größe: 100 MB
+    """
+    zip_bytes = await file.read()
+    if len(zip_bytes) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Datei zu groß: {len(zip_bytes) // (1024*1024)} MB (Max: 100 MB)",
+        )
+
+    if dry_run:
+        result = await _import_service.validate_import(zip_bytes, tenant)
+        return {
+            "dry_run": True,
+            "valid": result["valid"],
+            "errors": result["errors"],
+            "preview": result["preview"],
+        }
+
+    if not confirm:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Echter Import erfordert ?confirm=true als Query-Parameter. "
+                "Verwende ?dry_run=true für eine Vorschau."
+            ),
+        )
+
+    result = await _import_service.execute_import(zip_bytes, tenant, db, merge=merge)
+    return {
+        "dry_run": False,
+        "imported": result["imported"],
+        "errors": result["errors"],
+        "success": len(result["errors"]) == 0,
+    }
 
 
 @router.get("/settings/llm-routing")
