@@ -15,6 +15,7 @@ import DriftReview from './components/DriftReview'
 import ReviewQueue from './components/ReviewQueue'
 import AdminModels from './components/AdminModels'
 import Settings from './components/Settings'
+import ExportImport from './components/ExportImport'
 import Analytics from './components/Analytics'
 import PublishQueue from './components/PublishQueue'
 import Dialogue from './components/Dialogue'
@@ -41,6 +42,7 @@ function App() {
         <Route path="/dialogue" element={<Dialogue />} />
         <Route path="/admin/models/backtest" element={<AdminModels />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/settings/export-import" element={<ExportImport />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Layout>

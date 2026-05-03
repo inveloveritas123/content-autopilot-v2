@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card'
 import { Button } from './ui/Button'
 import LLMSettings from './LLMSettings'
@@ -522,6 +523,19 @@ export default function Settings() {
           </CardContent>
         </Card>
       )}
+
+      {/* Daten & Export */}
+      <Card>
+        <CardHeader><CardTitle>Daten & Export</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Exportiere alle Tenant-Daten als ZIP-Archiv oder importiere ein vorhandenes Backup.
+          </p>
+          <Link to="/settings/export-import">
+            <Button variant="secondary">Zu Export / Import</Button>
+          </Link>
+        </CardContent>
+      </Card>
 
       <div className="sticky bottom-4 z-10">
         <Button onClick={handleSave} disabled={saving} className="w-full shadow-lg">

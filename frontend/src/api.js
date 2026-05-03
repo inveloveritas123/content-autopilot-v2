@@ -157,6 +157,37 @@ export const getCarouselTemplates = () => request('/carousels/templates')
 export const getVoiceProfile = () => request('/tenants/me/voice-profile').catch(() => null)
 export const updateVoiceProfile = (dimensions) => request('/tenants/me/voice-profile', { method: 'PATCH', body: { dimensions } })
 
+export async function downloadTenantDataExport() {
+  const resp = await fetch(`${API_BASE}/tenants/me/data-export`, {
+    headers: { 'X-API-Key': getApiKey() },
+  })
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: resp.statusText }))
+    throw new Error(err.detail || 'Export fehlgeschlagen')
+  }
+  const blob = await resp.blob()
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `cap-export-${new Date().toISOString().slice(0, 10)}.zip`
+  a.click()
+  URL.revokeObjectURL(a.href)
+  return { downloaded: true }
+}
+
+export const importTenantData = async (file, dryRun = true, merge = true) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  const resp = await fetch(
+    `${API_BASE}/tenants/me/data-import?dry_run=${dryRun}&confirm=${!dryRun}&merge=${merge}`,
+    { method: 'POST', headers: { 'X-API-Key': getApiKey() }, body: fd }
+  )
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: resp.statusText }))
+    throw new Error(err.detail || 'Import fehlgeschlagen')
+  }
+  return resp.json()
+}
+
 // Pipeline
 export const getPipelineProgress = () => request('/pipeline/progress')
 export const getPipelineLog = (params) => request('/pipeline/log', { params })
