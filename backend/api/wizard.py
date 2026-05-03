@@ -325,7 +325,7 @@ async def wizard_answer(
     await db.execute(
         text(
             "UPDATE wizard_session "
-            "SET answers = :answers::jsonb, current_phase = :phase, updated_at = now() "
+            "SET answers = CAST(:answers AS jsonb), current_phase = :phase, updated_at = now() "
             "WHERE id = :id"
         ),
         {
