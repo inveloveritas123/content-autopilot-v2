@@ -331,8 +331,13 @@ export async function getWizardQuestions() {
   const res = await request('/brand-voice/wizard/questions')
   return res.phases
 }
-export const startWizardSession = (forceNew = false) =>
-  request(`/brand-voice/wizard/start${forceNew ? '?force_new=true' : ''}`, { method: 'POST' })
+export const startWizardSession = (forceNew = false, projectId = null) => {
+  const params = new URLSearchParams()
+  if (forceNew) params.set('force_new', 'true')
+  if (projectId) params.set('project_id', projectId)
+  const qs = params.toString()
+  return request(`/brand-voice/wizard/start${qs ? '?' + qs : ''}`, { method: 'POST' })
+}
 export const getWizardSession = (sessionId) => request(`/brand-voice/wizard/${sessionId}`)
 export const answerWizardQuestion = (sessionId, phase, questionId, answer) =>
   request(`/brand-voice/wizard/${sessionId}/answer`, { method: 'POST', body: { phase, question_id: questionId, answer } })

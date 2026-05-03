@@ -494,7 +494,8 @@ export default function WizardPage() {
           if (session.current_phase) setCurrentPhase(session.current_phase)
           if (session.phase_progress) setPhaseProgress(session.phase_progress)
         } else {
-          const result = await startWizardSession()
+          const activeProjectId = localStorage.getItem('activeProjectId') || null
+          const result = await startWizardSession(false, activeProjectId)
           const newId = result.session_id || result.id
           if (result.resumed) {
             // Offene Session gefunden — Modal anzeigen, Loading beenden
@@ -503,6 +504,7 @@ export default function WizardPage() {
               phase: result.phase,
               answersCount: result.answers_count || 0,
               lastUpdated: result.last_updated,
+              stale: result.stale || false,
             })
             setLoading(false)
             return
@@ -530,7 +532,8 @@ export default function WizardPage() {
     setResumeModal(null)
     setLoading(true)
     try {
-      const result = await startWizardSession(true) // force_new=true
+      const activeProjectId = localStorage.getItem('activeProjectId') || null
+      const result = await startWizardSession(true, activeProjectId) // force_new=true
       const newId = result.session_id || result.id
       setSessionId(newId)
       navigate(`/brand-voice/wizard/${newId}`, { replace: true })
@@ -752,6 +755,11 @@ export default function WizardPage() {
               <BookmarkCheck className="w-6 h-6 text-primary-600" />
             </div>
             <h2 className="text-lg font-semibold text-ink mb-2">Offene Session gefunden</h2>
+            {resumeModal.stale && (
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3">
+                ⚠️ Diese Session ist älter als 7 Tage — die Wizard-Fragen könnten sich geändert haben. Neu starten empfohlen.
+              </p>
+            )}
             <p className="text-sm text-ink-muted mb-1">
               Du hast bereits mit dem Brand Voice Wizard begonnen
               {lastDate ? ` (zuletzt am ${lastDate})` : ''}.

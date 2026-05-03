@@ -11,7 +11,7 @@ import html
 import json
 import logging
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 import anthropic
 from fastapi import APIRouter, Depends, HTTPException
@@ -401,53 +401,89 @@ class SynthesizePhaseRequest(BaseModel):
 # POST /brand-voice/wizard/start
 # ---------------------------------------------------------------------------
 
+_STALE_SESSION_DAYS = 7  # sessions older than this are flagged stale
+
+
 @router.post("/brand-voice/wizard/start", status_code=201)
 async def wizard_start(
     force_new: bool = False,
+    project_id: Optional[uuid.UUID] = None,
     tenant_id: uuid.UUID = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Neue Wizard-Session anlegen oder bestehende fortsetzen.
 
     Wenn `force_new=true` (Query-Param), wird immer eine neue Session erstellt.
-    Sonst: wenn eine offene Session existiert, wird sie zurückgegeben
-    (resumed=true) damit das Frontend ein Fortsetzen-Modal anzeigen kann.
+    Sonst: wenn eine offene Session existiert (project_id-scoped wenn angegeben),
+    wird sie zurückgegeben (resumed=true) damit das Frontend ein Fortsetzen-Modal
+    anzeigen kann.
+
+    project_id: wenn gesetzt, wird nur nach Sessions dieses Projekts gesucht
+    (und neue Sessions für dieses Projekt angelegt). Ohne project_id: globaler Slot.
     """
+    from datetime import datetime, timezone, timedelta
+
     if not force_new:
-        # Prüfen ob eine offene Session existiert
-        existing = (await db.execute(
-            text(
-                "SELECT id, current_phase, answers, updated_at "
-                "FROM wizard_session "
-                "WHERE tenant_id=:t AND status='in_progress' "
-                "ORDER BY updated_at DESC LIMIT 1"
-            ),
-            {"t": str(tenant_id)},
-        )).fetchone()
+        # Prüfen ob eine offene Session für diesen Tenant (+ Projekt) existiert
+        if project_id is not None:
+            existing = (await db.execute(
+                text(
+                    "SELECT id, current_phase, answers, updated_at "
+                    "FROM wizard_session "
+                    "WHERE tenant_id=:t AND project_id=:pid AND status='in_progress' "
+                    "ORDER BY updated_at DESC LIMIT 1"
+                ),
+                {"t": str(tenant_id), "pid": str(project_id)},
+            )).fetchone()
+        else:
+            existing = (await db.execute(
+                text(
+                    "SELECT id, current_phase, answers, updated_at "
+                    "FROM wizard_session "
+                    "WHERE tenant_id=:t AND project_id IS NULL AND status='in_progress' "
+                    "ORDER BY updated_at DESC LIMIT 1"
+                ),
+                {"t": str(tenant_id)},
+            )).fetchone()
 
         if existing:
             session_id = str(existing.id)
             current_phase = existing.current_phase or 1
             answers = existing.answers or {}
             phase_data = _PHASE_BY_NUM.get(current_phase, WIZARD_PHASES[0])
+            # Stale-Flag: session >7 days old (UX hint — not a hard block)
+            stale = False
+            if existing.updated_at:
+                age = datetime.now(timezone.utc) - existing.updated_at.replace(tzinfo=timezone.utc)
+                stale = age > timedelta(days=_STALE_SESSION_DAYS)
             return {
                 "session_id": session_id,
                 "phase": current_phase,
                 "phase_title": phase_data["title"],
                 "questions": phase_data["questions"],
                 "resumed": True,
+                "stale": stale,
                 "answers_count": len(answers),
                 "last_updated": existing.updated_at.isoformat() if existing.updated_at else None,
             }
 
     session_id = str(uuid.uuid4())
-    await db.execute(
-        text(
-            "INSERT INTO wizard_session (id, tenant_id, status, current_phase, answers, phase_synthesis) "
-            "VALUES (:id, :tenant_id, 'in_progress', 1, '{}'::jsonb, '{}'::jsonb)"
-        ),
-        {"id": session_id, "tenant_id": str(tenant_id)},
-    )
+    if project_id is not None:
+        await db.execute(
+            text(
+                "INSERT INTO wizard_session (id, tenant_id, project_id, status, current_phase, answers, phase_synthesis) "
+                "VALUES (:id, :tenant_id, :project_id, 'in_progress', 1, '{}'::jsonb, '{}'::jsonb)"
+            ),
+            {"id": session_id, "tenant_id": str(tenant_id), "project_id": str(project_id)},
+        )
+    else:
+        await db.execute(
+            text(
+                "INSERT INTO wizard_session (id, tenant_id, status, current_phase, answers, phase_synthesis) "
+                "VALUES (:id, :tenant_id, 'in_progress', 1, '{}'::jsonb, '{}'::jsonb)"
+            ),
+            {"id": session_id, "tenant_id": str(tenant_id)},
+        )
     await db.commit()
 
     first_phase = WIZARD_PHASES[0]
@@ -457,6 +493,7 @@ async def wizard_start(
         "phase_title": first_phase["title"],
         "questions": first_phase["questions"],
         "resumed": False,
+        "stale": False,
         "answers_count": 0,
     }
 
