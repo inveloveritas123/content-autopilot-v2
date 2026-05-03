@@ -42,6 +42,7 @@ services:
       UVICORN_LOOP: asyncio
       COST_CAP_USD_PER_DAY: ${COST_CAP_USD_PER_DAY:-5.0}
       COST_CAP_USD_GLOBAL_PER_DAY: ${COST_CAP_USD_GLOBAL_PER_DAY:-10.0}
+      TELEGRAM_ADMIN_CHAT_ID: ${TELEGRAM_ADMIN_CHAT_ID:-}  # Setzen für 50%-Cost-Cap-Alert via Telegram
     depends_on:
       redis-v2:
         condition: service_healthy
@@ -92,6 +93,7 @@ services:
       APP_ENV: ${APP_ENV:-production}
       COST_CAP_USD_PER_DAY: ${COST_CAP_USD_PER_DAY:-5.0}
       COST_CAP_USD_GLOBAL_PER_DAY: ${COST_CAP_USD_GLOBAL_PER_DAY:-10.0}
+      TELEGRAM_ADMIN_CHAT_ID: ${TELEGRAM_ADMIN_CHAT_ID:-}  # Setzen für 50%-Cost-Cap-Alert via Telegram
     depends_on:
       redis-v2:
         condition: service_healthy
