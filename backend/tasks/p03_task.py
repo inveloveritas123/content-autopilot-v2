@@ -258,10 +258,38 @@ def run_p03(
     t_start = time.monotonic()
 
     try:
-        # 2. Cost-Cap-Schätzung (sync — reine Rechenoperation)
-        from services.cost_cap import estimate_anthropic_cost
+        # 2. Cost-Cap-Schätzung + Enforcement (#123 Lücke: P03 hatte keinen Cap-Check)
+        from services.cost_cap import estimate_anthropic_cost, CostCapExceeded
         est = estimate_anthropic_cost(ANTHROPIC_MODEL_ID, 3000, 1500)
         logger.info("P03 estimated cost=%.6f USD for tenant=%s", est, tenant_id)
+        try:
+            from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+            from sqlalchemy.orm import sessionmaker as _sm
+            from services.cost_cap import CostCapMiddleware
+            from config import settings as _s
+            import asyncio as _asyncio
+
+            async def _p03_cap_check():
+                _engine = create_async_engine(_s.database_url, pool_pre_ping=True)
+                _Session = _sm(_engine, class_=AsyncSession, expire_on_commit=False)
+                try:
+                    async with _Session() as _sess:
+                        await CostCapMiddleware(_sess).check_and_record(tenant_id, est)
+                finally:
+                    await _engine.dispose()
+
+            _asyncio.run(_p03_cap_check())
+        except CostCapExceeded:
+            logger.warning("P03 run_id=%s tenant=%s: daily cost cap exceeded, pausing", run_id, tenant_id)
+            with sync_session_factory() as session:
+                session.execute(
+                    text("UPDATE setup_pipeline_run SET status='paused_for_cost', finished_at=now() WHERE id=:id"),
+                    {"id": run_id},
+                )
+                session.commit()
+            return {"run_id": run_id, "status": "paused_for_cost"}
+        except Exception as cap_err:
+            logger.warning("P03 cost-cap check failed (fail-open): %s", cap_err)
 
         # 3. Prompt laden
         loader = get_default_prompt_loader()
