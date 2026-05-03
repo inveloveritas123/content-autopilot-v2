@@ -159,7 +159,7 @@ function ProjectSwitcher() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => { setOpen(!open); setShowNewForm(false) }}
-        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors group"
+        className="w-full flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-lg hover:bg-gray-50 transition-colors group"
       >
         <div className="w-6 h-6 rounded-md bg-primary-100 flex items-center justify-center shrink-0">
           <FolderOpen className="w-3.5 h-3.5 text-primary-700" />
@@ -172,7 +172,7 @@ function ProjectSwitcher() {
         <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-surface-border rounded-xl shadow-lg z-50 py-1 overflow-hidden">
           {projects.map(p => (
             <div key={p.id}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer group"
+              className="flex items-center gap-2 px-3 py-2 min-h-[44px] hover:bg-gray-50 cursor-pointer group"
               onClick={() => renamingId !== p.id && selectProject(p)}
             >
               {activeId === p.id
@@ -267,7 +267,7 @@ export default function Layout({ children }) {
                   to={item.to}
                   end={item.to === '/'}
                   className={({ isActive }) => clsx(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                    'flex items-center gap-3 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-colors',
                     isActive
                       ? 'bg-primary-50 text-primary-700 border-l-2 border-primary-700'
                       : 'text-ink-light hover:bg-gray-50 hover:text-ink'
@@ -292,7 +292,7 @@ export default function Layout({ children }) {
                   key={item.to}
                   to={item.to}
                   className={({ isActive }) => clsx(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                    'flex items-center gap-3 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-colors',
                     isActive
                       ? 'bg-primary-50 text-primary-700 border-l-2 border-primary-700'
                       : 'text-ink-light hover:bg-gray-50 hover:text-ink'
@@ -319,7 +319,7 @@ export default function Layout({ children }) {
                   key={item.to}
                   to={item.to}
                   className={({ isActive }) => clsx(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                    'flex items-center gap-3 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-colors',
                     isActive
                       ? 'bg-primary-50 text-primary-700 border-l-2 border-primary-700'
                       : 'text-ink-light hover:bg-gray-50 hover:text-ink'

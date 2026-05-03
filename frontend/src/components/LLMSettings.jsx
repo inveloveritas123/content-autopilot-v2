@@ -207,12 +207,12 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
           <div className="flex items-center gap-1.5">
             <button
               onClick={openEditForm}
-              className={`p-1.5 rounded-md hover:bg-gray-100 ${editOpen ? 'text-primary-600 bg-primary-50' : 'text-ink-muted hover:text-primary-600'}`}
+              className={`p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md hover:bg-gray-100 ${editOpen ? 'text-primary-600 bg-primary-50' : 'text-ink-muted hover:text-primary-600'}`}
               title="Bearbeiten"
             >
               <Pencil className="w-4 h-4" />
             </button>
-            <button onClick={() => onTest(provider.id)} disabled={testing} className="p-1.5 rounded-md hover:bg-gray-100 text-ink-muted hover:text-primary-600" title="Testen">
+            <button onClick={() => onTest(provider.id)} disabled={testing} className="p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md hover:bg-gray-100 text-ink-muted hover:text-primary-600" title="Testen">
               {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
             </button>
             <button onClick={() => onToggleDefault(provider)} className="p-1.5 rounded-md hover:bg-gray-100" title="Als Default setzen">
@@ -226,7 +226,7 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
               {provider.is_active ? 'Aktiv' : 'Inaktiv'}
             </button>
             {!provider.is_active && (
-              <button onClick={() => onDelete(provider.id)} className="p-1.5 rounded-md hover:bg-red-50 text-ink-muted hover:text-red-500" title="Loeschen">
+              <button onClick={() => onDelete(provider.id)} className="p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md hover:bg-red-50 text-ink-muted hover:text-red-500" title="Loeschen">
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
@@ -967,7 +967,7 @@ function AddProviderModal({ onClose, onSave }) {
               {step === 'select' ? 'Provider hinzufuegen' : `${selectedType?.label} einrichten`}
             </h3>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-gray-100 text-ink-muted">
+          <button onClick={onClose} className="p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md hover:bg-gray-100 text-ink-muted">
             <X className="w-4 h-4" />
           </button>
         </div>

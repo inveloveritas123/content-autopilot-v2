@@ -171,7 +171,7 @@ export default function LLMAnalytics() {
             <button
               key={p.label}
               onClick={() => applyPreset(p.days)}
-              className="px-3 py-1.5 text-xs bg-surface-100 hover:bg-primary-50 hover:text-primary-700 text-ink rounded-lg border border-surface-border transition-colors"
+              className="px-3 py-1.5 min-h-[44px] text-xs bg-surface-100 hover:bg-primary-50 hover:text-primary-700 text-ink rounded-lg border border-surface-border transition-colors"
             >
               {p.label}
             </button>
