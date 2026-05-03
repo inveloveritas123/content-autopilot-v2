@@ -13,7 +13,6 @@ import logging
 import uuid
 from typing import Any, Optional
 
-import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -21,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant_id
 from services.cost_cap import CostCapMiddleware, CostCapExceeded, estimate_anthropic_cost
+from services.llm import llm_service, set_llm_tenant
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -714,7 +714,9 @@ async def wizard_synthesize_phase(
             detail=f"Tageslimit ueberschritten: {exc}",
         ) from exc
 
-    # Anthropic-Call
+    # LLM-Call via LLMService (Requesty-Router → auto_cache, kein Direct-Anthropic-Auth nötig)
+    # set_llm_tenant für Cost-Cap-Tracking gesetzt
+    set_llm_tenant(str(tenant_id))
     user_content = json.dumps(
         {
             "phase": data.phase,
@@ -724,61 +726,35 @@ async def wizard_synthesize_phase(
         ensure_ascii=False,
         indent=2,
     )
-
-    client = anthropic.Anthropic()
-    message = client.messages.create(
-        model=ANTHROPIC_MODEL_ID,
-        max_tokens=1024,
-        system=[
-            {
-                "type": "text",
-                "text": (
-                    "Du analysierst Wizard-Antworten und schlägst Vertiefungen vor. "
-                    "Antworte ausschliesslich mit einem JSON-Array. "
-                    "Jedes Element hat die Felder: "
-                    "'suggestion' (string, Vertiefungsvorschlag) und "
-                    "'applies_to_question_id' (string, z.B. 'q1_2'). "
-                    "Maximal 5 Vorschlaege. Kein Markdown, nur reines JSON-Array."
-                ),
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[{"role": "user", "content": user_content}],
+    system_prompt = (
+        "Du analysierst Wizard-Antworten und schlägst Vertiefungen vor. "
+        "Antworte ausschliesslich mit einem JSON-Array. "
+        "Jedes Element hat die Felder: "
+        "'suggestion' (string, Vertiefungsvorschlag) und "
+        "'applies_to_question_id' (string, z.B. 'q1_2'). "
+        "Maximal 5 Vorschlaege. Kein Markdown, nur reines JSON-Array."
     )
 
-    raw_output = message.content[0].text if message.content else "[]"
-
-    # JSON parsen — Markdown-Code-Zaun ggf. entfernen
-    cleaned = raw_output.strip()
-    if cleaned.startswith("```"):
-        lines = cleaned.splitlines()
-        inner = lines[1:]
-        if inner and inner[-1].strip() == "```":
-            inner = inner[:-1]
-        cleaned = "\n".join(inner).strip()
-
     try:
-        suggestions: list[dict] = json.loads(cleaned)
-        if not isinstance(suggestions, list):
+        parsed = await llm_service.complete_json(
+            prompt=user_content,
+            system=system_prompt,
+            model="claude-sonnet",
+            purpose="onboarding",
+        )
+        # complete_json kann dict ODER list zurückgeben — wir akzeptieren list
+        if isinstance(parsed, list):
+            suggestions = parsed
+        elif isinstance(parsed, dict) and "suggestions" in parsed:
+            suggestions = parsed.get("suggestions") or []
+        else:
             suggestions = []
-    except json.JSONDecodeError:
-        logger.warning("synthesize-phase: JSON-Parse-Fehler, raw=%s", raw_output[:200])
+    except Exception as exc:
+        logger.warning("synthesize-phase: LLM-Call fehlgeschlagen: %s", exc)
         suggestions = []
 
-    # Tatsaechliche Kosten aufzeichnen
-    actual_cost = estimate_anthropic_cost(
-        ANTHROPIC_MODEL_ID,
-        message.usage.input_tokens if message.usage else 500,
-        message.usage.output_tokens if message.usage else 300,
-    )
-    try:
-        await cost_cap.check_and_record(
-            tenant_id=str(tenant_id),
-            estimated_cost_usd=0,
-            actual_cost_usd=actual_cost,
-        )
-    except Exception:
-        pass  # Kostenaufzeichnung darf nicht die Antwort blockieren
+    # Tatsächliche Kosten werden bereits im LLMService._litellm via track_cost aufgezeichnet
+    # (siehe services/llm.py:347) — kein separater Call hier nötig.
 
     # Synthese in DB speichern
     current_synthesis: dict = dict(row.phase_synthesis or {})
