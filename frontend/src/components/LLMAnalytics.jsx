@@ -60,6 +60,10 @@ export default function LLMAnalytics() {
   const [byDay, setByDay] = useState([])
   const [byHour, setByHour] = useState([])
   const [anomaly, setAnomaly] = useState(null)
+  // #128 B-5: Provider-Reconciliation (manuelle Requesty-Side-Werte)
+  const [manualRequestyCost, setManualRequestyCost] = useState(() => localStorage.getItem('reconcile_requesty_usd') || '')
+  const [manualRequestyTokens, setManualRequestyTokens] = useState(() => localStorage.getItem('reconcile_requesty_tokens') || '')
+  const [manualReconcileDate, setManualReconcileDate] = useState(() => localStorage.getItem('reconcile_date') || toYYYYMMDD(new Date()))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [dateRange, setDateRange] = useState(() => {
@@ -104,6 +108,12 @@ export default function LLMAnalytics() {
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange])
+
+  useEffect(() => {
+    if (manualRequestyCost) localStorage.setItem('reconcile_requesty_usd', manualRequestyCost)
+    if (manualRequestyTokens) localStorage.setItem('reconcile_requesty_tokens', manualRequestyTokens)
+    if (manualReconcileDate) localStorage.setItem('reconcile_date', manualReconcileDate)
+  }, [manualRequestyCost, manualRequestyTokens, manualReconcileDate])
 
   function applyPreset(days) {
     const to = new Date()
@@ -338,6 +348,106 @@ export default function LLMAnalytics() {
             })}
           </div>
         )}
+      </div>
+
+      {/* #128 B-5: Provider-Reconciliation — intern vs Requesty.ai-Dashboard */}
+      <div className="bg-white rounded-xl border border-surface-border p-4">
+        <h3 className="text-sm font-semibold text-ink mb-3 flex items-center gap-2">
+          <Activity className="w-4 h-4" /> Provider-Vergleich
+          <span className="text-[11px] font-normal text-ink-muted">— Intern vs Requesty.ai-Dashboard</span>
+        </h3>
+        <p className="text-[11px] text-ink-muted mb-3">
+          Trage hier die Werte aus deinem Requesty.ai-Dashboard ein, um Abweichungen zu erkennen.
+          Eingabe wird lokal im Browser gespeichert (kein Server).
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <div>
+            <label className="block text-[11px] text-ink-muted mb-1">Datum</label>
+            <input
+              type="date"
+              value={manualReconcileDate}
+              onChange={e => setManualReconcileDate(e.target.value)}
+              className="w-full text-xs border border-surface-border rounded-lg px-2 py-1.5"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-ink-muted mb-1">Cost laut Requesty (USD)</label>
+            <input
+              type="number"
+              step="0.001"
+              min="0"
+              value={manualRequestyCost}
+              onChange={e => setManualRequestyCost(e.target.value)}
+              placeholder="z.B. 7.42"
+              className="w-full text-xs border border-surface-border rounded-lg px-2 py-1.5"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-ink-muted mb-1">Tokens laut Requesty</label>
+            <input
+              type="number"
+              step="1"
+              min="0"
+              value={manualRequestyTokens}
+              onChange={e => setManualRequestyTokens(e.target.value)}
+              placeholder="z.B. 1234567"
+              className="w-full text-xs border border-surface-border rounded-lg px-2 py-1.5"
+            />
+          </div>
+        </div>
+
+        {/* Diff-Tabelle */}
+        {(() => {
+          const dayRow = byDay.find(d => d.day === manualReconcileDate || (d.day || '').slice(0, 10) === manualReconcileDate)
+          const internCostUsd = dayRow ? (dayRow.total_cost_cents / 100) : 0
+          const internTokens = dayRow ? (dayRow.total_tokens || 0) : 0
+          const reqCostUsd = parseFloat(manualRequestyCost || '0') || 0
+          const reqTokens = parseFloat(manualRequestyTokens || '0') || 0
+          const costDiff = reqCostUsd - internCostUsd
+          const tokenDiff = reqTokens - internTokens
+          const costDiffPct = internCostUsd > 0 ? (costDiff / internCostUsd) * 100 : null
+          const significant = costDiffPct !== null && Math.abs(costDiffPct) > 10
+          if (!manualRequestyCost && !manualRequestyTokens && !dayRow) return null
+          return (
+            <div className={`rounded-lg p-3 text-xs ${significant ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50 border border-gray-200'}`}>
+              <table className="w-full text-left">
+                <thead className="text-[10px] text-ink-muted uppercase tracking-wide">
+                  <tr>
+                    <th className="pb-1">Metrik</th>
+                    <th className="pb-1 text-right">Intern (uns)</th>
+                    <th className="pb-1 text-right">Requesty</th>
+                    <th className="pb-1 text-right">Diff</th>
+                  </tr>
+                </thead>
+                <tbody className="font-mono">
+                  <tr>
+                    <td className="py-1">Cost (USD)</td>
+                    <td className="py-1 text-right">${internCostUsd.toFixed(4)}</td>
+                    <td className="py-1 text-right">${reqCostUsd.toFixed(4)}</td>
+                    <td className={`py-1 text-right ${significant ? 'text-amber-700 font-semibold' : 'text-ink-muted'}`}>
+                      {costDiff >= 0 ? '+' : ''}{costDiff.toFixed(4)}
+                      {costDiffPct !== null ? ` (${costDiffPct >= 0 ? '+' : ''}${costDiffPct.toFixed(1)}%)` : ''}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-1">Tokens</td>
+                    <td className="py-1 text-right">{fmtTokens(internTokens)}</td>
+                    <td className="py-1 text-right">{fmtTokens(reqTokens)}</td>
+                    <td className="py-1 text-right text-ink-muted">
+                      {tokenDiff >= 0 ? '+' : ''}{fmtTokens(Math.abs(tokenDiff))}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              {significant && (
+                <p className="mt-2 text-[11px] text-amber-700">
+                  ⚠ Abweichung &gt; 10% — bitte Requesty.ai-Dashboard prüfen ggf. Cache-Tracking-Drift.
+                </p>
+              )}
+            </div>
+          )
+        })()}
       </div>
 
       {/* CSV Export */}
