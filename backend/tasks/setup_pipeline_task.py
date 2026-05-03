@@ -51,7 +51,7 @@ def _load_p01_payload(tenant_id: str, project_id: str | None = None) -> dict:
         if project_id is None:
             row = session.execute(
                 text(
-                    "SELECT context_data FROM tenant_customer_context "
+                    "SELECT payload FROM tenant_customer_context"
                     "WHERE tenant_id=:t AND project_id IS NULL AND is_active=false "
                     "ORDER BY version DESC LIMIT 1"
                 ),
@@ -60,7 +60,7 @@ def _load_p01_payload(tenant_id: str, project_id: str | None = None) -> dict:
         else:
             row = session.execute(
                 text(
-                    "SELECT context_data FROM tenant_customer_context "
+                    "SELECT payload FROM tenant_customer_context"
                     "WHERE tenant_id=:t AND project_id=:pid AND is_active=false "
                     "ORDER BY version DESC LIMIT 1"
                 ),
@@ -266,6 +266,37 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
             session.commit()
 
         logger.info("setup_pipeline tenant=%s: is_active-Wechsel abgeschlossen", tenant_id)
+
+        # ------------------------------------------------------------------
+        # D.5 NC Back-Sync — aktive Profile nach Nextcloud schreiben
+        # ------------------------------------------------------------------
+        try:
+            from services.brand_voice_storage import sync_brand_voice_to_nc
+            nc_result = sync_brand_voice_to_nc(tenant_id, project_id=project_id)
+            if nc_result.get("synced"):
+                logger.info(
+                    "setup_pipeline NC-sync tenant=%s synced=%s",
+                    tenant_id,
+                    nc_result["synced"],
+                )
+            if nc_result.get("skipped"):
+                logger.debug(
+                    "setup_pipeline NC-sync tenant=%s skipped=%s",
+                    tenant_id,
+                    nc_result["skipped"],
+                )
+            if nc_result.get("errors"):
+                logger.warning(
+                    "setup_pipeline NC-sync partial errors tenant=%s: %s",
+                    tenant_id,
+                    nc_result["errors"],
+                )
+        except Exception as nc_err:
+            logger.warning(
+                "NC back-sync failed (non-fatal) tenant=%s: %s",
+                tenant_id,
+                nc_err,
+            )
 
         # ------------------------------------------------------------------
         # E. WebSocket-Push + Email-Fallback

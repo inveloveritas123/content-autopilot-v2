@@ -319,3 +319,141 @@ def get_default_nc_adapter() -> NextcloudWebDAVAdapter:
         user=os.getenv("NC_SERVICE_USER", settings.nextcloud_user),
         token=os.getenv("NC_SERVICE_TOKEN", settings.nextcloud_password),
     )
+
+
+# ---------------------------------------------------------------------------
+# Slug helper
+# ---------------------------------------------------------------------------
+
+import re as _re_slug
+
+
+def _slugify(name: str) -> str:
+    """Convert a display name to a URL-safe directory slug."""
+    s = (name or "").lower().strip()
+    for src, dst in [("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")]:
+        s = s.replace(src, dst)
+    s = _re_slug.sub(r"[^\w\s-]", "", s)
+    s = _re_slug.sub(r"[\s_]+", "-", s)
+    s = _re_slug.sub(r"-+", "-", s).strip("-")
+    return s[:64] or "default"
+
+
+# ---------------------------------------------------------------------------
+# NC Back-Sync (App → NC)
+# ---------------------------------------------------------------------------
+
+_PILLAR_TABLES = {
+    "voice_profile": "tenant_voice_profile",
+    "customer_context": "tenant_customer_context",
+    "audience_avatar": "tenant_audience_avatar",
+}
+
+
+def sync_brand_voice_to_nc(
+    tenant_id: str,
+    project_id: str | None = None,
+) -> dict:
+    """Sync active brand voice profiles back to Nextcloud.
+
+    Path scheme: {nc_base}/{tenant_slug}/{project_slug}/{pillar}.json
+
+    Returns {"synced": [...], "skipped": [...], "errors": [...]}.
+    Never raises — all errors are collected and returned.
+    """
+    import json as _json
+    from sqlalchemy import text as _text
+    from models.base import sync_session_factory
+
+    synced: list[str] = []
+    skipped: list[str] = []
+    errors: list[str] = []
+
+    try:
+        with sync_session_factory() as session:
+            # Resolve tenant name → slug
+            tenant_row = session.execute(
+                _text("SELECT name FROM tenants WHERE id = :t"),
+                {"t": str(tenant_id)},
+            ).fetchone()
+            if not tenant_row:
+                return {
+                    "synced": [],
+                    "skipped": [],
+                    "errors": [f"Tenant {tenant_id} not found"],
+                }
+            tenant_slug = _slugify(tenant_row[0])
+
+            # Resolve project slug
+            if project_id is not None:
+                proj_row = session.execute(
+                    _text("SELECT slug FROM projects WHERE id = :p"),
+                    {"p": str(project_id)},
+                ).fetchone()
+                project_slug = proj_row[0] if proj_row and proj_row[0] else _slugify(str(project_id))
+            else:
+                project_slug = "default"
+
+            nc_base = _get_brand_voice_base().rstrip("/")
+            nc_dir = f"{nc_base}/{tenant_slug}/{project_slug}"
+
+            # Fetch and write each pillar
+            for pillar, tbl in _PILLAR_TABLES.items():
+                try:
+                    if project_id is None:
+                        row = session.execute(
+                            _text(
+                                f"SELECT payload FROM {tbl} "
+                                "WHERE tenant_id=:t AND project_id IS NULL AND is_active=true "
+                                "ORDER BY version DESC LIMIT 1"
+                            ),
+                            {"t": str(tenant_id)},
+                        ).fetchone()
+                    else:
+                        row = session.execute(
+                            _text(
+                                f"SELECT payload FROM {tbl} "
+                                "WHERE tenant_id=:t AND project_id=:pid AND is_active=true "
+                                "ORDER BY version DESC LIMIT 1"
+                            ),
+                            {"t": str(tenant_id), "pid": str(project_id)},
+                        ).fetchone()
+
+                    if not row or not row[0]:
+                        skipped.append(pillar)
+                        continue
+
+                    payload = row[0] if isinstance(row[0], dict) else _json.loads(row[0])
+                    nc_path = f"{nc_dir}/{pillar}.json"
+                    content = _json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+
+                    adapter = get_default_nc_adapter()
+                    adapter.write(nc_path, content)
+                    synced.append(f"{pillar} → {nc_path}")
+                    logger.info(
+                        "NC back-sync: wrote %s for tenant=%s project=%s",
+                        nc_path,
+                        tenant_id,
+                        project_id,
+                    )
+
+                except Exception as pillar_err:
+                    errors.append(f"{pillar}: {pillar_err}")
+                    logger.warning(
+                        "NC back-sync failed for pillar=%s tenant=%s project=%s: %s",
+                        pillar,
+                        tenant_id,
+                        project_id,
+                        pillar_err,
+                    )
+
+    except Exception as outer_err:
+        errors.append(f"outer: {outer_err}")
+        logger.warning(
+            "NC back-sync outer error tenant=%s project=%s: %s",
+            tenant_id,
+            project_id,
+            outer_err,
+        )
+
+    return {"synced": synced, "skipped": skipped, "errors": errors}
