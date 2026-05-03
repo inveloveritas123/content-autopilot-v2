@@ -399,7 +399,7 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
       <ColumnSelectModal
         open={showColumnModalForNC}
         onClose={() => setShowColumnModalForNC(false)}
-        onSelect={handleNCImportWithType}
+        onConfirm={handleNCImportWithType}
       />
     </Dialog>
   )
