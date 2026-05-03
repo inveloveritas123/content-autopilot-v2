@@ -200,6 +200,53 @@ Bis dahin: erst muss Phase 1-3 hart gut laufen.
 
 ---
 
+---
+
+## 11. Wann welches Modell — Knecht-Routing-Regel (Stand 2026-05-03)
+
+### A) Direkte Anthropic-Calls (Setup-Pipeline, keine Requesty.ai)
+
+| Task | Datei | Modell | Begründung |
+|------|-------|--------|------------|
+| P01 Kundenkontext-Extraktion | `tasks/p01_task.py` | Gemini 2.5 Flash Lite (Vertex direkt) | Strukturierte Extraktion, günstig, EU-hosted |
+| P03 Voice-Profil | `tasks/p03_task.py` | `claude-sonnet-4-6-20251022` | Hohe Anforderungen an Nuance + Tonalität |
+| P04 Audience Avatar | `tasks/p04_task.py` | `claude-sonnet-4-6-20251022` | Empathie-Task, Persona-Generierung |
+| P12 Post-Generierung | `tasks/p12_task.py` | `claude-sonnet-4-6-20251022` | Kreativ + Marken-Voice |
+| P12b Post-Optimierung | `tasks/p12b_task.py` | `claude-sonnet-4-6-20251022` | Kreativ + Marken-Voice |
+| P12c Carousel | `tasks/p12c_task.py` | `claude-sonnet-4-6-20251022` | Kreativ + Marken-Voice |
+| Voice Drift | `tasks/voice_drift_task.py` | `claude-sonnet-4-6-20251022` | Stimmanalyse, hohe Qualitätsanforderung |
+| Wizard Synthese | `api/wizard.py` | `claude-sonnet-4-6-20251022` | Kontextsensitiv, direkte User-Interaktion |
+
+**Alle direkten Anthropic-Calls** haben `cache_control: {"type": "ephemeral"}` auf dem System-Prompt — spart ~90% Prompt-Cache-Kosten bei stabilen System-Prompts.
+
+### B) LLM-Service (Requesty.ai, `llm_service.complete()`)
+
+Mapping via `PURPOSE_MODEL_MAP` in `services/llm.py`:
+
+| Purpose | Internes Modell | Aktuell geroutet zu | Kosten-Ziel |
+|---------|-----------------|---------------------|-------------|
+| `transcription`, `analysis`, `voice_update`, `summary`, `tagging`, `scoring` | `gemini-flash` | `vertex/gemini-2.5-flash-lite@europe-central2` | $0.075/1M |
+| `ideation`, `questions`, `creative`, `post_generation`, `onboarding` | `claude-sonnet` | `vertex/gemini-2.5-flash-lite@europe-central2` (**temporär remapped nach Mistral-Desaster 2026-05-03**) | $0.075/1M |
+
+**Wichtig:** `claude-sonnet` zeigt in REQUESTY_MODELS auf Gemini Flash Lite (nicht Claude). Das war eine Notmaßnahme nach dem Mistral-medium-$20-Budget-Overrun. Wenn ein echter Claude-Sonnet-Pfad über Requesty.ai gewünscht wird: `REQUESTY_MODELS["claude-sonnet"]` auf `"anthropic/claude-sonnet-4-20250514"` setzen + Requesty.ai Budget entsprechend anpassen.
+
+### C) Preis-Referenz (Mai 2026)
+
+| Modell | Input-Preis | Output-Preis | Caching |
+|--------|-------------|--------------|---------|
+| Gemini 2.5 Flash Lite | $0.075/1M | $0.30/1M | ✅ via Requesty `auto_cache` |
+| Claude Sonnet 4 | $3.00/1M | $15.00/1M | ✅ via `cache_control: ephemeral` (direkt) |
+| ~~Mistral Medium~~ | ~~$5.00/1M~~ | ~~$15.00/1M~~ | ❌ DEAKTIVIERT |
+
+### D) Entscheidungs-Kriterien
+
+- **Gemini Flash Lite:** Alles was Extraktion, Klassifikation, Tagging, kurze Strukturierung ist. Günstig, schnell, ausreichend.
+- **Claude Sonnet (direkt):** Kreative Generierung mit Marken-Voice, Persona-Erstellung, Nuance-intensive Aufgaben. Nur wenn Qualitätsunterschied messbar.
+- **Niemals:** Mistral-medium, GPT-4 (zu teuer ohne nachgewiesenen Qualitätsvorteil in dieser Domäne).
+- **Modell-Pinning:** IMMER dated alias (`claude-sonnet-4-6-20251022`), nie generischer Alias. Constraint #6.
+
+---
+
 ## Neuer Acceptance-Punkt für #82
 
 Alle pending Migrations sind auf der Live-DB ausgeführt (`alembic current` zeigt `head`). Issue #82 gilt erst als abgeschlossen wenn dieser Stand verifiziert ist.
