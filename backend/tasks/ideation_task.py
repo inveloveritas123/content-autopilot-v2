@@ -9,7 +9,7 @@ Workflow:
 """
 import logging
 import asyncio
-from services.llm import BudgetExceededError
+from services.llm import BudgetExceededError, set_llm_tenant
 from services.brand_voice import format_voice_for_prompt
 
 from sqlalchemy import select
@@ -74,6 +74,7 @@ def auto_generate_ideas(item_id: str):
             brand_context = format_voice_for_prompt(voice_profile) if voice_profile else ""
 
             # Ideation-Pipeline ausführen
+            set_llm_tenant(str(item.tenant_id))
             ideas_data = asyncio.run(
                 run_ideation_pipeline(
                     analysis=item.analysis,

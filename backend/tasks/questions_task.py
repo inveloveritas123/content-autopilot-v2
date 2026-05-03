@@ -5,6 +5,7 @@ Auto-Chain: transcribe → analyse → [generate_smart_questions] → ready_for_
 """
 import asyncio
 import logging
+from services.llm import set_llm_tenant
 
 from tasks.celery_app import celery_app
 from models.base import sync_session_factory
@@ -47,6 +48,7 @@ def generate_smart_questions_task(item_id: str):
         try:
             from services.smart_questions import generate_smart_questions
 
+            set_llm_tenant(str(item.tenant_id))
             questions = asyncio.run(
                 generate_smart_questions(
                     item_id=item_id,
