@@ -191,6 +191,33 @@ async def cost_history(
     ]
 
 
+@router.post("/llm-providers/{provider_id}/reset-cost")
+async def reset_provider_cost(
+    provider_id: str,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reset today's cost counter for a provider (for testing / manual override)."""
+    from sqlalchemy import text
+
+    provider = await db.get(LLMProvider, uuid.UUID(provider_id))
+    if not provider or provider.tenant_id != tenant.id:
+        raise HTTPException(404, "Provider not found")
+
+    provider.cost_spent_today_cents = 0
+    provider.cost_reset_at = datetime.utcnow()
+
+    # Also delete today's row from daily_cost_tenant for this tenant
+    today = datetime.utcnow().date()
+    await db.execute(
+        text("DELETE FROM daily_cost_tenant WHERE tenant_id = :tid AND date = :d"),
+        {"tid": str(tenant.id), "d": today},
+    )
+
+    await db.commit()
+    return {"reset": True, "reset_at": provider.cost_reset_at.isoformat()}
+
+
 @router.delete("/llm-providers/{provider_id}")
 async def delete_provider(
     provider_id: str,

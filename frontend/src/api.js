@@ -195,6 +195,7 @@ export const deleteLLMProvider = (id) => request(`/settings/llm-providers/${id}`
 export const testLLMProvider = (id) => request(`/settings/llm-providers/${id}/test`, { method: 'POST' })
 export const getLLMCostHistory = (days = 7) => request('/settings/llm-cost-history', { params: { days } })
 export const benchmarkLLM = (step, item_id) => request('/settings/benchmark', { method: 'POST', body: JSON.stringify({ step, item_id: item_id || undefined }) })
+export const resetLLMProviderCost = (id) => request(`/settings/llm-providers/${id}/reset-cost`, { method: 'POST' })
 export const getVoiceProfilesList = () => request('/settings/voice-profiles-list')
 export const runVoiceCompare = (item_id) => request('/settings/voice-compare', { method: 'POST', body: JSON.stringify({ item_id: item_id || undefined }) })
 

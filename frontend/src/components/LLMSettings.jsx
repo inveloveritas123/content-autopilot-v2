@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Cpu, Plus, Trash2, Zap, CheckCircle2, XCircle, Loader2, Star, Eye, EyeOff, Pencil, Check, X, FlaskConical } from 'lucide-react'
+import { Cpu, Plus, Trash2, Zap, CheckCircle2, XCircle, Loader2, Star, Eye, EyeOff, Pencil, Check, X, FlaskConical, RotateCcw } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { getLLMProviders, createLLMProvider, updateLLMProvider, deleteLLMProvider, testLLMProvider, getLLMCostHistory, benchmarkLLM, getLlmRouting, updateSettings } from '../api'
+import { getLLMProviders, createLLMProvider, updateLLMProvider, deleteLLMProvider, testLLMProvider, getLLMCostHistory, benchmarkLLM, getLlmRouting, updateSettings, resetLLMProviderCost } from '../api'
 
 const PROVIDER_TYPES = [
   { value: 'litellm', label: 'LiteLLM Proxy', defaultUrl: 'http://host.docker.internal:4000/v1' },
@@ -39,7 +39,7 @@ const TASK_MODEL_MAP = [
   { task: 'Smart-Fragen', model: 'Mistral Medium', modelId: 'mistral/mistral-medium-latest', tier: 'creative', assignment: 'creative', cost: '$0.40/1M' },
 ]
 
-function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLimit, onUpdateModel, testing }) {
+function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLimit, onUpdateModel, onResetCost, testing }) {
   const statusColor = provider.last_test_status === 'ok' ? 'text-emerald-500' : provider.last_test_status === 'error' ? 'text-red-500' : 'text-gray-400'
   const StatusIcon = provider.last_test_status === 'ok' ? CheckCircle2 : provider.last_test_status === 'error' ? XCircle : Cpu
 
@@ -47,6 +47,7 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
   const [limitInput, setLimitInput] = useState('')
   const [editingModel, setEditingModel] = useState(false)
   const [modelInput, setModelInput] = useState(provider.model_name || '')
+  const [resetting, setResetting] = useState(false)
 
   const spent = provider.cost_spent_today_cents || 0
   const limit = provider.cost_limit_daily_cents || 500
@@ -115,7 +116,7 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
           <span className="text-[11px] text-ink-muted">Tageskosten</span>
           <div className="flex items-center gap-1">
             <span className={`text-[11px] font-semibold ${isBlocked ? 'text-red-600' : isWarning ? 'text-amber-600' : 'text-ink'}`}>
-              {(spent / 100).toFixed(2)} EUR /
+              ${(spent / 100).toFixed(2)} /
             </span>
             {editingLimit ? (
               <div className="flex items-center gap-1">
@@ -127,13 +128,13 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
                   className="w-16 text-[11px] border border-primary-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
                   autoFocus
                 />
-                <span className="text-[11px] text-ink-muted">EUR</span>
+                <span className="text-[11px] text-ink-muted">USD</span>
                 <button onClick={saveLimit} className="text-emerald-600 hover:text-emerald-700"><Check className="w-3 h-3" /></button>
                 <button onClick={() => setEditingLimit(false)} className="text-gray-400 hover:text-gray-600"><X className="w-3 h-3" /></button>
               </div>
             ) : (
               <button onClick={startEdit} className="flex items-center gap-0.5 text-[11px] text-ink-muted hover:text-primary-600 group">
-                <span>{(limit / 100).toFixed(2)} EUR</span>
+                <span>${(limit / 100).toFixed(2)} USD</span>
                 <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
             )}
@@ -147,14 +148,23 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             <p className="text-[10px] text-red-600 font-medium">LIMIT ERREICHT</p>
             <div className="flex gap-1 ml-auto">
-              {[2, 5].map(eur => (
+              <button
+                onClick={async () => { setResetting(true); try { await onResetCost(provider.id) } finally { setResetting(false) } }}
+                disabled={resetting}
+                className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded-md hover:bg-amber-200 border border-amber-200 transition-colors"
+                title="Tageskosten auf 0 zurücksetzen"
+              >
+                {resetting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RotateCcw className="w-2.5 h-2.5" />}
+                Reset
+              </button>
+              {[2, 5].map(usd => (
                 <button
-                  key={eur}
-                  onClick={() => onUpdateLimit(provider.id, limit + eur * 100)}
+                  key={usd}
+                  onClick={() => onUpdateLimit(provider.id, limit + usd * 100)}
                   className="px-2 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700 rounded-md hover:bg-red-200 border border-red-200 transition-colors"
-                  title={`Limit um +${eur}€ erhöhen`}
+                  title={`Limit um +$${usd} erhöhen`}
                 >
-                  +{eur}€
+                  +${usd}
                 </button>
               ))}
             </div>
@@ -162,14 +172,22 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
         )}
         {!isBlocked && (
           <div className="mt-1.5 flex justify-end gap-1">
-            {[2, 5].map(eur => (
+            <button
+              onClick={async () => { setResetting(true); try { await onResetCost(provider.id) } finally { setResetting(false) } }}
+              disabled={resetting || spent === 0}
+              className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-ink-muted hover:text-amber-600 hover:bg-amber-50 rounded transition-colors disabled:opacity-30"
+              title="Tageskosten auf 0 zurücksetzen"
+            >
+              {resetting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RotateCcw className="w-2.5 h-2.5" />}
+            </button>
+            {[2, 5].map(usd => (
               <button
-                key={eur}
-                onClick={() => onUpdateLimit(provider.id, limit + eur * 100)}
+                key={usd}
+                onClick={() => onUpdateLimit(provider.id, limit + usd * 100)}
                 className="px-1.5 py-0.5 text-[10px] text-ink-muted hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
-                title={`Limit um +${eur}€ erhöhen`}
+                title={`Limit um +$${usd} erhöhen`}
               >
-                +{eur}€
+                +${usd}
               </button>
             ))}
           </div>
@@ -243,9 +261,9 @@ function CostHistoryChart() {
     <ResponsiveContainer width="100%" height={100}>
       <BarChart data={formatted} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
         <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={v => `${v}€`} />
+        <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={v => `$${v}`} />
         <Tooltip
-          formatter={(val, name) => [`${val.toFixed(3)} EUR`, 'Kosten']}
+          formatter={(val, name) => [`$${val.toFixed(3)} USD`, 'Kosten']}
           labelStyle={{ fontSize: 11 }}
           contentStyle={{ fontSize: 11, padding: '4px 8px' }}
         />
@@ -567,6 +585,11 @@ export default function LLMSettings() {
     await loadProviders()
   }
 
+  const handleResetCost = async (id) => {
+    await resetLLMProviderCost(id)
+    await loadProviders()
+  }
+
   const handleTypeChange = (type) => {
     const pt = PROVIDER_TYPES.find(p => p.value === type)
     setForm({ ...form, provider_type: type, base_url: pt?.defaultUrl || '' })
@@ -601,7 +624,7 @@ export default function LLMSettings() {
           {providers.map(p => (
             <ProviderCard key={p.id} provider={p} onTest={handleTest} onDelete={handleDelete}
               onToggleDefault={handleToggleDefault} onUpdateLimit={handleUpdateLimit}
-              onUpdateModel={handleUpdateModel} testing={testingId === p.id} />
+              onUpdateModel={handleUpdateModel} onResetCost={handleResetCost} testing={testingId === p.id} />
           ))}
         </div>
       )}
