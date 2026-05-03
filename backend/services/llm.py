@@ -36,10 +36,10 @@ PURPOSE_MODEL_MAP = {
 }
 
 # Requesty.ai model strings (direct, EU-region)
-# Cost targets: gemini-2.0-flash $0.075/1M, mistral-medium $0.40/1M (vs. Sonnet $3.00/1M)
+# Cost targets: gemini-2.5-flash-lite $0.075/1M (all tasks — mistral-medium DISABLED, caused $20 runaway)
 REQUESTY_MODELS = {
     "gemini-flash": "vertex/gemini-2.5-flash-lite@europe-central2",  # Analysis: cheap, EU-hosted
-    "claude-sonnet": "mistral/mistral-medium-latest",                 # Creative: $0.40/1M (7x cheaper)
+    "claude-sonnet": "vertex/gemini-2.5-flash-lite@europe-central2",  # Creative: remapped to Gemini (mistral-medium disabled 2026-05-03 — caused $20 budget overrun in one day)
     "gpt-4o-mini": "openai/gpt-4.1-mini",
 }
 
@@ -170,7 +170,40 @@ class LLMService:
 
     async def _litellm(self, prompt: str, system: Optional[str], model: str, purpose: Optional[str] = None) -> str:
         """Route through configured provider (Requesty.ai or LiteLLM proxy)."""
-        from services.provider_resolver import get_active_provider, track_cost, get_model_for_task
+        from services.provider_resolver import get_active_provider, track_cost, get_model_for_task, _DAILY_CAP_USD, _GLOBAL_CAP_USD
+        from services.cost_cap import CostCapExceeded
+        import os
+        from datetime import datetime, timezone
+
+        # Pre-call cap check (sync DB read — fast, protects against runaway)
+        try:
+            from models.base import sync_session_factory
+            from sqlalchemy import text as _t
+            today = datetime.now(timezone.utc).date()
+            with sync_session_factory() as _s:
+                # Global cap
+                g_row = _s.execute(_t(
+                    "SELECT COALESCE(SUM(cost_usd), 0) FROM daily_cost_tenant WHERE date = :today"
+                ), {"today": today}).fetchone()
+                if g_row and float(g_row[0]) >= _GLOBAL_CAP_USD:
+                    raise BudgetExceededError(
+                        f"Global daily cost cap exceeded: {float(g_row[0]):.2f} >= {_GLOBAL_CAP_USD:.2f} USD. "
+                        "All LLM calls blocked until midnight UTC."
+                    )
+                # Per-tenant cap (best-effort — tenant_id not always available here)
+                t_row = _s.execute(_t(
+                    "SELECT COALESCE(SUM(cost_usd), 0) FROM daily_cost_tenant WHERE date = :today"
+                    " GROUP BY tenant_id ORDER BY 1 DESC LIMIT 1"
+                ), {"today": today}).fetchone()
+                if t_row and float(t_row[0]) >= _DAILY_CAP_USD:
+                    raise BudgetExceededError(
+                        f"Tenant daily cost cap exceeded: {float(t_row[0]):.2f} >= {_DAILY_CAP_USD:.2f} USD. "
+                        "Pipeline paused until midnight UTC."
+                    )
+        except BudgetExceededError:
+            raise
+        except Exception:
+            pass  # Cap check failure must not block calls (fail-open for availability)
 
         # Try DB-configured provider first
         task = "analysis" if model in ("gemini-flash",) else "creative" if model in ("claude-sonnet",) else "all"

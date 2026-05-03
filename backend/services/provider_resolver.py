@@ -105,10 +105,33 @@ def get_model_for_task(task: str) -> str:
     return TASK_MODEL_MAP.get(task, "google/gemini-2.0-flash")
 
 
+_DAILY_CAP_USD = float(os.environ.get("COST_CAP_USD_PER_DAY", "5.0"))
+_GLOBAL_CAP_USD = float(os.environ.get("COST_CAP_USD_GLOBAL_PER_DAY", "20.0"))
+
+
+def _check_global_cap(session, today) -> None:
+    """Raise CostCapGlobalExceeded if total platform spend today exceeds global cap."""
+    try:
+        from sqlalchemy import text as sa_text
+        row = session.execute(sa_text(
+            "SELECT COALESCE(SUM(cost_usd), 0) FROM daily_cost_tenant WHERE date = :today"
+        ), {"today": today}).fetchone()
+        if row and float(row[0]) >= _GLOBAL_CAP_USD:
+            raise RuntimeError(
+                f"GLOBAL daily cost cap exceeded: {float(row[0]):.2f} >= {_GLOBAL_CAP_USD:.2f} USD. "
+                "All LLM calls blocked until midnight UTC."
+            )
+    except RuntimeError:
+        raise
+    except Exception:
+        pass
+
+
 def track_cost(provider_id, usage: dict, model: str = "", task_type: str = "unknown", tenant_id=None):
     """Track LLM cost from response usage data + log the call.
 
     provider_id may be None (env-config fallback path) — still logs cost.
+    Also updates daily_cost_tenant for cap enforcement.
     """
     if not usage:
         return
@@ -120,6 +143,8 @@ def track_cost(provider_id, usage: dict, model: str = "", task_type: str = "unkn
     pricing = MODEL_PRICING.get(model, {"input": 0.075, "output": 0.30})
     cost_usd = (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
     cost_cents = cost_usd * 100
+
+    today = datetime.utcnow().date()
 
     with sync_session_factory() as session:
         # Update provider cost if we have a DB provider
@@ -162,6 +187,32 @@ def track_cost(provider_id, usage: dict, model: str = "", task_type: str = "unkn
                 session.add(log)
             except Exception as e:
                 logger.warning(f"Cost log failed: {e}")
+
+        # Update daily_cost_tenant for cap enforcement
+        if tenant_id and cost_usd > 0:
+            try:
+                from sqlalchemy import text as sa_text
+                import uuid as _uuid
+                tid = str(tenant_id)
+                session.execute(sa_text("""
+                    INSERT INTO daily_cost_tenant (tenant_id, date, cost_usd, call_count, notified_at)
+                    VALUES (:tid, :today, :cost, 1, NULL)
+                    ON CONFLICT (tenant_id, date)
+                    DO UPDATE SET cost_usd = daily_cost_tenant.cost_usd + :cost,
+                                  call_count = daily_cost_tenant.call_count + 1
+                """), {"tid": tid, "today": today, "cost": cost_usd})
+
+                # Per-tenant cap check — log critical if exceeded
+                row = session.execute(sa_text(
+                    "SELECT cost_usd FROM daily_cost_tenant WHERE tenant_id = :tid AND date = :today"
+                ), {"tid": tid, "today": today}).fetchone()
+                if row and float(row[0]) >= _DAILY_CAP_USD:
+                    logger.critical(
+                        "COST_CAP_EXCEEDED tenant=%s today=%s total_usd=%.4f cap=%.2f model=%s",
+                        tid, today, float(row[0]), _DAILY_CAP_USD, model
+                    )
+            except Exception as e:
+                logger.warning(f"daily_cost_tenant update failed: {e}")
 
         session.commit()
         if cost_cents >= 0.1:
