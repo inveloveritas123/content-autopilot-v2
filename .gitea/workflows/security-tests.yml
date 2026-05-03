@@ -1,0 +1,66 @@
+name: Security Tests (Tenant Isolation)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".gitea/workflows/security-tests.yml"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  tenant-isolation:
+    name: Tenant Isolation Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install minimal test dependencies
+        run: |
+          pip install --quiet \
+            fastapi==0.115.* \
+            httpx==0.28.* \
+            pydantic==2.10.* \
+            pydantic-settings==2.7.* \
+            sqlalchemy[asyncio]==2.0.* \
+            pytest \
+            pytest-asyncio \
+            starlette \
+            python-multipart==0.0.*
+
+      - name: Run tenant isolation tests
+        run: |
+          python -m pytest tests/security/test_tenant_isolation.py \
+            -v \
+            --tb=short \
+            -x \
+            2>&1
+        env:
+          PYTHONPATH: .
+          DATABASE_URL: "postgresql+asyncpg://test:test@localhost:5432/test"
+          SYNC_DATABASE_URL: "postgresql://test:test@localhost:5432/test"
+          REDIS_URL: "redis://localhost:6379/0"
+          DEFAULT_TENANT_KEY: "test-key"
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Tenant-Isolation gebrochen!** Security tests failed — PR blocked.\n\nSiehe Workflow-Logs für Details.'
+            });
