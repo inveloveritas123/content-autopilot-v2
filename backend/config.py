@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     sentry_dsn: str = ""  # Empty = disabled
     app_env: str = "production"  # dev | staging | production
 
+    # Storage paths (Nextcloud)
+    brand_voice_nc_base_path: str = "/content-autopilot/v2/Kunde/"
+    prompt_nc_base_path: str = "/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/"
+
     # VoiceScriptor
     voicescriptor_bot_token: Optional[str] = None
     voicescriptor_chat_id: Optional[str] = None

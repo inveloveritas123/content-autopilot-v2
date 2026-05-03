@@ -36,6 +36,8 @@ services:
       DEFAULT_TENANT_KEY: ${DEFAULT_TENANT_KEY}
       SENTRY_DSN: ${SENTRY_DSN:-}
       APP_ENV: ${APP_ENV:-production}
+      BRAND_VOICE_NC_BASE_PATH: ${BRAND_VOICE_NC_BASE_PATH:-/content-autopilot/v2/Kunde/}
+      PROMPT_NC_BASE_PATH: ${PROMPT_NC_BASE_PATH:-/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/}
       UVICORN_LOOP: asyncio
     depends_on:
       redis-v2:

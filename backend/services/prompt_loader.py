@@ -22,7 +22,12 @@ logger = logging.getLogger(__name__)
 # Prompt-Pfade
 # ---------------------------------------------------------------------------
 
-_PROMPT_BASE = "/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/"
+def _prompt_base() -> str:
+    from config import settings as _s
+    return _s.prompt_nc_base_path
+
+
+_PROMPT_BASE = _prompt_base()
 
 PROMPT_PATHS: dict[str, str] = {
     "P01":          _PROMPT_BASE + "P01-kundenkontext-extraktion.md",

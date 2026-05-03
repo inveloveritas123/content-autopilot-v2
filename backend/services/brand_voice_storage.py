@@ -62,11 +62,13 @@ class BrandVoiceStorageAdapter(Protocol):
 # Path helpers
 # ---------------------------------------------------------------------------
 
-BRAND_VOICE_TENANT_PATH = "/content-autopilot/v2/Kunde/{slug}/"
+def _get_brand_voice_base() -> str:
+    from config import settings as _s
+    return _s.brand_voice_nc_base_path
 
 
 def tenant_voice_path(slug: str, sub: str = "") -> str:
-    base = BRAND_VOICE_TENANT_PATH.format(slug=slug)
+    base = _get_brand_voice_base().rstrip("/") + f"/{slug}/"
     return base + sub if sub else base
 
 
