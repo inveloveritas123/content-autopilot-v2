@@ -4,10 +4,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy import select
 
+import logging_config
+logging_config.setup_logging()
+
 from config import settings
 from models import async_session_factory, Tenant
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -21,10 +23,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Migration failed (may already be applied): {e}")
 
-    # Create default tenant if not exists
+    # Create default tenant if not exists (check both primary and secondary key)
     async with async_session_factory() as session:
-        result = await session.execute(select(Tenant).where(Tenant.api_key == settings.default_tenant_key))
-        tenant = result.scalar_one_or_none()
+        result = await session.execute(
+            select(Tenant).where(
+                (Tenant.api_key == settings.default_tenant_key) |
+                (Tenant.api_key_secondary == settings.default_tenant_key)
+            )
+        )
+        tenant = result.scalars().first()
         if not tenant:
             tenant = Tenant(
                 name="Default Tenant",
@@ -33,7 +40,7 @@ async def lifespan(app: FastAPI):
             )
             session.add(tenant)
             await session.commit()
-            logger.info(f"Default tenant created with API key: {settings.default_tenant_key}")
+            logger.info("Default tenant created (API key configured via env)")
 
         # Auto-setup default project if none exists
         from models.project import Project
@@ -110,6 +117,10 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
+
+# Structured JSON logging middleware — sets correlation_id / tenant_id context
+from middleware.logging_middleware import LoggingMiddleware
+app.add_middleware(LoggingMiddleware)
 
 # Import and include routers
 from api.dashboard import router as dashboard_router

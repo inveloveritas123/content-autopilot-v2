@@ -1,5 +1,6 @@
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import task_prerun
 
 from config import settings
 
@@ -70,6 +71,20 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour=8, minute=30),  # täglich 08:30
     },
 }
+
+# ---------------------------------------------------------------------------
+# Logging context — contextvars are NOT inherited across process boundaries.
+# Set correlation_id from task_id and clear tenant_id for every task run.
+# ---------------------------------------------------------------------------
+@task_prerun.connect
+def _setup_logging_context(task_id: str = "", **kwargs) -> None:  # noqa: ANN001
+    try:
+        from logging_config import correlation_id_var, tenant_id_var
+        correlation_id_var.set(task_id or "")
+        tenant_id_var.set("")
+    except Exception:  # pragma: no cover — never crash a task over logging
+        pass
+
 
 # Explicit task module imports
 celery_app.conf.include = [
