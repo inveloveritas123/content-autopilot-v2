@@ -77,6 +77,11 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.reviewer_queue_cron.check_reviewer_queue_backlog",
         "schedule": crontab(hour=8, minute=30),  # täglich 08:30
     },
+    "memory-backfill-hourly": {
+        "task": "tasks.memory_backfill_task.run_backfill",
+        "schedule": crontab(minute=15),  # stündlich :15 (kein Konflikt mit Drift)
+        "kwargs": {"limit": 100},
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -116,5 +121,6 @@ celery_app.conf.include = [
     "tasks.random_smart_scheduler",
     "tasks.reviewer_queue_cron",
     "tasks.telegram_task",
+    "tasks.memory_backfill_task",
     "api.wizard",
 ]

@@ -82,12 +82,15 @@ def _verify_signature(raw_body: bytes, signature_header: Optional[str]) -> bool:
 def _resolve_tenant_for_wa_user(wa_user_id: str) -> Optional[str]:
     """Findet tenant_id über tenant_telegram_link.channel='whatsapp'.
 
-    Bestehende tenant_telegram_link-Tabelle wiederverwendet — Spalte
-    `channel` (siehe Folge-Migration). Falls noch nicht vorhanden:
-    fallback auf telegram_user_id-Spalte (legacy).
+    Migration 040 hat die channel-Spalte hinzugefügt. WhatsApp-User-IDs
+    sind keine Integer (E.164-Phone-Nummern), aber das Feld
+    telegram_user_id ist bigint. Wir mappen WA-Phone als Hash auf
+    bigint? Pragmatisch: für WhatsApp legen wir die User-ID als
+    text(:uid) ab und vergleichen via ::text-Cast.
+
+    Bei Drift/leerer Tabelle: None.
     """
     with sync_session_factory() as db:
-        # Erste Variante: channel-Spalte existiert
         try:
             row = db.execute(
                 text(
@@ -99,9 +102,8 @@ def _resolve_tenant_for_wa_user(wa_user_id: str) -> Optional[str]:
             ).fetchone()
             if row:
                 return str(row[0])
-        except Exception:
-            # channel-Spalte noch nicht da — Migration kommt mit Welle 5/6
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("WA-tenant-resolve failed: %s", exc)
     return None
 
 

@@ -246,7 +246,7 @@ async def telegram_webhook(
             link_row = db.execute(
                 text(
                     "SELECT tenant_id FROM tenant_telegram_link "
-                    "WHERE telegram_user_id = :uid AND status = 'active'"
+                    "WHERE telegram_user_id = :uid AND channel = 'telegram' AND status = 'active'"
                 ),
                 {"uid": telegram_user_id},
             ).fetchone()
@@ -263,9 +263,131 @@ async def telegram_webhook(
         return {"ok": True}
 
     tenant_id: str = str(link_row[0])
+    chat_id_for_reply: int = message.get("chat", {}).get("id", 0)
+
+    # ── #140 Phase 5 Welle 7: Memory-Commands (Constraint #13 Mobile-First) ──
+    if message_type == "text":
+        cmd_handled = _try_memory_command(tenant_id, chat_id_for_reply, text_content)
+        if cmd_handled:
+            return {"ok": True}
+
     try:
         _store_and_dispatch(tenant_id, message, message_type)
     except Exception as e:
         logger.error(f"_store_and_dispatch error: {e}")
 
     return {"ok": True}
+
+
+# ── Memory-Commands (Phase 5 Welle 7) ────────────────────────────────
+
+
+def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool:
+    """Verarbeitet /such und /notiz und /erinner.
+
+    Returns True wenn das Kommando erkannt wurde (egal ob Erfolg oder
+    Fehler) — der normale store_and_dispatch-Pfad wird dann übersprungen.
+    """
+    stripped = text_content.strip()
+    if not stripped.startswith("/"):
+        return False
+
+    parts = stripped.split(maxsplit=1)
+    cmd = parts[0].lower().split("@")[0]  # /such@Bot → /such
+    arg = parts[1].strip() if len(parts) > 1 else ""
+
+    if cmd in ("/such", "/suche", "/erinner"):
+        if not arg or len(arg) < 2:
+            _send_telegram_message(chat_id, "Bitte Suchanfrage angeben — z.B. /such Authentizität")
+            return True
+        try:
+            results = _memory_search_sync(tenant_id, arg, limit=5)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("/such failed: %s", exc)
+            _send_telegram_message(chat_id, f"Suche fehlgeschlagen: {exc}")
+            return True
+        if not results:
+            _send_telegram_message(chat_id, f"Keine Treffer für „{arg[:60]}“.")
+            return True
+        lines = [f"Top {len(results)} Treffer für „{arg[:60]}“:"]
+        for r in results:
+            sim = r.get("similarity") or 0
+            preview = (r.get("content_text") or "")[:200]
+            tag = (r.get("classification") or "—")
+            lines.append(f"\n• {sim*100:.0f}% [{tag}] {preview}")
+        _send_telegram_message(chat_id, "\n".join(lines)[:4000])
+        return True
+
+    if cmd in ("/notiz", "/note"):
+        if not arg or len(arg) < 5:
+            _send_telegram_message(chat_id, "Bitte Notiz-Text angeben — z.B. /notiz Wertschätzung ist mir wichtig")
+            return True
+        try:
+            chunk_id = _memory_note_sync(tenant_id, arg)
+            _send_telegram_message(chat_id, f"✓ Notiz gespeichert (id: {chunk_id[:8]}…). Frag später mit /such danach.")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("/notiz failed: %s", exc)
+            _send_telegram_message(chat_id, f"Notiz konnte nicht gespeichert werden: {exc}")
+        return True
+
+    if cmd in ("/help", "/hilfe"):
+        _send_telegram_message(
+            chat_id,
+            (
+                "Verfügbare Kommandos:\n"
+                "• Voice/Photo/Text → Gedächtnis\n"
+                "• /such <Begriff> — Semantische Suche\n"
+                "• /notiz <Text> — Manuelle Notiz speichern\n"
+                "• /help — diese Hilfe"
+            ),
+        )
+        return True
+
+    return False  # kein Memory-Command — normal verarbeiten
+
+
+def _memory_search_sync(tenant_id: str, query: str, limit: int = 5) -> list[dict]:
+    """Synchrone Search-Wrapper für Telegram-Bot-Pfad."""
+    import asyncio
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.orm import sessionmaker as _sm
+    from services.embedding_service import search_similar
+    from config import settings as _s
+
+    async def _run():
+        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
+        SessionMaker = _sm(engine, class_=AsyncSession, expire_on_commit=False)
+        try:
+            async with SessionMaker() as db:
+                return await search_similar(
+                    db, tenant_id=tenant_id, query_text=query, limit=limit, min_similarity=0.0
+                )
+        finally:
+            await engine.dispose()
+    return asyncio.run(_run())
+
+
+def _memory_note_sync(tenant_id: str, text_input: str) -> str:
+    """Synchrone Note-Wrapper."""
+    import asyncio
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.orm import sessionmaker as _sm
+    from services.embedding_service import store_chunk
+    from config import settings as _s
+
+    async def _run():
+        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
+        SessionMaker = _sm(engine, class_=AsyncSession, expire_on_commit=False)
+        try:
+            async with SessionMaker() as db:
+                return await store_chunk(
+                    db=db,
+                    tenant_id=tenant_id,
+                    source_type="manual_note",
+                    content_text=text_input.strip(),
+                    metadata={"channel": "telegram", "via": "command"},
+                    classify=True,
+                )
+        finally:
+            await engine.dispose()
+    return asyncio.run(_run())
