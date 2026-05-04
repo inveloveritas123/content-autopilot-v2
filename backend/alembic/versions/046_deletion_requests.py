@@ -25,6 +25,10 @@ def upgrade():
         "deletion_requests",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True,
                   server_default=sa.text("gen_random_uuid()")),
+        # tenant_id absichtlich OHNE FK-Constraint auf tenants.id:
+        # Das Audit-Log muss 10 Jahre aufbewahrt werden (DSGVO Art. 5 Abs. 2),
+        # auch nachdem ein Tenant gelöscht wurde. Ein ON DELETE CASCADE würde
+        # den Audit-Trail vernichten — das ist unzulässig.
         sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("tenant_name_snapshot", sa.String(255), nullable=True),
         sa.Column("mode", sa.String(30), nullable=False),
