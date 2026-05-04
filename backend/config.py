@@ -45,6 +45,16 @@ class Settings(BaseSettings):
     telegram_webhook_secret: Optional[str] = None
     telegram_bot_username: Optional[str] = "content_autopilot_bot"
 
+    # WhatsApp Business Cloud API (Phase 8.1, #140)
+    # Setup: Meta-Developer-Account → WhatsApp-Business-App → Phone-Number-ID
+    # WHATSAPP_ACCESS_TOKEN: Long-lived Access Token vom Meta-Dashboard
+    # WHATSAPP_PHONE_NUMBER_ID: Phone Number ID des verbundenen Bots
+    # WHATSAPP_VERIFY_TOKEN: selbstgewählt für Webhook-Verifikation
+    whatsapp_access_token: Optional[str] = None
+    whatsapp_phone_number_id: Optional[str] = None
+    whatsapp_verify_token: Optional[str] = None
+    whatsapp_app_secret: Optional[str] = None  # für X-Hub-Signature-256-Verifikation
+
     class Config:
         env_file = ".env"
         extra = "ignore"

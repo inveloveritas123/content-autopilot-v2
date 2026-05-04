@@ -199,15 +199,18 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
 
     _update_log_transcript(log_id, transcript, result.model_name or "unknown", result.confidence)
 
+    channel = payload.get("_channel") or "telegram"
+    source_type = "voice_whatsapp" if channel == "whatsapp" else "voice_telegram"
     chunk_metadata = {
-        "telegram_message_id": payload.get("message_id"),
+        "telegram_message_id": payload.get("message_id") or payload.get("id"),
         "duration_sec": duration,
         "transcription_confidence": round(min(max(result.confidence, 0), 1), 2),
         "transcription_model": result.model_name,
+        "channel": channel,
     }
     try:
         chunk_id = asyncio.run(
-            _store_chunk_async(tenant_id, "voice_telegram", transcript, log_id, chunk_metadata)
+            _store_chunk_async(tenant_id, source_type, transcript, log_id, chunk_metadata)
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("store_voice_chunk failed: %s", exc)
@@ -217,6 +220,8 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         "status": "ok",
         "transcript_chars": len(transcript),
         "memory_chunk_id": chunk_id,
+        "source_type": source_type,
+        "channel": channel,
     }
 
 
@@ -251,20 +256,23 @@ def _process_photo(log_id: str, tenant_id: str, payload: dict) -> dict:
     if caption:
         content_text = f"{caption}\n\n{content_text}"
 
+    channel = payload.get("_channel") or "telegram"
+    source_type = "photo_whatsapp" if channel == "whatsapp" else "photo_telegram"
     chunk_metadata = {
-        "telegram_message_id": payload.get("message_id"),
+        "telegram_message_id": payload.get("message_id") or payload.get("id"),
         "file_size": best.get("file_size"),
         "width": best.get("width"),
         "height": best.get("height"),
         "ocr_chars": result.get("ocr_chars", 0),
         "ocr_lang": result.get("ocr_lang"),
         "has_description": bool(result.get("description")),
-        "telegram_caption": caption,
+        "caption": caption,
+        "channel": channel,
     }
 
     try:
         chunk_id = asyncio.run(
-            _store_chunk_async(tenant_id, "photo_telegram", content_text, log_id, chunk_metadata)
+            _store_chunk_async(tenant_id, source_type, content_text, log_id, chunk_metadata)
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("store_photo_chunk failed: %s", exc)
@@ -274,6 +282,8 @@ def _process_photo(log_id: str, tenant_id: str, payload: dict) -> dict:
         "status": "ok",
         "memory_chunk_id": chunk_id,
         "ocr_chars": result.get("ocr_chars", 0),
+        "source_type": source_type,
+        "channel": channel,
     }
 
 
@@ -283,16 +293,29 @@ def _process_photo_stub(log_id: str, tenant_id: str, payload: dict) -> dict:
 
 
 def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
-    """Text-Nachrichten — speichern als manual_note (kein Wizard-Bridge in dieser Welle)."""
-    text_content = (payload.get("text") or "").strip()
+    """Text-Nachrichten — speichern als manual_note (kein Wizard-Bridge in dieser Welle).
+
+    Akzeptiert beide Payload-Formate:
+    - Telegram:  message["text"] = "..."
+    - WhatsApp:  message["text"] = {"body": "..."}
+    """
+    raw = payload.get("text")
+    if isinstance(raw, dict):
+        text_content = (raw.get("body") or "").strip()
+    elif isinstance(raw, str):
+        text_content = raw.strip()
+    else:
+        text_content = ""
     if not text_content:
         return {"status": "skipped", "reason": "empty_text"}
     if len(text_content) < 10:
         return {"status": "skipped", "reason": "too_short"}
 
+    # channel-Erkennung: WhatsApp-Adapter schreibt _channel='whatsapp' ins payload
+    channel = payload.get("_channel") or "telegram"
     chunk_metadata = {
-        "telegram_message_id": payload.get("message_id"),
-        "channel": "telegram",
+        "telegram_message_id": payload.get("message_id") or payload.get("id"),
+        "channel": channel,
     }
     try:
         chunk_id = asyncio.run(
@@ -302,4 +325,4 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
         logger.warning("store_text_chunk failed: %s", exc)
         return {"status": "error", "reason": str(exc)[:120]}
 
-    return {"status": "ok", "memory_chunk_id": chunk_id, "source_type": "manual_note"}
+    return {"status": "ok", "memory_chunk_id": chunk_id, "source_type": "manual_note", "channel": channel}

@@ -48,6 +48,7 @@ _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 # Path prefixes that are exempt from CSRF (not browser-triggered)
 _CSRF_EXEMPT_PREFIXES = (
     "/api/telegram",
+    "/api/whatsapp",  # Meta-Webhook, eigene Signatur via X-Hub-Signature-256
     "/api/health",
     "/api/_test",
     "/api/internal",
