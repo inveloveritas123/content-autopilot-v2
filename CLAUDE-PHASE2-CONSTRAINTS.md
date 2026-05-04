@@ -1,6 +1,6 @@
 # Phase-2/3-Constraints für Knecht (Cowork-Vorgaben)
 
-> **Stand:** 2026-05-03 (R2)
+> **Stand:** 2026-05-03 (R3)
 > **Quelle:** Cowork (Robert/Luisa)
 > **Zweck:** Knecht-Sonnet UND Knecht-Haiku müssen diese Constraints bei JEDEM PR im Brand-Voice-/Telegram-Bot-/Voice-Pipeline-Kontext einhalten. Bei Verstoß: Cowork-Review markiert als BLOCKING.
 
@@ -276,6 +276,45 @@ Knecht ist sehr produktiv (24+ Commits in 6 Stunden am 2026-05-03), und Cowork-A
 - Bei jedem APPROVE: explizit kommentieren `**Bitte Robert: kurz im UI verifizieren, dann schließen.**`
 - Bei Issues mit reinem Backend-Impact und Tests grün: Robert-Briefing am Tagesende auflisten was zur Verifikation ansteht
 - Knecht-Status-Polling: re-open kritische Issues falls Knecht versehentlich self-closed
+
+---
+
+## 13. Mobile-First / Telegram-First — Architektur-Prinzip (NEU 2026-05-03 R3)
+
+> **Eric/Christoph-Briefing 2026-04-13:** "Kunde lebt im Telegram, Web-Dashboard ist sekundär."
+
+Im Roadmap-Scope-Check (2026-05-03 R3) als implizit-aber-nicht-dokumentiert identifiziert. Wird ab jetzt expliziter Architektur-Constraint.
+
+### Regel
+
+- **Primärer User-Touchpoint = Telegram-Bot** (für den Tenant: ZukunftsBund-Kunde)
+- **Sekundär = Web-Dashboard** (eher für Robert/Admin/Setup-Phase)
+- Bei jeder UX-Entscheidung muss Knecht fragen: **"Was muss im Bot funktionieren? Was darf nur im Web sein?"**
+
+### Konsequenzen für Feature-Design
+
+- **Approve-Flow:** Posts müssen im Bot approved werden können (nicht nur per Web-Dashboard). Bot zeigt Post-Text + Buttons "Veröffentlichen / Bearbeiten / Verwerfen".
+- **Voice-Drift-Feedback:** "So sage ich das nicht" muss im Bot-Reply funktionieren.
+- **Ideen-Picker / Quick-Generate:** Bot-Befehl `/idee` triggert die ganze Pipeline ohne Web-Touch.
+- **Status-Updates:** Bot pushed proaktiv ("Dein Wochen-Post ist fertig — willst du ihn sehen?"). Web ist Pull-Modell, Bot ist Push.
+- **Setup-Phase:** Wizard darf Web-only sein (zu viel Eingabe für Bot). Aber: Re-Run einzelner Phasen muss im Bot triggerbar sein.
+
+### Konsequenzen für UX-Entscheidungen
+
+- Wenn Knecht zwischen "Feature im Web bauen" vs "Feature im Bot bauen" wählen muss: Default = Bot.
+- Wenn ein Feature beides braucht: Bot zuerst, Web folgt.
+- Web-Dashboard-Komplexität minimieren — alles was nicht zwingend Desktop-Bildschirm braucht (große Tabellen, Multi-Spalten-Layout) gehört in den Bot.
+
+### Konsequenzen für Mobile-Web
+
+- Web-Dashboard MUSS auf Mobile (375px) funktionieren — nicht nur Desktop. Setup-Wizard, Approve-Queue, Settings.
+- Tap-Targets ≥ 44×44 px (Constraint #4).
+- Storybook + Playwright mit `viewport: 375x812` Pflicht.
+- Issue #143 (Phase 8.2) ist die explizite Mobile-Responsive-Phase.
+
+### Begründung
+
+Tenant ist auf der Baustelle, im Termin, im Auto — nicht am Schreibtisch. Telegram ist immer offen, Web-Dashboard wird vielleicht 1× pro Woche angeklickt. Wenn das Produkt das ignoriert, ist es für Zielgruppe (Handwerk, Mittelstand, Berater) unbrauchbar.
 
 ---
 
