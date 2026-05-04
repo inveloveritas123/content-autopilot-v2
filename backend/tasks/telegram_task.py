@@ -163,7 +163,7 @@ def process_telegram_update(self, log_id: str) -> dict:
     if message_type == "voice":
         return _process_voice(log_id, tenant_id, payload)
     elif message_type == "photo":
-        return _process_photo_stub(log_id, tenant_id, payload)
+        return _process_photo(log_id, tenant_id, payload)
     else:
         return _process_text(log_id, tenant_id, payload)
 
@@ -220,10 +220,66 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
     }
 
 
+def _process_photo(log_id: str, tenant_id: str, payload: dict) -> dict:
+    """Photo-Pipeline (Welle 4): getFile → OCR (+Vision-Stub) → memory_chunk."""
+    photos = payload.get("photo") or []
+    if not photos:
+        return {"status": "skipped", "reason": "no_photo_array"}
+    # Telegram liefert Liste verschiedener Auflösungen — nimm die größte
+    best = max(photos, key=lambda p: p.get("file_size") or 0)
+    file_id = best.get("file_id")
+    if not file_id:
+        return {"status": "error", "reason": "no_file_id"}
+
+    image_bytes = _telegram_get_file(file_id)
+    if not image_bytes:
+        return {"status": "error", "reason": "download_failed"}
+
+    from services.photo_pipeline import process_photo, PhotoProcessingError
+
+    caption = (payload.get("caption") or "").strip() or None
+    try:
+        result = asyncio.run(process_photo(image_bytes, hint=caption))
+    except PhotoProcessingError as exc:
+        logger.warning("photo pipeline fail: %s", exc)
+        return {"status": "error", "reason": str(exc)[:120]}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("photo pipeline unexpected: %s", exc)
+        return {"status": "error", "reason": "pipeline_exception"}
+
+    content_text = result["content_text"]
+    if caption:
+        content_text = f"{caption}\n\n{content_text}"
+
+    chunk_metadata = {
+        "telegram_message_id": payload.get("message_id"),
+        "file_size": best.get("file_size"),
+        "width": best.get("width"),
+        "height": best.get("height"),
+        "ocr_chars": result.get("ocr_chars", 0),
+        "ocr_lang": result.get("ocr_lang"),
+        "has_description": bool(result.get("description")),
+        "telegram_caption": caption,
+    }
+
+    try:
+        chunk_id = asyncio.run(
+            _store_chunk_async(tenant_id, "photo_telegram", content_text, log_id, chunk_metadata)
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("store_photo_chunk failed: %s", exc)
+        return {"status": "error", "reason": str(exc)[:120]}
+
+    return {
+        "status": "ok",
+        "memory_chunk_id": chunk_id,
+        "ocr_chars": result.get("ocr_chars", 0),
+    }
+
+
 def _process_photo_stub(log_id: str, tenant_id: str, payload: dict) -> dict:
-    """Stub für Welle 4 — Foto-Pipeline wird im nächsten Commit fertig."""
-    logger.info("telegram_task: photo erkannt, log_id=%s — wartet auf Welle 4", log_id)
-    return {"status": "deferred", "reason": "photo_pipeline_in_welle_4"}
+    """Backwards-Compat-Wrapper, falls noch ein älterer Pfad ihn aufruft."""
+    return _process_photo(log_id, tenant_id, payload)
 
 
 def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
