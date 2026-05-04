@@ -115,5 +115,6 @@ celery_app.conf.include = [
     "tasks.wizard_cleanup",
     "tasks.random_smart_scheduler",
     "tasks.reviewer_queue_cron",
+    "tasks.telegram_task",
     "api.wizard",
 ]

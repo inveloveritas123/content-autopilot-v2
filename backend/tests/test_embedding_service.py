@@ -30,7 +30,7 @@ def test_allowed_constants():
     assert "manual_note" in ALLOWED_SOURCE_TYPES
     assert "transcript_extra" in ALLOWED_SOURCE_TYPES
     assert ALLOWED_CLASSIFICATIONS == {"werte", "stories", "konflikte"}
-    assert EMBEDDING_DIM == 768
+    assert EMBEDDING_DIM == 1536
     assert "embedding" in EMBEDDING_MODEL
 
 

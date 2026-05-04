@@ -31,8 +31,8 @@ from services.llm import llm_service
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_DIM = 768
-EMBEDDING_MODEL = "vertex/text-embedding-004"  # Requesty-Routing, EU-Region
+EMBEDDING_DIM = 1536
+EMBEDDING_MODEL = "openai/text-embedding-3-small"  # 1536-dim, Requesty-supported (vertex 768-dim wird nicht geroutet)
 
 ALLOWED_SOURCE_TYPES = {
     "voice_telegram",
