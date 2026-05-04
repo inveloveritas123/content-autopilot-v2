@@ -422,6 +422,10 @@ export const getLLMAnalyticsByModel = (params) => request('/analytics/llm-by-mod
 export const getLLMAnalyticsByDay = (params) => request('/analytics/llm-by-day', { params })
 export const getLLMAnalyticsByHour = (params) => request('/analytics/llm-by-hour', { params })
 export const getContentByCategory = (params) => request('/analytics/content-by-category', { params })
+export const listResearchFindings = (params) => request('/research/findings', { params })
+export const dismissResearchFinding = (id) => request(`/research/findings/${id}/dismiss`, { method: 'POST' })
+export const useFindingAsIdea = (id, hookIdx) => request(`/research/findings/${id}/use-as-idea?hook_index=${hookIdx}`, { method: 'POST' })
+
 export const listIdeaVariants = (ideaId) => request(`/ideas/${ideaId}/variants`)
 export const regenerateIdeaVariants = (ideaId) => request(`/ideas/${ideaId}/variants/regenerate`, { method: 'POST' })
 export const chooseIdeaVariant = (ideaId, variantId) => request(`/ideas/${ideaId}/variants/${variantId}/choose`, { method: 'POST' })

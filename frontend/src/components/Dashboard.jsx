@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Radio, FileText, Lightbulb, CheckCircle2, TrendingUp, Clock, ArrowRight, Sparkles, AlertCircle, Zap, BarChart3, CalendarDays, Flame, Play, Target, Award, TrendingDown } from 'lucide-react'
 import { getDashboard, getIdeas, getFeedbackStats, triggerAutoPipeline, getScheduledPosts, getSourceFunnel, getContentList, getTodayBrief, autoSchedulePosts, resetBudgetFlag, getSettings, bulkArchiveIdeas, getIdeasSourceBreakdown, getBrandVoiceStatus } from '../api'
+import ResearchFindings from './ResearchFindings'
 
 function FrequencyAdvisor({ approved, drafts }) {
   const [freq, setFreq] = useState(5)
@@ -973,6 +974,17 @@ export default function Dashboard() {
 
       {/* 12-Week Content Activity Calendar */}
       <ContentStreakCalendar posts={recentPosts} />
+
+      {/* Phase 6.1 — Research-Vorschläge der Woche */}
+      <div className="bg-white rounded-xl border border-surface-border p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-violet-500" /> Vorschläge der Woche
+            <span className="text-[10px] font-normal text-ink-muted">— P07 Themen-Research</span>
+          </h2>
+        </div>
+        <ResearchFindings limit={5} />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Recent Ideas */}

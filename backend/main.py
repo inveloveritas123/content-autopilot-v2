@@ -201,7 +201,9 @@ from api.whatsapp import router as whatsapp_router
 app.include_router(whatsapp_router, prefix="/api", tags=["WhatsApp"])
 
 from api.memory import router as memory_router
+from api.research import router as research_router
 app.include_router(memory_router, prefix="/api", tags=["Memory"])
+app.include_router(research_router, prefix="/api", tags=["Research"])
 
 from api.analytics import router as analytics_router
 app.include_router(analytics_router, prefix="/api", tags=["Analytics"])

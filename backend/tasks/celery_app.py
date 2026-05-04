@@ -77,6 +77,10 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.reviewer_queue_cron.check_reviewer_queue_backlog",
         "schedule": crontab(hour=8, minute=30),  # täglich 08:30
     },
+    "p07-research-twice-weekly": {
+        "task": "tasks.p07_research_task.run_research_all_tenants",
+        "schedule": crontab(day_of_week="tue,fri", hour=6, minute=30),
+    },
     "memory-backfill-hourly": {
         "task": "tasks.memory_backfill_task.run_backfill",
         "schedule": crontab(minute=15),  # stündlich :15 (kein Konflikt mit Drift)
@@ -123,5 +127,6 @@ celery_app.conf.include = [
     "tasks.telegram_task",
     "tasks.memory_backfill_task",
     "tasks.p12_variants_task",
+    "tasks.p07_research_task",
     "api.wizard",
 ]
