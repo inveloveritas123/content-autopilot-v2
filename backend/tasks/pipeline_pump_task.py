@@ -12,7 +12,7 @@ Limits pro Lauf: 30 / 30 / 20 — verhindert Überlastung des LLM-Proxys.
 import logging
 from datetime import datetime, timedelta
 
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, text
 
 from tasks.celery_app import celery_app
 from models.base import sync_session_factory
@@ -151,9 +151,39 @@ def pump_pipeline():
                     logger.warning(f"pump ideation failed for {item_id}: {e}")
                     stats["errors"] += 1
 
+        # ── 4. Phase 4.3: ideas without variants → enqueue p12_variants ─────
+        if not budget_exceeded:
+            stats["variants"] = 0
+            ideas_with_variants = session.execute(
+                text("SELECT DISTINCT idea_id FROM idea_variants")
+            ).scalars().all()
+            cutoff_recent = datetime.utcnow() - timedelta(days=7)
+            new_ideas = session.execute(
+                text(
+                    "SELECT id FROM content_ideas "
+                    "WHERE created_at >= :cut "
+                    "  AND id NOT IN :have_variants "
+                    "  AND status IN ('new', 'questions_pending', 'pending') "
+                    "ORDER BY created_at DESC LIMIT :lim"
+                ),
+                {
+                    "cut": cutoff_recent,
+                    "have_variants": tuple(ideas_with_variants) or ("00000000-0000-0000-0000-000000000000",),
+                    "lim": 20,
+                },
+            ).fetchall()
+            for r in new_ideas:
+                try:
+                    from tasks.p12_variants_task import generate_variants
+                    generate_variants.apply_async(args=[str(r.id)])
+                    stats["variants"] += 1
+                except Exception as e:
+                    logger.warning(f"pump variants failed for {r.id}: {e}")
+                    stats["errors"] += 1
+
     logger.info(
         f"Pipeline pump: analyze={stats['analyze']} generate={stats['generate']} "
-        f"ideation={stats['ideation']} errors={stats['errors']} "
-        f"stuck_reset={stats['stuck_reset']}"
+        f"ideation={stats['ideation']} variants={stats.get('variants', 0)} "
+        f"errors={stats['errors']} stuck_reset={stats['stuck_reset']}"
     )
     return stats

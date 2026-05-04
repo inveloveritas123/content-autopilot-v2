@@ -128,5 +128,6 @@ celery_app.conf.include = [
     "tasks.memory_backfill_task",
     "tasks.p12_variants_task",
     "tasks.p07_research_task",
+    "tasks.p05_industry_task",
     "api.wizard",
 ]

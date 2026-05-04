@@ -17,6 +17,9 @@ class Tenant(Base):
     api_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     api_key_secondary: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)
     settings: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # Phase 4.4 / #141 — Branchen-spezifisches Scoring
+    industry: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    industry_context: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now())
 
     enabled: Mapped[bool] = mapped_column(Boolean, server_default=text('true'), nullable=False, default=True)

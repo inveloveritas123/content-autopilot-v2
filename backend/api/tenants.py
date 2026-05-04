@@ -405,3 +405,55 @@ async def get_llm_routing_info(tenant: Tenant = Depends(get_tenant)):
         "daily_budget_eur": (tenant.settings or {}).get("daily_budget_eur"),
         "note": "Kein Claude mehr im Backend — Gemini Flash (0.075$/1M) + Mistral Medium (0.40$/1M)",
     }
+
+
+# ── Phase 4.4: Industry-Setup + Refresh ────────────────────────────────
+
+
+class IndustrySet(BaseModel):
+    industry: str
+
+
+@router.put("/tenants/me/industry")
+async def set_tenant_industry(
+    payload: IndustrySet,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Setzt die Branche und triggert sofort den Refresh-Task."""
+    industry = (payload.industry or "").strip()
+    if not industry:
+        raise HTTPException(400, "industry darf nicht leer sein")
+    tenant.industry = industry[:100]
+    await db.commit()
+    queued = False
+    try:
+        from tasks.p05_industry_task import refresh_industry_context
+        refresh_industry_context.apply_async(args=[str(tenant.id)])
+        queued = True
+    except Exception:  # noqa: BLE001
+        pass
+    return {"status": "ok", "industry": tenant.industry, "refresh_queued": queued}
+
+
+@router.post("/tenants/me/industry/refresh")
+async def refresh_industry_now(
+    tenant: Tenant = Depends(get_tenant),
+):
+    """Stößt den P05-Task manuell an (z.B. nach Änderungen am Industry-Profil)."""
+    if not tenant.industry:
+        raise HTTPException(400, "Erst Branche setzen via PUT /tenants/me/industry")
+    try:
+        from tasks.p05_industry_task import refresh_industry_context
+        refresh_industry_context.apply_async(args=[str(tenant.id)])
+        return {"status": "queued", "industry": tenant.industry}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"Task-Dispatch: {exc}")
+
+
+@router.get("/tenants/me/industry")
+async def get_tenant_industry(tenant: Tenant = Depends(get_tenant)):
+    return {
+        "industry": tenant.industry,
+        "industry_context": dict(tenant.industry_context or {}),
+    }

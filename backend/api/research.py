@@ -123,4 +123,20 @@ async def use_finding_as_idea(
         {"id": finding_id},
     )
     await db.commit()
-    return {"status": "ok", "idea_id": str(new_idea_id.id), "hook_used": chosen_hook}
+
+    # Phase 4.3: nach use-as-idea automatisch 3 Variants enqueuen
+    new_idea_str = str(new_idea_id.id)
+    variants_queued = False
+    try:
+        from tasks.p12_variants_task import generate_variants
+        generate_variants.apply_async(args=[new_idea_str])
+        variants_queued = True
+    except Exception:  # noqa: BLE001 — nicht-blockend
+        pass
+
+    return {
+        "status": "ok",
+        "idea_id": new_idea_str,
+        "hook_used": chosen_hook,
+        "variants_queued": variants_queued,
+    }
