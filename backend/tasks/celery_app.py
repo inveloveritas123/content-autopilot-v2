@@ -86,6 +86,14 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(minute=15),  # stündlich :15 (kein Konflikt mit Drift)
         "kwargs": {"limit": 100},
     },
+    "p06-profile-extractor-nightly": {
+        "task": "tasks.p06_profile_extractor_task.run_all",
+        "schedule": crontab(hour=3, minute=15),  # nightly 03:15 (nach memory-backfill)
+    },
+    "deletion-purge-daily": {
+        "task": "tasks.deletion_purge_task.purge_expired",
+        "schedule": crontab(hour=4, minute=0),  # daily 04:00 hard-delete
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -129,5 +137,7 @@ celery_app.conf.include = [
     "tasks.p12_variants_task",
     "tasks.p07_research_task",
     "tasks.p05_industry_task",
+    "tasks.p06_profile_extractor_task",
+    "tasks.deletion_purge_task",
     "api.wizard",
 ]

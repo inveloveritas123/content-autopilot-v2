@@ -185,7 +185,7 @@ export default function IndustryAndHooks() {
             type="text"
             value={newHook}
             onChange={e => setNewHook(e.target.value)}
-            placeholder="Neuer Hook (z.B. „Vertrauen entsteht in 5 Minuten — nicht in 5 Monaten.")"
+            placeholder={'Neuer Hook (z.B. „Vertrauen entsteht in 5 Minuten — nicht in 5 Monaten.")'}
             className="flex-1 px-3 py-2 min-h-[44px] text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
           <Button type="submit" disabled={!newHook.trim() || newHook.trim().length < 5}>

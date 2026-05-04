@@ -442,6 +442,19 @@ export const getMemoryRecent = (params) => request('/memory/recent', { params })
 export const getMemoryPicker = (params) => request('/memory/picker', { params })
 export const getMemoryStats = () => request('/memory/stats')
 export const addMemoryNote = (data) => request('/memory/note', { method: 'POST', body: data })
+
+export const getCompanyProfile = () => request('/me/company-profile')
+export const updateCompanyProfile = (fields) => request('/me/company-profile', { method: 'PUT', body: fields })
+export const getCompanyProvenance = () => request('/me/company-profile/provenance')
+export const getCompanyProfilePending = () => request('/me/company-profile/pending')
+export const reviewCompanyProfileSuggestion = (id, action) => request(`/me/company-profile/review/${id}`, { method: 'POST', body: { action } })
+export const importCompanyProfileMd = (content, auto_apply = true) => request('/me/company-profile/import-md', { method: 'POST', body: { content, auto_apply } })
+
+export const requestDataDeletion = (payload) => request('/me/data-deletion', { method: 'POST', body: payload })
+export const listDataDeletions = () => request('/me/data-deletion')
+export const recoverDataDeletion = (id) => request(`/me/data-deletion/${id}/recover`, { method: 'POST' })
+export const getDataDeletion = (id) => request(`/me/data-deletion/${id}`)
+export const getMemoryVizData = (params) => request('/memory/viz-data', { params })
 export const getLLMAnalyticsAnomaly = (params) => request('/analytics/llm-anomaly', { params })
 
 export const getLLMAnalyticsCSVUrl = (params) => {

@@ -210,6 +210,15 @@ app.include_router(hooks_router, prefix="/api", tags=["Hooks"])
 from api.analytics import router as analytics_router
 app.include_router(analytics_router, prefix="/api", tags=["Analytics"])
 
+from api.company_profile import router as company_profile_router
+app.include_router(company_profile_router, prefix="/api", tags=["CompanyProfile"])
+
+from api.data_deletion import router as data_deletion_router
+app.include_router(data_deletion_router, prefix="/api", tags=["DataDeletion"])
+
+from api.memory_viz import router as memory_viz_router
+app.include_router(memory_viz_router, prefix="/api", tags=["MemoryViz"])
+
 
 @app.get("/api/health")
 async def health():

@@ -20,3 +20,4 @@ __all__ = [
 ]
 from .memory_chunk import MemoryChunk
 from .idea_variant import IdeaVariant
+from .company_profile import CompanyProfile, ProfileFieldProvenance, SOURCE_TRUST, AUTO_APPLY_THRESHOLD

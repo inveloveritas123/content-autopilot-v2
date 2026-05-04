@@ -46,6 +46,9 @@ const brandVoiceNavItems = [
   { to: '/brand-voice/insights', label: 'So liest KI mich', icon: Brain },
   { to: '/brand-voice/review-queue', label: 'Review-Queue', icon: ShieldAlert },
   { to: '/memory', label: 'Gedächtnis', icon: Sparkles },
+  { to: '/memory/viz', label: 'Gedächtnis-Karte', icon: Sparkles },
+  { to: '/settings/company-profile', label: 'Firmen-Profil', icon: Settings },
+  { to: '/settings/data-deletion', label: 'Recht auf Vergessen', icon: ShieldAlert },
 ]
 
 const adminNavItems = [

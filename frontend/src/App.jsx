@@ -20,6 +20,9 @@ import LLMAnalytics from './components/LLMAnalytics'
 import PublishQueue from './components/PublishQueue'
 import Dialogue from './components/Dialogue'
 import Memory from './components/Memory'
+import CompanyProfile from './components/CompanyProfile'
+import DataDeletion from './components/DataDeletion'
+import MemoryViz from './components/MemoryViz'
 function App() {
   return (
     <Layout>
@@ -47,6 +50,9 @@ function App() {
         <Route path="/settings/export-import" element={<ExportImport />} />
         <Route path="/settings/analytics" element={<LLMAnalytics />} />
         <Route path="/memory" element={<Memory />} />
+        <Route path="/settings/company-profile" element={<CompanyProfile />} />
+        <Route path="/settings/data-deletion" element={<DataDeletion />} />
+        <Route path="/memory/viz" element={<MemoryViz />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Layout>
