@@ -12,7 +12,7 @@ import asyncio
 from services.llm import BudgetExceededError, set_llm_tenant
 from services.brand_voice import format_voice_for_prompt
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from tasks.celery_app import celery_app
 from models.base import sync_session_factory
@@ -89,9 +89,36 @@ def auto_generate_ideas(item_id: str):
                 logger.warning(f"Ideation produced no ideas for item {item_id}")
                 return {"status": "no_ideas"}
 
+            # Phase 4.4: Industry-Boost auf relevance_score
+            from services.industry_relevance import apply_industry_boost
+            tenant_industry_ctx = None
+            try:
+                _trow = session.execute(
+                    text("SELECT industry_context FROM tenants WHERE id = :tid"),
+                    {"tid": item.tenant_id},
+                ).fetchone()
+                if _trow and _trow.industry_context:
+                    tenant_industry_ctx = dict(_trow.industry_context)
+            except Exception:
+                pass
+
             # Ideen in DB speichern
             saved_count = 0
             for idea_data in ideas_data:
+                base_score = float(idea_data.get("relevance_score", 5.0) or 5.0)
+                idea_text = f"{idea_data.get('title', '')} {idea_data.get('description', '')}"
+                final_score, boost_info = apply_industry_boost(
+                    base_score, idea_text, tenant_industry_ctx, cap=10.0
+                )
+                # Optional: Boost-Info in source_context für Audit
+                src_ctx = dict(idea_data.get("source_context") or {})
+                if boost_info.get("applied"):
+                    src_ctx["industry_boost"] = {
+                        "hits": boost_info["hits"],
+                        "boost": boost_info["boost"],
+                        "base_score": boost_info["base"],
+                    }
+
                 idea = ContentIdea(
                     source_item_id=item.id,
                     tenant_id=item.tenant_id,
@@ -99,11 +126,11 @@ def auto_generate_ideas(item_id: str):
                     description=idea_data.get("description", ""),
                     angle=idea_data.get("angle", "meinung"),
                     hook_suggestion=idea_data.get("hook_suggestion", ""),
-                    relevance_score=idea_data.get("relevance_score", 5.0),
+                    relevance_score=final_score,
                     priority=idea_data.get("priority", "medium"),
                     entrepreneur_questions=idea_data.get("entrepreneur_questions", []),
                     source_quotes=idea_data.get("source_quotes", []),
-                    source_context=idea_data.get("source_context", {}),
+                    source_context=src_ctx,
                     status="new",
                 )
                 session.add(idea)

@@ -1319,14 +1319,19 @@ async def regenerate_variants(
 async def choose_variant(
     idea_id: str,
     variant_id: str,
+    and_generate: bool = Query(False, description="Auto-trigger Post-Generierung mit chosen variant"),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Wählt eine Variante als chosen — alle anderen werden auf is_chosen=false gesetzt."""
-    # Tenant-Isolation
+    """Wählt eine Variante als chosen + (optional) startet P12-Detail-Pass.
+
+    Phase 4.2 Pipeline-Schritt: nach Wahl wird der Variant-Hook in
+    content_ideas.hook_suggestion gespiegelt — der bestehende
+    generate_post-Pfad nutzt das als Anker.
+    """
     v = (await db.execute(
         text(
-            "SELECT id FROM idea_variants "
+            "SELECT id, hook_text, body_outline FROM idea_variants "
             "WHERE id = CAST(:vid AS uuid) AND idea_id = CAST(:iid AS uuid) "
             "  AND tenant_id = :tid"
         ),
@@ -1335,7 +1340,6 @@ async def choose_variant(
     if not v:
         raise HTTPException(404, "Variante nicht gefunden")
 
-    # Reset alle Varianten dieser Idee
     await db.execute(
         text(
             "UPDATE idea_variants SET is_chosen = false, chosen_at = NULL "
@@ -1350,5 +1354,39 @@ async def choose_variant(
         ),
         {"vid": variant_id},
     )
+    # Phase 4.2 → P12-Detail-Pass: Hook ans content_ideas.hook_suggestion spiegeln
+    await db.execute(
+        text(
+            "UPDATE content_ideas SET hook_suggestion = :hook, "
+            "  source_context = COALESCE(source_context, '{}'::jsonb) || "
+            "                   CAST(:ctx AS jsonb) "
+            "WHERE id = CAST(:iid AS uuid)"
+        ),
+        {
+            "iid": idea_id,
+            "hook": (v.hook_text or "")[:1000],
+            "ctx": json.dumps({"chosen_variant_id": variant_id, "body_outline": v.body_outline}),
+        },
+    )
     await db.commit()
-    return {"status": "ok", "chosen_id": variant_id}
+
+    # Optional: Post sofort generieren (P12-Detail-Pass)
+    generation_status = None
+    if and_generate:
+        try:
+            from tasks.p12_task import run_p12
+            answers_with_hook = {
+                "_chosen_hook": v.hook_text,
+                "_chosen_outline": v.body_outline,
+            }
+            run_p12.apply_async(args=[str(tenant.id), idea_id, answers_with_hook])
+            generation_status = "queued"
+        except Exception as exc:  # noqa: BLE001
+            generation_status = f"dispatch_error: {str(exc)[:80]}"
+
+    return {
+        "status": "ok",
+        "chosen_id": variant_id,
+        "hook_synced_to_idea": True,
+        "generation_status": generation_status,
+    }
