@@ -222,12 +222,22 @@ async def recover_deletion(
 
     affected: dict = row.affected_records or {}
     restored: dict = {}
+    soft_deleted_at = (await db.execute(
+        text("SELECT soft_deleted_at FROM deletion_requests WHERE id = :id"),
+        {"id": req_id},
+    )).scalar()
+    if soft_deleted_at is None:
+        raise HTTPException(status_code=409, detail="no soft_deleted_at on request")
+    window_start = soft_deleted_at - datetime.timedelta(seconds=2)
+    window_end = soft_deleted_at + datetime.timedelta(seconds=2)
     for table in ("memory_chunks", "content_pieces", "content_ideas", "source_items"):
         if affected.get(table, 0) > 0:
             r = await db.execute(
                 text(f"UPDATE {table} SET deleted_at = NULL "
-                     f"WHERE tenant_id = :tid AND deleted_at IS NOT NULL"),
-                {"tid": tenant.id},
+                     f"WHERE tenant_id = :tid "
+                     f"  AND deleted_at IS NOT NULL "
+                     f"  AND deleted_at BETWEEN :ws AND :we"),
+                {"tid": tenant.id, "ws": window_start, "we": window_end},
             )
             restored[table] = r.rowcount or 0
     if row.mode == "full":
