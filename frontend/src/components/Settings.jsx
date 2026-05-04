@@ -4,6 +4,7 @@ import { Eye, EyeOff } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card'
 import { Button } from './ui/Button'
 import LLMSettings from './LLMSettings'
+import IndustryAndHooks from './IndustryAndHooks'
 import { Badge } from './ui/Badge'
 import { Input, Textarea } from './ui/Input'
 import { Dialog } from './ui/Dialog'
@@ -247,6 +248,9 @@ export default function Settings() {
           <LLMSettings />
         </CardContent>
       </Card>
+
+      {/* Phase 4.4 + 7.4 — Industry-Profil + Hook-Bibliothek */}
+      <IndustryAndHooks />
 
       {/* YouTube API Key */}
       <Card>
