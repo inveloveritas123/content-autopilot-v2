@@ -1,30 +1,37 @@
 """Foto-Pipeline für Phase 5.3 (Issue #140).
 
 Nimmt Photo-Bytes, extrahiert OCR-Text via Tesseract (deu+eng),
-holt eine kurze Bild-Beschreibung via LLMService (Multimodal-Call
-oder Text-Prompt mit OCR-Snippet als Anker — fallback wenn
-Multimodal nicht verfügbar) und liefert ein zusammengesetztes
-content_text für memory_chunks.
+holt eine kurze Bild-Beschreibung via Vision-LLM (vertex-Gemini-Vision
+EU-Region als Default, gpt-4o-mini als Fallback) und liefert ein
+zusammengesetztes content_text für memory_chunks.
 
 Designentscheidungen:
 - Tesseract läuft im Container (siehe Dockerfile)
-- Bild-Beschreibung optional — wenn LLM-Call fehlschlägt: nur
-  OCR-Text als content_text (besser als gar nichts)
-- Confidence < 0.3 von Tesseract → OCR-Text wird verworfen
-  (häufig Rauschen ohne Text-Inhalt)
+- Vision-LLM via Requesty mit data:image-base64-URL
+- Bei Vision-Fehler: nur OCR-Text als content_text (besser als nichts)
+- Confidence < MIN_OCR_CHARS von Tesseract → OCR-Text wird verworfen
 """
 from __future__ import annotations
 
+import asyncio
+import base64
 import io
 import logging
 import shutil
 import subprocess
 from typing import Optional
 
+import httpx
+
+from config import settings
+
 logger = logging.getLogger(__name__)
 
 TESSERACT_LANG = "deu+eng"
 MIN_OCR_CHARS = 5  # weniger Text als das = vermutlich kein sinnvoller OCR-Output
+
+VISION_MODEL_PRIMARY = "vertex/gemini-2.5-flash-lite@europe-central2"  # EU, günstig
+VISION_MODEL_FALLBACK = "openai/gpt-4o-mini"
 
 
 class PhotoProcessingError(Exception):
@@ -69,18 +76,85 @@ def ocr_image(image_bytes: bytes, lang: str = TESSERACT_LANG, timeout: float = 3
         return ""
 
 
-async def describe_image(image_bytes: bytes, hint: Optional[str] = None) -> Optional[str]:
-    """Liefert eine kurze deutsche Bildbeschreibung (1-3 Sätze).
+def _detect_mime(image_bytes: bytes) -> str:
+    """Heuristik: PNG/JPG/WebP via Magic-Bytes."""
+    if image_bytes.startswith(b"\x89PNG"):
+        return "image/png"
+    if image_bytes.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if len(image_bytes) >= 12 and image_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    if image_bytes.startswith(b"GIF8"):
+        return "image/gif"
+    return "image/jpeg"  # Default für Telegram-Photos
 
-    Versucht Vision-fähigen LLM-Call; fallback auf reinen Text-Prompt
-    falls Vision nicht verfügbar (LLMService routet aktuell nur Text).
-    Returns None wenn kein nutzbarer Output zustande kommt.
+
+async def _vision_call(image_bytes: bytes, hint: Optional[str], model: str) -> Optional[str]:
+    """Eine Runde Vision-LLM-Call via Requesty data:-URL."""
+    base_url = (settings.litellm_base_url or "").rstrip("/")
+    api_key = settings.litellm_api_key or ""
+    if not base_url or not api_key:
+        return None
+    mime = _detect_mime(image_bytes)
+    b64 = base64.b64encode(image_bytes).decode()
+    prompt_text = (
+        "Beschreibe das Bild in 1–2 deutschen Sätzen. "
+        "Konzentriere dich auf was gezeigt wird (Personen, Objekte, Szene, Stimmung). "
+        "Falls Text im Bild erkennbar ist, ignoriere ihn (wird separat per OCR erfasst)."
+    )
+    if hint:
+        prompt_text += f"\nKontext-Hinweis vom Nutzer: {hint[:200]}"
+
+    payload = {
+        "model": model,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt_text},
+                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+            ],
+        }],
+        "max_tokens": 200,
+    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(f"{base_url}/chat/completions", json=payload, headers=headers)
+        if r.status_code != 200:
+            logger.warning("vision %s → HTTP %s: %s", model, r.status_code, r.text[:160])
+            return None
+        data = r.json()
+        choices = data.get("choices") or []
+        if not choices:
+            return None
+        msg = (choices[0].get("message") or {}).get("content") or ""
+        msg = msg.strip()
+        return msg or None
+    except (httpx.TimeoutException, httpx.RequestError) as exc:
+        logger.warning("vision network: %s", exc)
+        return None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("vision unknown: %s", exc)
+        return None
+
+
+async def describe_image(image_bytes: bytes, hint: Optional[str] = None) -> Optional[str]:
+    """Liefert eine kurze deutsche Bildbeschreibung (1-2 Sätze) via Vision-LLM.
+
+    Versucht VISION_MODEL_PRIMARY (Vertex Gemini EU), fallback
+    VISION_MODEL_FALLBACK (gpt-4o-mini). None wenn beide fehlschlagen.
     """
-    # Heuristic-Approach für jetzt: ohne Multimodal-Support im LLMService
-    # liefern wir keine Beschreibung. Sobald LLMService Vision routen kann
-    # (z.B. claude-3-haiku-vision via Requesty), Plug-Point hier.
-    # Vorerst Stub — caller fällt auf OCR-Text-only zurück.
-    return None
+    if not image_bytes or len(image_bytes) < 100:
+        return None
+    # Limit zur Cost-Kontrolle: > 4 MB auslassen
+    if len(image_bytes) > 4 * 1024 * 1024:
+        logger.info("describe_image: > 4MB, skip Vision")
+        return None
+    desc = await _vision_call(image_bytes, hint, VISION_MODEL_PRIMARY)
+    if desc:
+        return desc
+    desc = await _vision_call(image_bytes, hint, VISION_MODEL_FALLBACK)
+    return desc
 
 
 async def process_photo(
