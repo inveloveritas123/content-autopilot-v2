@@ -19,3 +19,4 @@ __all__ = [
     "Base", "async_engine", "async_session_factory", "sync_engine", "sync_session_factory",
 ]
 from .memory_chunk import MemoryChunk
+from .idea_variant import IdeaVariant

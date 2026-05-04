@@ -1256,3 +1256,99 @@ async def update_idea(
 
     await db.commit()
     return {"message": "Idee aktualisiert", "status": idea.status, "priority": idea.priority}
+
+
+# ── Phase 4.2: Idea-Variants (3 Aufhänger) ──────────────────────────────
+
+
+@router.get("/{idea_id}/variants")
+async def list_idea_variants(
+    idea_id: str,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Liefert alle 3 Aufhänger-Varianten zu einer Idee (sofern generiert)."""
+    rows = (await db.execute(
+        text(
+            "SELECT id, variant_type, hook_text, body_outline, is_chosen, "
+            "       chosen_at, created_at "
+            "FROM idea_variants "
+            "WHERE idea_id = CAST(:id AS uuid) AND tenant_id = :tid "
+            "ORDER BY CASE variant_type "
+            "  WHEN 'hook' THEN 1 WHEN 'story' THEN 2 WHEN 'these' THEN 3 ELSE 4 END"
+        ),
+        {"id": idea_id, "tid": tenant.id},
+    )).fetchall()
+    return [
+        {
+            "id": str(r.id),
+            "variant_type": r.variant_type,
+            "hook_text": r.hook_text,
+            "body_outline": r.body_outline,
+            "is_chosen": bool(r.is_chosen),
+            "chosen_at": r.chosen_at.isoformat() if r.chosen_at else None,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/{idea_id}/variants/regenerate")
+async def regenerate_variants(
+    idea_id: str,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stößt P12-Variants-Task an — generiert die 3 Varianten neu."""
+    # Tenant-Isolation: Idea muss dem Tenant gehören
+    row = (await db.execute(
+        text("SELECT 1 FROM content_ideas WHERE id = CAST(:id AS uuid) AND tenant_id = :tid"),
+        {"id": idea_id, "tid": tenant.id},
+    )).fetchone()
+    if not row:
+        raise HTTPException(404, "Idee nicht gefunden")
+    try:
+        from tasks.p12_variants_task import generate_variants
+        async_result = generate_variants.apply_async(args=[idea_id])
+        return {"status": "queued", "task_id": getattr(async_result, "id", None)}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"Task-Dispatch fehlgeschlagen: {exc}")
+
+
+@router.post("/{idea_id}/variants/{variant_id}/choose")
+async def choose_variant(
+    idea_id: str,
+    variant_id: str,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Wählt eine Variante als chosen — alle anderen werden auf is_chosen=false gesetzt."""
+    # Tenant-Isolation
+    v = (await db.execute(
+        text(
+            "SELECT id FROM idea_variants "
+            "WHERE id = CAST(:vid AS uuid) AND idea_id = CAST(:iid AS uuid) "
+            "  AND tenant_id = :tid"
+        ),
+        {"vid": variant_id, "iid": idea_id, "tid": tenant.id},
+    )).fetchone()
+    if not v:
+        raise HTTPException(404, "Variante nicht gefunden")
+
+    # Reset alle Varianten dieser Idee
+    await db.execute(
+        text(
+            "UPDATE idea_variants SET is_chosen = false, chosen_at = NULL "
+            "WHERE idea_id = CAST(:iid AS uuid)"
+        ),
+        {"iid": idea_id},
+    )
+    await db.execute(
+        text(
+            "UPDATE idea_variants SET is_chosen = true, chosen_at = now() "
+            "WHERE id = CAST(:vid AS uuid)"
+        ),
+        {"vid": variant_id},
+    )
+    await db.commit()
+    return {"status": "ok", "chosen_id": variant_id}

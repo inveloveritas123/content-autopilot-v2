@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import { Lightbulb, MessageCircleQuestion, ChevronDown, ChevronUp, Send, Sparkles, Tag, Star, Clock, CheckCircle2, AlertCircle, Plus, Loader2, Trash2, LayoutList, Rows3, SkipForward, Zap } from 'lucide-react'
 import { getIdeas, getIdea, submitAnswer, generatePost, updateIdea, getItems, generateIdeas, batchGenerateIdeas, refreshIdeasWithProfile, getSources, bulkArchiveIdeas, quickGeneratePost, bulkQuickGeneratePosts, getIdeasSourceBreakdown, createManualIdea } from '../api'
 import TimeFilter from './TimeFilter'
+import IdeaVariants from './IdeaVariants'
 
 const STATUS_MAP = {
   new: { label: 'Neu', color: 'bg-blue-100 text-blue-700', icon: Lightbulb },
@@ -175,6 +176,7 @@ function IdeaCard({ idea, onToggle, isExpanded, inlineContent, isSelected, onSel
         </div>
 
         {isExpanded && inlineContent}
+        {isExpanded && <IdeaVariants ideaId={idea.id} />}
       </div>
     </div>
   )

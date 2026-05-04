@@ -122,5 +122,6 @@ celery_app.conf.include = [
     "tasks.reviewer_queue_cron",
     "tasks.telegram_task",
     "tasks.memory_backfill_task",
+    "tasks.p12_variants_task",
     "api.wizard",
 ]
