@@ -19,6 +19,7 @@ import Analytics from './components/Analytics'
 import LLMAnalytics from './components/LLMAnalytics'
 import PublishQueue from './components/PublishQueue'
 import Dialogue from './components/Dialogue'
+import Memory from './components/Memory'
 function App() {
   return (
     <Layout>
@@ -45,6 +46,7 @@ function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/settings/export-import" element={<ExportImport />} />
         <Route path="/settings/analytics" element={<LLMAnalytics />} />
+        <Route path="/memory" element={<Memory />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Layout>

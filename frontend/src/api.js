@@ -422,6 +422,11 @@ export const getLLMAnalyticsByModel = (params) => request('/analytics/llm-by-mod
 export const getLLMAnalyticsByDay = (params) => request('/analytics/llm-by-day', { params })
 export const getLLMAnalyticsByHour = (params) => request('/analytics/llm-by-hour', { params })
 export const getContentByCategory = (params) => request('/analytics/content-by-category', { params })
+export const searchMemory = (params) => request('/memory/search', { params })
+export const getMemoryRecent = (params) => request('/memory/recent', { params })
+export const getMemoryPicker = (params) => request('/memory/picker', { params })
+export const getMemoryStats = () => request('/memory/stats')
+export const addMemoryNote = (data) => request('/memory/note', { method: 'POST', body: data })
 export const getLLMAnalyticsAnomaly = (params) => request('/analytics/llm-anomaly', { params })
 
 export const getLLMAnalyticsCSVUrl = (params) => {

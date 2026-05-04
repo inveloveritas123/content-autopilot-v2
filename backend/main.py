@@ -200,6 +200,9 @@ app.include_router(telegram_router, prefix="/api", tags=["Telegram"])
 from api.whatsapp import router as whatsapp_router
 app.include_router(whatsapp_router, prefix="/api", tags=["WhatsApp"])
 
+from api.memory import router as memory_router
+app.include_router(memory_router, prefix="/api", tags=["Memory"])
+
 from api.analytics import router as analytics_router
 app.include_router(analytics_router, prefix="/api", tags=["Analytics"])
 

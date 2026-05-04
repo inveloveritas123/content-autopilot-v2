@@ -22,6 +22,7 @@ import {
   Brain,
   ShieldAlert,
   Pencil,
+  Sparkles,
 } from 'lucide-react'
 import { getProjects, createProject, deleteProject, updateProject } from '../api'
 
@@ -44,6 +45,7 @@ const brandVoiceNavItems = [
   { to: '/brand-voice', label: 'Brand Voice', icon: Mic2 },
   { to: '/brand-voice/insights', label: 'So liest KI mich', icon: Brain },
   { to: '/brand-voice/review-queue', label: 'Review-Queue', icon: ShieldAlert },
+  { to: '/memory', label: 'Gedächtnis', icon: Sparkles },
 ]
 
 const adminNavItems = [
