@@ -328,6 +328,30 @@ def run_p12(
         # ------------------------------------------------------------------
         # 6. User-Prompt zusammenbauen
         # ------------------------------------------------------------------
+        # Phase 7.4: Top-5 Hooks aus library als Inspiration (Allow-List, kein Forced-Use)
+        hook_inspirations: list[dict] = []
+        try:
+            with sync_session_factory() as _hook_db:
+                _hook_rows = _hook_db.execute(
+                    text(
+                        "SELECT id, hook_text, hook_type, performance_score "
+                        "FROM hook_library "
+                        "WHERE tenant_id = :tid "
+                        "ORDER BY performance_score DESC, used_count DESC, created_at DESC "
+                        "LIMIT 5"
+                    ),
+                    {"tid": tenant_id},
+                ).fetchall()
+                for hr in _hook_rows:
+                    hook_inspirations.append({
+                        "id": str(hr.id),
+                        "hook_text": hr.hook_text,
+                        "type": hr.hook_type,
+                        "performance": float(hr.performance_score or 0),
+                    })
+        except Exception:
+            pass  # Fail-safe: ohne Hook-Library generieren
+
         context_payload = {
             "customer_context": pruned_context,
             "voice_profile": pruned_voice,
@@ -335,6 +359,8 @@ def run_p12(
             "answers": answers,
             "idea_id": idea_id,
         }
+        if hook_inspirations:
+            context_payload["hook_inspirations"] = hook_inspirations
         context_json_str = json.dumps(context_payload, ensure_ascii=False)
         user_prompt = loaded.user_prompt_template.replace(
             "{context_json}", context_json_str
@@ -459,12 +485,27 @@ def run_p12(
                                 "ki_signal_check": output_json.get("ki_signal_check", {}),
                                 "potenzielle_schwaechen": output_json.get("potenzielle_schwaechen", []),
                                 "kategorie_raw": _raw_cat,
+                                "inspired_by_hook_id": output_json.get("inspired_by_hook_id"),
                                 "output_hash": output_hash,
                             },
                             ensure_ascii=False,
                         ),
                     },
                 )
+                # Phase 7.4: track_use wenn LLM einen Library-Hook als Inspiration nennt
+                _inspired_id = output_json.get("inspired_by_hook_id")
+                if _inspired_id:
+                    try:
+                        session.execute(
+                            text(
+                                "UPDATE hook_library SET used_count = used_count + 1, "
+                                "  last_used_at = now() "
+                                "WHERE id = CAST(:hid AS uuid) AND tenant_id = :tid"
+                            ),
+                            {"hid": str(_inspired_id), "tid": tenant_id},
+                        )
+                    except Exception:
+                        pass  # Drift-safe: ungültige hook_id wird einfach ignoriert
                 session.commit()
             except Exception:
                 session.rollback()
