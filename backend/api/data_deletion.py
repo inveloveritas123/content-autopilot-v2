@@ -14,6 +14,7 @@ Workflow:
 from __future__ import annotations
 
 import datetime
+import json
 import logging
 import uuid
 from typing import Optional
@@ -32,6 +33,90 @@ router = APIRouter()
 VALID_MODES = ("full", "memory_selective", "telegram_purge", "audit_selective")
 RECOVERY_DAYS = 30
 
+# Critical #1: Statische Whitelist aller Soft-Delete-Tabellen.
+# Schlüssel = Tabellenname, Wert = SQL-Statement für Soft-Delete.
+# KEIN f-String mit variablem Tabellennamen — verhindert SQL-Injection
+# wenn die Tabellenliste je aus einer Konfigurationsquelle befüllt wird.
+_SOFT_DELETE_TABLES: dict[str, str] = {
+    "memory_chunks": (
+        "UPDATE memory_chunks "
+        "SET deleted_at = NOW(), deletion_request_id = :req_id "
+        "WHERE tenant_id = :tid AND deleted_at IS NULL"
+    ),
+    "content_pieces": (
+        "UPDATE content_pieces "
+        "SET deleted_at = NOW(), deletion_request_id = :req_id "
+        "WHERE tenant_id = :tid AND deleted_at IS NULL"
+    ),
+    "content_ideas": (
+        "UPDATE content_ideas "
+        "SET deleted_at = NOW(), deletion_request_id = :req_id "
+        "WHERE tenant_id = :tid AND deleted_at IS NULL"
+    ),
+    "source_items": (
+        "UPDATE source_items "
+        "SET deleted_at = NOW(), deletion_request_id = :req_id "
+        "WHERE tenant_id = :tid AND deleted_at IS NULL"
+    ),
+    # Critical #4: llm_call_logs in Cascade einbeziehen (DSGVO Art. 17)
+    "llm_call_logs": (
+        "UPDATE llm_call_logs "
+        "SET deleted_at = NOW(), deletion_request_id = :req_id "
+        "WHERE tenant_id = :tid AND deleted_at IS NULL"
+    ),
+}
+
+# M1: Statische Whitelist für _soft_delete_audit — kein f-String mit variablem Tabellennamen.
+# Pattern identisch zu _SOFT_DELETE_TABLES (Critical #1).
+_AUDIT_TABLES_SOFT_DELETE: dict[str, str] = {
+    "content_pieces": (
+        "UPDATE content_pieces "
+        "SET deleted_at = NOW(), deletion_request_id = :req_id "
+        "WHERE tenant_id = :tid AND id = ANY(:ids) AND deleted_at IS NULL"
+    ),
+    "content_ideas": (
+        "UPDATE content_ideas "
+        "SET deleted_at = NOW(), deletion_request_id = :req_id "
+        "WHERE tenant_id = :tid AND id = ANY(:ids) AND deleted_at IS NULL"
+    ),
+    "source_items": (
+        "UPDATE source_items "
+        "SET deleted_at = NOW(), deletion_request_id = :req_id "
+        "WHERE tenant_id = :tid AND id = ANY(:ids) AND deleted_at IS NULL"
+    ),
+}
+
+# M2: Statische Whitelist für recover_deletion — kein f-String mit variablem Tabellennamen.
+# telegram_message_log eingeschlossen (M5: Recovery-Symmetrie via deletion_request_id FK).
+_RECOVER_TABLES: dict[str, str] = {
+    "memory_chunks": (
+        "UPDATE memory_chunks SET deleted_at = NULL, deletion_request_id = NULL "
+        "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
+    ),
+    "content_pieces": (
+        "UPDATE content_pieces SET deleted_at = NULL, deletion_request_id = NULL "
+        "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
+    ),
+    "content_ideas": (
+        "UPDATE content_ideas SET deleted_at = NULL, deletion_request_id = NULL "
+        "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
+    ),
+    "source_items": (
+        "UPDATE source_items SET deleted_at = NULL, deletion_request_id = NULL "
+        "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
+    ),
+    "llm_call_logs": (
+        "UPDATE llm_call_logs SET deleted_at = NULL, deletion_request_id = NULL "
+        "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
+    ),
+    # M5: telegram_message_log Recovery — erfordert deletion_request_id-Spalte
+    # (Migration 047 erweitert). Ohne diese Migration bleibt Recovery ein no-op für diese Tabelle.
+    "telegram_message_log": (
+        "UPDATE telegram_message_log SET deleted_at = NULL, deletion_request_id = NULL "
+        "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
+    ),
+}
+
 
 class DeletionRequest(BaseModel):
     mode: str = Field(..., description="full | memory_selective | telegram_purge | audit_selective")
@@ -41,69 +126,102 @@ class DeletionRequest(BaseModel):
     notes: Optional[str] = Field(None, max_length=1000)
 
 
-async def _soft_delete_memory(db: AsyncSession, tenant_id, older_than_days, classification) -> int:
+async def _soft_delete_memory(
+    db: AsyncSession, tenant_id, older_than_days, classification, req_id
+) -> int:
     where = ["tenant_id = :tid", "deleted_at IS NULL"]
-    params: dict = {"tid": tenant_id}
+    params: dict = {"tid": tenant_id, "req_id": req_id}
     if older_than_days is not None:
         where.append("created_at < NOW() - make_interval(days => :days)")
         params["days"] = older_than_days
     if classification:
         where.append("classification = :cls")
         params["cls"] = classification
+    # M3: f-String-Prefix entfernt — Tabellenname ist hartcodiert, kein f-String nötig.
+    # WHERE-Bedingungen werden als parametrisierte Bind-Variablen eingefügt.
     result = await db.execute(
-        text(f"UPDATE memory_chunks SET deleted_at = NOW() WHERE {' AND '.join(where)}"),
+        text(
+            "UPDATE memory_chunks "
+            "SET deleted_at = NOW(), deletion_request_id = :req_id "
+            "WHERE " + " AND ".join(where)
+        ),
         params,
     )
     return result.rowcount or 0
 
 
-async def _soft_delete_telegram(db: AsyncSession, tenant_id, older_than_days) -> dict:
+async def _soft_delete_telegram(
+    db: AsyncSession, tenant_id, older_than_days, req_id
+) -> dict:
     counts: dict = {}
-    where = ["tenant_id = :tid", "deleted_at IS NULL", "source_type LIKE 'voice_telegram%'"]
-    params: dict = {"tid": tenant_id}
+    where = [
+        "tenant_id = :tid",
+        "deleted_at IS NULL",
+        "source_type LIKE 'voice_telegram%'",
+    ]
+    params: dict = {"tid": tenant_id, "req_id": req_id}
     if older_than_days is not None:
         where.append("created_at < NOW() - make_interval(days => :days)")
         params["days"] = older_than_days
+    # M3: f-String-Prefix entfernt — Tabellenname ist hartcodiert, kein f-String nötig.
     r = await db.execute(
-        text(f"UPDATE memory_chunks SET deleted_at = NOW() WHERE {' AND '.join(where)}"),
+        text(
+            "UPDATE memory_chunks "
+            "SET deleted_at = NOW(), deletion_request_id = :req_id "
+            "WHERE " + " AND ".join(where)
+        ),
         params,
     )
     counts["memory_chunks"] = r.rowcount or 0
+    # M5: telegram_message_log soft-delete mit deletion_request_id setzen
+    # (statt hard-DELETE) — ermöglicht Recovery via _RECOVER_TABLES.
+    # Erfordert: Migration 047 erweitert telegram_message_log um deleted_at + deletion_request_id.
     r2 = await db.execute(
-        text("DELETE FROM telegram_message_log WHERE tenant_id = :tid"),
-        {"tid": tenant_id},
+        text(
+            "UPDATE telegram_message_log "
+            "SET deleted_at = NOW(), deletion_request_id = :req_id "
+            "WHERE tenant_id = :tid AND deleted_at IS NULL"
+        ),
+        {"tid": tenant_id, "req_id": req_id},
     )
     counts["telegram_message_log"] = r2.rowcount or 0
     return counts
 
 
-async def _soft_delete_audit(db: AsyncSession, tenant_id, record_ids) -> dict:
+async def _soft_delete_audit(
+    db: AsyncSession, tenant_id, record_ids, req_id
+) -> dict:
     counts: dict = {"content_pieces": 0, "content_ideas": 0, "source_items": 0}
     if not record_ids:
         return counts
-    for table in ("content_pieces", "content_ideas", "source_items"):
+    # M1: f-String-Loop durch statische Whitelist _AUDIT_TABLES_SOFT_DELETE ersetzt.
+    # Pattern identisch zu _soft_delete_full / _SOFT_DELETE_TABLES (Critical #1).
+    for table, stmt in _AUDIT_TABLES_SOFT_DELETE.items():
         r = await db.execute(
-            text(f"UPDATE {table} SET deleted_at = NOW() "
-                 f"WHERE tenant_id = :tid AND id = ANY(:ids) AND deleted_at IS NULL"),
-            {"tid": tenant_id, "ids": record_ids},
+            text(stmt),
+            {"tid": tenant_id, "ids": record_ids, "req_id": req_id},
         )
         counts[table] = r.rowcount or 0
     return counts
 
 
-async def _soft_delete_full(db: AsyncSession, tenant_id, tenant_name) -> dict:
+async def _soft_delete_full(
+    db: AsyncSession, tenant_id, tenant_name, req_id
+) -> dict:
+    """Critical #2 + #4: Schreibt deletion_request_id in alle Soft-Delete-Tabellen."""
     counts: dict = {}
-    for table in ("memory_chunks", "content_pieces", "content_ideas", "source_items"):
+    for table, stmt in _SOFT_DELETE_TABLES.items():
         r = await db.execute(
-            text(f"UPDATE {table} SET deleted_at = NOW() "
-                 f"WHERE tenant_id = :tid AND deleted_at IS NULL"),
-            {"tid": tenant_id},
+            text(stmt),
+            {"tid": tenant_id, "req_id": req_id},
         )
         counts[table] = r.rowcount or 0
     await db.execute(
-        text("UPDATE tenants SET enabled = false, disabled_reason = :r, "
-             "disabled_at = NOW(), disabled_by = 'rtbf_request' "
-             "WHERE id = :tid"),
+        text(
+            "UPDATE tenants SET enabled = false, disabled_reason = :r, "
+            "disabled_at = NOW(), disabled_by = 'rtbf_request' "
+            "WHERE id = :tid"
+        ),
         {"tid": tenant_id, "r": f"DSGVO Art. 17 — Soft-Delete für '{tenant_name}'"},
     )
     return counts
@@ -121,18 +239,27 @@ async def request_deletion(
     now = datetime.datetime.utcnow()
     recovery_until = now + datetime.timedelta(days=RECOVERY_DAYS)
 
+    # req_id wird VOR den Soft-Deletes erzeugt, damit die FK-Spalten sofort
+    # korrekt gesetzt werden (Critical #2).
+    req_id = uuid.uuid4()
+
     affected: dict = {}
     if payload.mode == "full":
-        affected = await _soft_delete_full(db, tenant.id, tenant.name)
+        affected = await _soft_delete_full(db, tenant.id, tenant.name, req_id)
     elif payload.mode == "memory_selective":
-        n = await _soft_delete_memory(db, tenant.id, payload.older_than_days, payload.classification)
+        n = await _soft_delete_memory(
+            db, tenant.id, payload.older_than_days, payload.classification, req_id
+        )
         affected = {"memory_chunks": n}
     elif payload.mode == "telegram_purge":
-        affected = await _soft_delete_telegram(db, tenant.id, payload.older_than_days)
+        affected = await _soft_delete_telegram(
+            db, tenant.id, payload.older_than_days, req_id
+        )
     elif payload.mode == "audit_selective":
-        affected = await _soft_delete_audit(db, tenant.id, payload.record_ids or [])
+        affected = await _soft_delete_audit(
+            db, tenant.id, payload.record_ids or [], req_id
+        )
 
-    req_id = uuid.uuid4()
     await db.execute(
         text("""
             INSERT INTO deletion_requests
@@ -145,14 +272,19 @@ async def request_deletion(
                  :ru, :now, :notes)
         """),
         {
-            "id": req_id, "tid": tenant.id, "tname": tenant.name, "mode": payload.mode,
-            "pf": __import__("json").dumps({
+            "id": req_id,
+            "tid": tenant.id,
+            "tname": tenant.name,
+            "mode": payload.mode,
+            "pf": json.dumps({
                 "older_than_days": payload.older_than_days,
                 "classification": payload.classification,
                 "record_ids": payload.record_ids,
             }),
-            "aff": __import__("json").dumps(affected),
-            "now": now, "ru": recovery_until, "notes": payload.notes,
+            "aff": json.dumps(affected),
+            "now": now,
+            "ru": recovery_until,
+            "notes": payload.notes,
         },
     )
     await db.commit()
@@ -222,23 +354,32 @@ async def recover_deletion(
 
     affected: dict = row.affected_records or {}
     restored: dict = {}
-    for table in ("memory_chunks", "content_pieces", "content_ideas", "source_items"):
+
+    # M2: f-String-Loop durch statische Whitelist _RECOVER_TABLES ersetzt.
+    # Critical #2: Recovery per deletion_request_id FK — kein ±2s Zeitfenster mehr.
+    # Nur Rows die exakt zu diesem Request gehören werden zurückgeholt.
+    # telegram_message_log ist ebenfalls in _RECOVER_TABLES (M5-Recovery-Symmetrie).
+    for table, stmt in _RECOVER_TABLES.items():
         if affected.get(table, 0) > 0:
             r = await db.execute(
-                text(f"UPDATE {table} SET deleted_at = NULL "
-                     f"WHERE tenant_id = :tid AND deleted_at IS NOT NULL"),
-                {"tid": tenant.id},
+                text(stmt),
+                {"tid": tenant.id, "req_id": req_id},
             )
             restored[table] = r.rowcount or 0
+
     if row.mode == "full":
         await db.execute(
-            text("UPDATE tenants SET enabled = true, disabled_reason = NULL, "
-                 "disabled_at = NULL, disabled_by = NULL WHERE id = :tid"),
+            text(
+                "UPDATE tenants SET enabled = true, disabled_reason = NULL, "
+                "disabled_at = NULL, disabled_by = NULL WHERE id = :tid"
+            ),
             {"tid": tenant.id},
         )
 
     await db.execute(
-        text("UPDATE deletion_requests SET status = 'recovered', recovered_at = NOW() WHERE id = :id"),
+        text(
+            "UPDATE deletion_requests SET status = 'recovered', recovered_at = NOW() WHERE id = :id"
+        ),
         {"id": req_id},
     )
     await db.commit()

@@ -1,12 +1,27 @@
 /**
  * Vector-DB-Visualisierung (Issue #148, Welle F).
  * Force-Directed-Graph (react-force-graph-2d) — Cosine-Similarity-Edges aus pgvector.
+ *
+ * Critical #3: Default-View nutzt `text_preview`, kein `full_text` im DOM.
+ * Should-Fix: ResizeObserver statt hartkodiertem width={1024}.
  */
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { Network, RefreshCw, Loader2, AlertCircle } from 'lucide-react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { Network, RefreshCw, Loader2, AlertCircle, Eye } from 'lucide-react'
 import { Button } from './ui/Button'
 import ForceGraph2D from 'react-force-graph-2d'
-import { getMemoryVizData } from '../api'
+import { getMemoryVizData, getMemoryChunkFullText } from '../api'
+
+// S3: HTML-Escape-Helper — verhindert XSS in nodeLabel-Template (Trust-Boundary: eigene DB,
+// aber Defense-in-Depth gegen Daten mit < > & Zeichen aus Nutzereingaben).
+function escapeHtml(s) {
+  if (!s) return ''
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
 
 const CLASS_COLORS = {
   werte: '#2563eb',
@@ -24,7 +39,30 @@ export default function MemoryViz() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [selectedNode, setSelectedNode] = useState(null)
+
+  // Should-Fix: ResizeObserver statt hartkodiertem width={1024}
+  const containerRef = useRef()
+  const [graphWidth, setGraphWidth] = useState(800)
   const fgRef = useRef()
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    const obs = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (entry) {
+        setGraphWidth(Math.floor(entry.contentRect.width))
+      }
+    })
+    obs.observe(containerRef.current)
+    return () => obs.disconnect()
+  }, [])
+
+  // Critical #3: Confirm-Dialog-State für Full-Text-Anfrage
+  const [fullTextLoading, setFullTextLoading] = useState(false)
+  const [fullTextError, setFullTextError] = useState(null)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [confirmReason, setConfirmReason] = useState('')
+  const [fullTextData, setFullTextData] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -47,6 +85,30 @@ export default function MemoryViz() {
     nodes: data.nodes.map(n => ({ ...n })),
     links: data.edges.map(e => ({ source: e.source, target: e.target, value: e.weight })),
   }), [data])
+
+  const handleNodeClick = useCallback((n) => {
+    setSelectedNode(n)
+    setFullTextData(null)
+    setFullTextError(null)
+    setShowConfirmDialog(false)
+    setConfirmReason('')
+  }, [])
+
+  async function handleRequestFullText() {
+    if (!selectedNode) return
+    if (!confirmReason.trim()) return
+    setFullTextLoading(true)
+    setFullTextError(null)
+    try {
+      const result = await getMemoryChunkFullText(selectedNode.id, confirmReason.trim())
+      setFullTextData(result)
+      setShowConfirmDialog(false)
+    } catch (e) {
+      setFullTextError(e.message)
+    } finally {
+      setFullTextLoading(false)
+    }
+  }
 
   return (
     <div style={{ padding: 24, maxWidth: 1400 }}>
@@ -107,7 +169,9 @@ export default function MemoryViz() {
       {error && <div style={{ padding: 12, background: '#fee2e2', color: '#991b1b', borderRadius: 6, marginBottom: 12 }}>{error}</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
-        <div style={{ height: 600, background: '#0f172a', borderRadius: 8, position: 'relative', overflow: 'hidden' }}>
+        {/* Should-Fix: ref auf Container, graphWidth aus ResizeObserver */}
+        <div ref={containerRef}
+             style={{ height: 600, background: '#0f172a', borderRadius: 8, position: 'relative', overflow: 'hidden' }}>
           {graphData.nodes.length === 0 ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af' }}>
               <AlertCircle size={20} style={{ marginRight: 8 }} />
@@ -120,12 +184,12 @@ export default function MemoryViz() {
               backgroundColor="#0f172a"
               nodeRelSize={5}
               nodeColor={(n) => n.color || '#6b7280'}
-              nodeLabel={(n) => `<div style="max-width:300px;background:#fff;padding:6px;border-radius:4px;font-size:12px">${n.label}<br/><i style="color:#64748b">${n.classification || ''} · ${n.source_type}</i></div>`}
+              nodeLabel={(n) => `<div style="max-width:300px;background:#fff;padding:6px;border-radius:4px;font-size:12px">${escapeHtml(n.label)}<br/><i style="color:#64748b">${escapeHtml(n.classification || '')} · ${escapeHtml(n.source_type)}</i></div>`}
               linkColor={() => 'rgba(255,255,255,0.2)'}
               linkWidth={(l) => Math.max(0.3, (l.value - 0.5) * 3)}
-              onNodeClick={(n) => setSelectedNode(n)}
+              onNodeClick={handleNodeClick}
               cooldownTicks={100}
-              width={1024}
+              width={graphWidth}
               height={600}
             />
           )}
@@ -163,7 +227,82 @@ export default function MemoryViz() {
               <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
                 {selectedNode.classification || 'unklassifiziert'} · {selectedNode.source_type}
               </div>
-              <div style={{ fontSize: 13 }}>{selectedNode.full_text}</div>
+
+              {/* Critical #3: Standard-View zeigt nur text_preview */}
+              {!fullTextData && (
+                <>
+                  <div data-testid="viz-text-preview" style={{ fontSize: 13 }}>
+                    {selectedNode.text_preview}
+                  </div>
+                  {!showConfirmDialog && (
+                    <Button
+                      data-testid="btn-viz-show-full"
+                      onClick={() => setShowConfirmDialog(true)}
+                      style={{ marginTop: 8, fontSize: 11, padding: '4px 8px' }}
+                    >
+                      <Eye size={12} style={{ marginRight: 4 }} />
+                      Vollständigen Inhalt anzeigen…
+                    </Button>
+                  )}
+                  {showConfirmDialog && (
+                    <div style={{ marginTop: 8, padding: 8, background: '#fef3c7', borderRadius: 4, fontSize: 12 }}>
+                      <p style={{ fontWeight: 600, marginBottom: 4 }}>
+                        Vollständigen Inhalt anzeigen?
+                      </p>
+                      <p style={{ color: '#92400e', marginBottom: 6 }}>
+                        Dieser Zugriff wird im Audit-Log vermerkt.
+                      </p>
+                      <input
+                        type="text"
+                        placeholder="Begründung (Pflicht)"
+                        value={confirmReason}
+                        onChange={(e) => setConfirmReason(e.target.value)}
+                        data-testid="viz-confirm-reason"
+                        style={{ width: '100%', padding: '4px 6px', border: '1px solid #d1d5db', borderRadius: 4, marginBottom: 6, fontSize: 12 }}
+                      />
+                      {fullTextError && (
+                        <div style={{ color: '#991b1b', fontSize: 11, marginBottom: 4 }}>{fullTextError}</div>
+                      )}
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <Button
+                          data-testid="btn-viz-confirm-ok"
+                          onClick={handleRequestFullText}
+                          disabled={fullTextLoading || !confirmReason.trim()}
+                          style={{ fontSize: 11, padding: '4px 8px' }}
+                        >
+                          {fullTextLoading ? <Loader2 size={12} className="animate-spin" /> : 'OK, anzeigen'}
+                        </Button>
+                        <Button
+                          data-testid="btn-viz-confirm-cancel"
+                          onClick={() => { setShowConfirmDialog(false); setConfirmReason('') }}
+                          style={{ fontSize: 11, padding: '4px 8px', background: 'transparent', border: '1px solid #d1d5db' }}
+                        >
+                          Abbrechen
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Critical #3: Full-Text-View nach Confirm */}
+              {fullTextData && (
+                <>
+                  <div data-testid="viz-full-text" style={{ fontSize: 13 }}>
+                    {fullTextData.full_text}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+                    (Volltext — Zugriff wurde im Audit-Log vermerkt)
+                  </div>
+                  <Button
+                    onClick={() => setFullTextData(null)}
+                    style={{ marginTop: 6, fontSize: 11, padding: '2px 6px', background: 'transparent', border: '1px solid #d1d5db' }}
+                  >
+                    Vorschau
+                  </Button>
+                </>
+              )}
+
               <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
                 {new Date(selectedNode.created_at).toLocaleString('de-DE')}
               </div>

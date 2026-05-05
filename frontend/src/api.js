@@ -455,6 +455,9 @@ export const listDataDeletions = () => request('/me/data-deletion')
 export const recoverDataDeletion = (id) => request(`/me/data-deletion/${id}/recover`, { method: 'POST' })
 export const getDataDeletion = (id) => request(`/me/data-deletion/${id}`)
 export const getMemoryVizData = (params) => request('/memory/viz-data', { params })
+// Critical #3: Volltext nach explizitem Confirm (POST, schreibt Audit-Log)
+export const getMemoryChunkFullText = (chunkId, reason) =>
+  request(`/memory/viz-data/${chunkId}/full`, { method: 'POST', body: { confirm: true, reason } })
 export const getLLMAnalyticsAnomaly = (params) => request('/analytics/llm-anomaly', { params })
 
 export const getLLMAnalyticsCSVUrl = (params) => {

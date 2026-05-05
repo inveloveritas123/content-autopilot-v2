@@ -126,6 +126,14 @@ def run_for_tenant(tenant_id: str, max_chunks: int = 30) -> dict:
         )[:10000]
 
         try:
+            # Should-Fix-Hinweis: asyncio.run() in einem Celery-Task ist korrekt,
+            # weil Celery sync Tasks in einem eigenen Thread ohne laufende Event-Loop
+            # ausführt. asyncio.run() erzeugt eine neue Loop und schließt sie danach.
+            # Falls dieser Task je in einem async Kontext (z.B. FastAPI Background Task)
+            # gerufen wird, würde asyncio.run() mit RuntimeError "cannot run nested
+            # event loop" scheitern. Dann: nest_asyncio.apply() vor dem run() einfügen
+            # oder llm_service.complete_json_sync() verwenden falls verfügbar.
+            # Aktuell: Celery-only → kein Problem. (#148-followup bei Async-Migration)
             data = asyncio.run(llm_service.complete_json(
                 prompt="## TEXT:\n" + combined_text,
                 system=EXTRACTION_PROMPT,

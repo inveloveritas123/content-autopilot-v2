@@ -4,13 +4,23 @@ Liefert nodes + edges für force-directed-Graph.
 Cosine-Similarity wird via pgvector im Server berechnet (kein UMAP nötig
 bei kleinen Datasets <500 Chunks). Frontend (react-force-graph-2d) macht
 den Layout via d3-force.
+
+Critical #3 — PII-Leak-Fix:
+- Default-Response liefert nur `text_preview` (max 200 Zeichen), kein `full_text`.
+- Neuer Detail-Endpoint `GET /api/memory/viz-data/{chunk_id}/full` erfordert
+  Confirm-Token (POST body `{"confirm": true, "reason": "..."}`) und loggt
+  den Zugriff in llm_call_logs als Tenant-Audit (task_type='memory_full_view').
 """
 from __future__ import annotations
 
+import json
 import logging
+import uuid
+from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +29,16 @@ from models.tenant import Tenant
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+_TEXT_PREVIEW_MAX = 200
+
+
+def _make_preview(content: str | None) -> str:
+    if not content:
+        return ""
+    if len(content) <= _TEXT_PREVIEW_MAX:
+        return content
+    return content[:_TEXT_PREVIEW_MAX] + " …"
 
 
 CLASSIFICATION_COLORS = {
@@ -49,6 +69,21 @@ async def get_viz_data(
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    # S1: Whitelist-Check vor Query-Building — verhindert unerwartete Werte
+    # auch wenn die Werte parametrisiert sind (Defense-in-Depth, konsistent mit PR-Ziel).
+    _ALLOWED_CLASSIFICATIONS = set(CLASSIFICATION_COLORS.keys()) - {None}
+    _ALLOWED_SOURCE_TYPES = set(SOURCE_TYPE_GROUPS.keys())
+    if classification and classification not in _ALLOWED_CLASSIFICATIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"classification muss einer von {sorted(_ALLOWED_CLASSIFICATIONS)} sein",
+        )
+    if source_type and source_type not in _ALLOWED_SOURCE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"source_type muss einer von {sorted(_ALLOWED_SOURCE_TYPES)} sein",
+        )
+
     where = ["tenant_id = :tid", "embedding IS NOT NULL", "deleted_at IS NULL",
              "created_at >= NOW() - make_interval(days => :days)"]
     params: dict = {"tid": tenant.id, "days": days, "max_nodes": max_nodes}
@@ -79,7 +114,8 @@ async def get_viz_data(
         nodes.append({
             "id": str(r.id),
             "label": (r.content_text or "")[:80] + ("…" if len(r.content_text or "") > 80 else ""),
-            "full_text": r.content_text,
+            # Critical #3: Nur text_preview, kein full_text im Default-Response
+            "text_preview": _make_preview(r.content_text),
             "classification": r.classification,
             "source_type": r.source_type,
             "source_group": SOURCE_TYPE_GROUPS.get(r.source_type, "other"),
@@ -172,4 +208,73 @@ async def get_viz_data(
             "source_type": source_type,
             "edge_threshold": edge_threshold,
         },
+    }
+
+
+class FullTextConfirm(BaseModel):
+    confirm: bool = Field(..., description="Muss true sein")
+    reason: str = Field(..., min_length=3, max_length=500,
+                        description="Begründung für den Volltext-Abruf (Audit-Pflicht)")
+
+
+@router.post("/memory/viz-data/{chunk_id}/full")
+async def get_chunk_full_text(
+    chunk_id: str,
+    body: FullTextConfirm,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Critical #3: Liefert den Volltext eines Memory-Chunks nach explizitem Confirm.
+
+    - Erfordert `{"confirm": true, "reason": "..."}` im Request-Body.
+    - Schreibt Audit-Eintrag in llm_call_logs (task_type='memory_full_view').
+    - Gibt den vollen content_text zurück.
+    """
+    if not body.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="confirm muss true sein — Zugriff wird im Audit-Log vermerkt.",
+        )
+
+    # Chunk laden — Tenant-Isolation sicherstellen
+    row = (await db.execute(
+        text("""
+            SELECT id, content_text, classification, source_type, created_at
+            FROM memory_chunks
+            WHERE id = :cid AND tenant_id = :tid AND deleted_at IS NULL
+        """),
+        {"cid": chunk_id, "tid": tenant.id},
+    )).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="chunk not found")
+
+    # Audit-Log in llm_call_logs (kein LLM-Call, aber Zugriff auf PII)
+    await db.execute(
+        text("""
+            INSERT INTO llm_call_logs
+                (id, tenant_id, task_type, model, prompt_tokens, completion_tokens,
+                 cost_cents, duration_ms, success, error_message, created_at)
+            VALUES
+                (:id, :tid, 'memory_full_view', 'none', 0, 0, 0, 0, true,
+                 :reason, NOW())
+        """),
+        {
+            "id": uuid.uuid4(),
+            "tid": tenant.id,
+            # M4: error_message wird bewusst als Audit-Feld missbraucht, weil
+            # llm_call_logs kein dediziertes Freitext-Feld hat. JSON-Wrap macht
+            # den Missbrauch explizit erkennbar.
+            # TODO: dedizierte audit_notes-Spalte in llm_call_logs (Issue-Followup)
+            "reason": json.dumps({"chunk_id": chunk_id, "reason": body.reason[:200]}),
+        },
+    )
+    await db.commit()
+
+    return {
+        "id": str(row.id),
+        "full_text": row.content_text,
+        "classification": row.classification,
+        "source_type": row.source_type,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "audit_logged": True,
     }

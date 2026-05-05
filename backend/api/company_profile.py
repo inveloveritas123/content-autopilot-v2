@@ -269,11 +269,17 @@ async def review_suggestion(
 
     now = datetime.datetime.utcnow()
     if decision.action == "accept":
-        if row.field_name in EDITABLE_FIELDS:
-            await db.execute(
-                text(f"UPDATE company_profile SET {row.field_name} = :v, updated_at = NOW() WHERE tenant_id = :tid"),
-                {"v": row.value, "tid": tenant.id},
+        # Should-Fix: Whitelist-Check analog zu update_company_profile — verhindert
+        # SQL-Injection über field_name aus der DB, falls Provenance-Rows manipuliert wurden.
+        if row.field_name not in EDITABLE_FIELDS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"field_name '{row.field_name}' ist nicht in EDITABLE_FIELDS",
             )
+        await db.execute(
+            text(f"UPDATE company_profile SET {row.field_name} = :v, updated_at = NOW() WHERE tenant_id = :tid"),
+            {"v": row.value, "tid": tenant.id},
+        )
         await db.execute(
             text("UPDATE profile_field_provenance SET applied = true, applied_at = :now, reviewed_by = 'user' WHERE id = :id"),
             {"now": now, "id": prov_id},
