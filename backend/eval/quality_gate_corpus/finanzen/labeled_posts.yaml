@@ -1,0 +1,147 @@
+# Quality-Gate Eval Korpus — Branche: finanzen
+# Skelett 2026-05-05 — Robert/Louis: bitte auf 50 Posts erweitern.
+# WICHTIG: Finanz-Posts sollten bei laengeren Posts einen Anlageberatungs-Disclaimer enthalten.
+# label: "good" | "bad"
+# ground_truth_violations: Liste erwarteter Violations (leer wenn good)
+
+- id: finanzen_001
+  text: |
+    Der groesste Fehler bei der Altersvorsorge: zu spaet anfangen.
+
+    Wer mit 25 monatlich 200 EUR bei 6% Rendite anlegt, hat mit 65 rund 400.000 EUR.
+    Wer mit 35 startet, hat mit 65 nur noch ~200.000 EUR — trotz gleicher monatlicher Einzahlung.
+
+    Der Zinseszins-Effekt ist keine Magie. Es ist Mathematik. Und Zeit ist die Variable,
+    die kein Geld kaufen kann.
+
+    Dies ist keine Anlageberatung. Individuelle Beratung beim Finanzberater oder Honorarberater.
+
+    Habt ihr frueh angefangen oder wartet ihr noch?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Zinseszins-Visualisierung, Disclaimer."
+
+- id: finanzen_002
+  text: |
+    REICH WERDEN SCHNELL!!! KRYPTO 1000% GEWINNE!!! JETZT EINSTEIGEN!!!
+  label: "bad"
+  ground_truth_violations: ["excessive_caps", "too_short"]
+  notes: "Initial-Skelett 2026-05-05. Typischer Betrugs-Post."
+
+- id: finanzen_003
+  text: |
+    ETF vs. aktiv gemanagte Fonds — die Zahlen sprechen eine klare Sprache:
+
+    Laut SPIVA-Studie 2023 schlagen 85% der aktiven Fondsmanager ihren Benchmark-Index
+    ueber 15 Jahre NICHT. Die Kostenquote (TER) ist dabei der entscheidende Faktor:
+    aktive Fonds kosten 1,5–2,5%, ETFs oft unter 0,2%.
+
+    Das bedeutet: Ein Vorteil von 1,5% pro Jahr klingt klein. Ueber 30 Jahre macht
+    das bei 100.000 EUR Anlagesumme einen Unterschied von ueber 100.000 EUR.
+
+    Keine Anlageberatung — allgemeine Finanzbildung. Eigene Situation immer mit
+    zugelassenem Berater besprechen.
+
+    Was nutzt ihr — ETF oder aktive Fonds?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Datenbasiert, Disclaimer, CTA."
+
+- id: finanzen_004
+  text: |
+    Heute Boerse gestiegen. Morgen vielleicht nicht. Wer weiss?
+  label: "bad"
+  ground_truth_violations: ["too_short"]
+  notes: "Initial-Skelett 2026-05-05. Kein Mehrwert."
+
+- id: finanzen_005
+  text: |
+    Notgroschen — die unterschaetzte Basis jeder Finanzplanung:
+
+    Vor ETF, vor Aktien, vor allem anderen: 3–6 Monatsgehaelter liquide auf einem
+    Tagesgeldkonto. Das ist kein Luxus, das ist Pflichtprogramm.
+
+    Warum? Wer keinen Notgroschen hat, verkauft Aktien im Crash — genau dann,
+    wenn man kaufen sollte. Der Notgroschen ist die psychologische Absicherung.
+
+    Aktuell bieten einige Banken noch 3,5% auf Tagesgeld. Das schlaegt die Inflation
+    fast aus — und bleibt jederzeit verfuegbar.
+
+    Dies ist keine Anlageberatung. Jede Finanzsituation ist individuell.
+
+    Habt ihr euren Notgroschen aufgebaut?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Praxistipp, Psychologie, Disclaimer."
+
+- id: finanzen_006
+  text: |
+    3 Steuer-Tricks fuer Selbstaendige, die kaum jemand kennt:
+
+    1. Arbeitszimmer: Bis zu 1.250 EUR/Jahr pauschal absetzbar — auch ohne separaten Raum.
+    2. Betriebliche Altersvorsorge: Bis zu 604 EUR/Monat steuerfrei einzahlen.
+    3. Investitionsabzugsbetrag (IAB): 50% geplanter Investitionen schon im Vorjahr abziehen.
+
+    Allein IAB kann die Steuerlast im Spit zenjahr um mehrere Tausend Euro senken.
+
+    Keine Steuerberatung — fuer individuelle Optimierung immer einen Steuerberater hinzuziehen.
+    Keine Anlageberatung.
+
+    Welchen Trick habt ihr schon genutzt?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Konkrete Steuertipps, doppelter Disclaimer."
+
+- id: finanzen_007
+  text: |
+    INVESTIEREN SIE JETZT IN GOLD!!! GARANTIERTE RENDITE!!!
+  label: "bad"
+  ground_truth_violations: ["excessive_caps", "too_short"]
+  notes: "Initial-Skelett 2026-05-05. Unserioes, keine Grundlage."
+
+- id: finanzen_008
+  text: |
+    Warum Finanzbildung ein soziales Thema ist:
+
+    Wer reich aufgewachsen ist, lernt frueh: Geld investieren, nicht nur sparen.
+    Wer aermeren Verhaeltnissen entstammt, lernt oft: Geld ist knapp, bloß nicht verlieren.
+
+    Dieses Mindset erklaert zu einem grossen Teil, warum Vermoegen in Deutschland so ungleich
+    verteilt ist (Top 10% besitzen ~66% des Nettovermoegen, Bundesbank 2023).
+
+    Finanzbildung in Schulen ist keine nette Idee — sie ist eine Gerechtigkeitsfrage.
+
+    Keine Anlageberatung, sondern eine gesellschaftliche Beobachtung.
+
+    Was denkt ihr: Sollte Finanzbildung Pflichtfach sein?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Gesellschaftliche Dimension, Daten, Disclaimer."
+
+- id: finanzen_009
+  text: |
+    Heute gute Anlageentscheidung getroffen. Details folgen.
+  label: "bad"
+  ground_truth_violations: ["too_short"]
+  notes: "Initial-Skelett 2026-05-05. Vague Teaser ohne Substanz."
+
+- id: finanzen_010
+  text: |
+    Der psychologische Fehler, der die meisten Anleger Geld kostet:
+
+    Verlust-Aversion. Wir empfinden einen Verlust von 1.000 EUR doppelt so stark
+    wie einen gleich grossen Gewinn. Das ist evolutionaer sinnvoll — fuer Investoren fatal.
+
+    Konsequenz: Wir halten Verlustpositionen zu lang (Hoffnung auf Erholung) und
+    verkaufen Gewinner zu frueh (Angst vor Kursrueckgang). Beides kostet Rendite.
+
+    Die Loesung: Regelbasiertes Investieren. Stop-Loss-Levels vorher festlegen,
+    nicht im Moment der Emotion entscheiden.
+
+    Keine Anlageberatung — Behavioural Finance ist ein akademisches Feld,
+    das fuer jeden Investor relevant ist.
+
+    Welchen psychologischen Fehler habt ihr bei euch beobachtet?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Behavioral Finance, Disclaimer, CTA."

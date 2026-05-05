@@ -222,6 +222,9 @@ app.include_router(memory_viz_router, prefix="/api", tags=["MemoryViz"])
 from api.tenant_init import router as tenant_init_router
 app.include_router(tenant_init_router, prefix="/api", tags=["TenantInit"])
 
+from api.eval import router as eval_router
+app.include_router(eval_router, prefix="/api", tags=["Eval"])
+
 
 @app.get("/api/health")
 async def health():

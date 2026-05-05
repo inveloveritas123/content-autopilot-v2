@@ -1,0 +1,139 @@
+# Quality-Gate Eval Korpus — Branche: _generic
+# Skelett 2026-05-05 — Robert/Louis: bitte auf 50 Posts erweitern.
+# _generic gilt fuer Posts ohne spezifische Branchenregeln.
+# label: "good" | "bad"
+# ground_truth_violations: Liste erwarteter Violations (leer wenn good)
+
+- id: generic_001
+  text: |
+    Was ich heute in einem Meeting gelernt habe, das 30 Minuten Vorbereitung gebraucht haette
+    und stattdessen 90 Minuten gedauert hat:
+
+    Eine klare Agenda vor dem Meeting spart im Schnitt 40% der Meetingzeit (Harvard Business Review).
+    Das sind bei 10 Teilnehmern 10 Personenstunden pro Meeting.
+
+    Meine Regel: Kein Meeting ohne 3 klar formulierte Ziele im Kalendertermin.
+    Nicht "Status besprechen" — sondern "Entscheidung X treffen bis Ende des Meetings".
+
+    Was ist eure beste Meeting-Hygiene-Regel?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Universell anwendbarer Business-Tip."
+
+- id: generic_002
+  text: |
+    JETZT KLICKEN!!! GRATIS ANGEBOT!!! NICHT VERPASSEN!!!
+  label: "bad"
+  ground_truth_violations: ["excessive_caps", "too_short"]
+  notes: "Initial-Skelett 2026-05-05. Spam-Muster."
+
+- id: generic_003
+  text: |
+    5 Fragen, die ich jedem neuen Mitarbeiter in der ersten Woche stelle:
+
+    1. Was hat euch an eurem letzten Job am meisten genervt?
+    2. Was haettet ihr gerne frueher gewusst?
+    3. Was wurde euch versprochen, das nicht gehalten wurde?
+    4. Womit koennt ihr am meisten beitragen, aber noch keine Chance hattet?
+    5. Was braucht ihr von mir, damit ihr euren besten Job macht?
+
+    Diese Antworten sind Gold. Sie zeigen, wo echte Probleme liegen —
+    nicht die Probleme, ueber die Fuehrungskraefte reden, sondern die, die wirklich zaehlen.
+
+    Welche Frage fehlt in eurer Meinung auf dieser Liste?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Leadership-Content, starke CTA."
+
+- id: generic_004
+  text: |
+    Hallo
+  label: "bad"
+  ground_truth_violations: ["too_short", "no_sentence_terminators"]
+  notes: "Initial-Skelett 2026-05-05. Minimaler Content."
+
+- id: generic_005
+  text: |
+    Remote Work nach 5 Jahren — was ich wirklich gelernt habe:
+
+    Die Produktivitaet steigt nicht automatisch. Sie steigt, wenn man lernt,
+    Grenzen zu setzen — nach aussen (Kunden, Kollegen) und nach innen (Ablenkungen).
+
+    Was tatsaechlich hilft:
+    - Feste Arbeitszeiten, auch wenn niemand zuschaut
+    - Separater Arbeitsbereich, auch wenn es nur ein Tisch ist
+    - Ende des Arbeitstages ritualisieren — Laptop zuklappen und rausgehen
+
+    Was sich nie veraendert hat: Die besten Ideen kommen immer noch im Gespraech.
+    Nicht im Solo-Deep-Work. Deshalb: bewusst mehr Video-Calls als noetig.
+
+    Was ist euer groesster Remote-Work-Tipp?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Persoenliche Erfahrung, konkrete Tipps."
+
+- id: generic_006
+  text: |
+    Warum ich aufgehoert habe, auf LinkedIn zu posten — und warum ich wieder angefangen habe:
+
+    Aufgehort: Weil ich dachte, niemand liest das wirklich. Likes sind kein Beweis.
+
+    Wieder angefangen: Weil mir drei Menschen in einem Jahr gesagt haben,
+    ein spezifischer Post hat ihnen geholfen. Drei Menschen sind echte Menschen.
+
+    Reichweite ist nicht das Ziel. Wirkung ist das Ziel. Auch wenn sie klein ist.
+
+    Was war der Post, den du geschrieben hast und der unerwartet Wirkung hatte?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Meta-LinkedIn-Content, authentisch."
+
+- id: generic_007
+  text: |
+    Neuer Blogartikel veroeffentlicht. Link in den Kommentaren.
+  label: "bad"
+  ground_truth_violations: ["too_short"]
+  notes: "Initial-Skelett 2026-05-05. Nur Promotion, kein eigener Mehrwert."
+
+- id: generic_008
+  text: |
+    Das Buch, das mein Fuehrungs-Verstehen am staerksten veraendert hat:
+    "Turn the Ship Around" von David Marquet.
+
+    Kernidee: Fuehren heisst nicht, Antworten zu geben. Es heisst, Fragen zu stellen,
+    die andere dazu bringen, selbst die Antworten zu finden.
+
+    Ein Kapitaen auf einem U-Boot hat gelernt, statt "Mach X" zu sagen:
+    "Ich beabsichtige X zu tun." Damit verschob sich die Verantwortung zurueck ans Team.
+
+    Diese eine Satz-Umformulierung hat meine 1:1s veraendert. Seitdem höre ich mehr,
+    als ich rede.
+
+    Welches Buch hat euch fachlich am staerksten beeinflusst?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Buchempfehlung mit Anwendungsbeispiel."
+
+- id: generic_009
+  text: |
+    Motivierter Montag! Ihr schafft das! Sterne im Himmel! Toll!
+  label: "bad"
+  ground_truth_violations: ["too_short"]
+  notes: "Initial-Skelett 2026-05-05. Inhaltsleeres Motivations-Posting."
+
+- id: generic_010
+  text: |
+    Das Konzept, das meinen Kalender transformiert hat: Energy-Management statt Time-Management.
+
+    Zeit ist endlich — das wissen wir. Energie ist erneuerbar — das vergessen wir.
+
+    Ich habe gelernt, meine Deep-Work-Stunden in die Zeiten zu legen, in denen
+    ich die hoechste kognitive Leistung habe (bei mir: 8–11 Uhr). Administrative
+    Aufgaben kommen danach. Meetings am fruehen Nachmittag, wenn die Energie sowieso sinkt.
+
+    Ergebnis nach 6 Monaten: Gleiche Stunden, mehr Output, weniger Erschoepfung.
+
+    Wann seid ihr am produktivsten — und nutzt ihr das systematisch?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Produktivitaets-Framework, persoenliche Daten."

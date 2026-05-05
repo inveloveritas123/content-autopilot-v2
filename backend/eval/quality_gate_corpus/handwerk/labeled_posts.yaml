@@ -1,0 +1,124 @@
+# Quality-Gate Eval Korpus — Branche: handwerk
+# Skelett 2026-05-05 — Robert/Louis: bitte auf 50 Posts erweitern.
+# label: "good" | "bad"
+# ground_truth_violations: Liste erwarteter Violations (leer wenn good)
+# notes: Kontext fuer den Annotator
+
+- id: handwerk_001
+  text: |
+    Heute war ich bei Familie Mueller in Koeln und habe das undichte Dach repariert.
+    Nach drei Stunden Arbeit war der Schaden behoben.
+    Was viele nicht wissen: 80% aller Dachlecks entstehen nicht durch Sturm, sondern durch
+    vernachlaessigte Wartung. Eine Inspektion pro Jahr spart im Schnitt 2.000 Euro Folgekosten.
+    Habt ihr euer Dach schon dieses Jahr checken lassen?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Guter Handwerker-Post mit Mehrwert."
+
+- id: handwerk_002
+  text: |
+    Sanitaer-Notfall am Montag frueh: Wasserrohr gebrochen, Keller unter Wasser.
+    Unser Team war in 45 Minuten vor Ort. Schaden minimiert, Kunde erleichtert.
+    Schnelligkeit ist kein Zufall — sie ist das Ergebnis von Vorbereitung.
+    Unser Notfallfahrzeug ist immer vollstaendig bestuckt. Nicht erst bestellen, sofort loesen.
+    Welche Situation habt ihr erlebt, wo Schnelligkeit den Unterschied gemacht hat?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Story-Format, CTA am Ende."
+
+- id: handwerk_003
+  text: |
+    SUPER ANGEBOT!!! JETZT KAUFEN!!! BADEZIMMER RENOVIERUNG NUR 999 EURO!!!
+    RUFT AN RUFT AN!!! KEINE WARTEZEIT!!! HEUTE NOCH!!!
+  label: "bad"
+  ground_truth_violations: ["excessive_caps", "too_short"]
+  notes: "Initial-Skelett 2026-05-05. Spam-artig, keine Substanz."
+
+- id: handwerk_004
+  text: |
+    Drei Fehler, die ich in 20 Jahren als Elektriker immer wieder sehe:
+
+    1. Selbst installierte Steckdosen ohne Erdung — ein Brandrisiko.
+    2. Verlängerungskabel als Dauerlösung — gefährlich und teuer.
+    3. Sicherungen überbrückt statt ausgetauscht — lebensgefährlich.
+
+    Als Laie ist es schwer, diese Fehler zu erkennen. Deshalb: Elektroinstallation alle 10 Jahre
+    prüfen lassen. Der TÜV empfiehlt es, die Versicherung fordert es.
+
+    Was würdet ihr noch ergänzen?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Listenformat, Mehrwert, CTA."
+
+- id: handwerk_005
+  text: |
+    Heute Fliesenleger.
+  label: "bad"
+  ground_truth_violations: ["too_short", "no_sentence_terminators"]
+  notes: "Initial-Skelett 2026-05-05. Viel zu kurz, kein Inhalt."
+
+- id: handwerk_006
+  text: |
+    Was unterscheidet einen guten Handwerker von einem sehr guten?
+    Nicht das Werkzeug. Nicht mal die Erfahrung allein.
+
+    Es ist die Kommunikation.
+
+    Ich habe letztes Jahr 40 Auftraege abgelehnt — nicht weil ich ausgebucht war,
+    sondern weil die Beschreibung des Problems so vage war, dass ich kein fairen Preis
+    haette nennen koennen. Das waere unfair dem Kunden gegenueber.
+
+    Klare Kommunikation vor dem Auftrag = weniger Missverstaendnisse, bessere Ergebnisse,
+    zufriedenere Kunden.
+
+    Wie handhabt ihr das in eurem Betrieb?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Persoenliche Reflexion, gute Struktur."
+
+- id: handwerk_007
+  text: |
+    Warum ich seit 5 Jahren keine Werbung mehr schalte — und trotzdem ausgebucht bin:
+
+    Jeder zufriedene Kunde bringt im Schnitt 2,3 neue Kunden (eigene Auswertung 2019–2024).
+    Das ist besser als jede Google-Ads-Kampagne.
+
+    Mein Geheimnis: Ich schicke jedem Kunden 3 Wochen nach Abschluss eine kurze Checkliste
+    fuer die ersten Wartungsschritte. Kostet mich 10 Minuten, bleibt monatelang im Kopf.
+
+    Mundpropaganda ist kein Zufall. Sie ist ein System.
+
+    Wer setzt das auch ein?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Daten, persoenliche Geschichte, System-Denken."
+
+- id: handwerk_008
+  text: |
+    heizung kaputt ruf mich an danke
+  label: "bad"
+  ground_truth_violations: ["too_short", "no_sentence_terminators"]
+  notes: "Initial-Skelett 2026-05-05. Kein Mehrwert, kein Engagement."
+
+- id: handwerk_009
+  text: |
+    Fruehjahrs-Tipp fuer Hausbesitzer: Bevor die Hitze kommt, Dachventilation pruefen.
+
+    Ein schlecht belueftetes Dach kann im Sommer bis zu 70°C erreichen. Das beschleunigt
+    die Alterung der Dachpappe um das Dreifache. Im Winter bildet sich Kondenswasser —
+    Schimmelgefahr inklusive.
+
+    Loesung: Dachventilator oder Firstentlueftung. Kosten: 150–400 Euro fuer ein Einfamilienhaus.
+    Einsparpotenzial langfristig: bis zu 5.000 Euro weniger Sanierungskosten.
+
+    Wer hat schon sein Dach gecheckt? Oder wollt ihr einen Profi beaufragen?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Saisonaler Tipp, konkrete Zahlen."
+
+- id: handwerk_010
+  text: |
+    Heute neues Projekt angefangen. Wird schoen. Mehr demnächst.
+  label: "bad"
+  ground_truth_violations: ["too_short"]
+  notes: "Initial-Skelett 2026-05-05. Kein Mehrwert, kein Engagement, zu kurz."

@@ -1,0 +1,151 @@
+# Quality-Gate Eval Korpus — Branche: recht
+# Skelett 2026-05-05 — Robert/Louis: bitte auf 50 Posts erweitern.
+# WICHTIG: Rechts-Posts sollten bei laengeren Posts einen Disclaimer-Hinweis enthalten.
+# label: "good" | "bad"
+# ground_truth_violations: Liste erwarteter Violations (leer wenn good)
+
+- id: recht_001
+  text: |
+    Aufhebungsvertrag vs. Kuendigung — was viele Arbeitnehmer falsch verstehen:
+
+    Wer einen Aufhebungsvertrag unterschreibt, riskiert eine Sperrzeit beim Arbeitslosengeld.
+    Das sind 12 Wochen ohne ALG1 — selbst wenn der Arbeitgeber zur Kuendigung gedraengt hat.
+
+    Mein Rat: Niemals unter Druck unterschreiben. Immer mindestens 24 Stunden Bedenkzeit fordern.
+    Das Recht dazu haben Sie — und kein Arbeitgeber kann Sie zwingen.
+
+    Diese Information stellt keine Rechtsberatung dar. Im Einzelfall immer einen Anwalt konsultieren.
+
+    Habt ihr Erfahrungen mit solchen Situationen gemacht?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Guter Rechts-Post mit korrektem Disclaimer."
+
+- id: recht_002
+  text: |
+    KLAGE JETZT!!! SOFORT GELD ZURUECK!!! WIR GEWINNEN IMMER!!!
+    KEIN RISIKO!!! RUFT AN!!!
+  label: "bad"
+  ground_truth_violations: ["excessive_caps", "too_short"]
+  notes: "Initial-Skelett 2026-05-05. Unserioese Werbung, kein Disclaimer."
+
+- id: recht_003
+  text: |
+    5 Klauseln, die in jedem Mietvertrag illegal sind — und trotzdem hauffig vorkommen:
+
+    1. Schoenheitsreparaturen alle 3 Jahre unabhaengig vom Zustand (BGH untersagt)
+    2. Verbot von Haustieren generell (nur Einzelfallentscheid erlaubt)
+    3. Pflicht zur Renovierung beim Auszug ohne Ruecksicht auf Vorschaeden
+    4. Kuendigung mit weniger als 3 Monaten Frist fuer Mieter
+    5. Kautionszinsen nicht an Mieter auszuzahlen
+
+    Kein Rechtsberatung — diese Information dient nur zur ersten Orientierung.
+    Im Streitfall immer einen Fachanwalt fuer Mietrecht hinzuziehen.
+
+    Welche Klausel habt ihr schon erlebt?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Listenformat, Disclaimer vorhanden."
+
+- id: recht_004
+  text: |
+    Datenschutz im Unternehmen: Was viele KMU uebersehen.
+
+    Seit DSGVO 2018 sind Bussgelder bis 4% des Jahresumsatzes moeglich.
+    Dennoch haben laut Bitkom 2024 fast 40% der deutschen KMU keine vollstaendige
+    Datenschutzerklaerung auf ihrer Website.
+
+    Die drei haeufigsten Luecken:
+    - Kein Auftragsverarbeitungsvertrag mit Cloud-Anbietern
+    - Newsletter ohne Double-Opt-In
+    - Kontaktformulare ohne Einwilligung
+
+    Dies ist kein Rechtsberatung. Fuer eine individuelle DSGVO-Pruefung empfehle ich
+    einen zertifizierten Datenschutzbeauftragten.
+
+    Was habt ihr in eurem Unternehmen als groesste DSGVO-Luecke entdeckt?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Daten, Kontext, Disclaimer."
+
+- id: recht_005
+  text: |
+    Anwalt gut
+  label: "bad"
+  ground_truth_violations: ["too_short", "no_sentence_terminators"]
+  notes: "Initial-Skelett 2026-05-05. Nicht aussagekraeftig."
+
+- id: recht_006
+  text: |
+    Warum ich meinen Mandanten oft rate, NICHT zu klagen:
+
+    Prozesskosten, Zeitaufwand, emotionale Belastung — das sind reale Kosten,
+    die in keiner Kostenrechnung auftauchen.
+
+    Ein Vergleich, der 70% des Streitwerts bringt, ist oft wirtschaftlich besser
+    als ein gewonnenes Urteil nach 3 Jahren.
+
+    Das ist keine juristische Weisheit, die Anwaelte gerne teilen. Aber es ist die Wahrheit.
+
+    Dieser Post stellt keine Rechtsberatung dar. Jeder Fall ist individuell.
+
+    Was denkt ihr — Klage oder Vergleich?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Kontraintuitive Perspektive, Disclaimer."
+
+- id: recht_007
+  text: |
+    Heute hatte ich ein interessantes Mandantengespraech.
+    Mehr kann ich leider nicht sagen wegen Verschwiegenheitspflicht.
+    Anwaltsleben ist aufregend!
+  label: "bad"
+  ground_truth_violations: ["too_short"]
+  notes: "Initial-Skelett 2026-05-05. Kein Mehrwert, zu kurz."
+
+- id: recht_008
+  text: |
+    GmbH oder GmbH & Co. KG — die Wahl der Rechtsform entscheidet ueber Haftung und Steuern.
+
+    GmbH: Haftungsbeschraenkung auf Stammkapital (mind. 25.000 EUR), Koerperschaftsteuer 15%,
+    aber Geschaeftsfuehrergehalt sozialversicherungspflichtig.
+
+    GmbH & Co. KG: Kombination aus KG-Flexibilitaet und GmbH-Haftungsschutz, Steuergestaltung
+    durch Sonderbetriebsvermoegen moeglich, aber komplexere Buchfuehrung.
+
+    Fuer Einzelperson-Unternehmen mit >100k EUR Gewinn: GmbH oft vorteilhaft.
+    Fuer Familienbetriebe mit Nachfolgeplanung: GmbH & Co. KG haeufig besser.
+
+    Dies ist eine allgemeine Information, keine Rechtsberatung. Steuerberater und Anwalt
+    hinzuziehen vor jeder Gruendungsentscheidung.
+
+    Welche Rechtsform habt ihr gewaehlt und warum?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Fachliche Tiefe, Disclaimer, CTA."
+
+- id: recht_009
+  text: |
+    DRINGEND: Rechtsberatung sofort buchen! Wir loesen JEDEN Fall!
+  label: "bad"
+  ground_truth_violations: ["too_short", "excessive_caps"]
+  notes: "Initial-Skelett 2026-05-05. Spam-artig, kein Mehrwert."
+
+- id: recht_010
+  text: |
+    Der Unterschied zwischen einem guten und einem sehr guten Anwalt:
+
+    Ein guter Anwalt kennt das Gesetz.
+    Ein sehr guter Anwalt versteht, was der Mandant wirklich braucht.
+
+    Ich habe Faelle abgelehnt, die ich haette gewinnen koennen — weil der Aufwand
+    in keinem Verhaeltnis zum Ergebnis fuer den Mandanten gestanden haette.
+
+    Professionalitaet bedeutet manchmal, Nein zu sagen.
+
+    Keine Rechtsberatung — nur eine persoenliche Reflexion nach 15 Jahren Kanzleiarbeit.
+
+    Wie seht ihr das in eurem Berufsfeld?
+  label: "good"
+  ground_truth_violations: []
+  notes: "Initial-Skelett 2026-05-05. Reflexion, Erfahrungswert, Disclaimer."

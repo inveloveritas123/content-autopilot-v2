@@ -471,6 +471,10 @@ export const getLLMAnalyticsCSVUrl = (params) => {
   return `${base}/api/analytics/llm-calls.csv${qs ? '?' + qs : ''}`
 }
 
+// Quality-Gate Eval History (#152)
+export const getQualityGateEvalHistory = (params) => request('/eval/quality-gate/history', { params })
+export const getQualityGateEvalLatest = () => request('/eval/quality-gate/latest')
+
 // Throttle Status (#156)
 export function getThrottleStatus(adminToken, tenantId) {
   const qs = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : ''

@@ -99,6 +99,11 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.deletion_purge_task.purge_expired",
         "schedule": crontab(hour=4, minute=0),  # daily 04:00 hard-delete
     },
+    # #150 Embedding-Drift-Monitor: wöchentlich Montag 03:15
+    "embedding-drift-monitor-weekly": {
+        "task": "tasks.drift_monitor_task.run_embedding_drift_monitor",
+        "schedule": crontab(day_of_week=1, hour=3, minute=15),
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -145,5 +150,7 @@ celery_app.conf.include = [
     "tasks.p06_profile_extractor_task",
     "tasks.deletion_purge_task",
     "tasks.cost_alert_task",
+    "tasks.reembed_task",
+    "tasks.drift_monitor_task",
     "api.wizard",
 ]

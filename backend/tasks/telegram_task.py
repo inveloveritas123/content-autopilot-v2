@@ -117,22 +117,53 @@ async def _store_chunk_async(
     log_id: str,
     metadata: dict,
 ) -> Optional[str]:
-    """Async-Wrapper um embedding_service.store_chunk mit eigener Session."""
-    from services.embedding_service import store_chunk
+    """Async-Wrapper: chunkt Text via chunker, persistiert alle Chunks.
+
+    Returns die ID des ersten Chunks (fuer Rueckwaertskompatibilitaet).
+    Bei mehreren Chunks werden prev/next-Links via store_chunks_multi gesetzt.
+    """
+    from services.chunker import chunk_text
+    from services.embedding_service import store_chunk, store_chunks_multi
+
+    chunks = chunk_text(content_text, source_type)
+    if not chunks:
+        # Fallback: direkt speichern ohne Chunking (z.B. text zu kurz)
+        # store_chunk wirft ValueError fuer leere Texte — defensiv zurueck
+        logger.warning(
+            "_store_chunk_async: chunker lieferte 0 Chunks fuer source_type=%s, len=%d — direkt speichern",
+            source_type,
+            len(content_text),
+        )
+        engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+        SessionMaker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        try:
+            async with SessionMaker() as db:
+                return await store_chunk(
+                    db=db,
+                    tenant_id=tenant_id,
+                    source_type=source_type,
+                    content_text=content_text,
+                    source_ref=f"telegram_message_log:{log_id}",
+                    metadata=metadata,
+                    classify=True,
+                )
+        finally:
+            await engine.dispose()
 
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     SessionMaker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     try:
         async with SessionMaker() as db:
-            return await store_chunk(
-                db=db,
+            ids = await store_chunks_multi(
+                db,
                 tenant_id=tenant_id,
                 source_type=source_type,
-                content_text=content_text,
+                chunks=chunks,
                 source_ref=f"telegram_message_log:{log_id}",
-                metadata=metadata,
+                base_metadata=metadata,
                 classify=True,
             )
+        return ids[0] if ids else None
     finally:
         await engine.dispose()
 

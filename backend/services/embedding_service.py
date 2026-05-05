@@ -15,6 +15,13 @@ Designentscheidungen:
   später nachträglich embeddet werden.
 - Klassifikator ist optional; bei Drift/Fehler: classification=NULL.
 - Tenant-Isolation: Service-Methoden nehmen tenant_id zwingend.
+
+Issue #150: Embedding-Versionierung.
+- EMBEDDING_MODELS Registry — erweiterbar ohne Code-Änderung im Caller.
+- embed() gibt immer (vector, model_id) zurück — Caller MUSS model_id
+  mit-persistieren.
+- ACTIVE_EMBEDDING_MODEL steuert Default; Canary-Tasks können abweichendes
+  model_id übergeben.
 """
 from __future__ import annotations
 
@@ -31,16 +38,36 @@ from services.llm import llm_service
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Embedding-Modell-Registry (Issue #150)
+# ---------------------------------------------------------------------------
+
+EMBEDDING_MODELS: dict[str, dict] = {
+    "gemini-embedding-001-1536d": {
+        "provider": "requesty",          # geroutet via Requesty wie bisheriges Modell
+        "model_name": "openai/text-embedding-3-small",  # Requesty-Alias (768-dim erzwungen via dim param)
+        "dim": 1536,
+        "active": True,
+    },
+}
+
+ACTIVE_EMBEDDING_MODEL = "gemini-embedding-001-1536d"
+
+# Legacy-Konstanten — bleiben für Rückwärtskompatibilität (bestehende Callers)
 EMBEDDING_DIM = 1536
-EMBEDDING_MODEL = "openai/text-embedding-3-small"  # 1536-dim, Requesty-supported (vertex 768-dim wird nicht geroutet)
+EMBEDDING_MODEL = EMBEDDING_MODELS[ACTIVE_EMBEDDING_MODEL]["model_name"]
 
 ALLOWED_SOURCE_TYPES = {
     "voice_telegram",
     "voice_whatsapp",
+    "voice_note",
     "photo_telegram",
     "photo_whatsapp",
+    "photo_ocr",
     "manual_note",
+    "manual_idea",
     "transcript_extra",
+    "yt_transcript",
 }
 ALLOWED_CLASSIFICATIONS = {"werte", "stories", "konflikte"}
 
@@ -49,56 +76,89 @@ class EmbeddingError(Exception):
     """Wrapper für Embedding-Provider-Fehler."""
 
 
-async def embed_text(text_input: str, *, timeout: float = 15.0) -> Optional[list[float]]:
-    """Erzeuge ein 768-dim Embedding für `text_input` via Requesty.
+async def embed(
+    text_input: str,
+    model_id: Optional[str] = None,
+    *,
+    timeout: float = 15.0,
+) -> tuple[Optional[list[float]], str]:
+    """Versioniertes Embedding — gibt immer (vector_or_None, model_id) zurück.
 
-    Returns None bei Fehler (caller persistiert Chunk dann ohne embedding).
-    Wirft KEINE Exception — soll nicht den Caller-Pfad blockieren.
+    Caller MUSS den zurückgegebenen model_id mit-persistieren (Issue #150).
+
+    Args:
+        text_input: Zu embettender Text.
+        model_id:   Optionales Modell-Overrride (z.B. für Canary-Tasks).
+                    Default: ACTIVE_EMBEDDING_MODEL.
+        timeout:    HTTP-Timeout in Sekunden.
+
+    Returns:
+        Tuple (embedding_list_or_None, resolved_model_id).
     """
+    resolved_model_id = model_id or ACTIVE_EMBEDDING_MODEL
+    if resolved_model_id not in EMBEDDING_MODELS:
+        logger.warning("embed: unbekanntes model_id=%s — nutze ACTIVE", resolved_model_id)
+        resolved_model_id = ACTIVE_EMBEDDING_MODEL
+
+    config = EMBEDDING_MODELS[resolved_model_id]
+    model_name = config["model_name"]
+    expected_dim = config["dim"]
+
+    if not text_input or not text_input.strip():
+        return None, resolved_model_id
+
     base_url = (settings.litellm_base_url or "").rstrip("/")
     api_key = settings.litellm_api_key or ""
     if not base_url or not api_key:
-        logger.warning("Embedding: kein litellm_base_url/api_key konfiguriert — skippe")
-        return None
-    if not text_input or not text_input.strip():
-        return None
+        logger.warning("embed: kein litellm_base_url/api_key konfiguriert — skippe")
+        return None, resolved_model_id
 
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    payload = {"model": EMBEDDING_MODEL, "input": text_input[:8000]}
+    payload = {"model": model_name, "input": text_input[:8000]}
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(f"{base_url}/embeddings", json=payload, headers=headers)
         if resp.status_code != 200:
             logger.warning(
-                "Embedding %s → HTTP %s: %s",
-                EMBEDDING_MODEL,
+                "embed %s → HTTP %s: %s",
+                model_name,
                 resp.status_code,
                 resp.text[:200],
             )
-            return None
+            return None, resolved_model_id
         data = resp.json()
         items = data.get("data") or []
         if not items:
-            logger.warning("Embedding-Response ohne data: %s", str(data)[:200])
-            return None
+            logger.warning("embed: Response ohne data: %s", str(data)[:200])
+            return None, resolved_model_id
         emb = items[0].get("embedding")
-        if not isinstance(emb, list) or len(emb) != EMBEDDING_DIM:
+        if not isinstance(emb, list) or len(emb) != expected_dim:
             logger.warning(
-                "Embedding-Response Dimension unerwartet: %s (erwartet %d)",
+                "embed: Dimension unerwartet: %s (erwartet %d für %s)",
                 len(emb) if isinstance(emb, list) else type(emb).__name__,
-                EMBEDDING_DIM,
+                expected_dim,
+                resolved_model_id,
             )
-            return None
-        return [float(x) for x in emb]
+            return None, resolved_model_id
+        return [float(x) for x in emb], resolved_model_id
     except (httpx.TimeoutException, httpx.RequestError) as exc:
-        logger.warning("Embedding-Network-Error: %s", exc)
-        return None
+        logger.warning("embed: Network-Error: %s", exc)
+        return None, resolved_model_id
     except Exception as exc:  # noqa: BLE001 — defensive
-        logger.warning("Embedding-Unknown-Error: %s", exc)
-        return None
+        logger.warning("embed: Unknown-Error: %s", exc)
+        return None, resolved_model_id
+
+
+async def embed_text(text_input: str, *, timeout: float = 15.0) -> Optional[list[float]]:
+    """Legacy-Wrapper — gibt nur den Vektor zurück (ohne model_id).
+
+    Für neuen Code: embed() verwenden, das model_id mit zurückgibt.
+    """
+    vector, _ = await embed(text_input, timeout=timeout)
+    return vector
 
 
 async def classify_chunk(content: str) -> Optional[str]:
@@ -156,7 +216,8 @@ async def store_chunk(
     if not content_text or not content_text.strip():
         raise ValueError("content_text leer")
 
-    embedding = await embed_text(content_text)
+    # Issue #150: embed() gibt (vector, model_id) zurück — model_id persistieren
+    embedding, used_model_id = await embed(content_text)
     classification = await classify_chunk(content_text) if classify else None
 
     params = {
@@ -166,22 +227,24 @@ async def store_chunk(
         "content_text": content_text,
         "classification": classification,
         "metadata": json.dumps(metadata or {}, ensure_ascii=False),
+        "embedding_model_id": used_model_id,
     }
     if embedding is not None:
         params["embedding_str"] = _embedding_to_pg(embedding)
         sql = text(
             "INSERT INTO memory_chunks "
-            "(tenant_id, source_type, source_ref, content_text, classification, metadata, embedding) "
+            "(tenant_id, source_type, source_ref, content_text, classification, metadata, "
+            " embedding, embedding_model_id) "
             "VALUES (CAST(:tenant_id AS uuid), :source_type, :source_ref, :content_text, :classification, "
-            "        CAST(:metadata AS jsonb), CAST(:embedding_str AS vector)) "
+            "        CAST(:metadata AS jsonb), CAST(:embedding_str AS vector), :embedding_model_id) "
             "RETURNING id"
         )
     else:
         sql = text(
             "INSERT INTO memory_chunks "
-            "(tenant_id, source_type, source_ref, content_text, classification, metadata) "
+            "(tenant_id, source_type, source_ref, content_text, classification, metadata, embedding_model_id) "
             "VALUES (CAST(:tenant_id AS uuid), :source_type, :source_ref, :content_text, :classification, "
-            "        CAST(:metadata AS jsonb)) "
+            "        CAST(:metadata AS jsonb), :embedding_model_id) "
             "RETURNING id"
         )
 
@@ -189,14 +252,107 @@ async def store_chunk(
     await db.commit()
     new_id = str(row.id)
     logger.info(
-        "memory_chunk angelegt id=%s tenant=%s type=%s embed=%s class=%s",
+        "memory_chunk angelegt id=%s tenant=%s type=%s embed=%s class=%s model=%s",
         new_id,
         tenant_id,
         source_type,
         bool(embedding),
         classification,
+        used_model_id,
     )
     return new_id
+
+
+async def store_chunks_multi(
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    source_type: str,
+    chunks: "list",  # list[chunker.Chunk] — lazy import um Zirkel zu vermeiden
+    source_ref: Optional[str] = None,
+    base_metadata: Optional[dict] = None,
+    classify: bool = True,
+) -> list[str]:
+    """Persistiert mehrere Chunks (aus chunker.chunk_text) mit prev/next-Links.
+
+    Workflow:
+    1. Alle Chunks speichern (ohne prev/next-IDs, da noch unbekannt).
+    2. chunker.link_chunks_with_ids() aufrufen → IDs in Chunk-Objekten setzen.
+    3. Alle Chunks mit UPDATE auf prev/next patchen.
+
+    Returns: Liste der angelegten memory_chunk-IDs in Chunk-Reihenfolge.
+
+    Falls nur 1 Chunk: store_chunk() direkt nutzen (kein UPDATE noetig).
+    """
+    from services.chunker import link_chunks_with_ids  # lazy import
+
+    if not chunks:
+        return []
+
+    if len(chunks) == 1:
+        chunk_meta = dict(base_metadata or {})
+        chunk_meta["chunk_position"] = 0
+        chunk_meta["chunk_total"] = 1
+        chunk_id = await store_chunk(
+            db,
+            tenant_id=tenant_id,
+            source_type=source_type,
+            content_text=chunks[0].text,
+            source_ref=source_ref,
+            metadata=chunk_meta,
+            classify=classify,
+        )
+        return [chunk_id]
+
+    # Schritt 1: Alle Chunks speichern (ohne prev/next)
+    db_ids: list[str] = []
+    for i, chunk in enumerate(chunks):
+        chunk_meta = dict(base_metadata or {})
+        chunk_meta["chunk_position"] = i
+        chunk_meta["chunk_total"] = len(chunks)
+        chunk_id = await store_chunk(
+            db,
+            tenant_id=tenant_id,
+            source_type=source_type,
+            content_text=chunk.text,
+            source_ref=source_ref,
+            metadata=chunk_meta,
+            classify=classify,
+        )
+        db_ids.append(chunk_id)
+
+    # Schritt 2: IDs in Chunk-Objekten setzen
+    link_chunks_with_ids(chunks, db_ids)
+
+    # Schritt 3: prev/next-IDs via UPDATE eintragen
+    for chunk, chunk_id in zip(chunks, db_ids):
+        prev_id = chunk.prev_chunk_id
+        next_id = chunk.next_chunk_id
+        if prev_id is None and next_id is None:
+            continue  # Single-Chunk-Fall — kein Update noetig
+        update_sql = text(
+            "UPDATE memory_chunks "
+            "SET metadata = metadata || CAST(:patch AS jsonb) "
+            "WHERE id = CAST(:cid AS uuid)"
+        )
+        patch: dict = {}
+        if prev_id is not None:
+            patch["prev_chunk_id"] = prev_id
+        if next_id is not None:
+            patch["next_chunk_id"] = next_id
+        await db.execute(update_sql, {
+            "patch": json.dumps(patch),
+            "cid": chunk_id,
+        })
+
+    await db.commit()
+    logger.info(
+        "store_chunks_multi: %d chunks gespeichert, tenant=%s type=%s",
+        len(db_ids),
+        tenant_id,
+        source_type,
+    )
+    return db_ids
 
 
 async def search_similar(

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  DollarSign, BarChart3, Zap, Download, RefreshCw, TrendingUp, Cpu, Activity, AlertTriangle, Clock, Shield
+  DollarSign, BarChart3, Zap, Download, RefreshCw, TrendingUp, Cpu, Activity, AlertTriangle, Clock, Shield, CheckCircle2
 } from 'lucide-react'
 import {
   getLLMAnalyticsSummary,
@@ -14,6 +14,7 @@ import {
   getCostTrend,
   getCacheHitRate,
   getRunawayDetection,
+  getQualityGateEvalHistory,
 } from '../api'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, Legend, ReferenceLine, ResponsiveContainer,
@@ -340,6 +341,214 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
 }
 
 // -----------------------------------------------------------------------
+// #152 Quality-Gate-Metriken Tab
+// -----------------------------------------------------------------------
+
+const BRANCHEN_LABELS = {
+  handwerk: 'Handwerk',
+  recht: 'Recht',
+  finanzen: 'Finanzen',
+  _generic: 'Generisch',
+}
+
+function f1Color(f1) {
+  if (f1 >= 0.85) return 'bg-emerald-500'
+  if (f1 >= 0.75) return 'bg-amber-400'
+  if (f1 >= 0.60) return 'bg-orange-400'
+  return 'bg-red-500'
+}
+
+function f1TextColor(f1) {
+  if (f1 >= 0.85) return 'text-emerald-700'
+  if (f1 >= 0.75) return 'text-amber-700'
+  if (f1 >= 0.60) return 'text-orange-700'
+  return 'text-red-700'
+}
+
+function QualityGateTab({ loading, error, evalHistory, onReload }) {
+  if (loading) {
+    return <div className="py-12 text-center text-ink-muted text-sm">Lade Quality-Gate-Metriken...</div>
+  }
+  if (error) {
+    return (
+      <div className="py-8 flex flex-col items-center gap-3">
+        <p className="text-red-600 text-sm">{error}</p>
+        <button onClick={onReload} className="min-h-[44px] px-4 py-2 text-xs bg-surface-100 border border-surface-border rounded-lg hover:bg-gray-50">
+          Erneut laden
+        </button>
+      </div>
+    )
+  }
+
+  const runs = evalHistory?.runs || []
+  const latestTs = evalHistory?.latest_timestamp
+
+  if (runs.length === 0) {
+    return (
+      <div className="py-12 text-center text-ink-muted text-sm">
+        <p>Noch kein Eval-Run vorhanden.</p>
+        <p className="mt-2 text-xs">Starte: <code className="bg-gray-100 px-1 rounded">python backend/eval/run_quality_gate_eval.py</code></p>
+      </div>
+    )
+  }
+
+  const latest = runs[0]
+  const agg = latest?.aggregate || {}
+  const perBranche = latest?.per_branche || {}
+  const branchen = Object.keys(perBranche)
+
+  // Trend-Daten: letzte 30 Runs pro Branche, F1 ueber Zeit
+  const trendByBranche = {}
+  for (const b of branchen) {
+    trendByBranche[b] = runs
+      .slice(0, 30)
+      .map(r => ({
+        ts: r.timestamp ? r.timestamp.slice(0, 10) : '?',
+        f1: r.per_branche?.[b]?.f1 ?? 0,
+      }))
+      .reverse()
+  }
+
+  return (
+    <div className="space-y-6 pt-2">
+      {/* Frische-Hinweis */}
+      <div className="flex items-center gap-2 text-xs text-ink-muted">
+        <Clock className="w-3 h-3" />
+        <span>Letzte Eval: {latestTs ? latestTs.replace('T', ' ').replace('Z', ' UTC') : '—'}</span>
+        {latest?.stub_warning && (
+          <span className="ml-2 px-2 py-0.5 bg-amber-50 border border-amber-200 rounded text-amber-700">
+            Stub — Production in #146
+          </span>
+        )}
+      </div>
+
+      {/* Aggregate KPIs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Weighted F1', value: agg.weighted_f1?.toFixed(3) },
+          { label: 'Weighted Precision', value: agg.weighted_precision?.toFixed(3) },
+          { label: 'Weighted Recall', value: agg.weighted_recall?.toFixed(3) },
+          { label: 'Posts gesamt', value: agg.total_posts },
+        ].map(({ label, value }) => (
+          <div key={label} className="bg-white rounded-xl border border-surface-border p-3">
+            <p className="text-xs text-ink-muted">{label}</p>
+            <p className="text-xl font-bold text-ink mt-1">{value ?? '—'}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Heatmap: Branche x F1 (neuester Run) */}
+      <div className="bg-white rounded-xl border border-surface-border p-4">
+        <h3 className="text-sm font-semibold text-ink mb-3 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" /> F1 per Branche (neuester Run)
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {branchen.map(b => {
+            const bdata = perBranche[b]
+            const f1 = bdata?.f1 ?? 0
+            const optThr = bdata?.optimal_threshold
+            const cm = bdata?.confusion_matrix || {}
+            return (
+              <div key={b} className="rounded-lg border border-surface-border p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-ink">{BRANCHEN_LABELS[b] || b}</span>
+                  <span className={`text-xs font-bold ${f1TextColor(f1)}`}>{f1.toFixed(3)}</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+                  <div className={`h-full rounded-full ${f1Color(f1)}`} style={{ width: `${Math.round(f1 * 100)}%` }} />
+                </div>
+                <div className="mt-2 text-[10px] text-ink-muted space-y-0.5">
+                  <div>AUC: {bdata?.auc?.toFixed(3) ?? '—'}</div>
+                  <div>Opt. Threshold: {optThr ?? '—'}</div>
+                  <div className="text-[9px] font-mono">
+                    TP={cm.tp ?? '?'} FP={cm.fp ?? '?'} TN={cm.tn ?? '?'} FN={cm.fn ?? '?'}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Trend: F1 letzte 30 Runs */}
+      <div className="bg-white rounded-xl border border-surface-border p-4">
+        <h3 className="text-sm font-semibold text-ink mb-3 flex items-center gap-2">
+          <TrendingUp className="w-4 h-4" /> F1-Trend (letzte {Math.min(runs.length, 30)} Runs)
+        </h3>
+        {branchen.length === 0 ? (
+          <p className="text-sm text-ink-muted text-center py-4">Keine Branchen-Daten.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+              <XAxis
+                dataKey="ts"
+                type="category"
+                allowDuplicatedCategory={false}
+                tick={{ fontSize: 9 }}
+                tickFormatter={v => v.slice(5)}
+              />
+              <YAxis domain={[0, 1]} tick={{ fontSize: 10 }} width={35} />
+              <Tooltip formatter={(v) => [v.toFixed(3), 'F1']} />
+              <Legend iconSize={10} wrapperStyle={{ fontSize: 10 }} />
+              {branchen.map((b, i) => {
+                const COLORS = ['#10b981', '#f59e0b', '#6366f1', '#ef4444']
+                return (
+                  <Line
+                    key={b}
+                    data={trendByBranche[b]}
+                    type="monotone"
+                    dataKey="f1"
+                    stroke={COLORS[i % COLORS.length]}
+                    strokeWidth={2}
+                    dot={false}
+                    name={BRANCHEN_LABELS[b] || b}
+                  />
+                )
+              })}
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Eval-History Tabelle */}
+      <div className="bg-white rounded-xl border border-surface-border p-4">
+        <h3 className="text-sm font-semibold text-ink mb-3">Eval-History ({runs.length} Runs)</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left min-w-[400px]">
+            <thead>
+              <tr className="border-b border-surface-border">
+                <th className="pr-3 py-1 font-medium text-ink-muted">Timestamp</th>
+                <th className="pr-3 py-1 font-medium text-ink-muted">Weighted F1</th>
+                {branchen.map(b => (
+                  <th key={b} className="pr-3 py-1 font-medium text-ink-muted">{BRANCHEN_LABELS[b] || b} F1</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {runs.slice(0, 10).map((run, idx) => {
+                const wf1 = run.aggregate?.weighted_f1 ?? 0
+                return (
+                  <tr key={idx} className="border-b border-surface-border/50 hover:bg-gray-50">
+                    <td className="pr-3 py-1.5 text-ink-muted font-mono">{(run.timestamp || '—').replace('T', ' ').replace('Z', '')}</td>
+                    <td className={`pr-3 py-1.5 font-semibold ${f1TextColor(wf1)}`}>{wf1.toFixed(3)}</td>
+                    {branchen.map(b => {
+                      const bf1 = run.per_branche?.[b]?.f1 ?? 0
+                      return (
+                        <td key={b} className={`pr-3 py-1.5 ${f1TextColor(bf1)}`}>{bf1.toFixed(3)}</td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// -----------------------------------------------------------------------
 // Main Component
 // -----------------------------------------------------------------------
 
@@ -370,6 +579,10 @@ export default function LLMAnalytics() {
   const [runaway, setRunaway] = useState(null)
   const [trendLoading, setTrendLoading] = useState(false)
   const [trendError, setTrendError] = useState(null)
+  // #152 Quality-Gate Eval
+  const [evalHistory, setEvalHistory] = useState(null)
+  const [evalLoading, setEvalLoading] = useState(false)
+  const [evalError, setEvalError] = useState(null)
 
   const apiParams = useMemo(() => ({
     from_date: dateRange.from || undefined,
@@ -434,6 +647,26 @@ export default function LLMAnalytics() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
+  async function loadEvalHistory() {
+    setEvalLoading(true)
+    setEvalError(null)
+    try {
+      const data = await getQualityGateEvalHistory({ limit: 30 })
+      setEvalHistory(data)
+    } catch (e) {
+      setEvalError(e.message)
+    } finally {
+      setEvalLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'quality-gate') {
+      loadEvalHistory()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
   useEffect(() => {
     if (manualRequestyCost) localStorage.setItem('reconcile_requesty_usd', manualRequestyCost)
     if (manualRequestyTokens) localStorage.setItem('reconcile_requesty_tokens', manualRequestyTokens)
@@ -467,6 +700,7 @@ export default function LLMAnalytics() {
     { id: 'model', label: 'Nach Modell', icon: Cpu },
     { id: 'day', label: 'Nach Tag', icon: BarChart3 },
     { id: 'trends', label: 'Trends & Cache', icon: Shield },
+    { id: 'quality-gate', label: 'Quality-Gate-Metriken', icon: CheckCircle2 },
   ]
 
   const presets = [
@@ -655,6 +889,15 @@ export default function LLMAnalytics() {
               cacheHitRate={cacheHitRate}
               runaway={runaway}
               onReload={loadTrendData}
+            />
+          )}
+
+          {activeTab === 'quality-gate' && (
+            <QualityGateTab
+              loading={evalLoading}
+              error={evalError}
+              evalHistory={evalHistory}
+              onReload={loadEvalHistory}
             />
           )}
         </div>
