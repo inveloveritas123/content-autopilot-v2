@@ -10,3 +10,6 @@ venv/
 celerybeat-schedule*
 *.wal
 *.shm
+
+# Eval-Runner-Output (Issue #152)
+eval_results/
