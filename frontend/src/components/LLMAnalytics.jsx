@@ -67,15 +67,25 @@ function HBar({ label, value, max, sub, color = 'bg-primary-500' }) {
 
 const HEATMAP_DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 
-function HeatmapCell({ count, alert }) {
+function HeatmapCell({ count, alert: isAlert, dayOfWeek, hour, onCellClick }) {
   const intensity = Math.min(1, (count || 0) / 500)
-  const bg = alert
+  const bg = isAlert
     ? 'bg-red-500'
     : intensity > 0.7 ? 'bg-orange-400' : intensity > 0.3 ? 'bg-amber-300' : intensity > 0 ? 'bg-emerald-200' : 'bg-gray-100'
+
+  const DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
+  const label = dayOfWeek != null && hour != null
+    ? `${DAYS[dayOfWeek]} ${String(hour).padStart(2, '0')}:00 — ${count} Calls${isAlert ? ' (ALERT >500)' : ''}`
+    : `${count} Calls${isAlert ? ' — ALERT >500' : ''}`
+
   return (
-    <div
-      className={`w-6 h-6 rounded-sm ${bg} flex items-center justify-center`}
-      title={`${count} Calls${alert ? ' — ALERT >500' : ''}`}
+    <button
+      type="button"
+      onClick={() => onCellClick?.({ dayOfWeek, hour, count, isAlert })}
+      className={`w-8 h-8 sm:w-10 sm:h-10 rounded-sm ${bg} flex items-center justify-center
+        cursor-pointer hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-primary-400`}
+      title={label}
+      aria-label={label}
     />
   )
 }
@@ -303,9 +313,9 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
           <div className="overflow-x-auto">
             <div className="flex gap-1 min-w-[560px]">
               {/* Y-Achse: Wochentage */}
-              <div className="flex flex-col gap-1 pt-6">
+              <div className="flex flex-col gap-1 pt-8 sm:pt-10">
                 {HEATMAP_DAYS.map(d => (
-                  <div key={d} className="h-6 text-[10px] text-ink-muted flex items-center w-7 justify-end pr-1">{d}</div>
+                  <div key={d} className="h-8 sm:h-10 text-[10px] text-ink-muted flex items-center w-7 justify-end pr-1">{d}</div>
                 ))}
               </div>
               {/* Grid: 24 Spalten (Stunden) x 7 Zeilen (Tage) */}
@@ -313,7 +323,7 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
                 {/* Header: Stunden */}
                 <div className="flex gap-1 mb-1">
                   {Array.from({ length: 24 }, (_, h) => (
-                    <div key={h} className="w-6 text-[8px] text-ink-muted text-center">{h}</div>
+                    <div key={h} className="w-8 sm:w-10 text-[8px] text-ink-muted text-center">{h}</div>
                   ))}
                 </div>
                 {HEATMAP_DAYS.map((_, dow) => (
@@ -326,6 +336,12 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
                           key={hour}
                           count={cell?.call_count || 0}
                           alert={cell?.alert || false}
+                          dayOfWeek={dow}
+                          hour={hour}
+                          onCellClick={({ dayOfWeek, hour: h, count, isAlert }) => {
+                            // TODO: Drill-Down "Top Queries in Stunde XY" — Issue #drilldown
+                            console.debug('[Heatmap] Klick:', { dayOfWeek, hour: h, count, isAlert })
+                          }}
                         />
                       )
                     })}

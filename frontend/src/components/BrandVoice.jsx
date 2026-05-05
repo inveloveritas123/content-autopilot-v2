@@ -495,8 +495,66 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
     .sort()
     .pop()
 
+  // QW5: Säulen-Progress
+  const pillars = [
+    { key: 'voice_profile', label: 'Voice-Profil', value: voice_profile },
+    { key: 'customer_context', label: 'Kundenkontext', value: customer_context },
+    { key: 'audience_avatar', label: 'Zielgruppen-Avatar', value: audience_avatar },
+  ]
+  const pillarsCount = pillars.filter(p => p.value).length
+  const pillarsPercent = Math.round((pillarsCount / 3) * 100)
+
   return (
     <div className="space-y-3 mb-6">
+      {/* QW5: Säulen-Progress-Leiste */}
+      <div className="bg-white rounded-xl border border-surface-border p-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-ink-muted uppercase tracking-wide">Brand Voice Fortschritt</span>
+          <span className="text-xs font-bold text-ink">{pillarsCount}/3 Säulen abgeschlossen</span>
+        </div>
+        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+            style={{ width: `${pillarsPercent}%` }}
+          />
+        </div>
+        {/* Badge pro Säule */}
+        <div className="flex flex-wrap gap-2 mt-3">
+          {pillars.map(p => (
+            <span
+              key={p.key}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+                p.value
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-amber-50 text-amber-700 border-amber-200'
+              }`}
+            >
+              {p.value ? (
+                <CheckCircle2 className="w-3 h-3" />
+              ) : (
+                <Loader2 className="w-3 h-3" />
+              )}
+              {p.label}
+              {p.value ? ' Erledigt' : ' Offen'}
+            </span>
+          ))}
+        </div>
+        {/* Banner wenn alle 3 fertig */}
+        {allPresent && (
+          <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-emerald-800">
+              Brand Voice komplett.
+            </p>
+            <Link
+              to="/brand-voice/wizard"
+              className="text-xs font-medium text-emerald-700 underline hover:no-underline whitespace-nowrap"
+            >
+              Wizard starten →
+            </Link>
+          </div>
+        )}
+      </div>
+
       {drift_available && (
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3 text-sm text-blue-700">
           <Info className="w-4 h-4 shrink-0" />

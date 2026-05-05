@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { ToastProvider } from './components/ui/Toast'
 import Layout from './components/Layout'
 import Dashboard from './components/Dashboard'
 import SourceList from './components/SourceList'
@@ -25,6 +26,7 @@ import DataDeletion from './components/DataDeletion'
 import MemoryViz from './components/MemoryViz'
 function App() {
   return (
+    <ToastProvider>
     <Layout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
@@ -56,6 +58,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Layout>
+    </ToastProvider>
   )
 }
 

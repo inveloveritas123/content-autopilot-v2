@@ -21,3 +21,12 @@ body {
 .status-active { @apply bg-amber-100 text-amber-700; }
 .status-done { @apply bg-emerald-100 text-emerald-700; }
 .status-error { @apply bg-red-100 text-red-700; }
+
+/* Toast-Animation (Sprint 3C QW2) */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-toast-in {
+  animation: toast-in 200ms ease-out;
+}

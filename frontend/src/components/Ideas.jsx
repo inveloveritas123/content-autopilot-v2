@@ -40,7 +40,12 @@ function RelevanceBar({ score }) {
 }
 
 function InlineQA({ idea, answers, onChange, onSubmit, onGeneratePost, onQuickGenerate, submitting, generating, quickGenerating, message }) {
-  if (!idea) return <div className="py-3 text-center text-xs text-ink-muted animate-pulse">Lade Fragen...</div>
+  if (!idea) return (
+    <div className="py-3 flex items-center justify-center gap-2 text-xs text-ink-muted">
+      <Loader2 className="animate-spin w-4 h-4" aria-hidden="true" />
+      Lade Fragen…
+    </div>
+  )
   const questions = idea.entrepreneur_questions || []
   const existingAnswerIndices = new Set((idea.answers || []).map(a => a.question_index))
   const allAnswered = questions.length > 0 && questions.every((_, i) => existingAnswerIndices.has(i))

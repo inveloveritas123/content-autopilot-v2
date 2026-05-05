@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Radio, FileText, Lightbulb, CheckCircle2, TrendingUp, Clock, ArrowRight, Sparkles, AlertCircle, Zap, BarChart3, CalendarDays, Flame, Play, Target, Award, TrendingDown } from 'lucide-react'
+import { Radio, FileText, Lightbulb, CheckCircle2, TrendingUp, Clock, ArrowRight, Sparkles, AlertCircle, Zap, BarChart3, CalendarDays, Flame, Play, Target, Award, TrendingDown, Loader2 } from 'lucide-react'
 import { getDashboard, getIdeas, getFeedbackStats, triggerAutoPipeline, getScheduledPosts, getSourceFunnel, getContentList, getTodayBrief, autoSchedulePosts, resetBudgetFlag, getSettings, bulkArchiveIdeas, getIdeasSourceBreakdown, getBrandVoiceStatus } from '../api'
 import ResearchFindings from './ResearchFindings'
 
@@ -664,8 +664,10 @@ export default function Dashboard() {
             className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 hover:bg-emerald-100 disabled:opacity-60 transition-colors"
             title="Analysieren + Generieren + Ideation für alle wartenden Items"
           >
-            <Play className="w-3.5 h-3.5" />
-            {autoPumping ? 'Pumpt...' : 'Auto-Pipeline'}
+            {autoPumping
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+              : <Play className="w-3.5 h-3.5" />}
+            {autoPumping ? 'Pumpt…' : 'Auto-Pipeline'}
           </button>
           <button onClick={loadAll} className="text-xs text-ink-muted hover:text-primary-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50">
             Aktualisieren

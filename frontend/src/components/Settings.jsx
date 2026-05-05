@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
+import { useToast } from './ui/Toast'
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card'
 import { Button } from './ui/Button'
 import LLMSettings from './LLMSettings'
@@ -12,6 +13,7 @@ import { useApi } from '../hooks/useApi'
 import { getSettings, updateSettings, setApiKey, ncBrowse, ncSuggest, refreshIdeasWithProfile, getLlmRouting, getLLMCostHistory } from '../api'
 
 export default function Settings() {
+  const toast = useToast()
   const { data, loading, refetch } = useApi(getSettings)
   const [localApiKey, setLocalApiKey] = useState(localStorage.getItem('apiKey') || '')
   const [tone, setTone] = useState('')
@@ -95,10 +97,10 @@ export default function Settings() {
           target_audience: entAudience,
         },
       })
-      alert('Einstellungen gespeichert!')
+      toast.success('Einstellungen gespeichert!')
       refetchRouting()
     } catch (e) {
-      alert('Fehler: ' + e.message)
+      toast.error('Fehler: ' + e.message)
     } finally {
       setSaving(false)
     }
@@ -109,9 +111,9 @@ export default function Settings() {
     setRefreshing(true)
     try {
       const r = await refreshIdeasWithProfile(20)
-      alert(r.message || 'Ideen werden im Hintergrund neu generiert.')
+      toast.success(r.message || 'Ideen werden im Hintergrund neu generiert.')
     } catch (e) {
-      alert('Fehler: ' + (e.message || 'Unbekannter Fehler'))
+      toast.error('Fehler: ' + (e.message || 'Unbekannter Fehler'))
     } finally {
       setRefreshing(false)
     }
@@ -170,9 +172,9 @@ export default function Settings() {
       setNcAnalysisPath(s.analysis)
       setNcContentPath(s.content)
       if (s.read_paths?.length) setNcReadPaths([...new Set([...ncReadPaths, ...s.read_paths])])
-      alert('Vorschlaege uebernommen!')
+      toast.success('Vorschläge übernommen!')
     } catch (e) {
-      alert('Fehler: ' + e.message)
+      toast.error('Fehler: ' + e.message)
     }
   }
 
@@ -194,7 +196,7 @@ export default function Settings() {
       setProfileSaved(true)
       setTimeout(() => setProfileSaved(false), 3000)
     } catch (e) {
-      alert('Fehler beim Speichern: ' + e.message)
+      toast.error('Fehler beim Speichern: ' + e.message)
     } finally {
       setProfileSaving(false)
     }
