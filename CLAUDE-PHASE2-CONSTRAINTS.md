@@ -1,6 +1,6 @@
 # Phase-2/3-Constraints für Knecht (Cowork-Vorgaben)
 
-> **Stand:** 2026-05-03 (R3)
+> **Stand:** 2026-05-04 (R4)
 > **Quelle:** Cowork (Robert/Luisa)
 > **Zweck:** Knecht-Sonnet UND Knecht-Haiku müssen diese Constraints bei JEDEM PR im Brand-Voice-/Telegram-Bot-/Voice-Pipeline-Kontext einhalten. Bei Verstoß: Cowork-Review markiert als BLOCKING.
 
@@ -100,7 +100,7 @@ Robert: "da darf sich Claude Code viel zeit nehmen, jeder button muss funktionie
 **Pro PR:**
 - Unit-Tests für jede neue Funktion
 - Integrationstest für jeden neuen Endpoint
-- E2E-Test für jeden neuen User-Flow
+- E2E-Test für jeden neuen User-Flow (NEU: via Browser-Use CLI 2.0 — siehe Constraint #14)
 - Adversarial-Tests für jeden LLM-Touchpoint mit User-Input (Injection-Versuche)
 - Schema-Validator-Tests für jeden JSON-Output
 - Race-Condition-Tests wo Concurrency möglich
@@ -109,6 +109,7 @@ Robert: "da darf sich Claude Code viel zeit nehmen, jeder button muss funktionie
 **Eval-Suite (Issue #79):**
 - 5+ eingefrorene Test-Cases (Marcus-Weber + andere Branchen)
 - PR-Block bei <80% PASS
+- Confusion-Matrix für Quality-Gate (#152)
 
 **Bestätigungs-Pflicht:**
 - Wenn Knecht ein Issue als "fertig" markiert → muss in Comment Cowork (auto-review) zur Bestätigung einladen
@@ -129,6 +130,8 @@ Robert: "da darf sich Claude Code viel zeit nehmen, jeder button muss funktionie
 | P08-Random-Smart | exakt 3 Fragen aus 3 Kategorien |
 | Telegram-Voice-Note-Limit | 3 Min / 180s |
 | Whisper-Confidence-Threshold | < 0.7 → Gemini-Fallback |
+| pgvector HNSW Defaults | M=32, ef_construction=200, ef_search=64 (Issue #150) |
+| Chunking Defaults | max_tokens=600, overlap=80 (~13%), min=80 (Issue #151) |
 
 ---
 
@@ -219,29 +222,11 @@ Bis dahin: erst muss Phase 1-3 hart gut laufen.
 
 ### B) LLM-Service (Requesty.ai, `llm_service.complete()`)
 
-Mapping via `PURPOSE_MODEL_MAP` in `services/llm.py`:
+Mapping via `PURPOSE_MODEL_MAP` in `services/llm.py` — siehe Code für Details.
 
-| Purpose | Internes Modell | Aktuell gerouted zu | Kosten-Ziel |
-|---------|-----------------|---------------------|-------------|
-| `transcription`, `analysis`, `voice_update`, `summary`, `tagging`, `scoring` | `gemini-flash` | `vertex/gemini-2.5-flash-lite@europe-central2` | $0.075/1M |
-| `ideation`, `questions`, `creative`, `post_generation`, `onboarding` | `claude-sonnet` | `vertex/gemini-2.5-flash-lite@europe-central2` (**temporär remapped nach Mistral-Desaster 2026-05-03**) | $0.075/1M |
+### C) Embeddings (NEU R4)
 
-**Wichtig:** `claude-sonnet` zeigt in REQUESTY_MODELS auf Gemini Flash Lite (nicht Claude). Das war eine Notmaßnahme nach dem Mistral-medium-$20-Budget-Overrun. Wenn ein echter Claude-Sonnet-Pfad über Requesty.ai gewünscht wird: `REQUESTY_MODELS["claude-sonnet"]` auf `"anthropic/claude-sonnet-4-20250514"` setzen + Requesty.ai Budget entsprechend anpassen.
-
-### C) Preis-Referenz (Mai 2026)
-
-| Modell | Input-Preis | Output-Preis | Caching |
-|--------|-------------|--------------|---------|
-| Gemini 2.5 Flash Lite | $0.075/1M | $0.30/1M | ✅ via Requesty `auto_cache` |
-| Claude Sonnet 4 | $3.00/1M | $15.00/1M | ✅ via `cache_control: ephemeral` (direkt) |
-| ~~Mistral Medium~~ | ~~$5.00/1M~~ | ~~$15.00/1M~~ | ❌ DEAKTIVIERT |
-
-### D) Entscheidungs-Kriterien
-
-- **Gemini Flash Lite:** Alles was Extraktion, Klassifikation, Tagging, kurze Strukturierung ist. Günstig, schnell, ausreichend.
-- **Claude Sonnet (direkt):** Kreative Generierung mit Marken-Voice, Persona-Erstellung, Nuance-intensive Aufgaben. Nur wenn Qualitätsunterschied messbar.
-- **Niemals:** Mistral-medium, GPT-4 (zu teuer ohne nachgewiesenen Qualitätsvorteil in dieser Domäne).
-- **Modell-Pinning:** IMMER dated alias (`claude-sonnet-4-6-20251022`), nie generischer Alias. Constraint #6.
+Pro pgvector-Eintrag MUSS `embedding_model_id` gespeichert sein. Default-Modell: `vertex-text-embedding-005` (768-dim, EU-Region). Modell-Wechsel via Mass-Re-Embed-Job mit Canary (Issue #150).
 
 ---
 
@@ -261,21 +246,11 @@ Mapping via `PURPOSE_MODEL_MAP` in `services/llm.py`:
 
 ### Ausnahmen (Knecht darf selbst schließen)
 
-- Reine Doku-Issues ohne Code-Impact (z.B. "Memory-Datei aktualisieren")
-- Pure Refactor-Issues ohne User-sichtbare Änderung, mit grünen Tests UND Cowork-Approve
+- Reine Doku-Issues ohne Code-Impact
+- Pure Refactor-Issues ohne User-sichtbare Änderung mit grünen Tests UND Cowork-Approve
 - Trivial-Bugs (typo, fehlendes Import) mit Tests grün
 
 Bei Unsicherheit: **offen lassen**, Robert entscheidet.
-
-### Begründung
-
-Knecht ist sehr produktiv (24+ Commits in 6 Stunden am 2026-05-03), und Cowork-Auto-Reviews verifizieren Code-Qualität — aber der Endnutzer-Eindruck (klickt der Button? sieht der Wizard wie gedacht aus?) braucht **Roberts Augen**. Self-Close kann formell korrekt sein und trotzdem an UX-Realität vorbei.
-
-### Cowork-Verantwortung
-
-- Bei jedem APPROVE: explizit kommentieren `**Bitte Robert: kurz im UI verifizieren, dann schließen.**`
-- Bei Issues mit reinem Backend-Impact und Tests grün: Robert-Briefing am Tagesende auflisten was zur Verifikation ansteht
-- Knecht-Status-Polling: re-open kritische Issues falls Knecht versehentlich self-closed
 
 ---
 
@@ -283,38 +258,82 @@ Knecht ist sehr produktiv (24+ Commits in 6 Stunden am 2026-05-03), und Cowork-A
 
 > **Eric/Christoph-Briefing 2026-04-13:** "Kunde lebt im Telegram, Web-Dashboard ist sekundär."
 
-Im Roadmap-Scope-Check (2026-05-03 R3) als implizit-aber-nicht-dokumentiert identifiziert. Wird ab jetzt expliziter Architektur-Constraint.
+**Regel:** Primärer User-Touchpoint = Telegram-Bot. Sekundär = Web-Dashboard. Bei jeder UX-Entscheidung muss Knecht fragen: "Was muss im Bot funktionieren? Was darf nur im Web sein?"
 
-### Regel
+Konsequenzen für Approve-Flow, Voice-Drift-Feedback, Quick-Generate, Status-Updates → siehe Original-Constraint-Block in vorheriger Revision.
 
-- **Primärer User-Touchpoint = Telegram-Bot** (für den Tenant: ZukunftsBund-Kunde)
-- **Sekundär = Web-Dashboard** (eher für Robert/Admin/Setup-Phase)
-- Bei jeder UX-Entscheidung muss Knecht fragen: **"Was muss im Bot funktionieren? Was darf nur im Web sein?"**
+---
 
-### Konsequenzen für Feature-Design
+## 14. Soll-Ist-Pflicht + Subagent-UI-Test mit Browser-Use CLI 2.0 (NEU 2026-05-04 R4)
 
-- **Approve-Flow:** Posts müssen im Bot approved werden können (nicht nur per Web-Dashboard). Bot zeigt Post-Text + Buttons "Veröffentlichen / Bearbeiten / Verwerfen".
-- **Voice-Drift-Feedback:** "So sage ich das nicht" muss im Bot-Reply funktionieren.
-- **Ideen-Picker / Quick-Generate:** Bot-Befehl `/idee` triggert die ganze Pipeline ohne Web-Touch.
-- **Status-Updates:** Bot pushed proaktiv ("Dein Wochen-Post ist fertig — willst du ihn sehen?"). Web ist Pull-Modell, Bot ist Push.
-- **Setup-Phase:** Wizard darf Web-only sein (zu viel Eingabe für Bot). Aber: Re-Run einzelner Phasen muss im Bot triggerbar sein.
+> **Robert 2026-05-04:** "soll immer Soll-Ist-Abgleich gemacht werden und nach jeder Anpassung darf ein Subagent die Knöpfe drücken. Gerne statt Playwright soll Browser-Use CLI 2.0 der neuste schrei sein."
 
-### Konsequenzen für UX-Entscheidungen
+### A) Soll-Ist-Abgleich vor jeder Anpassung (Pflicht)
 
-- Wenn Knecht zwischen "Feature im Web bauen" vs "Feature im Bot bauen" wählen muss: Default = Bot.
-- Wenn ein Feature beides braucht: Bot zuerst, Web folgt.
-- Web-Dashboard-Komplexität minimieren — alles was nicht zwingend Desktop-Bildschirm braucht (große Tabellen, Multi-Spalten-Layout) gehört in den Bot.
+Bevor Knecht Code ändert — auch bei "klaren" Issues — MUSS er:
 
-### Konsequenzen für Mobile-Web
+1. Aktuellen Repo-State des betroffenen Files lesen (`git log --oneline -5 <file>`)
+2. **NICHT** von der Issue-Beschreibung blind ausgehen — Issues können stale sein, jemand könnte parallel was geändert haben
+3. SOLL (aus Issue) vs IST (im Repo) als kurzen Comment im Issue posten: "SOLL: X. IST: Y. Differenz: Z."
+4. Erst dann implementieren
 
-- Web-Dashboard MUSS auf Mobile (375px) funktionieren — nicht nur Desktop. Setup-Wizard, Approve-Queue, Settings.
-- Tap-Targets ≥ 44×44 px (Constraint #4).
-- Storybook + Playwright mit `viewport: 375x812` Pflicht.
-- Issue #143 (Phase 8.2) ist die explizite Mobile-Responsive-Phase.
+Bei Mismatch zwischen Issue-Beschreibung und Repo-Realität: **STOP** und im Issue nachfragen, statt blind drüber zu schreiben.
 
-### Begründung
+### B) Subagent-UI-Test nach jeder Anpassung (Pflicht für Frontend + API-Endpoints)
 
-Tenant ist auf der Baustelle, im Termin, im Auto — nicht am Schreibtisch. Telegram ist immer offen, Web-Dashboard wird vielleicht 1× pro Woche angeklickt. Wenn das Produkt das ignoriert, ist es für Zielgruppe (Handwerk, Mittelstand, Berater) unbrauchbar.
+Nach jedem Push der UI oder API ändert:
+
+1. Subagent (separates Claude-Instance via Task-Tool) wird beauftragt
+2. Subagent nutzt **Browser-Use CLI 2.0** (statt Playwright) — Begründung siehe unten
+3. Subagent klickt durch den geänderten User-Pfad (z.B. Wizard-Phase, Provider-Modal, Approve-Queue)
+4. Output: Screenshot + DOM-Snapshot + "PASS / FAIL + Bug-Liste"
+5. Bei FAIL: Knecht fixt + neuer Subagent-Run
+
+### C) Browser-Use CLI 2.0 statt Playwright
+
+**Warum Wechsel weg von Playwright?**
+- Playwright braucht Browser-Binary + komplette Test-Infrastruktur
+- Browser-Use CLI 2.0 läuft direkt im Terminal, syncht mit echtem Browser-Profil (Cookies, Sessions)
+- DOM-basiert (CDP) statt Screenshot-basiert → token-effizient für AI-Agenten
+- Nativ integriert mit Claude Code / Cursor — Knecht kann es direkt aus dem Terminal aufrufen
+- Cloud-Modus optional für Headless-Runs in CI
+
+**Setup auf der Kolonie:**
+```bash
+npx browser-use@latest init
+# folgt dem One-Command-Onboarding
+# erstellt Browser-Use Cloud Account automatisch (oder nutzt lokales Profile)
+```
+
+**Verwendung pro Test:**
+```bash
+browser-use run --url http://10.10.0.1:8601/wizard \
+  --task "klicke alle 6 Wizard-Phasen durch, prüfe dass keine Frage fehlt" \
+  --output ./test-results/wizard-$(date +%s).json
+```
+
+**Migration von Playwright:**
+- Bestehende Playwright-Specs unter `frontend/playwright/` bleiben — nicht löschen
+- Neue UI-Tests werden als Browser-Use-Tasks unter `tests/browser-use/` formuliert
+- Migration nur on-demand wenn Test angefasst wird (kein Big-Bang-Refactor)
+
+**Issue-Pflicht:** Wenn ein Issue UI-Impact hat, muss in den Acceptance-Punkten stehen:
+```
+- [ ] Subagent-UI-Test (Browser-Use CLI 2.0): <konkrete Klick-Liste>
+```
+
+### D) Was Subagent NICHT darf
+
+- Kein Auto-Approve. Nach Subagent-PASS bleibt Issue trotzdem offen (Constraint #12)
+- Keine Code-Änderungen. Subagent ist nur Tester, nicht Implementer
+- Keine Production-Touches. Subagent läuft gegen Test-/Staging-DB, nicht Live
+
+### E) Cowork-Pflicht beim Review
+
+Cowork prüft beim Auto-Review:
+1. Hat Knecht Soll-Ist-Comment im Issue?
+2. Wurde Subagent-UI-Test gefahren? (Subagent-Output verlinkt im PR/Commit?)
+3. Bei Frontend-PR ohne Subagent-Test: Verdict = CHANGES REQUESTED, "bitte Subagent-Test nachholen"
 
 ---
 
