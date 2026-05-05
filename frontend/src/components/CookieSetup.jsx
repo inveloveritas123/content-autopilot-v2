@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useToast } from './ui/Toast'
 import { Dialog } from './ui/Dialog'
 import { Button } from './ui/Button'
 import { Textarea } from './ui/Input'
@@ -6,6 +7,7 @@ import { Badge } from './ui/Badge'
 import { saveCookies } from '../api'
 
 export default function CookieSetup({ open, onClose, onSaved }) {
+  const { toast } = useToast()
   const [cookieText, setCookieText] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -23,7 +25,7 @@ export default function CookieSetup({ open, onClose, onSaved }) {
         setCookieText('')
       }, 1500)
     } catch (e) {
-      alert('Fehler beim Speichern: ' + e.message)
+      toast.error('Fehler beim Speichern: ' + e.message)
     } finally {
       setSaving(false)
     }

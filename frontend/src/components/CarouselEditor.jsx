@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useToast } from './ui/Toast'
 
 function getApiKey() {
   return localStorage.getItem('apiKey') || ''
@@ -62,6 +63,7 @@ function SlideCard({ slide, index, total, onMove, onChange, onDelete }) {
 }
 
 export default function CarouselEditor({ initialSlides = [], contentPieceId, tenantId, onPdfReady }) {
+  const { toast } = useToast()
   const [slides, setSlides] = useState(initialSlides)
   const [generating, setGenerating] = useState(false)
   const [pdfUrl, setPdfUrl] = useState(null)
@@ -107,7 +109,7 @@ export default function CarouselEditor({ initialSlides = [], contentPieceId, ten
       if (onPdfReady) onPdfReady(url)
     } catch (e) {
       console.error(e)
-      alert('PDF-Generierung fehlgeschlagen: ' + (e.message || 'Unbekannter Fehler'))
+      toast.error('PDF-Generierung fehlgeschlagen: ' + (e.message || 'Unbekannter Fehler'))
     }
     setGenerating(false)
   }

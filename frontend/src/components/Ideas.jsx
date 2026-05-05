@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { flushSync } from 'react-dom'
+import { useToast } from './ui/Toast'
 import { Lightbulb, MessageCircleQuestion, ChevronDown, ChevronUp, Send, Sparkles, Tag, Star, Clock, CheckCircle2, AlertCircle, Plus, Loader2, Trash2, LayoutList, Rows3, SkipForward, Zap } from 'lucide-react'
 import { getIdeas, getIdea, submitAnswer, generatePost, updateIdea, getItems, generateIdeas, batchGenerateIdeas, refreshIdeasWithProfile, getSources, bulkArchiveIdeas, quickGeneratePost, bulkQuickGeneratePosts, getIdeasSourceBreakdown, createManualIdea } from '../api'
 import TimeFilter from './TimeFilter'
@@ -431,6 +432,7 @@ function TriageCard({ idea, onSkip, onGenerate, skipping, generating }) {
 }
 
 export default function Ideas() {
+  const { toast } = useToast()
   const [ideas, setIdeas] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -875,7 +877,7 @@ export default function Ideas() {
                   const r = await bulkArchiveIdeas({ source_id: sourceFilter, status: 'new' })
                   setArchiveMsg(`🗑 ${r.archived} Ideen von "${sourceName}" archiviert`)
                   setTimeout(() => { setArchiveMsg(null); loadIdeas() }, 3000)
-                } catch(e) { alert('Fehler: ' + e.message) }
+                } catch(e) { toast.error('Fehler: ' + e.message) }
               }}
               className="px-2 py-1 text-[10px] font-medium text-red-600 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 transition-colors"
               title="Alle neuen Ideen dieser Quelle archivieren"
@@ -1054,7 +1056,7 @@ export default function Ideas() {
                                   const r = await bulkArchiveIdeas({ source_id: src.source_id, status: 'new' })
                                   setArchiveMsg(`🗑 ${r.archived} Ideen archiviert`)
                                   setTimeout(() => { setArchiveMsg(null); loadIdeas(); getIdeasSourceBreakdown().then(d => setSourceBreakdown(d)).catch(() => {}) }, 3000)
-                                } catch(e) { alert('Fehler: ' + e.message) }
+                                } catch(e) { toast.error('Fehler: ' + e.message) }
                               }}
                               className="px-2 py-0.5 text-[10px] text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors"
                             >Archivieren</button>

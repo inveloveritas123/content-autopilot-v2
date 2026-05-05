@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useToast } from './ui/Toast'
 import { clsx } from 'clsx'
 import {
   LayoutDashboard,
@@ -56,6 +57,7 @@ const adminNavItems = [
 ]
 
 function ProjectSwitcher() {
+  const { toast } = useToast()
   const [projects, setProjects] = useState([])
   const [open, setOpen] = useState(false)
   const [activeId, setActiveId] = useState(() => localStorage.getItem('activeProjectId') || null)
@@ -115,7 +117,7 @@ function ProjectSwitcher() {
       await loadProjects()
       selectProject(p)
     } catch (e) {
-      alert('Fehler: ' + e.message)
+      toast.error('Fehler: ' + e.message)
     } finally {
       setCreating(false)
     }
@@ -139,13 +141,13 @@ function ProjectSwitcher() {
       setRenamingId(null)
       await loadProjects()
     } catch (e) {
-      alert('Umbenennen fehlgeschlagen: ' + e.message)
+      toast.error('Umbenennen fehlgeschlagen: ' + e.message)
     }
   }
 
   const handleDelete = async (e, id) => {
     e.stopPropagation()
-    if (!confirm('Projekt wirklich loeschen?')) return
+    if (!window.confirm('Projekt wirklich loeschen?')) return
     try {
       await deleteProject(id)
       if (activeId === id) {
@@ -156,7 +158,7 @@ function ProjectSwitcher() {
       }
       await loadProjects()
     } catch (e) {
-      alert('Fehler: ' + e.message)
+      toast.error('Fehler: ' + e.message)
     }
   }
 

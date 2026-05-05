@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useToast } from './ui/Toast'
 import { Radio, Rss, Mic, Globe, Plus, RefreshCw, Trash2, Power, Clock, Loader2, Search, Compass, ExternalLink, Play, Tag, Archive, BarChart3, AlertTriangle } from 'lucide-react'
 import { useApi } from '../hooks/useApi'
 import { getSources, createSource, updateSource, updateSourceKeywords, deleteSource, checkSource, searchChannels, searchVideos, discoverSources, getSourceStats, analyzeAllSourceItems, archiveSourceItems, getSourceFunnel, bulkArchiveIdeas, getSourceItems } from '../api'
@@ -35,6 +36,7 @@ function relativeTime(dateStr) {
 }
 
 function SourceCard({ source, onCheck, onToggle, onDelete, onUpdateInterval, onUpdateKeywords, checking, stats }) {
+  const { toast } = useToast()
   const typeInfo = SOURCE_TYPES.find(t => t.key === source.type) || SOURCE_TYPES[0]
   const Icon = typeInfo.icon
   const s = stats || {}
@@ -52,7 +54,7 @@ function SourceCard({ source, onCheck, onToggle, onDelete, onUpdateInterval, onU
       setAnalyzeResult(`${r.queued} Items eingereiht`)
       setTimeout(() => setAnalyzeResult(null), 4000)
     } catch (e) {
-      alert('Fehler: ' + e.message)
+      toast.error('Fehler: ' + e.message)
     } finally {
       setAnalyzing(false)
     }
@@ -65,7 +67,7 @@ function SourceCard({ source, onCheck, onToggle, onDelete, onUpdateInterval, onU
       setAnalyzeResult(`${r.archived} Items archiviert`)
       setTimeout(() => { setAnalyzeResult(null); window.location.reload() }, 2000)
     } catch (e) {
-      alert('Fehler: ' + e.message)
+      toast.error('Fehler: ' + e.message)
     }
   }
 
@@ -241,6 +243,7 @@ function SourceCard({ source, onCheck, onToggle, onDelete, onUpdateInterval, onU
 }
 
 function AddSourceForm({ type, onAdd, onCancel }) {
+  const { toast } = useToast()
   const [form, setForm] = useState({
     name: '', type: type || 'youtube', url: '', channel_id: '', language: 'de',
     auto_process: false, polling_interval_minutes: DEFAULT_INTERVALS[type] || 60,
@@ -266,7 +269,7 @@ function AddSourceForm({ type, onAdd, onCancel }) {
       const results = await searchChannels(searchQuery)
       setSearchResults(results)
     } catch (e) {
-      alert('Suche fehlgeschlagen: ' + e.message)
+      toast.error('Suche fehlgeschlagen: ' + e.message)
     } finally {
       setSearching(false)
     }
@@ -346,6 +349,7 @@ function AddSourceForm({ type, onAdd, onCancel }) {
 }
 
 function YouTubeVideoSearch() {
+  const { toast } = useToast()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
@@ -359,7 +363,7 @@ function YouTubeVideoSearch() {
       setResults(data)
       setSearched(true)
     } catch (e) {
-      alert('Suche fehlgeschlagen: ' + e.message)
+      toast.error('Suche fehlgeschlagen: ' + e.message)
     } finally {
       setLoading(false)
     }
@@ -472,6 +476,7 @@ function DiscoverCard({ item, onAdd, adding }) {
 }
 
 function DiscoverTab({ sources }) {
+  const { toast } = useToast()
   const [topics, setTopics] = useState('')
   const [results, setResults] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -490,7 +495,7 @@ function DiscoverTab({ sources }) {
       setResults(data)
       setActiveType('youtube')
     } catch (e) {
-      alert('Fehler: ' + e.message)
+      toast.error('Fehler: ' + e.message)
     } finally {
       setLoading(false)
     }
@@ -525,7 +530,7 @@ function DiscoverTab({ sources }) {
         }
       })
     } catch (e) {
-      alert('Fehler: ' + e.message)
+      toast.error('Fehler: ' + e.message)
     } finally {
       setAddingKey(null)
     }
@@ -749,6 +754,7 @@ function isSHKSource(name) {
 }
 
 function FunnelTab({ funnelData, onArchiveIdeas, onCheckSource, onAnalyzeSource, checkingSourceId, analyzingSourceId, batchChecking, onBatchCheckSHK, onPreviewItems }) {
+  const { toast } = useToast()
   const [archiving, setArchiving] = useState(null)
   const [archiveMsg, setArchiveMsg] = useState(null)
 
@@ -769,7 +775,7 @@ function FunnelTab({ funnelData, onArchiveIdeas, onCheckSource, onAnalyzeSource,
       const r = await bulkArchiveIdeas({ source_id: src.source_id })
       setArchiveMsg(`✓ ${r.archived} Ideen von "${src.source_name}" archiviert`)
       setTimeout(() => { setArchiveMsg(null); if (onArchiveIdeas) onArchiveIdeas() }, 4000)
-    } catch(e) { alert('Fehler: ' + e.message) }
+    } catch(e) { toast.error('Fehler: ' + e.message) }
     setArchiving(null)
   }
 
@@ -936,6 +942,7 @@ function FunnelTab({ funnelData, onArchiveIdeas, onCheckSource, onAnalyzeSource,
 }
 
 export default function SourceList() {
+  const { toast } = useToast()
   const { data: sources, loading, refetch } = useApi(getSources)
   const [mainTab, setMainTab] = useState('sources')
   const [activeTypeTab, setActiveTypeTab] = useState('')
@@ -1027,7 +1034,7 @@ export default function SourceList() {
   }
 
   const handleDelete = async (id) => {
-    if (confirm('Quelle wirklich loeschen?')) {
+    if (window.confirm('Quelle wirklich loeschen?')) {
       await deleteSource(id)
       refetch()
     }

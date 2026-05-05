@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useToast } from './ui/Toast'
 import { request } from '../api'
 
 function ColorSwatch({ color }) {
@@ -8,6 +9,7 @@ function ColorSwatch({ color }) {
 }
 
 export default function BrandingSettings() {
+  const { toast } = useToast()
   const [form, setForm] = useState({
     primary_color: '#0F766E',
     secondary_color: '#F59E0B',
@@ -33,7 +35,7 @@ export default function BrandingSettings() {
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (e) {
-      alert('Fehler beim Speichern: ' + (e?.detail || e?.message || 'Unbekannter Fehler'))
+      toast.error('Fehler beim Speichern: ' + (e?.detail || e?.message || 'Unbekannter Fehler'))
     }
     setSaving(false)
   }

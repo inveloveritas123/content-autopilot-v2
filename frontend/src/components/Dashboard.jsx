@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useToast } from './ui/Toast'
 import { Radio, FileText, Lightbulb, CheckCircle2, TrendingUp, Clock, ArrowRight, Sparkles, AlertCircle, Zap, BarChart3, CalendarDays, Flame, Play, Target, Award, TrendingDown, Loader2 } from 'lucide-react'
 import { getDashboard, getIdeas, getFeedbackStats, triggerAutoPipeline, getScheduledPosts, getSourceFunnel, getContentList, getTodayBrief, autoSchedulePosts, resetBudgetFlag, getSettings, bulkArchiveIdeas, getIdeasSourceBreakdown, getBrandVoiceStatus } from '../api'
 import ResearchFindings from './ResearchFindings'
@@ -575,6 +576,7 @@ function ContentStreakCalendar({ posts }) {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { toast } = useToast()
   const [data, setData] = useState(null)
   const [ideas, setIdeas] = useState([])
   const [stats, setStats] = useState(null)
@@ -844,7 +846,7 @@ export default function Dashboard() {
             title="Erst Guthaben bei requesty.ai aufladen, dann diesen Button klicken"
             onClick={async () => {
               if (!window.confirm('Hast du das Guthaben bei requesty.ai bereits aufgeladen?\n\nDer Button funktioniert nur wenn tatsächlich Budget vorhanden ist.')) return
-              try { await resetBudgetFlag(); await triggerAutoPipeline(); loadAll() } catch(e) { alert(e.message) }
+              try { await resetBudgetFlag(); await triggerAutoPipeline(); loadAll() } catch(e) { toast.error(e.message) }
             }}
           >✓ Budget aufgeladen → Fortsetzen</button>
         </div>
@@ -889,7 +891,7 @@ export default function Dashboard() {
                       const r = await bulkArchiveIdeas({ status: 'new' })
                       setCleanupMsg(`✓ ${r.archived} Ideen archiviert`)
                       setTimeout(() => { setCleanupMsg(null); loadAll() }, 4000)
-                    } catch(e) { alert('Fehler: ' + e.message) }
+                    } catch(e) { toast.error('Fehler: ' + e.message) }
                     setCleaningUp(false)
                   }}
                   disabled={cleaningUp}

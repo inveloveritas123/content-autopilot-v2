@@ -1,4 +1,5 @@
 import { useState, useEffect, Fragment } from 'react'
+import { useToast } from './ui/Toast'
 import { Cpu, Plus, Trash2, Zap, CheckCircle2, XCircle, Loader2, Star, Eye, EyeOff, Pencil, Check, X, FlaskConical, RotateCcw } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { getLLMProviders, createLLMProvider, updateLLMProvider, deleteLLMProvider, testLLMProvider, getLLMCostHistory, benchmarkLLM, getLlmRouting, updateSettings, resetLLMProviderCost, listProviderModels, probeTestProvider } from '../api'
@@ -53,6 +54,7 @@ const TASK_MODEL_MAP = [
 // ProviderCard with inline Edit accordion
 // ——————————————————————————————————————————————————————
 function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLimit, onUpdateModel, onResetCost, onUpdate, onToggleActive, testing }) {
+  const { toast } = useToast()
   const statusColor = provider.last_test_status === 'ok' ? 'text-emerald-500' : provider.last_test_status === 'error' ? 'text-red-500' : 'text-gray-400'
   const StatusIcon = provider.last_test_status === 'ok' ? CheckCircle2 : provider.last_test_status === 'error' ? XCircle : Cpu
 
@@ -162,7 +164,7 @@ function ProviderCard({ provider, onTest, onDelete, onToggleDefault, onUpdateLim
       await onUpdate(provider.id, payload)
       setEditOpen(false)
     } catch (e) {
-      alert('Fehler: ' + e.message)
+      toast.error('Fehler: ' + e.message)
     }
     setEditSaving(false)
   }
@@ -729,6 +731,7 @@ const ROUTING_MODELS = [
 ]
 
 function RoutingOverridePanel() {
+  const { toast } = useToast()
   const [routing, setRouting] = useState(null)
   const [overrides, setOverrides] = useState({})
   const [saving, setSaving] = useState(null)
@@ -752,7 +755,7 @@ function RoutingOverridePanel() {
       setSavedMsg(purpose)
       setTimeout(() => setSavedMsg(null), 2000)
     } catch (e) {
-      alert('Fehler: ' + e.message)
+      toast.error('Fehler: ' + e.message)
     }
     setSaving(null)
   }
@@ -835,6 +838,7 @@ function RoutingOverridePanel() {
 // Add Provider Modal
 // ——————————————————————————————————————————————————————
 function AddProviderModal({ onClose, onSave }) {
+  const { toast } = useToast()
   const [step, setStep] = useState('select')   // 'select' | 'form'
   const [selectedType, setSelectedType] = useState(null)
   const [form, setForm] = useState({
@@ -944,7 +948,7 @@ function AddProviderModal({ onClose, onSave }) {
       onClose()
     } catch (e) {
       appendLog({ level: 'error', msg: `✗ Speichern fehlgeschlagen: ${e.message}` })
-      alert('Fehler: ' + e.message)
+      toast.error('Fehler: ' + e.message)
     }
     setSaving(false)
   }
@@ -1195,6 +1199,7 @@ function AddProviderModal({ onClose, onSave }) {
 // Main LLMSettings Component
 // ——————————————————————————————————————————————————————
 export default function LLMSettings() {
+  const { toast } = useToast()
   const [providers, setProviders] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -1260,15 +1265,15 @@ export default function LLMSettings() {
     try {
       const result = await testLLMProvider(id)
       if (result.status === 'ok') {
-        alert(`Verbindung OK! Latenz: ${result.latency_ms}ms`)
+        toast.success(`Verbindung OK! Latenz: ${result.latency_ms}ms`)
       } else if (result.http_status === 412) {
-        alert(`Budget erschoepft!\n\n${result.error}\n\nBitte auf https://requesty.ai einloggen und Guthaben aufladen.`)
+        toast.warning(`Budget erschoepft! ${result.error} Bitte auf https://requesty.ai einloggen und Guthaben aufladen.`)
       } else {
-        alert(`Test fehlgeschlagen:\n${result.error}`)
+        toast.error(`Test fehlgeschlagen: ${result.error}`)
       }
       await loadProviders()
     } catch (e) {
-      alert('Test-Fehler: ' + e.message)
+      toast.error('Test-Fehler: ' + e.message)
     }
     setTestingId(null)
   }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { useToast } from './ui/Toast'
 import TimeFilter from './TimeFilter'
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card'
 import { Button } from './ui/Button'
@@ -26,6 +27,7 @@ const statusLabels = {
 }
 
 export default function Pipeline() {
+  const { toast } = useToast()
   const [statusFilter, setStatusFilter] = useState('')
   const [sourceFilter, setSourceFilter] = useState('')
   const [sourceTypeFilter, setSourceTypeFilter] = useState('')
@@ -180,13 +182,13 @@ export default function Pipeline() {
 
   const handleSyncTranscripts = async () => {
     const result = await syncTranscripts()
-    alert(`Sync: ${result.synced} Transkripte zugeordnet (${result.checked} geprueft, ${result.available_transcripts} VoiceScriptor-Transkripte vorhanden)`)
+    toast.success(`Sync: ${result.synced} Transkripte zugeordnet (${result.checked} geprueft, ${result.available_transcripts} VoiceScriptor-Transkripte vorhanden)`)
     refetch()
   }
 
   const handleUpdateViews = async () => {
     await updateAllViews()
-    alert('View-Update gestartet (laeuft im Hintergrund)')
+    toast.info('View-Update gestartet (laeuft im Hintergrund)')
   }
 
   if (loading) return <div className="text-gray-500">Lade Pipeline...</div>
@@ -266,7 +268,7 @@ export default function Pipeline() {
                   await triggerAutoPipeline()
                   refetchPipelineStatus()
                   refetchProgress()
-                } catch(e) { alert('Fehler: ' + e.message) }
+                } catch(e) { toast.error('Fehler: ' + e.message) }
               }}
               title="Flag löschen + 100 Items starten"
             >▶ Fortsetzen (100)</button>
@@ -281,10 +283,10 @@ export default function Pipeline() {
                   if (!window.confirm(`Alle ${breakdown.total.toLocaleString('de-DE')} Items in Analyse-Queue einreihen?\n\nQuellenaufschlüsselung:\n${lines}\n\nGeschätzte Kosten: $${minCost}–$${maxCost}\n\nTipp: In den Quellen einen "Analyse (N)" Button klicken um nur eine Quelle zu verarbeiten.`)) return
                   await resetBudgetFlag()
                   const r = await queueAllAnalysis()
-                  alert(`${r.queued} Items eingereiht!`)
+                  toast.success(`${r.queued} Items eingereiht!`)
                   refetchPipelineStatus()
                   refetchProgress()
-                } catch(e) { alert('Fehler: ' + e.message) }
+                } catch(e) { toast.error('Fehler: ' + e.message) }
               }}
               title="Alle transkribierten Items auf einmal in die Queue (zeigt Aufschlüsselung)"
             >⚡ Alle einreihen</button>
@@ -299,9 +301,9 @@ export default function Pipeline() {
           <Button size="sm" variant="secondary" onClick={async () => {
             try {
               const r = await resetStuckItems()
-              if (r.reset > 0) { alert(`${r.reset} feststeckende Items zurückgesetzt.`); refetch() }
-              else alert('Keine feststeckenden Items gefunden.')
-            } catch(e) { alert('Fehler: ' + e.message) }
+              if (r.reset > 0) { toast.success(`${r.reset} feststeckende Items zurückgesetzt.`); refetch() }
+              else toast.info('Keine feststeckenden Items gefunden.')
+            } catch(e) { toast.error('Fehler: ' + e.message) }
           }} title="Items die >15min in 'transcribing/analyzing/generating' stecken zurücksetzen">
             Stuck reset
           </Button>
@@ -310,7 +312,7 @@ export default function Pipeline() {
             try {
               await batchTranscribe()
               setShowLog(true)
-            } catch (e) { alert('Fehler: ' + e.message) }
+            } catch (e) { toast.error('Fehler: ' + e.message) }
           }} disabled={batchRunning || newCount === 0}>
             {batchRunning ? 'Batch laeuft...' : `Alle transkribieren (${newCount})`}
           </Button>
@@ -320,9 +322,9 @@ export default function Pipeline() {
                 if (!confirm(`${failedCount} fehlgeschlagene Transkriptionen neu starten?`)) return
                 try {
                   const r = await bulkRetryFailed()
-                  alert(`${r.retried} Items zurückgesetzt und neu gestartet.`)
+                  toast.success(`${r.retried} Items zurückgesetzt und neu gestartet.`)
                   setTimeout(refetch, 1500)
-                } catch (e) { alert('Fehler: ' + e.message) }
+                } catch (e) { toast.error('Fehler: ' + e.message) }
               }}>
                 Retry Fehler ({failedCount})
               </Button>
@@ -330,9 +332,9 @@ export default function Pipeline() {
                 if (!confirm(`${failedCount} dauerhaft fehlgeschlagene Items archivieren? (z.B. Spotify-Podcasts ohne Audio-Zugriff)\n\nSie bleiben in der DB, erscheinen aber nicht mehr in der Pipeline.`)) return
                 try {
                   const r = await bulkArchiveFailed()
-                  alert(r.message)
+                  toast.success(r.message)
                   setTimeout(refetch, 1500)
-                } catch (e) { alert('Fehler: ' + e.message) }
+                } catch (e) { toast.error('Fehler: ' + e.message) }
               }}>
                 Archivieren ({failedCount})
               </Button>
@@ -427,10 +429,10 @@ export default function Pipeline() {
                             if (!window.confirm(`${src.count} Items von "${src.name}" in Analyse-Queue einreihen?\n\nGeschätzte Kosten: $${(src.count * 0.0005).toFixed(2)}–$${(src.count * 0.003).toFixed(2)}`)) return
                             try {
                               const r = await queueAllAnalysis(src.id)
-                              alert(`${r.queued} Items eingereiht!`)
+                              toast.success(`${r.queued} Items eingereiht!`)
                               loadBreakdown()
                               refetchPipelineStatus()
-                            } catch(e) { alert('Fehler: ' + e.message) }
+                            } catch(e) { toast.error('Fehler: ' + e.message) }
                           }}
                           className="px-2 py-0.5 text-xs bg-teal-600 hover:bg-teal-700 text-white rounded font-medium transition-colors"
                           title="Items dieser Quelle analysieren"
@@ -443,11 +445,11 @@ export default function Pipeline() {
                               if (!window.confirm(`Alle ${src.count} Items von "${src.name}" archivieren?\n\nDie Items bleiben in der DB, werden aber nicht mehr verarbeitet.`)) return
                               try {
                                 const r = await archiveSourceItems(src.id)
-                                alert(r.archived > 0 ? `${r.archived} Items archiviert.` : 'Keine Items archiviert.')
+                                toast.success(r.archived > 0 ? `${r.archived} Items archiviert.` : 'Keine Items archiviert.')
                                 loadBreakdown()
                                 refetchPipelineStatus()
                                 refetchProgress()
-                              } catch(e) { alert('Fehler: ' + e.message) }
+                              } catch(e) { toast.error('Fehler: ' + e.message) }
                             }}
                             className="px-2 py-0.5 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded font-medium transition-colors"
                             title="Items dieser Quelle archivieren (aus Pipeline entfernen)"
@@ -760,11 +762,11 @@ export default function Pipeline() {
                   <a href={detail.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-600 hover:underline">Video ansehen</a>
                 )}
                 <div className="flex gap-2 pt-2">
-                  {detail.status === 'new' && <Button size="sm" onClick={async () => { await transcribeItem(detail.id); alert('Transkription gestartet') }}>Transkribieren</Button>}
-                  {detail.status === 'transcribed' && <Button size="sm" onClick={async () => { await analyzeItem(detail.id); alert('Analyse gestartet') }}>Analysieren</Button>}
-                  {detail.status === 'analyzed' && <Button size="sm" onClick={async () => { await generateContent(detail.id); alert('Content-Generierung gestartet') }}>Content generieren</Button>}
+                  {detail.status === 'new' && <Button size="sm" onClick={async () => { await transcribeItem(detail.id); toast.info('Transkription gestartet') }}>Transkribieren</Button>}
+                  {detail.status === 'transcribed' && <Button size="sm" onClick={async () => { await analyzeItem(detail.id); toast.info('Analyse gestartet') }}>Analysieren</Button>}
+                  {detail.status === 'analyzed' && <Button size="sm" onClick={async () => { await generateContent(detail.id); toast.info('Content-Generierung gestartet') }}>Content generieren</Button>}
                   {(detail.status === 'transcription_failed' || detail.status === 'needs_voicescriptor') && (
-                    <Button size="sm" variant="danger" onClick={async () => { await retryTranscribe(detail.id); alert('Retry gestartet (4-Stufen-Fallback)') }}>Erneut versuchen</Button>
+                    <Button size="sm" variant="danger" onClick={async () => { await retryTranscribe(detail.id); toast.info('Retry gestartet (4-Stufen-Fallback)') }}>Erneut versuchen</Button>
                   )}
                 </div>
               </div>

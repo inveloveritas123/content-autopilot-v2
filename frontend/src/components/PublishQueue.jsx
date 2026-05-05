@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useToast } from './ui/Toast'
 import { CheckCircle2, Copy, Check, Clock, CalendarDays, Linkedin, ArrowUpRight, Flame } from 'lucide-react'
 import { getScheduledPosts, markPublished } from '../api'
 
@@ -25,6 +26,7 @@ function timeLabel(dateStr) {
 }
 
 function PostQueueCard({ post, onPublished }) {
+  const { toast } = useToast()
   const [copied, setCopied] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [done, setDone] = useState(false)
@@ -43,7 +45,7 @@ function PostQueueCard({ post, onPublished }) {
     } catch(e) {
       const detail = e?.detail || e?.message || ''
       if (typeof detail === 'object' && detail?.error === 'unapproved_post') {
-        alert('Dieser Post muss zuerst in der App freigegeben werden, bevor er veröffentlicht werden kann.')
+        toast.warning('Dieser Post muss zuerst in der App freigegeben werden, bevor er veröffentlicht werden kann.')
       } else {
         console.error(e)
       }

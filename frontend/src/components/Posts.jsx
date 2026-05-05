@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, Component } from 'react'
+import { useToast } from './ui/Toast'
 import { FileText, Check, Copy, Edit3, Eye, ThumbsUp, ThumbsDown, BarChart3, Send, X, Linkedin, MessageSquare, Repeat2, ArrowUpRight, CheckSquare, Square, AlertTriangle, Download, Zap, Search, Sparkles, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 import { getContentList, getContentPiece, approveContent, bulkApproveContent, bulkRejectContent, bulkPublishContent, submitEditDiff, submitPerformance, suggestHashtags, repurposeContent, getHookLibrary, getBestPostingTimes, generateCarousel, previewCarousel, downloadContentExport, autoSchedulePosts, updateContentPillar, updateContent, quickCreatePost, createContentSeries, postFromUrl, rewriteContent, generateVariants, repurposeFormats, predictPerformance, rateItemQuality, getSources, saveDirectPost, markPublished, updateContentTags, getCarouselTemplates } from '../api'
 
@@ -2270,6 +2271,7 @@ function LeaderboardModal({ posts, onClose, onCommit }) {
 }
 
 export default function Posts() {
+  const { toast } = useToast()
   const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -2775,7 +2777,7 @@ export default function Posts() {
                 const r = await bulkRejectContent(null, sourceFilter)
                 setBulkMsg(`🗑 ${r.rejected} Entwürfe von "${srcName}" abgelehnt`)
                 setTimeout(() => { setBulkMsg(null); loadPosts() }, 2500)
-              } catch (e) { alert('Fehler: ' + e.message) }
+              } catch (e) { toast.error('Fehler: ' + e.message) }
             }}
             className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 transition-colors"
           >
