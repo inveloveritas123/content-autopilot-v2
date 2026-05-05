@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     voicescriptor_bot_token: Optional[str] = None
     voicescriptor_chat_id: Optional[str] = None
 
+    # Pipeline Throttle (#156)
+    max_calls_per_tenant_per_hour: int = 200
+    max_calls_global_per_hour: int = 1000
+
     # Telegram Bot (Content-Autopilot)
     telegram_bot_token: Optional[str] = None
     telegram_admin_chat_id: Optional[str] = None  # TELEGRAM_ADMIN_CHAT_ID env var

@@ -465,3 +465,11 @@ export const getLLMAnalyticsCSVUrl = (params) => {
   const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))).toString()
   return `${base}/api/analytics/llm-calls.csv${qs ? '?' + qs : ''}`
 }
+
+// Throttle Status (#156)
+export function getThrottleStatus(adminToken, tenantId) {
+  const qs = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : ''
+  return request(`/admin/throttle-status${qs}`, {
+    headers: { 'X-Admin-Token': adminToken },
+  })
+}

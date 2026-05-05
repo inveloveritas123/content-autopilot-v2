@@ -27,6 +27,11 @@ class BudgetExceededError(Exception):
     pass
 
 
+# RateLimitExceededError is defined in services.throttle — re-export here so
+# callers only need to import from services.llm (one-stop import).
+from services.throttle import RateLimitExceededError  # noqa: E402 (after BudgetExceededError)
+
+
 def _maybe_send_global_cap_alert(spent_usd: float, cap_usd: float, today) -> None:
     """Send a Telegram warning once per day when global cost reaches 50% of cap.
 
@@ -164,6 +169,8 @@ class LLMService:
                     raise ValueError(f"Unknown model: {model}")
             except BudgetExceededError:
                 raise  # No retry for budget exceeded — it won't help
+            except RateLimitExceededError:
+                raise  # No retry for rate-limit exceeded — it won't help
             except Exception as e:
                 last_error = e
                 wait = 2 ** attempt
@@ -264,6 +271,29 @@ class LLMService:
             raise
         except Exception:
             pass  # Cap check failure must not block calls (fail-open for availability)
+
+        # ── Throttle pre-call check (#156) ─────────────────────────────────
+        # Second line of defense after Cost-Cap. Protects against latency
+        # cascade and provider rate-limits (e.g. 9.279 creative-calls anomaly).
+        # tenant_isolation enforced by WHERE tenant_id = :t in the SQL query.
+        try:
+            from services.throttle import check_and_record_throttle
+            _tid_for_throttle = tid_ctx  # already read above
+            if _tid_for_throttle:
+                with sync_session_factory() as _ts:
+                    _allowed, _tc, _gc = check_and_record_throttle(
+                        _ts, _tid_for_throttle, purpose
+                    )
+                if not _allowed:
+                    raise RateLimitExceededError(
+                        f"Throttle: tenant {_tid_for_throttle} at {_tc} calls/h "
+                        f"(limit={settings.max_calls_per_tenant_per_hour}). "
+                        "Pipeline paused for this tenant until next hour window."
+                    )
+        except RateLimitExceededError:
+            raise
+        except Exception:
+            pass  # Throttle check failure must not block calls (fail-open)
 
         # Try DB-configured provider first
         task = "analysis" if model in ("gemini-flash",) else "creative" if model in ("claude-sonnet",) else "all"

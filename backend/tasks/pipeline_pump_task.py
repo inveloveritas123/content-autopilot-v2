@@ -8,6 +8,9 @@ Workflow (ohne manuelle Intervention):
 3. content_ready ohne Ideen → auto_generate_ideas.delay()
 
 Limits pro Lauf: 30 / 30 / 20 — verhindert Überlastung des LLM-Proxys.
+
+Throttle (#156): Pre-Enqueue-Check verhindert Enqueue wenn Tenant bereits
+MAX_CALLS_PER_TENANT_PER_HOUR oder MAX_CALLS_GLOBAL_PER_HOUR erreicht hat.
 """
 import logging
 from datetime import datetime, timedelta
@@ -18,6 +21,7 @@ from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from models.source_item import SourceItem
 from models.content_idea import ContentIdea
+from models.idea_variant import IdeaVariant
 from models.source import Source
 
 logger = logging.getLogger(__name__)
@@ -25,6 +29,44 @@ logger = logging.getLogger(__name__)
 ANALYZE_LIMIT = 100   # was 30 — 2 workers @ -c 2 can handle 100 per 10-min window easily
 GENERATE_LIMIT = 50   # was 30
 IDEATION_LIMIT = 30   # was 20
+
+
+def _get_tenant_id_for_item(session, item_id) -> str | None:
+    """Return tenant_id for a SourceItem via its Source join (sync query)."""
+    row = session.execute(
+        text(
+            "SELECT s.tenant_id FROM source_items si "
+            "JOIN sources s ON s.id = si.source_id "
+            "WHERE si.id = :iid"
+        ),
+        {"iid": str(item_id)},
+    ).fetchone()
+    return str(row[0]) if row else None
+
+
+def _throttle_check_for_enqueue(session, tenant_id: str, task_name: str) -> bool:
+    """
+    Pre-enqueue throttle check (Issue #156).
+
+    Returns True if enqueue is allowed, False if throttled.
+    Logs WARNING and inserts throttle_events row when throttled.
+    Fail-open: returns True on any unexpected error.
+    """
+    try:
+        from services.throttle import check_and_record_throttle
+        allowed, tenant_count, global_count = check_and_record_throttle(
+            session, tenant_id, task_name
+        )
+        if not allowed:
+            logger.warning(
+                f"pump_pipeline: enqueue SKIPPED (throttled) "
+                f"tenant={tenant_id} task={task_name} "
+                f"tenant_calls_1h={tenant_count} global_calls_1h={global_count}"
+            )
+        return allowed
+    except Exception as exc:
+        logger.warning(f"_throttle_check_for_enqueue error (fail-open): {exc}")
+        return True
 
 
 @celery_app.task(name="tasks.pipeline_pump_task.pump_pipeline")
@@ -86,7 +128,12 @@ def pump_pipeline():
                 .limit(ANALYZE_LIMIT)
             ).scalars().all()
 
+            stats["throttled"] = 0
             for item_id in transcribed:
+                tenant_id = _get_tenant_id_for_item(session, item_id)
+                if tenant_id and not _throttle_check_for_enqueue(session, tenant_id, "analyze_item"):
+                    stats["throttled"] += 1
+                    continue
                 try:
                     from tasks.generate_task import analyze_item
                     analyze_item.delay(str(item_id))
@@ -113,6 +160,10 @@ def pump_pipeline():
             ).scalars().all()
 
             for item_id in analyzed:
+                tenant_id = _get_tenant_id_for_item(session, item_id)
+                if tenant_id and not _throttle_check_for_enqueue(session, tenant_id, "generate_content"):
+                    stats["throttled"] = stats.get("throttled", 0) + 1
+                    continue
                 try:
                     from tasks.generate_task import generate_content
                     generate_content.delay(str(item_id))
@@ -143,6 +194,10 @@ def pump_pipeline():
             ).scalars().all()
 
             for item_id in ready_no_ideas:
+                tenant_id = _get_tenant_id_for_item(session, item_id)
+                if tenant_id and not _throttle_check_for_enqueue(session, tenant_id, "auto_generate_ideas"):
+                    stats["throttled"] = stats.get("throttled", 0) + 1
+                    continue
                 try:
                     from tasks.ideation_task import auto_generate_ideas
                     auto_generate_ideas.delay(str(item_id))
@@ -154,23 +209,23 @@ def pump_pipeline():
         # ── 4. Phase 4.3: ideas without variants → enqueue p12_variants ─────
         if not budget_exceeded:
             stats["variants"] = 0
+            # Use ORM-style .not_in() to avoid text()-tuple bind issues (M3 fix).
+            # text() IN :param with a Python tuple is not safe without
+            # bindparam(..., expanding=True) and is inconsistent with the
+            # ORM pattern used in the ideation block above (see .not_in() line).
             ideas_with_variants = session.execute(
-                text("SELECT DISTINCT idea_id FROM idea_variants")
+                select(IdeaVariant.idea_id).distinct()
             ).scalars().all()
             cutoff_recent = datetime.utcnow() - timedelta(days=7)
             new_ideas = session.execute(
-                text(
-                    "SELECT id FROM content_ideas "
-                    "WHERE created_at >= :cut "
-                    "  AND id NOT IN :have_variants "
-                    "  AND status IN ('new', 'questions_pending', 'pending') "
-                    "ORDER BY created_at DESC LIMIT :lim"
-                ),
-                {
-                    "cut": cutoff_recent,
-                    "have_variants": tuple(ideas_with_variants) or ("00000000-0000-0000-0000-000000000000",),
-                    "lim": 20,
-                },
+                select(ContentIdea.id)
+                .where(
+                    ContentIdea.created_at >= cutoff_recent,
+                    ContentIdea.id.not_in(ideas_with_variants) if ideas_with_variants else True,
+                    ContentIdea.status.in_(["new", "questions_pending", "pending"]),
+                )
+                .order_by(ContentIdea.created_at.desc())
+                .limit(20)
             ).fetchall()
             for r in new_ideas:
                 try:
@@ -184,6 +239,7 @@ def pump_pipeline():
     logger.info(
         f"Pipeline pump: analyze={stats['analyze']} generate={stats['generate']} "
         f"ideation={stats['ideation']} variants={stats.get('variants', 0)} "
-        f"errors={stats['errors']} stuck_reset={stats['stuck_reset']}"
+        f"errors={stats['errors']} stuck_reset={stats['stuck_reset']} "
+        f"throttled={stats.get('throttled', 0)}"
     )
     return stats

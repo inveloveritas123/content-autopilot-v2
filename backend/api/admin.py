@@ -265,6 +265,71 @@ async def apply_tenant_model(tenant_id: str, model_id: str, db=Depends(get_db)):
     return {"status": "ok", "tenant_id": tenant_id, "model_id": model_id}
 
 
+@router.get("/throttle-status", dependencies=[Depends(require_admin)])
+async def get_throttle_status(tenant_id: Optional[str] = None, db=Depends(get_db)):
+    """
+    Throttle-Status Endpoint — Issue #156.
+
+    Returns current call counts vs limits for UI card and alerting.
+    If tenant_id is given, returns per-tenant count.
+    Always returns global count (all tenants).
+
+    Superadmin-Endpoint: tenant_id is an optional filter, not an auth-match.
+    In multi-tenant deployments, require_admin already enforces superadmin token.
+    If the token is ever made tenant-scoped, add a match check here (S1).
+
+    Response schema:
+      tenant_count_1h: int — calls by this tenant in last hour (0 if tenant_id not given)
+      tenant_limit: int
+      global_count_1h: int
+      global_limit: int
+      throttled_24h: int — throttle_events rows in last 24 hours
+      currently_throttled: bool — tenant_count_1h >= tenant_limit OR global_count_1h >= global_limit
+    """
+    from config import settings as _cfg
+
+    tenant_count_1h = 0
+    if tenant_id:
+        row = await db.execute(
+            text(
+                "SELECT COUNT(*) FROM llm_call_logs "
+                "WHERE tenant_id = :t AND created_at > NOW() - INTERVAL '1 hour' "
+                "AND deleted_at IS NULL"
+            ),
+            {"t": tenant_id},
+        )
+        tenant_count_1h = int((row.fetchone() or [0])[0])
+
+    g_row = await db.execute(
+        text(
+            "SELECT COUNT(*) FROM llm_call_logs "
+            "WHERE created_at > NOW() - INTERVAL '1 hour' AND deleted_at IS NULL"
+        )
+    )
+    global_count_1h = int((g_row.fetchone() or [0])[0])
+
+    t24_row = await db.execute(
+        text("SELECT COUNT(*) FROM throttle_events WHERE created_at > NOW() - INTERVAL '24 hours'")
+    )
+    throttled_24h = int((t24_row.fetchone() or [0])[0])
+
+    tenant_limit = _cfg.max_calls_per_tenant_per_hour
+    global_limit = _cfg.max_calls_global_per_hour
+    currently_throttled = (
+        (tenant_id is not None and tenant_count_1h >= tenant_limit)
+        or global_count_1h >= global_limit
+    )
+
+    return {
+        "tenant_count_1h": tenant_count_1h,
+        "tenant_limit": tenant_limit,
+        "global_count_1h": global_count_1h,
+        "global_limit": global_limit,
+        "throttled_24h": throttled_24h,
+        "currently_throttled": currently_throttled,
+    }
+
+
 @router.post("/admin-token/rotate", dependencies=[Depends(require_admin)])
 async def rotate_admin_token():
     """Generate a new admin token and persist its hash to disk.
