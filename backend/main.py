@@ -219,6 +219,9 @@ app.include_router(data_deletion_router, prefix="/api", tags=["DataDeletion"])
 from api.memory_viz import router as memory_viz_router
 app.include_router(memory_viz_router, prefix="/api", tags=["MemoryViz"])
 
+from api.tenant_init import router as tenant_init_router
+app.include_router(tenant_init_router, prefix="/api", tags=["TenantInit"])
+
 
 @app.get("/api/health")
 async def health():

@@ -12,4 +12,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN groupadd -r app && useradd -r -g app -u 1000 app \
+    && mkdir -p /app/data \
+    && chown -R app:app /app
+
+USER app
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--loop", "asyncio"]

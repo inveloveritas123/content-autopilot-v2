@@ -120,7 +120,7 @@ export default function CookieSetup({ open, onClose, onSaved }) {
         <details className="text-xs text-gray-400">
           <summary className="cursor-pointer hover:text-gray-600">Alternativ: Per Terminal hochladen</summary>
           <div className="mt-2 bg-gray-50 dark:bg-gray-800 p-2 rounded font-mono select-all">
-            scp -P 10022 cookies.txt meister@152.53.142.163:/opt/content-autopilot/data/youtube_cookies.txt
+            scp -P 10022 cookies.txt meister@152.53.142.163:/opt/content-autopilot-v2/data/youtube_cookies.txt
           </div>
         </details>
       </div>

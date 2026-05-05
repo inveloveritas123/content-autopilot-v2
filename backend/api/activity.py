@@ -1,5 +1,6 @@
 """Activity log and pipeline progress tracking."""
 from datetime import datetime, timedelta
+import os
 import uuid
 from typing import Optional
 
@@ -210,7 +211,12 @@ async def save_cookies(
     from pathlib import Path
     from services.cookie_validator import sync_cookies_to_voicescriptor
 
-    cookie_file = Path("/opt/content-autopilot/data/youtube_cookies.txt")
+    cookie_file = Path(
+        os.environ.get(
+            "YT_COOKIES_PATH",
+            "/opt/content-autopilot-v2/data/youtube_cookies.txt",
+        )
+    )
     cookie_file.parent.mkdir(parents=True, exist_ok=True)
     cookie_file.write_text(cookie_text, encoding="utf-8")
 

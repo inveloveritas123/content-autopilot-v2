@@ -7,7 +7,10 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-COOKIE_FILE = "/opt/content-autopilot/data/youtube_cookies.txt"
+COOKIE_FILE = os.environ.get(
+    "YT_COOKIES_PATH",
+    "/opt/content-autopilot-v2/data/youtube_cookies.txt",
+)
 VS_COOKIE_FILE = "/home/meister/voicescriptor-web/data/cookies.txt"
 MAX_COOKIE_AGE_HOURS = 24
 
