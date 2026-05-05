@@ -460,6 +460,11 @@ export const getMemoryChunkFullText = (chunkId, reason) =>
   request(`/memory/viz-data/${chunkId}/full`, { method: 'POST', body: { confirm: true, reason } })
 export const getLLMAnalyticsAnomaly = (params) => request('/analytics/llm-anomaly', { params })
 
+// #155 Cost-Monitoring: Trend, Cache-Hit-Rate, Runaway-Detection
+export const getCostTrend = (params) => request('/analytics/cost-trend', { params })
+export const getCacheHitRate = (params) => request('/analytics/cache-hit-rate', { params })
+export const getRunawayDetection = (params) => request('/analytics/runaway-detection', { params })
+
 export const getLLMAnalyticsCSVUrl = (params) => {
   const base = window.location.origin
   const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))).toString()

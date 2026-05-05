@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  DollarSign, BarChart3, Zap, Download, RefreshCw, TrendingUp, Cpu, Activity, AlertTriangle, Clock
+  DollarSign, BarChart3, Zap, Download, RefreshCw, TrendingUp, Cpu, Activity, AlertTriangle, Clock, Shield
 } from 'lucide-react'
 import {
   getLLMAnalyticsSummary,
@@ -11,7 +11,13 @@ import {
   getLLMAnalyticsByHour,
   getLLMAnalyticsAnomaly,
   getContentByCategory,
+  getCostTrend,
+  getCacheHitRate,
+  getRunawayDetection,
 } from '../api'
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, Legend, ReferenceLine, ResponsiveContainer,
+} from 'recharts'
 
 function fmtTokens(n) {
   if (!n) return '0'
@@ -54,6 +60,289 @@ function HBar({ label, value, max, sub, color = 'bg-primary-500' }) {
   )
 }
 
+// -----------------------------------------------------------------------
+// #155 Trends & Cache Sub-Components
+// -----------------------------------------------------------------------
+
+const HEATMAP_DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
+
+function HeatmapCell({ count, alert }) {
+  const intensity = Math.min(1, (count || 0) / 500)
+  const bg = alert
+    ? 'bg-red-500'
+    : intensity > 0.7 ? 'bg-orange-400' : intensity > 0.3 ? 'bg-amber-300' : intensity > 0 ? 'bg-emerald-200' : 'bg-gray-100'
+  return (
+    <div
+      className={`w-6 h-6 rounded-sm ${bg} flex items-center justify-center`}
+      title={`${count} Calls${alert ? ' — ALERT >500' : ''}`}
+    />
+  )
+}
+
+function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onReload }) {
+  if (loading) {
+    return (
+      <div className="py-12 text-center text-ink-muted text-sm">Lade Trend-Daten...</div>
+    )
+  }
+  if (error) {
+    return (
+      <div className="py-8 flex flex-col items-center gap-3">
+        <p className="text-red-600 text-sm">{error}</p>
+        <button
+          onClick={onReload}
+          className="min-h-[44px] px-4 py-2 text-xs bg-surface-100 border border-surface-border rounded-lg hover:bg-gray-50"
+        >
+          Erneut laden
+        </button>
+      </div>
+    )
+  }
+
+  // --- Cache-Hit-Rate KPI Card ---
+  const avg7d = cacheHitRate?.avg_7d
+  const cacheAlert = cacheHitRate?.alert === true
+
+  // --- Cost-Trend Recharts data ---
+  const trendDays = costTrend?.days || []
+  const deployMarkers = costTrend?.deploy_markers || []
+
+  // Flatten to recharts format: [{date, total_cost_cents, total_input_tokens, total_output_tokens}]
+  const chartData = trendDays.map(d => ({
+    date: d.date,
+    cost: d.total?.total_cost_cents ?? 0,
+    input: d.total?.total_input_tokens ?? 0,
+    output: d.total?.total_output_tokens ?? 0,
+  }))
+
+  // --- Top Killers ---
+  const topKillers = runaway?.top_killers || []
+
+  // --- Heatmap ---
+  const heatmapRaw = runaway?.heatmap || []
+  // Build 7x24 grid keyed by (day_of_week, hour_of_day)
+  const heatmapGrid = {}
+  for (const cell of heatmapRaw) {
+    const key = `${cell.day_of_week}_${cell.hour_of_day}`
+    heatmapGrid[key] = cell
+  }
+
+  async function downloadCSV(endpoint, filename) {
+    const key = localStorage.getItem('apiKey') || ''
+    try {
+      const res = await fetch(`/api/analytics/${endpoint}?format=csv`, {
+        headers: { 'X-API-Key': key },
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('CSV-Download fehlgeschlagen:', err)
+    }
+  }
+
+  const hasTrendData = chartData.length > 0
+
+  return (
+    <div className="space-y-6 pt-2">
+      {/* 1. Cache-Hit-Rate KPI */}
+      <div className={`rounded-xl border p-4 ${cacheAlert ? 'bg-amber-50 border-amber-300' : 'bg-white border-surface-border'}`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+          <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+            <Zap className="w-4 h-4" /> Cache-Hit-Rate (7-Tage-Avg)
+          </h3>
+          <button
+            onClick={() => downloadCSV('cache-hit-rate', 'cache-hit-rate.csv')}
+            className="text-xs px-3 py-2 min-h-[44px] flex items-center bg-surface-100 border border-surface-border rounded-lg hover:bg-gray-50"
+          >
+            <Download className="w-3 h-3 mr-1" /> CSV
+          </button>
+        </div>
+        {avg7d === null || avg7d === undefined ? (
+          <p className="text-sm text-ink-muted">Noch keine Daten (mindestens 7 Tage nötig).</p>
+        ) : (
+          <div className="flex items-baseline gap-3">
+            <span className={`text-4xl font-bold ${cacheAlert ? 'text-amber-700' : 'text-emerald-600'}`}>
+              {(avg7d * 100).toFixed(1)}%
+            </span>
+            <span className="text-xs text-ink-muted">7-Tage-Durchschnitt</span>
+          </div>
+        )}
+        {cacheAlert && (
+          <div className="mt-2 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700 font-medium">
+              Cache-Hit-Rate unter 30% — #127 Auto-Caching prüfen!
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* 2. Cost-Trend Line Chart */}
+      <div className="bg-white rounded-xl border border-surface-border p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+            <TrendingUp className="w-4 h-4" /> Cost-Trend (30 Tage, Cent)
+          </h3>
+          <button
+            onClick={() => downloadCSV('cost-trend', 'cost-trend.csv')}
+            className="text-xs px-3 py-2 min-h-[44px] flex items-center bg-surface-100 border border-surface-border rounded-lg hover:bg-gray-50"
+          >
+            <Download className="w-3 h-3 mr-1" /> CSV
+          </button>
+        </div>
+        {!hasTrendData ? (
+          <p className="text-sm text-ink-muted text-center py-6">Keine Daten in den letzten 30 Tagen.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={v => v.slice(5)} />
+              <YAxis tick={{ fontSize: 10 }} width={40} />
+              <Tooltip formatter={(v) => [`${v}¢`, 'Cost']} />
+              <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+              {deployMarkers.map(m => (
+                <ReferenceLine
+                  key={m.label}
+                  x={m.date.slice(0, 10)}
+                  stroke="#6366f1"
+                  strokeDasharray="4 2"
+                  label={{ value: m.label, position: 'top', fontSize: 9, fill: '#6366f1' }}
+                />
+              ))}
+              <Line type="monotone" dataKey="cost" stroke="#f59e0b" strokeWidth={2} dot={false} name="Cost (¢)" />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* 3. Token-Volumen-Trend */}
+      <div className="bg-white rounded-xl border border-surface-border p-4">
+        <h3 className="text-sm font-semibold text-ink flex items-center gap-2 mb-4">
+          <BarChart3 className="w-4 h-4" /> Token-Volumen-Trend (30 Tage)
+        </h3>
+        {!hasTrendData ? (
+          <p className="text-sm text-ink-muted text-center py-6">Keine Daten.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={v => v.slice(5)} />
+              <YAxis tick={{ fontSize: 10 }} width={48} tickFormatter={v => fmtTokens(v)} />
+              <Tooltip formatter={(v) => [fmtTokens(v), '']} />
+              <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+              {deployMarkers.map(m => (
+                <ReferenceLine
+                  key={m.label}
+                  x={m.date.slice(0, 10)}
+                  stroke="#6366f1"
+                  strokeDasharray="4 2"
+                />
+              ))}
+              <Line type="monotone" dataKey="input" stroke="#3b82f6" strokeWidth={2} dot={false} name="Input Tokens" />
+              <Line type="monotone" dataKey="output" stroke="#10b981" strokeWidth={2} dot={false} name="Output Tokens" />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* 4. Top-N Token-Killer */}
+      <div className="bg-white rounded-xl border border-surface-border p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" /> Top-20 Token-Killer (7 Tage)
+          </h3>
+          <button
+            onClick={() => downloadCSV('runaway-detection', 'runaway-detection.csv')}
+            className="text-xs px-3 py-2 min-h-[44px] flex items-center bg-surface-100 border border-surface-border rounded-lg hover:bg-gray-50"
+          >
+            <Download className="w-3 h-3 mr-1" /> CSV
+          </button>
+        </div>
+        {topKillers.length === 0 ? (
+          <p className="text-sm text-ink-muted text-center py-4">Keine Daten.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left min-w-[400px]">
+              <thead>
+                <tr className="border-b border-surface-border text-[10px] text-ink-muted uppercase tracking-wide">
+                  <th className="pb-2 pr-3">Task</th>
+                  <th className="pb-2 pr-3">Modell</th>
+                  <th className="pb-2 pr-3 text-right">Kosten (¢)</th>
+                  <th className="pb-2 text-right">Calls</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topKillers.map((k, i) => (
+                  <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="py-1.5 pr-3 font-medium text-ink">{k.task_name}</td>
+                    <td className="py-1.5 pr-3 text-ink-muted font-mono">{k.model}</td>
+                    <td className="py-1.5 pr-3 text-right font-mono">{k.total_cost_cents.toFixed(2)}</td>
+                    <td className="py-1.5 text-right text-ink-muted">{k.total_calls}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* 5. Calls-Heatmap: Tenant x Hour-of-Day */}
+      <div className="bg-white rounded-xl border border-surface-border p-4">
+        <h3 className="text-sm font-semibold text-ink flex items-center gap-2 mb-3">
+          <Clock className="w-4 h-4" /> Calls-Heatmap: Tag x Stunde (7 Tage)
+          <span className="text-[10px] font-normal text-ink-muted">rot = &gt;500/h</span>
+        </h3>
+        {heatmapRaw.length === 0 ? (
+          <p className="text-sm text-ink-muted text-center py-4">Keine Daten.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <div className="flex gap-1 min-w-[560px]">
+              {/* Y-Achse: Wochentage */}
+              <div className="flex flex-col gap-1 pt-6">
+                {HEATMAP_DAYS.map(d => (
+                  <div key={d} className="h-6 text-[10px] text-ink-muted flex items-center w-7 justify-end pr-1">{d}</div>
+                ))}
+              </div>
+              {/* Grid: 24 Spalten (Stunden) x 7 Zeilen (Tage) */}
+              <div className="flex flex-col gap-1">
+                {/* Header: Stunden */}
+                <div className="flex gap-1 mb-1">
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <div key={h} className="w-6 text-[8px] text-ink-muted text-center">{h}</div>
+                  ))}
+                </div>
+                {HEATMAP_DAYS.map((_, dow) => (
+                  <div key={dow} className="flex gap-1">
+                    {Array.from({ length: 24 }, (_, hour) => {
+                      const key = `${dow}_${hour}`
+                      const cell = heatmapGrid[key]
+                      return (
+                        <HeatmapCell
+                          key={hour}
+                          count={cell?.call_count || 0}
+                          alert={cell?.alert || false}
+                        />
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// -----------------------------------------------------------------------
+// Main Component
+// -----------------------------------------------------------------------
+
 export default function LLMAnalytics() {
   const [summary, setSummary] = useState(null)
   const [byTask, setByTask] = useState([])
@@ -75,6 +364,12 @@ export default function LLMAnalytics() {
     return { from: toYYYYMMDD(from), to: toYYYYMMDD(to) }
   })
   const [activeTab, setActiveTab] = useState('task')
+  // #155 Trend & Cache
+  const [costTrend, setCostTrend] = useState(null)
+  const [cacheHitRate, setCacheHitRate] = useState(null)
+  const [runaway, setRunaway] = useState(null)
+  const [trendLoading, setTrendLoading] = useState(false)
+  const [trendError, setTrendError] = useState(null)
 
   const apiParams = useMemo(() => ({
     from_date: dateRange.from || undefined,
@@ -113,6 +408,32 @@ export default function LLMAnalytics() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange])
 
+  async function loadTrendData() {
+    setTrendLoading(true)
+    setTrendError(null)
+    try {
+      const [trend, cache, rwd] = await Promise.all([
+        getCostTrend({ days: 30 }),
+        getCacheHitRate({ days: 30 }),
+        getRunawayDetection({}),
+      ])
+      setCostTrend(trend)
+      setCacheHitRate(cache)
+      setRunaway(rwd)
+    } catch (e) {
+      setTrendError(e.message)
+    } finally {
+      setTrendLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'trends') {
+      loadTrendData()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
   useEffect(() => {
     if (manualRequestyCost) localStorage.setItem('reconcile_requesty_usd', manualRequestyCost)
     if (manualRequestyTokens) localStorage.setItem('reconcile_requesty_tokens', manualRequestyTokens)
@@ -145,6 +466,7 @@ export default function LLMAnalytics() {
     { id: 'task', label: 'Nach Task', icon: TrendingUp },
     { id: 'model', label: 'Nach Modell', icon: Cpu },
     { id: 'day', label: 'Nach Tag', icon: BarChart3 },
+    { id: 'trends', label: 'Trends & Cache', icon: Shield },
   ]
 
   const presets = [
@@ -323,6 +645,17 @@ export default function LLMAnalytics() {
                   color="bg-accent-500"
                 />
               ))
+          )}
+
+          {activeTab === 'trends' && (
+            <TrendsCacheTab
+              loading={trendLoading}
+              error={trendError}
+              costTrend={costTrend}
+              cacheHitRate={cacheHitRate}
+              runaway={runaway}
+              onReload={loadTrendData}
+            />
           )}
         </div>
       </div>

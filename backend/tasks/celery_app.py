@@ -61,6 +61,11 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.voice_drift_task.check_drift_triggers",
         "schedule": crontab(minute=0),  # jede volle Stunde
     },
+    # #155 Cost-Monitoring: stündliche Alert-Checks
+    "check-cost-alerts-hourly": {
+        "task": "tasks.cost_alert_task.check_cost_alerts",
+        "schedule": crontab(minute=30),  # :30 — kein Konflikt mit drift (:00) und memory (:15)
+    },
     "check-model-availability-daily": {
         "task": "tasks.model_check_task.check_model_availability",
         "schedule": crontab(hour=6, minute=0),  # täglich 06:00
@@ -139,5 +144,6 @@ celery_app.conf.include = [
     "tasks.p05_industry_task",
     "tasks.p06_profile_extractor_task",
     "tasks.deletion_purge_task",
+    "tasks.cost_alert_task",
     "api.wizard",
 ]

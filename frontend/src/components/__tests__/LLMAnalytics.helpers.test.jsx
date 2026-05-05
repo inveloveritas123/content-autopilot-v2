@@ -87,6 +87,72 @@ describe('Provider-Reconciliation Diff-Logik', () => {
   })
 })
 
+// --- #155 Trends & Cache ---
+
+describe('TrendsCacheTab Hilfsfunktionen (#155)', () => {
+  // Cache-Hit-Rate Karte: Alert nur wenn avg_7d < 0.30
+  function shouldShowCacheAlert(avg7d, alert) {
+    return alert === true
+  }
+
+  test('alert=false → kein Alert-Banner', () => {
+    expect(shouldShowCacheAlert(0.45, false)).toBe(false)
+  })
+  test('alert=true → Alert-Banner', () => {
+    expect(shouldShowCacheAlert(0.22, true)).toBe(true)
+  })
+  test('avg7d=null → kein Alert (kein Warmup)', () => {
+    expect(shouldShowCacheAlert(null, false)).toBe(false)
+  })
+
+  // Heatmap-Cell: alert wenn call_count > 500
+  function heatmapAlert(count) {
+    return count > 500
+  }
+  test('499 Calls → kein Alert', () => {
+    expect(heatmapAlert(499)).toBe(false)
+  })
+  test('500 Calls → kein Alert (Schwelle exklusiv)', () => {
+    expect(heatmapAlert(500)).toBe(false)
+  })
+  test('501 Calls → Alert', () => {
+    expect(heatmapAlert(501)).toBe(true)
+  })
+
+  // chartData mapping aus costTrend
+  function mapTrendToChartData(days) {
+    return (days || []).map(d => ({
+      date: d.date,
+      cost: d.total?.total_cost_cents ?? 0,
+      input: d.total?.total_input_tokens ?? 0,
+      output: d.total?.total_output_tokens ?? 0,
+    }))
+  }
+  test('Empty days → empty chartData', () => {
+    expect(mapTrendToChartData([])).toEqual([])
+  })
+  test('null costTrend → empty chartData', () => {
+    expect(mapTrendToChartData(null)).toEqual([])
+  })
+  test('Valid day entry maps correctly', () => {
+    const days = [{
+      date: '2026-05-01',
+      total: { total_cost_cents: 12.5, total_input_tokens: 1000, total_output_tokens: 500 },
+      models: [],
+    }]
+    const result = mapTrendToChartData(days)
+    expect(result[0].cost).toBe(12.5)
+    expect(result[0].input).toBe(1000)
+    expect(result[0].output).toBe(500)
+  })
+  test('Day with missing total → defaults to 0', () => {
+    const days = [{ date: '2026-05-01', models: [] }]
+    const result = mapTrendToChartData(days)
+    expect(result[0].cost).toBe(0)
+    expect(result[0].input).toBe(0)
+  })
+})
+
 describe('auto_cache Toggle-Logik (Frontend-API-Layer)', () => {
   // Frontend-Snippet: forceSave-Override verhindert dass Save ohne Test funktioniert
   function canSave(testResult, forceSave) {

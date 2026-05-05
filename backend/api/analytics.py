@@ -4,7 +4,9 @@ import io
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+import uuid as _uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, text, func as sqlfunc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -445,6 +447,256 @@ async def llm_anomaly(
         "current_hour": current_hour_start.isoformat(),
         "history_buckets": len(history),
     }
+
+
+# --- #155 Cost-Monitoring: Trend, Cache-Hit-Rate, Runaway-Detection ---
+
+DEPLOY_MARKERS = [
+    {"date": "2026-05-03T11:59:00", "label": "#127 Auto-Caching"},
+    {"date": "2026-05-03T13:46:00", "label": "#123 Cost-Cap"},
+    {"date": "2026-05-05T07:50:00", "label": "#156 Throttle"},
+]
+
+
+def _csv_streaming_response(buf: io.StringIO, filename: str) -> StreamingResponse:
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/analytics/cost-trend")
+async def cost_trend(
+    days: int = Query(30, ge=1, le=365),
+    tenant_id: Optional[str] = Query(None),
+    format: Optional[str] = Query(None),
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """30-Tage Cost-Trend: GROUP BY DATE(created_at), model — inkl. Deploy-Marker."""
+    # Tenant-scope: der angemeldete Tenant darf nur seine eigenen Daten sehen
+    effective_tid = tenant.id
+    if tenant_id is not None:
+        try:
+            parsed = _uuid.UUID(str(tenant_id))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid tenant_id format")
+        if parsed != tenant.id:
+            raise HTTPException(status_code=403, detail="tenant_id mismatch")
+        effective_tid = parsed
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    day_col = sqlfunc.date(LLMCallLog.created_at).label("day")
+    rows = (await db.execute(
+        select(
+            day_col,
+            LLMCallLog.model,
+            sqlfunc.count(LLMCallLog.id).label("call_count"),
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens), 0).label("total_input_tokens"),
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label("total_output_tokens"),
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
+        )
+        .where(LLMCallLog.tenant_id == effective_tid, LLMCallLog.created_at >= cutoff)
+        .group_by(day_col, LLMCallLog.model)
+        .order_by(day_col, LLMCallLog.model)
+    )).all()
+
+    # Aggregate per day
+    days_map: dict = {}
+    for r in rows:
+        d = str(r.day)
+        if d not in days_map:
+            days_map[d] = {"date": d, "models": [], "total": {"total_input_tokens": 0, "total_output_tokens": 0, "total_cost_cents": 0.0, "call_count": 0}}
+        model_entry = {
+            "model": r.model,
+            "total_input_tokens": int(r.total_input_tokens),
+            "total_output_tokens": int(r.total_output_tokens),
+            "total_cost_cents": round(float(r.total_cost_cents), 4),
+            "call_count": int(r.call_count),
+        }
+        days_map[d]["models"].append(model_entry)
+        days_map[d]["total"]["total_input_tokens"] += int(r.total_input_tokens)
+        days_map[d]["total"]["total_output_tokens"] += int(r.total_output_tokens)
+        days_map[d]["total"]["total_cost_cents"] = round(days_map[d]["total"]["total_cost_cents"] + float(r.total_cost_cents), 4)
+        days_map[d]["total"]["call_count"] += int(r.call_count)
+
+    days_list = sorted(days_map.values(), key=lambda x: x["date"])
+
+    if format == "csv":
+        buf = io.StringIO()
+        buf.write("﻿")
+        writer = csv.writer(buf)
+        writer.writerow(["date", "model", "call_count", "total_input_tokens", "total_output_tokens", "total_cost_cents"])
+        for day_entry in days_list:
+            for m in day_entry["models"]:
+                writer.writerow([day_entry["date"], m["model"], m["call_count"], m["total_input_tokens"], m["total_output_tokens"], m["total_cost_cents"]])
+        return _csv_streaming_response(buf, "cost-trend.csv")
+
+    return {"days": days_list, "deploy_markers": DEPLOY_MARKERS}
+
+
+@router.get("/analytics/cache-hit-rate")
+async def cache_hit_rate_endpoint(
+    days: int = Query(30, ge=1, le=365),
+    tenant_id: Optional[str] = Query(None),
+    format: Optional[str] = Query(None),
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cache-Hit-Rate KPI: cache_read_tokens / (cache_read_tokens + prompt_tokens) pro Tag/Modell.
+
+    Nenner = gesamter Input (was als Input gesendet wurde). completion_tokens sind Output
+    und gehören NICHT in den Nenner.
+    """
+    effective_tid = tenant.id
+    if tenant_id is not None:
+        try:
+            parsed = _uuid.UUID(str(tenant_id))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid tenant_id format")
+        if parsed != tenant.id:
+            raise HTTPException(status_code=403, detail="tenant_id mismatch")
+        effective_tid = parsed
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    day_col = sqlfunc.date(LLMCallLog.created_at).label("day")
+    rows = (await db.execute(
+        select(
+            day_col,
+            LLMCallLog.model,
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_read_tokens), 0).label("cache_read_tokens"),
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens), 0).label("total_input_tokens"),
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label("total_output_tokens"),
+        )
+        .where(LLMCallLog.tenant_id == effective_tid, LLMCallLog.created_at >= cutoff)
+        .group_by(day_col, LLMCallLog.model)
+        .order_by(day_col, LLMCallLog.model)
+    )).all()
+
+    daily = []
+    for r in rows:
+        cache_r = int(r.cache_read_tokens)
+        total_input = cache_r + int(r.total_input_tokens)  # nur Input-Tokens; completion ist Output
+        hit_rate = None if total_input == 0 else round(cache_r / total_input, 4)
+        daily.append({
+            "date": str(r.day),
+            "model": r.model,
+            "hit_rate": hit_rate,
+            "total_input_tokens": int(r.total_input_tokens),
+            "cache_read_tokens": cache_r,
+        })
+
+    # 7-day weighted avg (last 7 days) — gewichtet nach Token-Volumen,
+    # damit Tage mit wenig Traffic nicht überproportional zählen.
+    seven_days_ago = (datetime.utcnow() - timedelta(days=7)).date()
+    recent = [
+        d for d in daily
+        if str(d["date"]) >= str(seven_days_ago)
+    ]
+    total_cache_r_7d = sum(d["cache_read_tokens"] for d in recent)
+    total_input_7d = sum(d["cache_read_tokens"] + d["total_input_tokens"] for d in recent)
+    avg_7d = round(total_cache_r_7d / total_input_7d, 4) if total_input_7d > 0 else None
+
+    # Für Warmup-Check: Anzahl Tage mit Daten (distinct dates in den letzten 7d)
+    recent_dates_with_data = len({d["date"] for d in recent if (d["cache_read_tokens"] + d["total_input_tokens"]) > 0})
+
+    # Alert: nur wenn 7 Tage Warmup (>=7 Datenpunkte) und avg < 30%
+    alert = bool(avg_7d is not None and recent_dates_with_data >= 7 and avg_7d < 0.30)
+
+    if format == "csv":
+        buf = io.StringIO()
+        buf.write("﻿")
+        writer = csv.writer(buf)
+        writer.writerow(["date", "model", "hit_rate", "total_input_tokens", "cache_read_tokens"])
+        for d in daily:
+            writer.writerow([d["date"], d["model"], d["hit_rate"], d["total_input_tokens"], d["cache_read_tokens"]])
+        return _csv_streaming_response(buf, "cache-hit-rate.csv")
+
+    return {"daily": daily, "avg_7d": avg_7d, "alert": alert}
+
+
+@router.get("/analytics/runaway-detection")
+async def runaway_detection(
+    tenant_id: Optional[str] = Query(None),
+    format: Optional[str] = Query(None),
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Heatmap (Tenant x Stunde) + Top-20-Killer der letzten 7 Tage."""
+    effective_tid = tenant.id
+    if tenant_id is not None:
+        try:
+            parsed = _uuid.UUID(str(tenant_id))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid tenant_id format")
+        if parsed != tenant.id:
+            raise HTTPException(status_code=403, detail="tenant_id mismatch")
+        effective_tid = parsed
+
+    cutoff = datetime.utcnow() - timedelta(days=7)
+
+    # Heatmap: calls per tenant per hour-of-day per day-of-week
+    hour_col = sqlfunc.extract("hour", LLMCallLog.created_at).label("hour_of_day")
+    dow_col = sqlfunc.extract("dow", LLMCallLog.created_at).label("day_of_week")
+    heatmap_rows = (await db.execute(
+        select(
+            LLMCallLog.tenant_id,
+            hour_col,
+            dow_col,
+            sqlfunc.count(LLMCallLog.id).label("call_count"),
+        )
+        .where(LLMCallLog.tenant_id == effective_tid, LLMCallLog.created_at >= cutoff)
+        .group_by(LLMCallLog.tenant_id, hour_col, dow_col)
+        .order_by(dow_col, hour_col)
+    )).all()
+
+    heatmap = [
+        {
+            "tenant": str(r.tenant_id),
+            "hour_of_day": int(r.hour_of_day),
+            "day_of_week": int(r.day_of_week),
+            "call_count": int(r.call_count),
+            "alert": int(r.call_count) > 500,
+        }
+        for r in heatmap_rows
+    ]
+
+    # Top-20 Killers: GROUP BY (task_type, model)
+    killer_rows = (await db.execute(
+        select(
+            LLMCallLog.task_type.label("task_name"),
+            LLMCallLog.model,
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
+            sqlfunc.count(LLMCallLog.id).label("total_calls"),
+        )
+        .where(LLMCallLog.tenant_id == effective_tid, LLMCallLog.created_at >= cutoff)
+        .group_by(LLMCallLog.task_type, LLMCallLog.model)
+        .order_by(sqlfunc.sum(LLMCallLog.cost_cents).desc())
+        .limit(20)
+    )).all()
+
+    top_killers = [
+        {
+            "task_name": r.task_name,
+            "model": r.model,
+            "total_cost_cents": round(float(r.total_cost_cents), 4),
+            "total_calls": int(r.total_calls),
+        }
+        for r in killer_rows
+    ]
+
+    if format == "csv":
+        buf = io.StringIO()
+        buf.write("﻿")
+        writer = csv.writer(buf)
+        writer.writerow(["task_name", "model", "total_cost_cents", "total_calls"])
+        for k in top_killers:
+            writer.writerow([k["task_name"], k["model"], k["total_cost_cents"], k["total_calls"]])
+        return _csv_streaming_response(buf, "runaway-top-killers.csv")
+
+    return {"heatmap": heatmap, "top_killers": top_killers}
 
 
 # --- #145 Phase 4.1: Kategorie-Verteilung ---
