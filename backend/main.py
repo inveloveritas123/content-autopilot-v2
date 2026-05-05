@@ -110,7 +110,15 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Content-Autopilot", version="2.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="Content Autopilot v2",
+    description="LinkedIn-Content-Pipeline mit Brand-Voice + DSGVO-Cascade (Art. 17) + Throttle-Layer + pgvector-Memory",
+    version="2.0.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+    lifespan=lifespan,
+)
 
 # CORS — needed for Cowork dashboard and external integrations
 from fastapi.middleware.cors import CORSMiddleware
