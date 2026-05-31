@@ -13,3 +13,13 @@ celerybeat-schedule*
 
 # Eval-Runner-Output (Issue #152)
 eval_results/
+
+# Secrets / dumps — gehärtet bei GitHub-Migration 2026-05-31
+.env
+.env.*
+!.env.example
+*.sql
+*.sql.gz
+*.dump
+*.pem
+*.key

@@ -3,7 +3,7 @@
 import sys, json, os, urllib.request
 
 GITEA_API = "http://localhost:3000/api/v1/repos/meister/content-autopilot-v2"
-TOKEN = "***REMOVED-GITEA-TOKEN***"
+TOKEN = os.environ["GITEA_TOKEN"]  # Secret entfernt bei GitHub-Migration; aus Umgebung lesen
 
 issue_nr = int(os.environ.get("ISSUE_NR_VAL", "0"))
 label_name = sys.argv[1] if len(sys.argv) > 1 else "wartet-auf-freigabe"

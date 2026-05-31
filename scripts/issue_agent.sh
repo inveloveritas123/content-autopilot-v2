@@ -13,7 +13,7 @@ ISSUE_NR="${1:-}"
 ISSUE_TITLE="${2:-}"
 ISSUE_BODY="${3:-}"
 LOG_DIR="/opt/content-autopilot-v2/scripts/agent_logs"
-GITEA_TOKEN="***REMOVED-GITEA-TOKEN***"
+GITEA_TOKEN="${GITEA_TOKEN:?set GITEA_TOKEN env var}"  # Secret entfernt bei GitHub-Migration; aus Umgebung lesen
 GITEA_API="http://localhost:3000/api/v1/repos/meister/content-autopilot-v2"
 TELEGRAM_SCRIPT="/opt/content-autopilot-v2/scripts/notify_robert.py"
 
