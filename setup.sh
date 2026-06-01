@@ -224,8 +224,9 @@ if [ "$REBUILD" = true ]; then
         || die "docker compose build fehlgeschlagen." \
                "Details: docker compose -f ${COMPOSE_FILE} logs"
     ok "Images gebaut"
-else
-    info "Versuche Images aus Registry zu pullen..."
+elif [ -n "${IMAGE_PREFIX:-}" ]; then
+    # Registry konfiguriert (Gitea / GHCR / eigene) → pullen, mit Build-Fallback
+    info "IMAGE_PREFIX gesetzt (${IMAGE_PREFIX}) — versuche Pull aus Registry..."
     if docker compose -f "$COMPOSE_FILE" pull 2>&1; then
         ok "Images gepullt"
     else
@@ -235,6 +236,13 @@ else
                    "Details: docker compose -f ${COMPOSE_FILE} build (Fehler oben)"
         ok "Images lokal gebaut"
     fi
+else
+    # Standard (GitHub-Deploy): lokal bauen — keine Registry / kein Gitea noetig
+    info "Kein IMAGE_PREFIX gesetzt — baue Images lokal (Standard, ohne Registry)..."
+    docker compose -f "$COMPOSE_FILE" build \
+        || die "docker compose build fehlgeschlagen." \
+               "Details: docker compose -f ${COMPOSE_FILE} build (Fehler oben)"
+    ok "Images lokal gebaut"
 fi
 
 # ─── STEP 4: Stack hochfahren ─────────────────────────────────────────────────

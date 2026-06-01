@@ -11,20 +11,26 @@ Punkte, die bei einem GitHub-basierten Deploy auf fremder Infrastruktur anders s
 
 ---
 
-## Wichtig: Images lokal bauen (nicht pullen)
+## Standard: Images werden lokal gebaut (keine Registry / kein Gitea nötig)
 
-`docker-compose.v2.yml` referenziert standardmäßig die **interne Gitea Container
-Registry** (`10.10.0.1:3000`). Die ist auf einem neuen Host **nicht erreichbar**.
-Deshalb auf einem GitHub-Deploy immer **selbst bauen** statt pullen:
+Seit dieser Version ist **lokales Bauen der Standard**. `docker-compose.v2.yml` nutzt
+registry-neutrale Image-Tags (`content-autopilot-v2/*:local`), und jeder Service hat
+einen `build:`-Block. Es wird **keine Registry und kein Gitea** benötigt:
 
 ```bash
+bash setup.sh                 # baut automatisch lokal und startet den Stack
+# oder direkt:
 docker compose -f docker-compose.v2.yml up -d --build
-# oder über die Bootstrap-Routine:
-bash setup.sh --rebuild
 ```
 
-(Alternativ eine eigene Registry betreiben und `REGISTRY` / `IMAGE_TAG` in der `.env`
-darauf zeigen lassen — für den Standardfall reicht lokales Bauen.)
+**Optional** vorgebaute Images aus einer Registry ziehen statt bauen — dazu in der
+`.env` `IMAGE_PREFIX` (und ggf. `IMAGE_TAG`) setzen, dann pullt `setup.sh` automatisch:
+
+| Option | `IMAGE_PREFIX` in `.env` |
+|---|---|
+| **GitHub / lokal (Standard)** | *(leer lassen)* → lokal bauen |
+| Gitea-Registry | `10.10.0.1:3000/meister/content-autopilot-v2` |
+| GitHub Container Registry (GHCR) | `ghcr.io/inveloveritas123/content-autopilot-v2` |
 
 ---
 
@@ -99,15 +105,15 @@ zeigen (Default: `host.docker.internal:5432`).
 cd frontend && npm install && npm run build && cd ..
 ```
 
-### 6. Stack starten (lokal bauen!)
+### 6. Stack starten
 
 ```bash
-bash setup.sh --rebuild
-# oder manuell:
-docker compose -f docker-compose.v2.yml up -d --build
+bash setup.sh                 # baut lokal (Standard) und startet
+# --rebuild erzwingt Neubau bereits gebauter Images
 ```
 
-`setup.sh` validiert die `.env`, startet den Stack und wartet auf den Health-Check.
+`setup.sh` validiert die `.env`, baut die Images lokal (sofern kein `IMAGE_PREFIX`
+gesetzt ist), startet den Stack und wartet auf den Health-Check.
 Beim Backend-Start laufen automatisch:
 - `alembic upgrade head` → DB-Schema
 - Anlage von **Default-Tenant** (`api_key = DEFAULT_TENANT_KEY`) + Default-Projekt
@@ -137,6 +143,20 @@ Nur relevant, wenn du **nicht** frisch startest, sondern einen DB-Dump mitnimmst
   `api_key`-Werte — unabhängig von `DEFAULT_TENANT_KEY`.
 
 ---
+
+## Kubernetes (Helm) — abweichend
+
+Der Helm-Chart unter `deploy/helm/` ist ein **alternativer** Deploy-Pfad. In Kubernetes
+lassen sich Images **nicht lokal bauen** — sie müssen aus einer Registry kommen. Der
+Chart-Default `global.registry` zeigt noch auf die Gitea-Registry (`10.10.0.1:3000`).
+Für einen Gitea-freien k8s-Deploy: Images nach GHCR (o. ä.) pushen und überschreiben:
+
+```bash
+helm install cap deploy/helm/content-autopilot \
+  --set global.registry=ghcr.io/inveloveritas123
+```
+
+Für den Standard-Deploy via `docker-compose.v2.yml` / `setup.sh` ist das irrelevant.
 
 ## Hinweise
 
