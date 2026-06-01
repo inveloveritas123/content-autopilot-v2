@@ -44,21 +44,36 @@
   mcp-server-v2, nginx-v2, redis-v2 + nextcloud-web + nextcloud-app
 - **Frontend** `http://10.10.0.1:8601` → HTTP 200
 - **MCP** `:8180` erreichbar (root 404 ist erwartet, SSE-Endpoint live)
-- **Gitea-Registry-Images** taggen `main` von vor 5 Tagen — Container laeuft also
-  auf Code vor den letzten 4 Commits (Phase-5-Sub-Eval / Sprint-3C / Deploy-Doku).
-  Re-Build aus GitHub steht an, wenn die letzten Commits produktiv werden sollen.
+- **Gitea-Registry-Images** wurden am 2026-05-27 gebaut und enthalten alle
+  Feature-Commits inkl. Phase 5/6/7/8 + Sprint 3C + Migration 049. Die 5
+  GitHub-Commits danach (Security-Haertung, GitHub-Actions, Deploy-Doku,
+  compose-Restructure auf "lokales Bauen Standard", Nextcloud-Migration) sind
+  Build/Doku/CI ohne Runtime-Effekt — **kein Re-Build noetig**.
 - **v1 Pitch Alpha** (:8501): aktuell nicht erreichbar — Status zu verifizieren.
+
+## Phase 2 — Realstand
+
+Anders als urspruenglich im FAHRPLAN-PDCA gelistet: **4 von 5 Punkten sind
+gebaut**, nur unter Phase-Labels 4/5/6/8 verteilt:
+
+| FAHRPLAN-Item | Status | Belegt durch |
+|---------------|--------|--------------|
+| Dialogischer Workflow E2E | done | `backend/api/wizard.py` (9 strukturierte Fragen q1_1..q5_*), `frontend/src/components/WizardPage.jsx` |
+| Brand Voice Onboarding (9 Fragen) | done | Die 9 Wizard-Fragen oben + MD-Onboarding-Parser (`profile_md_parser.py`) als Alternative |
+| Content Calendar | done | `frontend/src/components/ContentCalendar.jsx` + `tasks/random_smart_scheduler.py` (Cron mit 08-21 Operating-Hours-Guard) + Model `scheduled_post` |
+| LinkedIn Auto-Upload | **bewusst offen** | `generate_linkedin_post_from_dialog` erzeugt das Format, `scheduled_post.linkedin_post_id` trackt — aber kein Auto-Posting an LinkedIn-API. **Konflikt mit Constraint #12 (Knecht schliesst NIE selbst, Robert ist Gate)** |
+| Performance Tracking | done | `backend/api/analytics.py` + Model `content_performance` + Cost-Monitoring (#155) integriert in analytics |
 
 ## Naechste Schritte
 
-1. **Container-Code aktualisieren** auf den GitHub-main-Stand (zZ. 5 Tage hinter
-   GitHub) und Images aus GitHub-Source neu bauen (per docs/runbooks/deployment.md).
-2. **v1 Pitch Alpha verifizieren** — Status :8501 klaeren, ggf. starten oder
-   eingefroren markieren.
-3. **Phase 2 abschliessen** (KW 18-20 Roadmap aus FAHRPLAN-PDCA.md):
-   Dialogischer Workflow E2E, Brand Voice Onboarding (9 Fragen), Content Calendar,
-   LinkedIn Auto-Upload, Performance Tracking — Status pro Item zu klaeren.
-4. **WhatsApp-Adapter** vom Stub zur produktiven Pipeline ausbauen.
+1. **Entscheidung LinkedIn-Auto-Upload**: bewusst offen lassen (Constraint #12)
+   oder mit explizitem Freigabe-Gate ("Robert klickt 'jetzt posten'") bauen.
+2. **WhatsApp-Adapter** vom Stub zur produktiven Pipeline ausbauen (Phase-5-
+   Welle-5 wurde nur als Stub markiert).
+3. **v1 Pitch Alpha verifizieren** — Status :8501 klaeren, ggf. starten oder
+   final eingefroren markieren.
+4. **Container-Sync GitHub-Stand** ist erledigt (Filesystem auf 2026-06-02),
+   `.old-20260602` kann nach Bestaetigung geloescht werden.
 
 ## Blocker
 
