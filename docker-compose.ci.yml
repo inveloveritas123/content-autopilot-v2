@@ -1,0 +1,113 @@
+# CI-Override fuer E2E-Tests in GitHub Actions.
+# Verwendung: docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml up -d
+#
+# Unterschiede zum Produktiv-Setup:
+# - Postgres + Redis laufen als Container (statt Host-Postgres)
+# - Alle Images werden lokal gebaut (kein IMAGE_PREFIX = Pull aus Registry)
+# - Pgvector-Image (postgres mit pgvector-Extension) statt postgres:15-alpine
+# - Health-Checks sind aggressiver, damit der Workflow nicht endlos wartet
+# - Kein Nextcloud-Profile, kein extra_hosts host.docker.internal
+
+services:
+  postgres-ci:
+    image: pgvector/pgvector:pg15
+    environment:
+      POSTGRES_USER: autopilot
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-citestpw}
+      POSTGRES_DB: content_autopilot_v2
+    volumes:
+      - postgres_ci_data:/var/lib/postgresql/data
+      - ./scripts/ci-seed-tenant.sql:/docker-entrypoint-initdb.d/99-seed-tenant.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autopilot -d content_autopilot_v2"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    networks:
+      - cap-v2-net
+
+  redis-v2:
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend-v2:
+    build:
+      context: ./backend
+    image: content-autopilot-v2/backend:ci
+    extra_hosts: []
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://autopilot:${DB_PASSWORD:-citestpw}@postgres-ci:5432/content_autopilot_v2"
+      SYNC_DATABASE_URL: "postgresql://autopilot:${DB_PASSWORD:-citestpw}@postgres-ci:5432/content_autopilot_v2"
+      REDIS_URL: "redis://redis-v2:6379/1"
+      DEFAULT_TENANT_KEY: "ci-test-tenant-key"
+      APP_ENV: "ci"
+      # Disable external LLM-Calls in Smoke-Tests
+      LITELLM_BASE_URL: ""
+      ANTHROPIC_API_KEY: ""
+      GEMINI_API_KEY: ""
+    depends_on:
+      postgres-ci:
+        condition: service_healthy
+      redis-v2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  celery-worker-v2:
+    build:
+      context: ./backend
+    image: content-autopilot-v2/backend:ci
+    extra_hosts: []
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://autopilot:${DB_PASSWORD:-citestpw}@postgres-ci:5432/content_autopilot_v2"
+      SYNC_DATABASE_URL: "postgresql://autopilot:${DB_PASSWORD:-citestpw}@postgres-ci:5432/content_autopilot_v2"
+      REDIS_URL: "redis://redis-v2:6379/1"
+    depends_on:
+      postgres-ci:
+        condition: service_healthy
+      redis-v2:
+        condition: service_healthy
+
+  celery-beat-v2:
+    build:
+      context: ./backend
+    image: content-autopilot-v2/backend:ci
+    extra_hosts: []
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://autopilot:${DB_PASSWORD:-citestpw}@postgres-ci:5432/content_autopilot_v2"
+      SYNC_DATABASE_URL: "postgresql://autopilot:${DB_PASSWORD:-citestpw}@postgres-ci:5432/content_autopilot_v2"
+      REDIS_URL: "redis://redis-v2:6379/1"
+    depends_on:
+      postgres-ci:
+        condition: service_healthy
+      redis-v2:
+        condition: service_healthy
+
+  mcp-server-v2:
+    image: content-autopilot-v2/mcp-server:ci
+    extra_hosts: []
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://autopilot:${DB_PASSWORD:-citestpw}@postgres-ci:5432/content_autopilot_v2"
+      REDIS_URL: "redis://redis-v2:6379/1"
+    depends_on:
+      postgres-ci:
+        condition: service_healthy
+
+  nginx-v2:
+    image: content-autopilot-v2/nginx:ci
+    ports:
+      - "8601:8080"
+    depends_on:
+      backend-v2:
+        condition: service_healthy
+
+volumes:
+  postgres_ci_data:

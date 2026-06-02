@@ -1,0 +1,121 @@
+name: E2E Explore (Browser-Use, LLM-driven)
+
+# Nicht als Required-Status-Check eingesetzt — LLM-Kosten + Non-Determinism
+# nicht fuer PR-Blocking geeignet. Laeuft nightly + on-demand.
+on:
+  schedule:
+    - cron: "30 3 * * *" # 03:30 UTC nightly
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Pfad zum Szenario (leer = alle)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-explore
+  cancel-in-progress: false
+
+jobs:
+  browser-use:
+    name: Browser-Use Explore (Chromium headless)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    env:
+      DB_PASSWORD: citestpw
+      E2E_BASE_URL: http://localhost:8601
+      E2E_API_KEY: ci-test-tenant-key
+      BROWSER_USE_MAX_STEPS: 30
+      BROWSER_USE_LLM_MODEL: claude-sonnet-4-6
+      BROWSER_USE_HEADLESS: "true"
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard — ANTHROPIC_API_KEY muss gesetzt sein
+        run: |
+          if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "::error::Secret ANTHROPIC_API_KEY fehlt im Repo. Workflow uebersprungen."
+            exit 0
+          fi
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Postgres-Client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Build + Start Stack
+        run: |
+          docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml \
+            up -d --build postgres-ci redis-v2 backend-v2 nginx-v2 celery-worker-v2 celery-beat-v2
+          docker ps
+
+      - name: Wait for Postgres
+        timeout-minutes: 3
+        run: |
+          for i in {1..60}; do
+            if docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml \
+                exec -T postgres-ci pg_isready -U autopilot -d content_autopilot_v2 2>/dev/null; then
+              break
+            fi
+            sleep 3
+          done
+
+      - name: Alembic-Migrations + Tenant-Bootstrap
+        run: |
+          docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml \
+            exec -T backend-v2 alembic upgrade head
+          docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml \
+            exec -T postgres-ci psql -U autopilot -d content_autopilot_v2 \
+            -c "INSERT INTO tenants (id, api_key, name, created_at, updated_at) VALUES (gen_random_uuid(), '${{ env.E2E_API_KEY }}', 'CI Test Tenant', NOW(), NOW()) ON CONFLICT (api_key) DO NOTHING;"
+
+      - name: Wait for /api/health
+        timeout-minutes: 3
+        run: |
+          for i in {1..40}; do
+            if curl -sf "${E2E_BASE_URL}/api/health" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 3
+          done
+          curl -sf "${E2E_BASE_URL}/api/health" || (echo "Health FAIL"; exit 1)
+
+      - name: Install Browser-Use + Playwright Chromium
+        working-directory: tests/e2e-explore
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Run Browser-Use Scenarios
+        working-directory: tests/e2e-explore
+        run: |
+          if [ -n "${{ github.event.inputs.scenario }}" ]; then
+            python runner.py "${{ github.event.inputs.scenario }}"
+          else
+            python runner.py --all
+          fi
+
+      - name: Dump Logs on failure
+        if: failure()
+        run: |
+          echo "::group::Backend logs"
+          docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml logs backend-v2 --tail=300 || true
+          echo "::endgroup::"
+
+      - name: Teardown
+        if: always()
+        run: |
+          docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml down -v

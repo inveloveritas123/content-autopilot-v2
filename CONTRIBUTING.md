@@ -75,6 +75,33 @@ Issue-Referenz am Ende ist Pflicht. Ohne Issue-Nummer: nur bei Trivial-Fixes (ty
 
 ---
 
+## E2E-Tests (Constraint #14: Hybrid Playwright + Browser-Use)
+
+Zwei Layer:
+
+| Layer | Tool | Wo | Wann |
+|-------|------|-------|------|
+| **Smoke** | Playwright (deterministisch) | `frontend/e2e/` | Required-Gate auf jeden PR |
+| **Explore** | Browser-Use (LLM-driven) | `tests/e2e-explore/` | Nightly + on-demand, nicht required |
+
+Smoke laufen lassen lokal:
+```bash
+cd frontend
+npm ci
+npx playwright install --with-deps chromium
+npm run test:e2e
+```
+
+Browser-Use-Szenarien lokal:
+```bash
+cd tests/e2e-explore
+pip install -r requirements.txt
+export ANTHROPIC_API_KEY=sk-ant-...
+python runner.py scenarios/brand_voice_wizard.md
+```
+
+Details: `docs/runbooks/RUNBOOK-e2e-tests.md`.
+
 ## Soll-Ist-Pflicht vor jeder Aenderung (Constraint #14)
 
 Bevor Code geaendert wird:
