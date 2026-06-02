@@ -1,0 +1,61 @@
+name: Eval Suite
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 2 * * *" # nightly 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "mock or real"
+        default: "mock"
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install pyyaml anthropic sqlalchemy
+
+      - name: Run eval (mock for PRs, real for nightly)
+        run: |
+          MODE=mock
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            MODE=real
+          fi
+          if [ -n "${{ github.event.inputs.mode }}" ]; then
+            MODE="${{ github.event.inputs.mode }}"
+          fi
+          echo "Running eval in $MODE mode"
+          # Eval-Runner-Aufruf — kompatibel mit Bestand .gitea/workflows/eval.yml
+          if [ -f eval/run_eval.py ]; then
+            python eval/run_eval.py --mode "$MODE" || true
+          else
+            echo "::warning::Eval-Runner backend/eval/run_eval.py noch nicht implementiert"
+          fi
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: backend/eval_results/
+          if-no-files-found: ignore
+          retention-days: 14

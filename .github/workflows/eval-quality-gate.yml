@@ -4,32 +4,32 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'backend/services/quality_gate*.py'
-      - 'backend/config/quality_standards/**'
-      - 'backend/eval/quality_gate_corpus/**'
-      - 'backend/eval/run_quality_gate_eval.py'
+      - "backend/services/quality_gate*.py"
+      - "backend/config/quality_standards/**"
+      - "backend/eval/quality_gate_corpus/**"
+      - "backend/eval/run_quality_gate_eval.py"
   schedule:
-    - cron: '0 3 * * *'  # nightly 03:00 UTC
+    - cron: "0 3 * * *" # nightly 03:00 UTC
   workflow_dispatch:
     inputs:
       min_f1:
-        description: 'CI-Gate: min weighted F1 (default 0.75)'
-        default: '0.75'
+        description: "CI-Gate: min weighted F1 (default 0.75)"
+        default: "0.75"
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   quality-gate-eval:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
-
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install eval dependencies
         run: pip install pyyaml
@@ -44,29 +44,28 @@ jobs:
           python backend/eval/run_quality_gate_eval.py \
             --min-f1 "$MIN_F1" \
             2>&1 | tee /tmp/qg_eval_output.txt
-          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Read eval result for PR comment
         id: read_result
         if: always()
         run: |
-          # Lese neueste Result-Datei
           LATEST=$(ls -t eval_results/quality_gate_*.json 2>/dev/null | head -1)
           if [ -n "$LATEST" ]; then
-            F1=$(python3 -c "
-          import json, sys
+            python3 -c "
+          import json
           d = json.load(open('$LATEST'))
           agg = d.get('aggregate', {})
-          print(f\"weighted_f1={agg.get('weighted_f1', 0):.4f}\")
-          print(f\"weighted_precision={agg.get('weighted_precision', 0):.4f}\")
-          print(f\"weighted_recall={agg.get('weighted_recall', 0):.4f}\")
-          print(f\"total_posts={agg.get('total_posts', 0)}\")
+          out = []
+          out.append(f\"weighted_f1={agg.get('weighted_f1', 0):.4f}\")
+          out.append(f\"weighted_precision={agg.get('weighted_precision', 0):.4f}\")
+          out.append(f\"weighted_recall={agg.get('weighted_recall', 0):.4f}\")
+          out.append(f\"total_posts={agg.get('total_posts', 0)}\")
           for b, bdata in d.get('per_branche', {}).items():
               m = bdata.get('metrics', {})
               opt = (bdata.get('optimal_threshold') or {})
-              print(f\"{b}|{m.get('f1',0):.4f}|{bdata.get('auc',0):.4f}|{opt.get('threshold','n/a')}\")
-          ")
-            echo "$F1" > /tmp/qg_metrics.txt
+              out.append(f\"{b}|{m.get('f1',0):.4f}|{bdata.get('auc',0):.4f}|{opt.get('threshold','n/a')}\")
+          open('/tmp/qg_metrics.txt','w').write('\n'.join(out))
+          "
             cat /tmp/qg_metrics.txt
           fi
 
@@ -78,47 +77,40 @@ jobs:
             const fs = require('fs');
             const outcome = '${{ steps.qg_eval.outcome }}';
             let metricsText = '';
-
             try {
               metricsText = fs.readFileSync('/tmp/qg_metrics.txt', 'utf8').trim();
             } catch(e) {
               metricsText = '(Metriken nicht verfuegbar)';
             }
-
             const lines = metricsText.split('\n');
             const aggregateLines = lines.filter(l => l.startsWith('weighted_') || l.startsWith('total_'));
             const brancheLines = lines.filter(l => l.includes('|'));
-
             let cmTable = '| Branche | F1 | AUC | Opt. Threshold |\n|---|---|---|---|\n';
             for (const line of brancheLines) {
               const [branche, f1, auc, threshold] = line.split('|');
               cmTable += `| ${branche} | ${f1} | ${auc} | ${threshold} |\n`;
             }
-
             const aggregateSummary = aggregateLines.join('  \n');
-            const statusEmoji = outcome === 'success' ? '✅' : '❌';
             const statusText = outcome === 'success'
               ? 'PASS — F1-Schwellwert erreicht'
               : 'FAIL — F1-Schwellwert unterschritten. PR geblockt.';
-
             const body = [
-              `## ${statusEmoji} Quality-Gate Eval (#152)`,
-              '',
+              `## Quality-Gate Eval (#152)`,
+              ``,
               `**Status:** ${statusText}`,
-              '',
+              ``,
               '### Aggregate',
               '```',
               aggregateSummary,
               '```',
-              '',
+              ``,
               '### Per-Branche (F1 / AUC / Optimaler Threshold)',
-              '',
+              ``,
               cmTable,
-              '',
+              ``,
               '_Stub: `quality_gate_stub.py` — Production-Implementation in #146._',
             ].join('\n');
-
-            github.rest.issues.createComment({
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -128,5 +120,5 @@ jobs:
       - name: Block PR on F1 gate failure
         if: steps.qg_eval.outcome == 'failure' && github.event_name == 'pull_request'
         run: |
-          echo "Quality-Gate Eval FAILED. PR wird geblockt."
+          echo "::error::Quality-Gate Eval FAILED. PR wird geblockt."
           exit 1
