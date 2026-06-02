@@ -1,0 +1,66 @@
+name: Feature Request
+description: Neue Funktion oder Erweiterung eines bestehenden Features
+title: "[FEAT] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Welches Problem loest das? (User-Story / Use Case)
+      description: Was kann ein Nutzer / Unternehmer / Knecht heute nicht oder nur umstaendlich?
+      placeholder: "Als Unternehmer moechte ich, dass das System mir Aufhaenger-Vorschlaege pro Branche liefert, damit ich nicht selbst recherchieren muss."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Geplante Loesung
+      description: Konkret — wie aendert sich das System? Welche Files/Endpoints/Komponenten?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativen die erwogen wurden
+      description: Optional, aber stark empfohlen. Welche Wege wurden verworfen und warum?
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      multiple: true
+      options:
+        - Backend (API)
+        - Backend (Pipeline / Celery)
+        - Frontend (UI)
+        - MCP-Server
+        - Telegram-Bot
+        - Datenbank / Schema
+        - Deployment / CI
+        - Documentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Akzeptanz-Kriterien (PDCA-CHECK)
+      description: Wie merken wir, dass das Feature fertig und korrekt ist?
+      value: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Tangiert das Constraints?
+      description: |
+        - **#12** Knecht schliesst nie selbst
+        - **#13** Mobile-First / Telegram-First
+        - **#14** Soll-Ist-Pflicht
+        Welche Constraints sind relevant? Welche Risiken?

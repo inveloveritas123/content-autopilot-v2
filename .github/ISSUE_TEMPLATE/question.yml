@@ -1,0 +1,47 @@
+name: Frage (Architektur / Entscheidung)
+description: Architektur-Frage oder Entscheidung die Robert klaeren muss. Knecht-Agents nutzen dieses Template fuer Label "frage".
+title: "[FRAGE] "
+labels: ["frage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Per FAHRPLAN-PDCA: Architektur-Entscheidungen warten auf Robert.
+        Dieses Template dient als strukturierter Stopper.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Kontext
+      description: Was ist die Ausgangslage? Welches Issue / welche Aenderung ist betroffen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Die konkrete Frage
+      description: Eine Frage pro Issue. Klar formuliert, mit erwarteter Antwort-Form (z.B. ja/nein, Variante A/B/C, Zahl).
+    validations:
+      required: true
+
+  - type: textarea
+    id: options
+    attributes:
+      label: Optionen die ich sehe (mit Tradeoffs)
+      value: |
+        ### Option A:
+        - Pro:
+        - Contra:
+
+        ### Option B:
+        - Pro:
+        - Contra:
+    validations:
+      required: true
+
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Meine Empfehlung
+      description: Optional — wenn du als Knecht/Entwickler eine begruendete Praeferenz hast, nenn sie. Robert ueberprueft.

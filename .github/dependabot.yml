@@ -1,0 +1,89 @@
+version: 2
+updates:
+  # Backend: Python via pip
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "backend"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      fastapi-stack:
+        patterns:
+          - "fastapi"
+          - "starlette"
+          - "pydantic*"
+          - "uvicorn"
+      sqlalchemy-stack:
+        patterns:
+          - "sqlalchemy*"
+          - "alembic"
+          - "asyncpg"
+          - "psycopg*"
+      llm-providers:
+        patterns:
+          - "anthropic"
+          - "openai"
+          - "google-*"
+          - "litellm"
+
+  # Frontend: npm
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "frontend"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      react-stack:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "react-router*"
+          - "@types/react*"
+      build-tooling:
+        patterns:
+          - "vite"
+          - "@vitejs/*"
+          - "vitest"
+          - "tailwindcss"
+          - "postcss"
+          - "autoprefixer"
+      linting:
+        patterns:
+          - "eslint*"
+          - "@eslint/*"
+          - "prettier"
+          - "globals"
+
+  # CI: GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"

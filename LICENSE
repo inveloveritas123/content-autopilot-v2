@@ -1,0 +1,62 @@
+Content Autopilot v2 — Proprietary Software License
+Copyright (c) 2026 Zukunftsbund GmbH. All Rights Reserved.
+
+This software and its associated source code, documentation, configuration
+files, models, prompts, datasets, and any other artifacts contained in this
+repository (the "Software") are proprietary and confidential property of
+Zukunftsbund GmbH ("the Company").
+
+1. NO LICENSE GRANTED
+   No license, express or implied, is granted by the Company to any party
+   to use, copy, modify, distribute, sublicense, publish, perform, display,
+   reverse engineer, decompile, or otherwise exploit the Software, except
+   as explicitly authorized in writing by the Company through a separate
+   agreement (e.g., employment contract, contractor agreement, NDA-bound
+   project engagement).
+
+2. ACCESS DOES NOT IMPLY LICENSE
+   Access to this repository (whether through GitHub collaborator access,
+   forks, clones, or any other means) does NOT constitute a license to use
+   the Software for any purpose. Authorized contributors operate strictly
+   under the terms of their separate written agreement with the Company.
+
+3. CONFIDENTIALITY
+   The Software contains trade secrets and confidential information of the
+   Company, including but not limited to: pipeline architecture, prompt
+   engineering, brand-voice analysis methods, throttle/cost-control logic,
+   and customer-specific configurations. All persons with access are bound
+   by confidentiality obligations under applicable contracts and the German
+   Geschaeftsgeheimnisgesetz (GeschGehG).
+
+4. THIRD-PARTY COMPONENTS
+   The Software incorporates third-party open-source components, each
+   subject to its own license. These licenses are listed in the
+   third-party-notices section of dependency manifests (requirements.txt,
+   package.json). Nothing in this License affects the rights granted to
+   you under those third-party licenses.
+
+5. NO WARRANTY
+   The Software is provided "AS IS" and "AS AVAILABLE" without warranty
+   of any kind, express or implied, including but not limited to the
+   warranties of merchantability, fitness for a particular purpose,
+   non-infringement, or that the Software will be uninterrupted or
+   error-free.
+
+6. LIMITATION OF LIABILITY
+   In no event shall the Company be liable for any indirect, incidental,
+   special, consequential, or punitive damages arising out of or related
+   to the Software, regardless of the legal theory.
+
+7. GOVERNING LAW
+   This License is governed by the laws of the Federal Republic of Germany.
+   Jurisdiction lies with the courts competent for the registered seat of
+   Zukunftsbund GmbH.
+
+8. CONTACT
+   For licensing inquiries, contractor agreements, or NDA requests:
+   Zukunftsbund GmbH
+   robert@totokaa.de
+
+Unauthorized use, reproduction, or distribution of the Software, in whole
+or in part, may result in civil and criminal penalties, and will be
+prosecuted to the maximum extent possible under law.

@@ -1,0 +1,11 @@
+# Code Owners — Default-Reviewer fuer alle PRs.
+# Syntax: <pattern> <owner1> [<owner2> ...]
+# Doku: https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default-Owner fuer alles
+*                            @inveloveritas123
+
+# Kritische Bereiche — falls weitere Reviewer dazukommen, hier per Pfad
+# anhaengen. Beispiele:
+# backend/api/data_deletion.py   @inveloveritas123 @dsgvo-reviewer
+# .github/workflows/             @inveloveritas123 @devops

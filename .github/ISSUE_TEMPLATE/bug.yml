@@ -1,0 +1,85 @@
+name: Bug Report
+description: Reproduzierbarer Fehler in Backend, Frontend, MCP, Pipeline oder Deployment
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke fuer den Bug-Report. Bitte alle Felder ausfuellen — leere
+        Reports werden ohne Rueckfrage geschlossen.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: Was passiert (Ist-Zustand)
+      description: Konkret, beobachtet, ohne Interpretation.
+      placeholder: "Beim Klick auf 'Idea generieren' kommt 500 Internal Server Error."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Was sollte passieren (Soll-Zustand)
+      placeholder: "Idea wird generiert und in der Liste angezeigt."
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Schritte zur Reproduktion
+      description: 1, 2, 3 — so genau, dass jemand anders das nachstellen kann.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevante Logs / Stacktrace / Screenshot
+      description: |
+        Backend-Logs: `docker compose -f docker-compose.v2.yml logs backend-v2 --tail=200`
+        Frontend-Console: Browser-DevTools Console
+      render: shell
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Betroffener Bereich
+      multiple: true
+      options:
+        - Backend (API)
+        - Backend (Pipeline / Celery)
+        - Frontend (UI)
+        - MCP-Server
+        - Telegram-Bot
+        - Datenbank / Migration
+        - Deployment / CI
+        - Documentation
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - kritisch (v1 betroffen oder Daten-Verlust)
+        - hoch (Hauptfunktion gebrochen)
+        - mittel (Workaround existiert)
+        - niedrig (Kosmetik / Edge-Case)
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: Umgebung
+      placeholder: "Browser: Firefox 130 / Backend: prod (KOLONIE) / Commit: 6eed4f9"
+    validations:
+      required: true

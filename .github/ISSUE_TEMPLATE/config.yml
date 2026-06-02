@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Doku im Repo
+    url: https://github.com/inveloveritas123/content-autopilot-v2/blob/main/CONTRIBUTING.md
+    about: Vor Issue-Erstellung CONTRIBUTING.md, FAHRPLAN-PDCA.md, SCOPE.md lesen.
+  - name: Status-Uebersicht
+    url: https://github.com/inveloveritas123/content-autopilot-v2/blob/main/STATUS.md
+    about: Wo das Projekt steht, was als naechstes ansteht, was bewusst offen ist.
