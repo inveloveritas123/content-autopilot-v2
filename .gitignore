@@ -19,6 +19,7 @@ eval_results/
 .env.*
 !.env.example
 *.sql
+!scripts/ci-*.sql       # CI-Init-Scripts (keine Secrets, nur Schema/Seeds)
 *.sql.gz
 *.dump
 *.pem
