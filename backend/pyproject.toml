@@ -1,0 +1,66 @@
+# Backend-Konfiguration fuer Ruff (Lint + Format) und Pytest.
+# Ruff ersetzt Flake8 + isort + Black + pyupgrade + autoflake in einem Tool.
+#
+# Lokal: cd backend && ruff check . && ruff format --check .
+# Auto-Fix:    ruff check --fix . && ruff format .
+
+[project]
+name = "content-autopilot-backend"
+version = "2.0.0"
+requires-python = ">=3.11"
+# Runtime-Deps stehen weiter in requirements.txt (kompatibel mit pip-Install
+# im Dockerfile). pyproject ist hier nur fuer Tooling-Konfiguration.
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    "alembic/versions",   # Migrations werden generiert, nicht hand-geschrieben
+    "__pycache__",
+    ".venv",
+    "venv",
+]
+
+[tool.ruff.lint]
+# Konservative initial-Auswahl — kann spaeter ausgebaut werden.
+select = [
+    "E",      # pycodestyle errors
+    "F",      # pyflakes (undefined names, unused imports)
+    "W",      # pycodestyle warnings
+    "I",      # isort (import sorting)
+    "UP",     # pyupgrade (modern syntax)
+    "B",      # flake8-bugbear (likely bugs)
+    "C4",     # flake8-comprehensions
+    "SIM",    # flake8-simplify
+    "RUF",    # Ruff-spezifisch
+]
+ignore = [
+    "E501",   # line-too-long — wir lassen Ruff-Format das machen
+    "B008",   # function-call-in-default-arg (FastAPI Depends-Pattern)
+    "SIM108", # ternary-instead-of-if-else — Lesbarkeit
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011", "B017"]   # asserts + bare-except sind in Tests OK
+"__init__.py" = ["F401"]        # re-exports
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning:passlib",
+    "ignore::DeprecationWarning:pydantic",
+]
+markers = [
+    "slow: tests that take more than 1 second",
+    "integration: needs DB + Redis",
+    "e2e: end-to-end including frontend or MCP",
+]

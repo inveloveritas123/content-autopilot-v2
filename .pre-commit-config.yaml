@@ -1,0 +1,61 @@
+# Pre-Commit-Hooks — lokale Quality-Gates vor jedem Commit.
+# Installation: pip install pre-commit && pre-commit install
+# Manuell ueber alles: pre-commit run --all-files
+#
+# Was hier laeuft, soll spaeter im CI nicht mehr fehlschlagen.
+
+repos:
+  # --- Allgemeine Hygiene ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$|^backend/alembic/versions/'
+      - id: end-of-file-fixer
+        exclude: '^backend/alembic/versions/|^frontend/dist/'
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        exclude: '^backend/eval/.*\.ya?ml$'
+      - id: check-json
+        exclude: '^backend/eval/.*\.json$|^frontend/dist/'
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # --- Python: Ruff (lint + format) ---
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/
+
+  # --- Frontend: Prettier (Format) ---
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        files: ^frontend/src/.*\.(js|jsx|ts|tsx|css|json)$
+        additional_dependencies: [prettier@3.3.3]
+
+  # --- Frontend: ESLint ---
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint (frontend)
+        entry: bash -c 'cd frontend && npx --no-install eslint --max-warnings 0'
+        language: system
+        files: ^frontend/src/.*\.(js|jsx)$
+        pass_filenames: false
+        require_serial: true
+
+  # --- Secrets: gitleaks (lokale Spiegelung des CI-Scans) ---
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+        name: gitleaks (Secrets-Scan)
+        args: [protect, --staged, --config=.gitleaks.toml, --verbose]

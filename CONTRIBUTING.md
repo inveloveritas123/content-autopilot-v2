@@ -4,6 +4,37 @@ Dieses Dokument beschreibt den Pflicht-Workflow fuer alle Beitraege (Knecht-Agen
 
 ---
 
+## Setup (einmalig nach Clone)
+
+```bash
+# 1. Pre-Commit installieren (Quality-Gates lokal vor jedem Commit)
+pip install pre-commit
+pre-commit install
+
+# 2. Backend-Tooling
+cd backend
+pip install -r requirements.txt
+pip install ruff==0.7.4 pytest pytest-asyncio  # Dev-Tools
+
+# 3. Frontend-Tooling
+cd ../frontend
+npm ci
+```
+
+**Pre-Commit-Hooks** (laufen automatisch bei `git commit`):
+
+- `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, `check-json`, `check-merge-conflict`, `detect-private-key`, `check-added-large-files` (max 2 MB)
+- `ruff` (Python lint) + `ruff-format` (Python format) auf `backend/`
+- `prettier` auf `frontend/src/`
+- `eslint` auf `frontend/src/`
+- `gitleaks` (Secret-Scan, lokales Pendant zum CI-Workflow)
+
+Manuell ueber alles laufen lassen: `pre-commit run --all-files`.
+
+**Wer Pre-Commit umgehen will**, muss `git commit --no-verify` schreiben und im PR-Body begruenden. Die CI-Workflows fangen dieselben Probleme aber nochmal — Umgehen wird also nur dann durchgehen, wenn der Commit auch wirklich sauber ist.
+
+---
+
 ## Branch-Strategie
 
 - `main` ist der stabile Branch. **Kein direkter Push auf main.**
