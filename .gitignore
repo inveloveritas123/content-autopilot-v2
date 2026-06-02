@@ -19,7 +19,8 @@ eval_results/
 .env.*
 !.env.example
 *.sql
-!scripts/ci-*.sql       # CI-Init-Scripts (keine Secrets, nur Schema/Seeds)
+# CI-Init-Scripts sind kein Secret-Material (nur Schema/Seeds) — re-included:
+!scripts/ci-*.sql
 *.sql.gz
 *.dump
 *.pem
