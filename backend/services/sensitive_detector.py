@@ -380,16 +380,14 @@ def _pattern_check(text: str) -> tuple[list[str], list[FlaggedPhrase], float]:
 
 
 def _llm_check(text: str) -> tuple[list[str], list[FlaggedPhrase], float]:
-    """Schicht B: LLM-Klassifikator mit Haiku (nur bei Schicht-A-Trigger)."""
-    import os
+    """Schicht B: LLM-Klassifikator via Router (nur bei Schicht-A-Trigger)."""
+    from services.pipeline_llm import call_pipeline_llm
 
-    import anthropic
-
-    LLM_MODEL = os.environ.get("BACKTEST_MODEL_OVERRIDE", "claude-haiku-4-5-20251001")
-
-    prompt = f"""Analysiere den folgenden LinkedIn-Post auf sensible Themen.
-
-Antworte NUR mit einem JSON-Objekt, KEIN anderer Text.
+    system_prompt = (
+        "Du bist ein Content-Moderator. Klassifiziere den Post auf sensible Themen. "
+        "Antworte NUR mit einem JSON-Objekt, KEIN anderer Text."
+    )
+    user_prompt = f"""Analysiere den folgenden LinkedIn-Post auf sensible Themen.
 
 Mögliche Kategorien: politics, religion, hate, health_claims, financial_advice, legal_advice
 
@@ -405,13 +403,13 @@ Post:
 {text[:2000]}"""
 
     try:
-        client = anthropic.Anthropic()
-        response = client.messages.create(
-            model=LLM_MODEL,
-            max_tokens=512,
-            messages=[{"role": "user", "content": prompt}],
+        result = call_pipeline_llm(
+            prompt_key="SENSITIVE_DETECT",
+            system_prompt=system_prompt,
+            user_content=user_prompt,
+            tenant_id="",
         )
-        raw = response.content[0].text.strip()
+        raw = result.text.strip()
         # Strip markdown code block if present
         if raw.startswith("```"):
             raw = raw.split("```")[1]
