@@ -49,33 +49,39 @@ logger = logging.getLogger("tasks.p03_voice_fallback")
 # die richtige Referenz ersetzt.
 # ---------------------------------------------------------------------------
 
+
 def _lazy_sync_session_factory():
     """Lazy-Wrapper um sync_session_factory — patchbar über vf.sync_session_factory."""
     from models.base import sync_session_factory
+
     return sync_session_factory()
 
 
 def _lazy_call_pipeline_llm(**kwargs):
     """Lazy-Wrapper um call_pipeline_llm — patchbar über vf.call_pipeline_llm."""
     from services.pipeline_llm import call_pipeline_llm
+
     return call_pipeline_llm(**kwargs)
 
 
 def _lazy_finalize_canonical(prompt_key, payload, meta=None):
     """Lazy-Wrapper um finalize_canonical — patchbar über vf.finalize_canonical."""
     from services.schema_transformer import finalize_canonical
+
     return finalize_canonical(prompt_key, payload, meta=meta)
 
 
 def _lazy_build_canonical_meta(*args, **kwargs):
     """Lazy-Wrapper um build_canonical_meta — patchbar über vf.build_canonical_meta."""
     from services.schema_transformer import build_canonical_meta
+
     return build_canonical_meta(*args, **kwargs)
 
 
 def _lazy_now_iso() -> str:
     """Lazy-Wrapper um now_iso aus canonical_wiring — patchbar über vf.now_iso."""
     from tasks.canonical_wiring import now_iso
+
     return now_iso()
 
 
@@ -115,10 +121,7 @@ def _has_voice_source(
             return True
 
     # LinkedIn-Posts vorhanden?
-    if linkedin_posts:
-        return True
-
-    return False
+    return bool(linkedin_posts)
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +320,7 @@ def _insert_fallback_voice_profile(
 ) -> str:
     """Schreibt den Fallback-Voice-Payload in tenant_voice_profile."""
     from sqlalchemy import text
+
     row = session.execute(
         text(
             "SELECT COALESCE(MAX(version), 0) + 1 AS next_version "
@@ -328,7 +332,7 @@ def _insert_fallback_voice_profile(
 
     new_id = str(uuid.uuid4())
     session.execute(
-        text(  # noqa: F821 — text imported above
+        text(
             "INSERT INTO tenant_voice_profile "
             "(id, tenant_id, version, is_active, source, payload, "
             "prompt_version_hash, model_id, project_id) "
