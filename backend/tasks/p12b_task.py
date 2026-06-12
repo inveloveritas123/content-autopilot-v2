@@ -15,6 +15,13 @@ Workflow:
 11. Reviewer-Queue-Eintrag bei loop_break
 12. Return dict
 """
+"""
+Umgestellt: 2026-06-11 (P5-anthropic-provider.md)
+  - anthropic-SDK-Bypass entfernt (ANTHROPIC_MODEL_ID / ANTHROPIC_PRICING_KEY entfernt)
+  - BACKTEST_MODEL_OVERRIDE ersetzt durch MODEL_TIER_P12B Env-Variable
+  - Modell-ID kommt jetzt aus PipelineLLMResult.model_id (Tier S6)
+  - Kosten-Schätzung über estimate_tier_cost statt estimate_anthropic_cost
+"""
 import asyncio
 import json
 import logging
@@ -24,18 +31,15 @@ import uuid
 from dataclasses import dataclass
 from typing import Optional
 
-import anthropic
 import jsonschema
 from sqlalchemy import text
 
 from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from services.prompt_loader import get_default_prompt_loader
+from services.pipeline_llm import call_pipeline_llm, resolve_tier, estimate_tier_cost, BudgetExceededError
 
 logger = logging.getLogger(__name__)
-
-ANTHROPIC_MODEL_ID = "claude-sonnet-4-6-20251022"
-ANTHROPIC_PRICING_KEY = "claude-sonnet-4-6"
 
 _SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "..", "schemas", "p12b_output_schema.json")
 
@@ -229,7 +233,8 @@ def run_p12b(
                     "(id, tenant_id, stage, model_id, status) "
                     "VALUES (:id, :tenant_id, 'p12b', :model_id, 'running')"
                 ),
-                {"id": run_id, "tenant_id": tenant_id, "model_id": ANTHROPIC_MODEL_ID},
+                # model_id wird beim Audit-Update mit dem echten Router-Wert überschrieben
+                {"id": run_id, "tenant_id": tenant_id, "model_id": "pending"},
             )
             session.commit()
         except Exception as exc:
@@ -262,14 +267,16 @@ def run_p12b(
         # ------------------------------------------------------------------
         # 3. Cost-Cap prüfen
         # ------------------------------------------------------------------
-        from services.cost_cap import CostCapExceeded, estimate_anthropic_cost
+        from services.cost_cap import CostCapExceeded
+        from services.llm import BudgetExceededError
 
-        estimated_cost = estimate_anthropic_cost(ANTHROPIC_PRICING_KEY, 2000, 800)
+        _tier, _ = resolve_tier("P12B")
+        estimated_cost = estimate_tier_cost(_tier, 2000, 800)
         logger.info("p12b run_id=%s: estimated cost=%.6f USD", run_id, estimated_cost)
 
         try:
             asyncio.run(_run_cost_check(tenant_id, estimated_cost))
-        except CostCapExceeded:
+        except (CostCapExceeded, BudgetExceededError):
             logger.warning(
                 "p12b run_id=%s tenant=%s: daily cost cap exceeded, pausing",
                 run_id,
@@ -316,36 +323,25 @@ def run_p12b(
             user_prompt = loaded.user_prompt_template + "\n\n" + context_json_str
 
         # ------------------------------------------------------------------
-        # 6. Anthropic-Call mit cache_control ephemeral auf System-Prompt
+        # 6. LLM-Call über den Seam (kein direkter SDK-Aufruf)
+        # BACKTEST_MODEL_OVERRIDE wird durch MODEL_TIER_P12B Env-Variable ersetzt
         # ------------------------------------------------------------------
-        from config import settings
-
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-
-        model_id = os.environ.get("BACKTEST_MODEL_OVERRIDE") or ANTHROPIC_MODEL_ID
-        response = client.messages.create(
-            model=model_id,
-            max_tokens=2000,
-            system=[
-                {
-                    "type": "text",
-                    "text": loaded.system_prompt,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": user_prompt}],
+        res = call_pipeline_llm(
+            prompt_key="P12B",
+            system_prompt=loaded.system_prompt,
+            user_content=user_prompt,
+            tenant_id=tenant_id,
         )
 
-        raw_text = response.content[0].text
-        logger.debug("p12b run_id=%s: Anthropic-Antwort erhalten (%d Zeichen)", run_id, len(raw_text))
+        raw_text = res.text
+        logger.debug("p12b run_id=%s: LLM-Antwort erhalten (%d Zeichen)", run_id, len(raw_text))
 
         # ------------------------------------------------------------------
         # 7. Token-Usage tracken
         # ------------------------------------------------------------------
-        usage = response.usage
-        input_tokens = usage.input_tokens
-        output_tokens = usage.output_tokens
-        cache_read = getattr(usage, "cache_read_input_tokens", 0)
+        input_tokens = res.input_tokens
+        output_tokens = res.output_tokens
+        cache_read = res.cache_read_tokens
         logger.info(
             "p12b run_id=%s: usage input=%d output=%d cache_read=%d tenant=%s",
             run_id,
@@ -355,7 +351,7 @@ def run_p12b(
             tenant_id,
         )
 
-        actual_cost = estimate_anthropic_cost(ANTHROPIC_PRICING_KEY, input_tokens, output_tokens)
+        actual_cost = res.cost_usd
 
         # ------------------------------------------------------------------
         # 8. JSON-Parsing
@@ -521,6 +517,26 @@ def run_p12b(
             "richtung_fuer_p12": output_json.get("richtung_fuer_p12", ""),
             "loop_iteration": loop_iteration,
         }
+
+    except BudgetExceededError as exc:
+        # BUG-1-Fix: Router-Budget überschritten (HTTP 412) → paused_for_cost, kein Retry
+        duration_ms = int((time.monotonic() - t_start) * 1000)
+        logger.warning("p12b run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id)
+        try:
+            with sync_session_factory() as session:
+                session.execute(
+                    text(
+                        "UPDATE setup_pipeline_run SET "
+                        "status = 'paused_for_cost', "
+                        "finished_at = now() "
+                        "WHERE id = :run_id"
+                    ),
+                    {"run_id": run_id},
+                )
+                session.commit()
+        except Exception as audit_exc:
+            logger.error("p12b run_id=%s: audit update (paused_for_cost) fehlgeschlagen: %s", run_id, audit_exc)
+        return {"run_id": run_id, "status": "paused_for_cost"}
 
     except Exception as exc:
         duration_ms = int((time.monotonic() - t_start) * 1000)

@@ -4,12 +4,17 @@ P04-Service — Audience-Avatar-Vertiefung aus P01-Kundenkontext.
 Workflow:
 1. Setup-Pipeline-Run in DB anlegen (status='running')
 2. Tageskosten-Cap prüfen (CostCapMiddleware, async via asyncio.run)
-3. Prompt laden (PromptLoader, sync via Nextcloud)
-4. Anthropic-Call mit cache_control: ephemeral auf System-Prompt
+3. Prompt laden (PromptLoader, sync via Nextcloud/localfs)
+4. LLM-Call über call_pipeline_llm (Seam → Router, kein direkter SDK-Aufruf)
 5. JSON-Parsing + Schema-Validierung (jsonschema)
    [HYPOTHESE]-Markierungen werden NICHT gefiltert — durchgereicht wie empfangen.
 6. Insert in tenant_audience_avatar (is_active=False)
 7. Audit-Update in setup_pipeline_run (status='done')
+
+Umgestellt: 2026-06-11 (P5-anthropic-provider.md)
+  - anthropic-SDK-Bypass entfernt (ANTHROPIC_MODEL_ID entfernt)
+  - Modell-ID kommt jetzt aus PipelineLLMResult.model_id
+  - Kosten-Schätzung über estimate_tier_cost statt estimate_anthropic_cost
 """
 import asyncio
 import hashlib
@@ -25,10 +30,9 @@ from sqlalchemy import text
 from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from services.prompt_loader import get_default_prompt_loader
+from services.pipeline_llm import call_pipeline_llm, resolve_tier, estimate_tier_cost, BudgetExceededError
 
 logger = logging.getLogger(__name__)
-
-ANTHROPIC_MODEL_ID = "claude-sonnet-4-6-20251022"  # dated alias
 
 _SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "../schemas/p04_output_schema.json")
 
@@ -72,7 +76,7 @@ async def _run_cost_check(tenant_id: str, estimated_cost: float) -> None:
 
 
 async def _record_actual_cost(tenant_id: str, actual_cost: float) -> None:
-    """Actual-Cost nach erfolgreichem Anthropic-Call ins daily_cost_tenant schreiben."""
+    """Actual-Cost nach erfolgreichem LLM-Call ins daily_cost_tenant schreiben."""
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker as async_sm
     from config import settings
@@ -136,16 +140,16 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
 
     try:
         # ------------------------------------------------------------------
-        # 2. Cost-Cap prüfen (estimated: ~3000 input + 1500 output tokens)
+        # 2. Cost-Cap prüfen
         # ------------------------------------------------------------------
-        from services.cost_cap import CostCapExceeded, estimate_anthropic_cost
+        from services.cost_cap import CostCapExceeded
+        from services.llm import BudgetExceededError
 
-        # Kurzname für Pricing-Lookup (ohne Datum-Suffix)
-        _pricing_model_key = "claude-sonnet-4-6"
-        estimated_cost = estimate_anthropic_cost(_pricing_model_key, 3000, 1500)
+        _tier, _ = resolve_tier("P04")
+        estimated_cost = estimate_tier_cost(_tier, 3000, 1500)
         try:
             asyncio.run(_run_cost_check(tenant_id, estimated_cost))
-        except CostCapExceeded:
+        except (CostCapExceeded, BudgetExceededError):
             logger.warning(
                 "p04 run_id=%s tenant=%s: daily cost cap exceeded, pausing",
                 run_id, tenant_id,
@@ -162,7 +166,7 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
             return {"run_id": run_id, "status": "paused_for_cost"}
 
         # ------------------------------------------------------------------
-        # 3. Prompt laden (sync via Nextcloud)
+        # 3. Prompt laden (sync via Nextcloud/localfs)
         # ------------------------------------------------------------------
         loader = get_default_prompt_loader()
         loaded = loader.load("P04")
@@ -172,13 +176,8 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
         )
 
         # ------------------------------------------------------------------
-        # 4. Anthropic-Call mit cache_control: ephemeral auf System-Prompt
+        # 4. LLM-Call über den Seam (kein direkter SDK-Aufruf)
         # ------------------------------------------------------------------
-        import anthropic
-        from config import settings
-
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-
         # User-Content aufbauen: P01-Kontext + optionales Transkript
         p01_context = json.dumps(p01_payload, ensure_ascii=False)
         user_content = (
@@ -188,42 +187,25 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
         if transcript:
             user_content += f"\n<transkript>{transcript}</transkript>"
 
-        response = client.messages.create(
-            model=ANTHROPIC_MODEL_ID,
-            max_tokens=2048,
-            system=[
-                {
-                    "type": "text",
-                    "text": loaded.system_prompt,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[
-                {"role": "user", "content": user_content}
-            ],
+        res = call_pipeline_llm(
+            prompt_key="P04",
+            system_prompt=loaded.system_prompt,
+            user_content=user_content,
+            tenant_id=tenant_id,
         )
 
-        raw_text = response.content[0].text
-        logger.debug("p04 run_id=%s: Anthropic-Antwort erhalten (%d Zeichen)", run_id, len(raw_text))
-
-        # Token-Nutzung auslesen (best-effort)
-        try:
-            usage = response.usage
-            input_tokens = usage.input_tokens or 0
-            output_tokens = usage.output_tokens or 0
-            cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
-            logger.info("p04 run_id=%s cache_read_input_tokens=%s", run_id, cache_read)
-        except Exception:
-            input_tokens, output_tokens, cache_read = 3000, 1500, 0
-
-        # cache_read Tokens sind billiger (cache-Preis ~0.1x input), Schätzung: voller input-Preis
-        actual_cost = estimate_anthropic_cost(_pricing_model_key, input_tokens, output_tokens)
+        raw_text = res.text
+        input_tokens = res.input_tokens if res.input_tokens > 0 else 3000
+        output_tokens = res.output_tokens if res.output_tokens > 0 else 1500
+        cache_read = res.cache_read_tokens
+        actual_cost = res.cost_usd
+        model_id = res.model_id
+        logger.info("p04 run_id=%s cache_read_tokens=%s", run_id, cache_read)
+        logger.debug("p04 run_id=%s: LLM-Antwort erhalten (%d Zeichen)", run_id, len(raw_text))
 
         # ------------------------------------------------------------------
         # 5. JSON-Parsing + Schema-Validierung
         # [HYPOTHESE]-Strings werden NICHT gefiltert — einfach durchgereicht.
-        # Das Schema verwendet additionalProperties:true und lässt null zu,
-        # daher passieren [HYPOTHESE]-Markierungen die Validierung problemlos.
         # ------------------------------------------------------------------
         schema = _load_output_schema()
 
@@ -238,21 +220,17 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
                 "\n\nDeine Antwort MUSS als reines JSON-Objekt ohne Markdown-Formatierung "
                 "ausgegeben werden. Pflichtfelder: hauptperson, kernschmerzen, transformation."
             )
-            retry_response = client.messages.create(
-                model=ANTHROPIC_MODEL_ID,
-                max_tokens=2048,
-                system=[
-                    {
-                        "type": "text",
-                        "text": loaded.system_prompt,
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ],
-                messages=[
-                    {"role": "user", "content": user_content + schema_hint}
-                ],
+            retry_res = call_pipeline_llm(
+                prompt_key="P04",
+                system_prompt=loaded.system_prompt,
+                user_content=user_content + schema_hint,
+                tenant_id=tenant_id,
             )
-            raw_text = retry_response.content[0].text
+            raw_text = retry_res.text
+            # Tokens und Kosten beider Calls summieren
+            input_tokens += retry_res.input_tokens
+            output_tokens += retry_res.output_tokens
+            actual_cost += retry_res.cost_usd
             try:
                 output_json = _extract_json_from_text(raw_text)
             except json.JSONDecodeError as retry_err:
@@ -299,7 +277,7 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
                     "version": next_version,
                     "payload": json.dumps(output_json, ensure_ascii=False),
                     "prompt_version_hash": prompt_version_hash,
-                    "model_id": ANTHROPIC_MODEL_ID,
+                    "model_id": model_id,
                     "project_id": project_id,
                 },
             )
@@ -338,7 +316,7 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
                 ),
                 {
                     "id": run_id,
-                    "model_id": ANTHROPIC_MODEL_ID,
+                    "model_id": model_id,
                     "input_tokens": input_tokens,
                     "output_tokens": output_tokens,
                     "cost_usd": actual_cost,
@@ -357,6 +335,23 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
         # 8. Return
         # ------------------------------------------------------------------
         return {"run_id": run_id, "status": "done"}
+
+    except BudgetExceededError as exc:
+        # BUG-1-Fix: Router-Budget überschritten (HTTP 412) aus call_pipeline_llm → paused_for_cost
+        logger.warning("p04 run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id)
+        try:
+            with sync_session_factory() as session:
+                session.execute(
+                    text(
+                        "UPDATE setup_pipeline_run SET status='paused_for_cost', "
+                        "finished_at=now() WHERE id=:id"
+                    ),
+                    {"id": run_id},
+                )
+                session.commit()
+        except Exception as db_err:
+            logger.error("p04 run_id=%s: DB-Update (paused_for_cost) fehlgeschlagen: %s", run_id, db_err)
+        return {"run_id": run_id, "status": "paused_for_cost"}
 
     except Exception as exc:
         logger.exception("p04 run_id=%s tenant=%s: FAILED — %s", run_id, tenant_id, exc)

@@ -6,13 +6,18 @@ Workflow:
 1. Setup-Pipeline-Run erstellen (stage='p03', status='running')
 2. Cost-Cap-Schätzung berechnen
 3. Prompt aus Nextcloud laden (PromptLoader, gecacht)
-4. Anthropic-Call mit Prompt-Caching (cache_control ephemeral)
+4. LLM-Call über call_pipeline_llm (Seam → Router, kein direkter SDK-Aufruf)
 5. JSON-Output parsen + Schema validieren
 6. In tenant_voice_profile inserieren (is_active=False, neue Version)
 7. Audit-Update (tokens, cost, duration, output_hash)
 
 Bypass-Pfad: Wenn bypass_with_existing_json=True + existing_json vorhanden →
 Schema validieren und direkt inserieren mit source='md_upload'.
+
+Umgestellt: 2026-06-11 (P5-anthropic-provider.md)
+  - anthropic-SDK-Bypass entfernt (ANTHROPIC_MODEL_ID entfernt)
+  - Modell-ID kommt jetzt aus PipelineLLMResult.model_id
+  - Kosten-Schätzung über estimate_tier_cost statt estimate_anthropic_cost
 """
 import hashlib
 import json
@@ -22,17 +27,15 @@ import re
 import time
 import uuid
 
-import anthropic
 import jsonschema
 from sqlalchemy import text
 
 from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from services.prompt_loader import get_default_prompt_loader
+from services.pipeline_llm import call_pipeline_llm, resolve_tier, estimate_tier_cost, BudgetExceededError
 
 logger = logging.getLogger(__name__)
-
-ANTHROPIC_MODEL_ID = "claude-sonnet-4-6-20251022"
 
 # Schema laden — einmalig beim Modulimport
 _SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "..", "schemas", "p03_output_schema.json")
@@ -244,10 +247,10 @@ def run_p03(
             session.execute(
                 text(
                     "INSERT INTO setup_pipeline_run "
-                    "(id, tenant_id, stage, model_id, status) "
-                    "VALUES (:id, :tenant_id, 'p03', :model_id, 'running')"
+                    "(id, tenant_id, stage, status) "
+                    "VALUES (:id, :tenant_id, 'p03', 'running')"
                 ),
-                {"id": run_id, "tenant_id": tenant_id, "model_id": ANTHROPIC_MODEL_ID},
+                {"id": run_id, "tenant_id": tenant_id},
             )
             session.commit()
         except Exception as exc:
@@ -258,9 +261,12 @@ def run_p03(
     t_start = time.monotonic()
 
     try:
-        # 2. Cost-Cap-Schätzung + Enforcement (#123 Lücke: P03 hatte keinen Cap-Check)
-        from services.cost_cap import estimate_anthropic_cost, CostCapExceeded
-        est = estimate_anthropic_cost(ANTHROPIC_MODEL_ID, 3000, 1500)
+        # 2. Cost-Cap-Schätzung + Enforcement
+        from services.cost_cap import CostCapExceeded
+        from services.llm import BudgetExceededError
+
+        _tier, _ = resolve_tier("P03")
+        est = estimate_tier_cost(_tier, 3000, 1500)
         logger.info("P03 estimated cost=%.6f USD for tenant=%s", est, tenant_id)
         try:
             from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -279,7 +285,7 @@ def run_p03(
                     await _engine.dispose()
 
             _asyncio.run(_p03_cap_check())
-        except CostCapExceeded:
+        except (CostCapExceeded, BudgetExceededError):
             logger.warning("P03 run_id=%s tenant=%s: daily cost cap exceeded, pausing", run_id, tenant_id)
             with sync_session_factory() as session:
                 session.execute(
@@ -296,10 +302,7 @@ def run_p03(
         loaded = loader.load("P03")
         prompt_version_hash = loaded.sha
 
-        # 4. Anthropic-Call mit cache_control
-        from config import settings
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-
+        # 4. User-Content zusammenbauen
         user_content = loaded.user_prompt_template + f"\n\n<transkript>{transcript}</transkript>"
         if written_texts:
             for i, txt in enumerate(written_texts, 1):
@@ -316,37 +319,29 @@ def run_p03(
                 run_id, len(filtered_posts)
             )
 
-        response = client.messages.create(
-            model=ANTHROPIC_MODEL_ID,
-            max_tokens=2000,
-            system=[
-                {
-                    "type": "text",
-                    "text": loaded.system_prompt,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": user_content}],
+        # 5. LLM-Call über den Seam (kein direkter SDK-Aufruf)
+        res = call_pipeline_llm(
+            prompt_key="P03",
+            system_prompt=loaded.system_prompt,
+            user_content=user_content,
+            tenant_id=tenant_id,
         )
 
-        raw_text = response.content[0].text
-        input_tokens = response.usage.input_tokens
-        output_tokens = response.usage.output_tokens
-        cache_read = getattr(response.usage, "cache_read_input_tokens", 0)
+        raw_text = res.text
+        input_tokens = res.input_tokens
+        output_tokens = res.output_tokens
+        actual_cost = res.cost_usd
+        model_id = res.model_id
         logger.info(
             "P03 usage: input=%d output=%d cache_read=%d tenant=%s",
-            input_tokens,
-            output_tokens,
-            cache_read,
-            tenant_id,
+            input_tokens, output_tokens, res.cache_read_tokens, tenant_id,
         )
 
-        # 5. JSON-Parsing + Schema-Validierung
+        # 6. JSON-Parsing + Schema-Validierung
         parsed = _parse_json_from_text(raw_text)
         _validate_schema(parsed)
 
-        # 6. DB-Insert in tenant_voice_profile
-        actual_cost = estimate_anthropic_cost(ANTHROPIC_MODEL_ID, input_tokens, output_tokens)
+        # 7. DB-Insert in tenant_voice_profile
         output_hash = hashlib.sha256(json.dumps(parsed, sort_keys=True).encode()).hexdigest()
         duration_ms = int((time.monotonic() - t_start) * 1000)
 
@@ -359,10 +354,10 @@ def run_p03(
                     payload=parsed,
                     source="transcript",
                     prompt_version_hash=prompt_version_hash,
-                    model_id=ANTHROPIC_MODEL_ID,
+                    model_id=model_id,
                     project_id=project_id,
                 )
-                # 7. Audit-Update
+                # Audit-Update
                 session.execute(
                     text(
                         "UPDATE setup_pipeline_run SET "
@@ -391,13 +386,32 @@ def run_p03(
                 session.rollback()
                 raise
 
+        # 8. Actual-Cost in daily_cost_tenant schreiben
+        try:
+            from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+            from sqlalchemy.orm import sessionmaker as _sm2
+            from services.cost_cap import CostCapMiddleware
+            from config import settings as _s2
+            import asyncio as _asyncio2
+
+            async def _p03_record_cost():
+                _engine = create_async_engine(_s2.database_url, pool_pre_ping=True)
+                _Session = _sm2(_engine, class_=AsyncSession, expire_on_commit=False)
+                try:
+                    async with _Session() as _sess:
+                        await CostCapMiddleware(_sess).check_and_record(
+                            tenant_id, 0.0, actual_cost_usd=actual_cost
+                        )
+                finally:
+                    await _engine.dispose()
+
+            _asyncio2.run(_p03_record_cost())
+        except Exception as cost_err:
+            logger.warning("P03 run_id=%s: actual-cost recording fehlgeschlagen: %s", run_id, cost_err)
+
         logger.info(
             "P03 done tenant=%s run_id=%s voice_profile_id=%s cost=%.6f USD duration=%dms",
-            tenant_id,
-            run_id,
-            voice_profile_id,
-            actual_cost,
-            duration_ms,
+            tenant_id, run_id, voice_profile_id, actual_cost, duration_ms,
         )
 
         return {
@@ -409,6 +423,26 @@ def run_p03(
             "cost_usd": actual_cost,
             "duration_ms": duration_ms,
         }
+
+    except BudgetExceededError as exc:
+        # BUG-1-Fix: Router-Budget überschritten (HTTP 412) → paused_for_cost, kein Retry
+        duration_ms = int((time.monotonic() - t_start) * 1000)
+        logger.warning("P03 run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id)
+        try:
+            with sync_session_factory() as session:
+                session.execute(
+                    text(
+                        "UPDATE setup_pipeline_run SET "
+                        "status = 'paused_for_cost', "
+                        "finished_at = now() "
+                        "WHERE id = :run_id"
+                    ),
+                    {"run_id": run_id},
+                )
+                session.commit()
+        except Exception as audit_exc:
+            logger.error("P03 audit update (paused_for_cost) failed: %s", audit_exc)
+        return {"run_id": run_id, "status": "paused_for_cost"}
 
     except Exception as exc:
         duration_ms = int((time.monotonic() - t_start) * 1000)

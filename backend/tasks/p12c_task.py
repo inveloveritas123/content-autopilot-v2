@@ -10,6 +10,13 @@ Workflow:
 7. carousel_pdf_path in content_pieces speichern (optional)
 8. Return dict: {slides, pdf_bytes (base64), slide_count}
 """
+"""
+Umgestellt: 2026-06-11 (P5-anthropic-provider.md)
+  - anthropic-SDK-Bypass entfernt (ANTHROPIC_MODEL_ID / ANTHROPIC_PRICING_KEY entfernt)
+  - BACKTEST_MODEL_OVERRIDE ersetzt durch MODEL_TIER_P12C Env-Variable
+  - LLM-Call über call_pipeline_llm (Seam → Router)
+  - Kosten-Schätzung über estimate_tier_cost statt estimate_anthropic_cost
+"""
 import base64
 import hashlib
 import json
@@ -18,21 +25,17 @@ import os
 import time
 import uuid
 
-import anthropic
 from sqlalchemy import text
 
 from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from services.cost_cap import (
-    estimate_anthropic_cost,
     CostCapExceeded,
     CostCapMiddleware,
 )
+from services.pipeline_llm import call_pipeline_llm, resolve_tier, estimate_tier_cost, BudgetExceededError
 
 logger = logging.getLogger(__name__)
-
-ANTHROPIC_MODEL_ID = "claude-sonnet-4-6-20251022"
-ANTHROPIC_PRICING_KEY = "claude-sonnet-4-6"
 
 # Local fallback prompt (used if PromptLoader/NC unavailable)
 _FALLBACK_SYSTEM = """Du bist ein LinkedIn-Content-Stratege. Wandle den Post in 5-7 Slides um.
@@ -159,7 +162,8 @@ def run_p12c(
     t_start = time.time()
 
     # Cost-cap check (#123 Lücke: P12c-cap-call hatte falschen Methodennamen + fehlende DB-Session)
-    est_cost = estimate_anthropic_cost(ANTHROPIC_PRICING_KEY, 4000, 1500)
+    _tier, _ = resolve_tier("P12C")
+    est_cost = estimate_tier_cost(_tier, 4000, 1500)
     logger.info("P12c estimated cost=%.6f USD for tenant=%s", est_cost, tenant_id)
     try:
         from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -206,23 +210,22 @@ def run_p12c(
         voice_hint=(voice_hint or "professionell, persönlich")[:500],
     )
 
-    # Anthropic call
+    # LLM-Call über den Seam (kein direkter SDK-Aufruf)
+    # BACKTEST_MODEL_OVERRIDE wird durch MODEL_TIER_P12C Env-Variable ersetzt
     try:
-        client = anthropic.Anthropic()
-        model_id = os.environ.get("BACKTEST_MODEL_OVERRIDE") or ANTHROPIC_MODEL_ID
-        response = client.messages.create(
-            model=model_id,
-            max_tokens=1024,
-            system=[{
-                "type": "text",
-                "text": prompt.system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }],
-            messages=[{"role": "user", "content": user_content}],
+        res = call_pipeline_llm(
+            prompt_key="P12C",
+            system_prompt=prompt.system_prompt,
+            user_content=user_content,
+            tenant_id=tenant_id,
         )
-        raw_output = response.content[0].text.strip()
+        raw_output = res.text.strip()
+    except BudgetExceededError as budget_err:
+        # BUG-1-Fix: Router-Budget überschritten (HTTP 412) → paused_for_cost, kein Retry
+        logger.warning("[P12c] run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id)
+        return {"run_id": run_id, "status": "paused_for_cost"}
     except Exception as api_err:
-        logger.error(f"[P12c] Anthropic-Call fehlgeschlagen: {api_err}")
+        logger.error(f"[P12c] LLM-Call fehlgeschlagen: {api_err}")
         return {"status": "failed", "error": str(api_err)}
 
     # Parse slides

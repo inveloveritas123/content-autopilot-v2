@@ -87,6 +87,8 @@ MODEL_PRICING = {
     "mistral/mistral-medium-latest": {"input": 0.40, "output": 1.20},
     "mistral/mistral-small-latest": {"input": 0.10, "output": 0.30},
     "openai/gpt-4.1-mini": {"input": 0.40, "output": 1.60},
+    # Anthropic via Requesty-Router — Preis identisch mit cost_cap._ANTHROPIC_PRICING
+    "anthropic/claude-sonnet-4-6": {"input": 3.00, "output": 15.00},
 }
 
 # Task → preferred model mapping (Cycle 86: Gemini 2.0 Flash + Mistral Medium)

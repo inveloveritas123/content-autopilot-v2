@@ -4,11 +4,16 @@ P01-Service — Kundenkontext-Extraktion aus Transkript + Mini-Formular.
 Workflow:
 1. Setup-Pipeline-Run in DB anlegen (status='running')
 2. Tageskosten-Cap prüfen (CostCapMiddleware, async via asyncio.run)
-3. Prompt laden (PromptLoader, sync via Nextcloud)
-4. Vertex/Gemini-Call via google-generativeai (sync)
+3. Prompt laden (PromptLoader, sync via Nextcloud/localfs)
+4. LLM-Call via call_pipeline_llm (Seam → Router, kein direkter SDK-Aufruf)
 5. JSON-Parsing + Schema-Validierung (jsonschema)
 6. Insert in tenant_customer_context
 7. Audit-Update in setup_pipeline_run (status='done')
+
+Umgestellt: 2026-06-11 (P5-anthropic-provider.md)
+  - google.generativeai-Bypass entfernt
+  - Modell-ID kommt jetzt aus PipelineLLMResult.model_id (Tier S6 = "anthropic/claude-sonnet-4-6")
+  - Kosten-Schätzung über estimate_tier_cost statt estimate_vertex_cost
 """
 import asyncio
 import hashlib
@@ -25,10 +30,9 @@ from sqlalchemy import text
 from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from services.prompt_loader import get_default_prompt_loader
+from services.pipeline_llm import call_pipeline_llm, resolve_tier, estimate_tier_cost, BudgetExceededError
 
 logger = logging.getLogger(__name__)
-
-VERTEX_MODEL_ID = "gemini-2.5-flash-lite-preview-06-17"  # dated alias, gepinnt
 
 _SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "../schemas/p01_output_schema.json")
 
@@ -74,7 +78,7 @@ async def _run_cost_check(tenant_id: str, estimated_cost: float) -> None:
 
 
 async def _record_actual_cost(tenant_id: str, actual_cost: float) -> None:
-    """Actual-Cost nach erfolgreichem Gemini-Call ins daily_cost_tenant schreiben."""
+    """Actual-Cost nach erfolgreichem LLM-Call ins daily_cost_tenant schreiben."""
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker as async_sm
     from config import settings
@@ -131,16 +135,34 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
 
     try:
         # ------------------------------------------------------------------
-        # 2. Cost-Cap prüfen (estimated: ~2000 input + 1000 output tokens)
+        # 2. Cost-Cap prüfen
+        # Schätzung: ~2000 Input + 1000 Output Tokens mit dem konfigurierten Tier
         # ------------------------------------------------------------------
-        from services.cost_cap import CostCapExceeded, estimate_vertex_cost
+        from services.cost_cap import CostCapExceeded
+        from services.llm import BudgetExceededError
 
-        estimated_cost = estimate_vertex_cost(VERTEX_MODEL_ID, 2000, 1000)
+        _tier, _ = resolve_tier("P01")
+        estimated_cost = estimate_tier_cost(_tier, 2000, 1000)
         try:
             asyncio.run(_run_cost_check(tenant_id, estimated_cost))
         except CostCapExceeded:
             logger.warning(
                 "p01 run_id=%s tenant=%s: daily cost cap exceeded, pausing",
+                run_id, tenant_id,
+            )
+            with sync_session_factory() as session:
+                session.execute(
+                    text(
+                        "UPDATE setup_pipeline_run SET status='paused_for_cost', "
+                        "finished_at=now() WHERE id=:id"
+                    ),
+                    {"id": run_id},
+                )
+                session.commit()
+            return {"run_id": run_id, "status": "paused_for_cost"}
+        except BudgetExceededError:
+            logger.warning(
+                "p01 run_id=%s tenant=%s: Router-Budget überschritten (412), pausing",
                 run_id, tenant_id,
             )
             with sync_session_factory() as session:
@@ -167,17 +189,8 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
         )
 
         # ------------------------------------------------------------------
-        # 4. Vertex-Call (sync — google-generativeai)
+        # 4. LLM-Call über den Seam (kein direkter SDK-Aufruf)
         # ------------------------------------------------------------------
-        import google.generativeai as genai
-        from config import settings
-
-        genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel(
-            model_name=VERTEX_MODEL_ID,
-            system_instruction=system_prompt_text,
-        )
-
         user_content = (
             f"{user_prompt_text}\n\n"
             f"<transkript>{transcript}</transkript>"
@@ -187,19 +200,23 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
                 f"\n<formular>{json.dumps(mini_form_data, ensure_ascii=False)}</formular>"
             )
 
-        response = model.generate_content(user_content)
-        raw_text = response.text
-        logger.debug("p01 run_id=%s: Gemini-Antwort erhalten (%d Zeichen)", run_id, len(raw_text))
+        res = call_pipeline_llm(
+            prompt_key="P01",
+            system_prompt=system_prompt_text,
+            user_content=user_content,
+            tenant_id=tenant_id,
+        )
+        raw_text = res.text
+        input_tokens = res.input_tokens if res.input_tokens > 0 else 2000
+        output_tokens = res.output_tokens if res.output_tokens > 0 else 1000
+        actual_cost = res.cost_usd
+        model_id = res.model_id
 
-        # Token-Nutzung auslesen (best-effort)
-        try:
-            usage_meta = response.usage_metadata
-            input_tokens = usage_meta.prompt_token_count or 2000
-            output_tokens = usage_meta.candidates_token_count or 1000
-        except Exception:
-            input_tokens, output_tokens = 2000, 1000
-
-        actual_cost = estimate_vertex_cost(VERTEX_MODEL_ID, input_tokens, output_tokens)
+        logger.debug("p01 run_id=%s: LLM-Antwort erhalten (%d Zeichen)", run_id, len(raw_text))
+        logger.info(
+            "p01 run_id=%s: usage input=%d output=%d cache_read=%d cost=%.6f USD",
+            run_id, input_tokens, output_tokens, res.cache_read_tokens, actual_cost,
+        )
 
         # ------------------------------------------------------------------
         # 5. JSON-Parsing + Schema-Validierung
@@ -213,14 +230,23 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
                 "p01 run_id=%s: JSON-Parsing fehlgeschlagen (%s), Retry mit Schema-Reminder",
                 run_id, first_err,
             )
-            # Retry: Schema-Reminder an Model anhängen
+            # JSON-Retry: Schema-Hint an user_content anhängen, neuer Call
             schema_hint = (
                 "\n\nDeine Antwort MUSS als reines JSON-Objekt ohne Markdown-Formatierung "
                 "ausgegeben werden. Pflichtfelder: "
                 "unternehmensgeschichte, kernbotschaft, zielgruppe, expertise, werte."
             )
-            retry_response = model.generate_content(user_content + schema_hint)
-            raw_text = retry_response.text
+            retry_res = call_pipeline_llm(
+                prompt_key="P01",
+                system_prompt=system_prompt_text,
+                user_content=user_content + schema_hint,
+                tenant_id=tenant_id,
+            )
+            raw_text = retry_res.text
+            # Tokens und Kosten beider Calls summieren
+            input_tokens += retry_res.input_tokens
+            output_tokens += retry_res.output_tokens
+            actual_cost += retry_res.cost_usd
             try:
                 output_json = _extract_json_from_text(raw_text)
             except json.JSONDecodeError as retry_err:
@@ -234,8 +260,7 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
             logger.warning(
                 "p01 run_id=%s: Schema-Validierung fehlgeschlagen: %s", run_id, ve.message
             )
-            # Weich-Fehler: Wir loggen, brechen aber nicht ab — Felder werden ggf. mit None gefüllt
-            # (wunschzustand + innenwelt werden sowieso überschrieben)
+            # Weich-Fehler: Wir loggen, brechen aber nicht ab
 
         # ------------------------------------------------------------------
         # 6. Wunschzustand + Innenwelt erzwingend auf null setzen
@@ -274,7 +299,7 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
                     "version": next_version,
                     "payload": json.dumps(output_json, ensure_ascii=False),
                     "prompt_version_hash": prompt_version_hash,
-                    "model_id": VERTEX_MODEL_ID,
+                    "model_id": model_id,
                     "project_id": project_id,
                 },
             )
@@ -319,7 +344,7 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
                     "duration_ms": duration_ms,
                     "output_hash": output_hash,
                     "prompt_version_hash": prompt_version_hash,
-                    "model_id": VERTEX_MODEL_ID,
+                    "model_id": model_id,
                 },
             )
             session.commit()
@@ -332,6 +357,23 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
         # 9. Return
         # ------------------------------------------------------------------
         return {"run_id": run_id, "status": "done", "p01_run_id": run_id}
+
+    except BudgetExceededError as exc:
+        # BUG-1-Fix: Router-Budget überschritten (HTTP 412) aus call_pipeline_llm → paused_for_cost
+        logger.warning("p01 run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id)
+        try:
+            with sync_session_factory() as session:
+                session.execute(
+                    text(
+                        "UPDATE setup_pipeline_run SET status='paused_for_cost', "
+                        "finished_at=now() WHERE id=:id"
+                    ),
+                    {"id": run_id},
+                )
+                session.commit()
+        except Exception as db_err:
+            logger.error("p01 run_id=%s: DB-Update (paused_for_cost) fehlgeschlagen: %s", run_id, db_err)
+        return {"run_id": run_id, "status": "paused_for_cost"}
 
     except Exception as exc:
         logger.exception("p01 run_id=%s tenant=%s: FAILED — %s", run_id, tenant_id, exc)
