@@ -215,6 +215,14 @@ Filtere die Artefakte im OUTPUT raus, aber nutze sie als DIAGNOSE-SIGNAL.
 6. Ist der persoenlichkeits_stance eine BESCHREIBUNG oder nur ein LABEL? "Stiller Praktiker" allein ist nutzlos. Die Beschreibung muss so konkret sein, dass P12 daraus ableiten kann, wie die Person einen Post über ein beliebiges Thema angehen würde.
 7. Ist der emotionale_subtext aus der Perspektive des LESERS formuliert — oder aus der des Kunden? (Muss Leser-Perspektive sein: "Der Leser soll fühlen...", nicht "Der Kunde will vermitteln...")
 8. Ist der zielgruppen_sprachfilter mit konkreten Beispielen gefüllt — oder nur mit Kategorien? "Kein Software-Jargon" ist zu vage. "Kein 'Onboarding', kein 'Interface', kein 'Workflow' — stattdessen 'Einarbeitung', 'Oberfläche', 'Ablauf'" ist nutzbar.
+
+## Output-Format
+
+Antworte AUSSCHLIESSLICH mit einem validen JSON-Objekt. Kein einleitender Text, keine Erklärung, keine Markdown-Backticks um das JSON. Nur das JSON.
+
+Das JSON muss diese Top-Level-Keys enthalten: grundton, satzarchitektur, vokabular, erzaehlmuster, persoenlichkeit, vermeidungsprofil, referenz_saetze, adaptierte_saetze.
+
+Verwende null für Felder die aus dem Transkript nicht ableitbar sind. Erfinde NICHTS.
 ```
 
 ## User-Prompt
@@ -234,7 +242,7 @@ Hier ist das Transkript des Onboarding-Gesprächs (PRIMÄRQUELLE für Voice-Anal
 
 ---
 
-Erstelle das vollständige Voice-Profil.
+Erstelle das vollständige Voice-Profil. Antworte ausschließlich mit dem JSON-Objekt (siehe Output-Format), ohne Text davor oder danach.
 ```
 
 ---
