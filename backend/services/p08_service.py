@@ -76,6 +76,10 @@ class ResponseResult:
     quality: str
     session_id: str
     is_closed: bool
+    # #19: Nur ein ECHTER Übergang active→closed darf die Post-Generierung
+    # triggern. Spät-/Doppel-Events auf eine bereits geschlossene Session
+    # liefern is_closed=True, aber was_already_closed=True → kein Re-Trigger.
+    was_already_closed: bool = False
 
 
 def _load_p08_prompt():
@@ -187,28 +191,19 @@ def _parse_llm_response(raw: str) -> dict:
 
 
 def _close_session_db(session_id: str, tenant_id: str) -> None:
-    """Mark a session as closed in DB and try to queue for P10 extraction."""
+    """Mark a session as closed in DB.
+
+    #19: Der frühere `ready_for_p10`-Insert in content_ideas war ein toter
+    Pfad (kein Consumer) und ist entfernt. Die Post-Generierung läuft jetzt
+    über tasks.session_post_task (Trigger im Close-Zweig von
+    _route_inbound_message), nicht über einen content_ideas-Platzhalter.
+    """
     with sync_session_factory() as s:
         s.execute(
             text("UPDATE bot_session SET status = 'closed', updated_at = NOW() WHERE id = :id"),
             {"id": session_id},
         )
         s.commit()
-
-    # Try to mark content for P10 extraction (fail-open)
-    try:
-        with sync_session_factory() as s:
-            s.execute(
-                text(
-                    "INSERT INTO content_ideas (id, tenant_id, title, status) "
-                    "VALUES (gen_random_uuid(), :tid, :title, 'ready_for_p10') "
-                    "ON CONFLICT DO NOTHING"
-                ),
-                {"tid": tenant_id, "title": f"Bot-Session {session_id[:8]}"},
-            )
-            s.commit()
-    except Exception:
-        pass
 
 
 def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> OpenerResult:
@@ -311,10 +306,16 @@ def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> O
     return OpenerResult(session_id=session_id, question_text=question_text, category=category)
 
 
-def p08_response(session_id: str, features: dict) -> ResponseResult:
+def p08_response(
+    session_id: str, features: dict, raw_transcript: str | None = None
+) -> ResponseResult:
     """Process user features and return the next question or close signal.
 
-    Layer-3 safety: only features dict is passed to LLM, never the original transcript.
+    Layer-3 safety: only the features dict is passed to the LLM, never the
+    original transcript. The raw transcript (raw_transcript) is persisted into
+    bot_session.messages[*].user_transcript for later post generation (P12), but
+    NEVER reaches the P08 prompt — _get_recent_messages reads only `bot` +
+    `user_features_summary` (Layer-3 boundary, verified by test).
     """
     # 1. Load session from DB
     with sync_session_factory() as s:
@@ -327,12 +328,16 @@ def p08_response(session_id: str, features: dict) -> ResponseResult:
         ).fetchone()
 
     if not row or row[4] in ("closed", "expired"):
+        # #19: Session war bereits geschlossen (oder nicht gefunden) — KEIN
+        # echter active→closed-Übergang → was_already_closed=True, damit der
+        # Trigger im Caller die Post-Generierung NICHT erneut feuert.
         return ResponseResult(
             next_action="close",
             message="Session beendet.",
             quality="leer",
             session_id=session_id,
             is_closed=True,
+            was_already_closed=True,
         )
 
     tenant_id = row[0]
@@ -343,13 +348,43 @@ def p08_response(session_id: str, features: dict) -> ResponseResult:
     # 2. Check max questions
     max_q = MAX_QUESTIONS_TARGETED if mode == "targeted" else MAX_QUESTIONS_RANDOM_SMART
     if current_idx >= max_q:
+        close_message = "Danke! Ich habe genug Material gesammelt."
+        # #19: Die LETZTE (oft beste) Antwort noch persistieren, bevor wir
+        # schließen — sonst fehlt sie dem Post-Input. Schicht-3: nur features-
+        # Summary + raw transcript in die Session, NIE in den P08-Prompt.
+        try:
+            messages_list = (
+                json.loads(messages_raw)
+                if isinstance(messages_raw, str)
+                else (messages_raw or [])
+            )
+            messages_list.append(
+                {
+                    "bot": close_message,
+                    "user_features_summary": json.dumps(features)[:200],
+                    "user_transcript": (raw_transcript or "")[:4000],
+                    "question_index": current_idx + 1,
+                }
+            )
+            with sync_session_factory() as s:
+                s.execute(
+                    text(
+                        "UPDATE bot_session SET messages = CAST(:msgs AS jsonb), "
+                        "updated_at = NOW(), last_message_at = NOW() WHERE id = :id"
+                    ),
+                    {"msgs": json.dumps(messages_list), "id": session_id},
+                )
+                s.commit()
+        except Exception as exc:
+            logger.warning("[P08] letzte Antwort vor Close nicht gespeichert: %s", type(exc).__name__)
         _close_session_db(session_id, tenant_id)
         return ResponseResult(
             next_action="close",
-            message="Danke! Ich habe genug Material gesammelt.",
+            message=close_message,
             quality="leer",
             session_id=session_id,
             is_closed=True,
+            was_already_closed=False,
         )
 
     # 3. Build LLM call — ONLY features, never original transcript
@@ -412,6 +447,10 @@ def p08_response(session_id: str, features: dict) -> ResponseResult:
         {
             "bot": response_message,
             "user_features_summary": json.dumps(features)[:200],
+            # #19: Roh-Transkript für die spätere Post-Generierung (P12).
+            # Schicht-3: landet NUR in der DB-Session, NIE im P08-Prompt
+            # (_get_recent_messages liest ausschließlich bot + features_summary).
+            "user_transcript": (raw_transcript or "")[:4000],
             "question_index": current_idx + 1,
         }
     )
@@ -431,29 +470,21 @@ def p08_response(session_id: str, features: dict) -> ResponseResult:
         )
         s.commit()
 
-    # Trigger P10 pipeline when closing (fail-open — separate from status update)
-    if is_closed:
-        try:
-            with sync_session_factory() as s:
-                s.execute(
-                    text(
-                        "INSERT INTO content_ideas (id, tenant_id, title, status) "
-                        "VALUES (gen_random_uuid(), :tid, :title, 'ready_for_p10') "
-                        "ON CONFLICT DO NOTHING"
-                    ),
-                    {"tid": tenant_id, "title": f"Bot-Session {session_id[:8]}"},
-                )
-                s.commit()
-        except Exception:
-            pass
+    # #19: Der frühere `ready_for_p10`-Insert in content_ideas (toter Pfad,
+    # kein Consumer) ist entfernt. Die Post-Generierung läuft jetzt über den
+    # Trigger in _route_inbound_message → tasks.session_post_task, gespeist aus
+    # bot_session.messages (raw transcripts), nicht über einen Platzhalter.
 
-    # 7. Return result
+    # 7. Return result. was_already_closed=False: dies IST der echte
+    # active→closed-Übergang (oben per Status-UPDATE vollzogen) → der Caller
+    # darf die Post-Generierung genau hier (und nur hier) triggern.
     return ResponseResult(
         next_action=next_action,
         message=response_message,
         quality=quality,
         session_id=session_id,
         is_closed=is_closed,
+        was_already_closed=False,
     )
 
 
