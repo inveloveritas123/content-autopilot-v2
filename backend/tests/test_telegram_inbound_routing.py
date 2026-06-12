@@ -217,3 +217,130 @@ class TestProcessVoiceRouting:
         assert kw["transcript"] == TRANSCRIPT
         assert kw["session_state"] == "active"
         mock_p08.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# #17 — Folgefrage / Abschluss per Telegram zurücksenden
+# ---------------------------------------------------------------------------
+
+
+class TestFollowupMessageSend:
+    """#17: _route_inbound_message sendet result.message via _send_telegram_message zurück.
+
+    Patch-Strategie:
+      - services.p08_service.p08_response  — Stub-Modul-Binding (lazy import)
+      - tasks.telegram_task._resolve_chat_id — direkte Attribut-Ersetzung
+      - api.telegram._send_telegram_message — Stub-Modul-Binding (lazy import)
+      - tasks.telegram_task.sync_session_factory — Idempotenz-Guard-SELECT
+    """
+
+    def _run_route(
+        self,
+        p08_result,
+        chat_id_return,
+        send_mock,
+        decision_target="p08_response",
+    ):
+        """Hilfsmethode: _route_inbound_message mit allen Stubs fahren."""
+        import sys
+
+        with (
+            patch.object(tt, "_load_active_session", return_value=active_session()),
+            patch.object(
+                sys.modules["services.layer1_extraction"],
+                "extract_intent_features",
+                return_value=make_extraction("answer_to_question"),
+            ),
+            patch.object(
+                sys.modules["services.layer2_routing"],
+                "route_telegram_intent",
+                return_value=make_decision(
+                    decision_target,
+                    {"session_id": "sess-1", "features": {"k": "v"}},
+                ),
+            ),
+            patch.object(
+                sys.modules["services.p08_service"],
+                "p08_response",
+                return_value=p08_result,
+            ),
+            patch.object(tt, "_resolve_chat_id", return_value=chat_id_return),
+            patch.object(sys.modules["api.telegram"], "_send_telegram_message", send_mock),
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+        ):
+            return tt._route_inbound_message("tenant-1", "Meine Antwort", log_id="log-17")
+
+    def test_followup_question_sent(self):
+        """Aktive Session + Antwort → Folgefrage wird via _send_telegram_message gesendet."""
+        send_mock = MagicMock()
+        p08_result = make_p08_result(
+            next_action="vertiefen",
+            message="Frage 2?",
+            is_closed=False,
+        )
+
+        result = self._run_route(p08_result, chat_id_return=4711, send_mock=send_mock)
+
+        assert result is not None
+        assert result["p08_message_sent"] is True
+        send_mock.assert_called_once_with(4711, "Frage 2?")
+
+    def test_close_message_sent(self):
+        """Session-Abschluss (is_closed=True) → Abschluss-Text wird gesendet."""
+        send_mock = MagicMock()
+        p08_result = make_p08_result(
+            next_action="close",
+            message="Danke! Ich habe genug Material gesammelt.",
+            is_closed=True,
+        )
+
+        result = self._run_route(p08_result, chat_id_return=9999, send_mock=send_mock)
+
+        assert result is not None
+        assert result["p08_message_sent"] is True
+        send_mock.assert_called_once_with(9999, "Danke! Ich habe genug Material gesammelt.")
+
+    def test_no_chat_link_no_send(self):
+        """Kein aktiver tenant_telegram_link → kein Send, p08_message_sent False, kein Raise."""
+        send_mock = MagicMock()
+        p08_result = make_p08_result(next_action="vertiefen", message="Frage?", is_closed=False)
+
+        result = self._run_route(p08_result, chat_id_return=None, send_mock=send_mock)
+
+        assert result is not None
+        assert result["p08_message_sent"] is False
+        send_mock.assert_not_called()
+
+    def test_send_failure_fail_open(self):
+        """_send_telegram_message wirft → routing_info bleibt intakt, kein Raise."""
+        import sys
+
+        crashing_send = MagicMock(side_effect=RuntimeError("Telegram down"))
+        p08_result = make_p08_result(next_action="vertiefen", message="Frage?", is_closed=False)
+
+        result = self._run_route(p08_result, chat_id_return=1234, send_mock=crashing_send)
+
+        # Chunk-Return bleibt intakt (kein raise, kein None)
+        assert result is not None
+        # routed_to muss gesetzt sein
+        assert result.get("routed_to") == "p08_response"
+        # p08_message_sent muss False sein (Send fehlgeschlagen)
+        assert result["p08_message_sent"] is False
+
+    def test_non_p08_target_no_send(self):
+        """Routing-Target != p08_response → kein Send, kein p08_message_sent-Key."""
+        send_mock = MagicMock()
+        # p08_result wird bei reviewer_queue gar nicht ausgewertet
+        p08_result = make_p08_result()
+
+        result = self._run_route(
+            p08_result,
+            chat_id_return=4711,
+            send_mock=send_mock,
+            decision_target="reviewer_queue",
+        )
+
+        assert result is not None
+        assert result["routed_to"] == "reviewer_queue"
+        assert "p08_message_sent" not in result
+        send_mock.assert_not_called()

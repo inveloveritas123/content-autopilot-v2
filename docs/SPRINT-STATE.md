@@ -28,7 +28,7 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 
 | # | Issue | Titel | Tier | Dep | Status |
 |---|---|---|---|---|---|
-| S1.1 | #17 | Folgefrage/Abschluss per Telegram zurück + Limit 2–3 | sonnet | #16 ✅ | ☐ offen |
+| S1.1 | #17 | Folgefrage/Abschluss per Telegram zurück + Limit 2–3 | sonnet | #16 ✅ | ✅ fertig (Send via _send_telegram_message, Limit 5→3) |
 | S1.2 | #18 | Idempotenz gegen Doppel-Verarbeitung (update_id-Dedupe) | sonnet | #16 | ✅ fertig (2-Schicht: routed_to-Guard + update_id-Dedupe) |
 | S1.3 | #19 | [BLOCKER] Post-Generierung an Session-Abschluss + Post im Chat (M24-Kern-Gap) | opus | #17 | ☐ offen |
 | S1.4 | #46 | Letzte Seam-Bypässe (voice_drift/md_converter/sensitive_detector) auf EU-Router | sonnet | — | ✅ fertig (lokal 99 Tests grün; sensitive_detector-Modellwahl → Robert) |
@@ -38,8 +38,8 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 | S1.8 | #57 | #16-Followup: targeted-Sessions mode-Filter | sonnet | #16 ✅ | ✅ fertig (mit #18 gebündelt) |
 | S1.9 | — | Security-Review (fable) + Gate-Orakel über den ganzen Sprint | fable | alle | ☐ offen |
 
-**Aktueller Fokus:** Sprint-1-Detailplan (fable) wird erstellt; #46 läuft parallel.
-**Nächste Aktion:** fable-Plan abwarten → S1.1 (#17) starten.
+**Aktueller Fokus:** Sprint 1 fast durch — nur noch S1.3 (#19 BLOCKER, opus) + S1.9 (Security-Review fable).
+**Nächste Aktion:** #19 (Post-Generierung an Session-Abschluss + Post im Chat) bauen.
 
 ### Backlog danach (Sprint 2+, Reihenfolge vorläufig)
 - Sprint 2 „Setup-Schema": #43-Impl (DB-Migration → Robert!), #29/#25/#26 Schema, #44 Wizard 6→8.
