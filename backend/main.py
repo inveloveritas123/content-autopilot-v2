@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
             tenant = Tenant(
                 name="Default Tenant",
                 api_key=settings.default_tenant_key,
+                slug="default-tenant",
                 settings={
                     "tone": "professionell, informativ, mit persoenlicher Note",
                     "language": "de",
