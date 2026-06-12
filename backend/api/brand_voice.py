@@ -602,6 +602,20 @@ async def patch_profile_field(
     Mit project_id-Query-Parameter wird das Profil des jeweiligen Projekts
     editiert. Ohne project_id wird der globale Tenant-Slot bearbeitet.
     """
+    # Schutzschritt (2026-06-12, #29): Der Dot-Path-Feld-Editor kann kanonische
+    # Pflicht-Objekte (z.B. grundton) und minItems-Arrays zerstören und schreibt
+    # ohne kanonische Re-Validierung (kein finalize_canonical, escapt HTML, kopiert
+    # veraltetes _meta). Bis ein Dokument-Editor (PUT + validate_canonical) bzw. der
+    # P17-Update-Pfad steht, ist Feld-Editing deaktiviert. Profil-Korrektur via
+    # Re-Run: POST /brand-voice/regenerate. Override: BRAND_VOICE_FIELD_EDIT_ENABLED=1.
+    import os as _os
+    if _os.environ.get("BRAND_VOICE_FIELD_EDIT_ENABLED", "").strip().lower() not in ("1", "true", "yes"):
+        raise HTTPException(
+            status_code=410,
+            detail="Feld-Editor deaktiviert (Schutz kanonischer Louis-Profile, #29). "
+                   "Bitte Profil neu generieren statt einzelne Felder zu patchen.",
+        )
+
     resolved_id = str(auth_tenant_id) if tenant_id == "me" else tenant_id
     if resolved_id != str(auth_tenant_id):
         raise HTTPException(status_code=403, detail="Zugriff verweigert")

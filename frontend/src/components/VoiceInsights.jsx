@@ -67,6 +67,12 @@ const EDITABLE_PATHS = {
   audience_avatar: ['identitaet', 'content_trigger', 'sprache_der_zielgruppe'],
 }
 
+// Schutzschritt (#29, 2026-06-12): Feld-Editing read-only, bis ein Dokument-Editor
+// (PUT + kanonische Validierung) bzw. der P17-Update-Pfad steht. Der Dot-Path-Patch
+// kann kanonische Pflicht-Objekte zerstören (Backend antwortet aktuell mit 410).
+// Profil-Korrektur erfolgt per Re-Run. Auf true setzen reaktiviert die Edit-Buttons.
+const FIELD_EDIT_ENABLED = false
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDate(iso) {
@@ -350,7 +356,7 @@ function ProfilePanel({ profileType, payload, comparePayload, editablePaths, onF
   return (
     <div className="space-y-3">
       {Object.entries(payload).map(([key, value]) => {
-        const editable = editablePaths.includes(key)
+        const editable = FIELD_EDIT_ENABLED && editablePaths.includes(key)
         const highlighted = fieldChanged(payload, comparePayload, key)
         return (
           <FieldBlock
