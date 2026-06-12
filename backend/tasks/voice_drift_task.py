@@ -3,9 +3,11 @@ Voice-Drift-Detector (Issue #76).
 
 Workflow:
 1. Beat-Job check_drift_triggers: prüft alle Tenants auf 10er-Post-Schwelle
-2. run_voice_drift: lädt aktives Voice-Profil + letzte 10 Posts, ruft Anthropic,
+2. run_voice_drift: lädt aktives Voice-Profil + letzte 10 Posts, ruft EU-Router-Seam,
    schreibt voice_drift_observation, sendet WS-Push
 """
+
+from __future__ import annotations  # Python 3.9-Kompatibilität: list | None Syntax
 
 import asyncio
 import json
@@ -22,7 +24,6 @@ from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
-ANTHROPIC_MODEL_ID = "claude-sonnet-4-6-20251022"  # dated alias, gepinnt
 ANTHROPIC_PRICING_KEY = "claude-sonnet-4-6"  # Pricing-Key fuer cost_cap.py (ohne Datum-Suffix)
 
 # Geschätzte Token-Kosten für Cost-Cap-Check (~4000 input, 512 output)
@@ -305,49 +306,35 @@ def run_voice_drift(
         user_prompt = loaded.user_prompt_template.replace("{context_json}", context_json)
 
         # ------------------------------------------------------------------
-        # 8. Anthropic-Call mit cache_control: ephemeral auf System-Prompt
+        # 8. LLM-Call über EU-Router-Seam (Issue #46: kein direkter Anthropic-Call)
+        #    Tier VOICE_DRIFT → S6 (bedrock/claude-sonnet-4-6@eu-central-1, EU-Frankfurt)
+        #    Auto-Cache für System-Prompt wird vom Router übernommen.
         # ------------------------------------------------------------------
-        import anthropic
+        from services.pipeline_llm import call_pipeline_llm
 
-        from config import settings
-
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-
-        response = client.messages.create(
-            model=ANTHROPIC_MODEL_ID,
-            max_tokens=1024,
-            system=[
-                {
-                    "type": "text",
-                    "text": loaded.system_prompt,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": user_prompt}],
+        llm_result = call_pipeline_llm(
+            prompt_key="VOICE_DRIFT",
+            system_prompt=loaded.system_prompt,
+            user_content=user_prompt,
+            tenant_id=tenant_id,
         )
 
-        raw_text = response.content[0].text
+        raw_text = llm_result.text
+        input_tokens = llm_result.input_tokens or _ESTIMATED_INPUT_TOKENS
+        output_tokens = llm_result.output_tokens or _ESTIMATED_OUTPUT_TOKENS
         logger.debug(
-            "run_voice_drift: tenant=%s Anthropic-Antwort erhalten (%d Zeichen)",
+            "run_voice_drift: tenant=%s Antwort erhalten (%d Zeichen)",
             tenant_id,
             len(raw_text),
         )
-
-        # Token-Nutzung (best-effort)
-        try:
-            usage = response.usage
-            input_tokens = usage.input_tokens or _ESTIMATED_INPUT_TOKENS
-            output_tokens = usage.output_tokens or _ESTIMATED_OUTPUT_TOKENS
-            cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
-            logger.info(
-                "run_voice_drift: tenant=%s input=%d output=%d cache_read=%d",
-                tenant_id,
-                input_tokens,
-                output_tokens,
-                cache_read,
-            )
-        except Exception:
-            input_tokens, output_tokens = _ESTIMATED_INPUT_TOKENS, _ESTIMATED_OUTPUT_TOKENS
+        logger.info(
+            "run_voice_drift: tenant=%s input=%d output=%d cache_read=%d tier=%s",
+            tenant_id,
+            input_tokens,
+            output_tokens,
+            llm_result.cache_read_tokens,
+            llm_result.tier,
+        )
 
         # ------------------------------------------------------------------
         # 9. Output parsen — erwartete Struktur:

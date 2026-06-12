@@ -63,6 +63,9 @@ MODEL_PER_PROMPT: dict[str, str] = {
     "P12B": "S6",
     "P12C": "S6",
     "LAYER1": "S2",  # Strukturierte Intent/Feature-Extraktion — schnelle JSON-Klassifikation, kein Frontier nötig (Issue #15)
+    "VOICE_DRIFT": "S6",  # Voice-Drift-Analyse — analytisch, Frontier-Qualität, EU via Bedrock-Frankfurt (Issue #46)
+    "MD_CONVERTER": "S2",  # MD→JSON-Konvertierung — strukturierte Extraktion, kein Frontier nötig (Issue #46)
+    "SENSITIVE_DETECT": "S2",  # Sensibilitäts-Klassifikation — kurzes JSON, kein Frontier nötig (Issue #46)
 }
 
 # Per-Prompt max_tokens — übernommen aus den bisherigen Task-Konstanten.
@@ -75,6 +78,9 @@ PROMPT_MAX_TOKENS: dict[str, int] = {
     "P12B": 2000,
     "P12C": 1024,
     "LAYER1": 512,  # Kompaktes JSON (5 Felder) — gleiche Größenordnung wie P08
+    "VOICE_DRIFT": 1024,  # Drift-Proposals JSON (proposals[]/summary/confidence)
+    "MD_CONVERTER": 2000,  # P03-JSON-Konvertierung — strukturierter Output
+    "SENSITIVE_DETECT": 512,  # Kurzes JSON (categories/confidence/flagged_phrases)
 }
 
 

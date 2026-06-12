@@ -31,7 +31,7 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 | S1.1 | #17 | Folgefrage/Abschluss per Telegram zurück + Limit 2–3 | sonnet | #16 ✅ | ☐ offen |
 | S1.2 | #18 | Idempotenz gegen Doppel-Verarbeitung (update_id-Dedupe) | sonnet | #16 | ☐ offen |
 | S1.3 | #19 | [BLOCKER] Post-Generierung an Session-Abschluss + Post im Chat (M24-Kern-Gap) | opus | #17 | ☐ offen |
-| S1.4 | #46 | Letzte Seam-Bypässe (voice_drift/md_converter/sensitive_detector) auf EU-Router | sonnet | — | ☐ offen |
+| S1.4 | #46 | Letzte Seam-Bypässe (voice_drift/md_converter/sensitive_detector) auf EU-Router | sonnet | — | ✅ fertig (lokal 99 Tests grün; sensitive_detector-Modellwahl → Robert) |
 | S1.5 | #22 | P17 lädt mit leerem System-Prompt (Heading-Fix) | sonnet | — | ☐ offen |
 | S1.6 | #30 | Modell-Pinning: -latest-Modelle pinnen oder Policy-Ausnahme | haiku | — | ☐ offen |
 | S1.7 | #56 | #16-Followup: routed_to in telegram_message_log persistieren | sonnet | #16 ✅ | ☐ offen |
@@ -48,4 +48,6 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 ---
 
 ## LOG (jüngste zuerst)
+- 2026-06-12 — **S1.4 #46 fertig**: 3 US-Anthropic-Calls auf EU-Seam (voice_drift→S6 gleiches Modell EU; md_converter/sensitive_detector→S2 mistral-EU). Test-Pollution (eu_router stubte services.pipeline_llm) in 2 Iterationen sauber gefixt → 99 Stub-Tests reihenfolge-unabhängig grün. sensitive_detector-Modellwahl → ROBERT-BACKLOG.
+- 2026-06-12 — Sprint-1-Detailplan (fable) in `docs/SPRINT-1-PLAN.md`: Bau-Reihenfolge #18→#17→#19, keine zwingende DB-Migration.
 - 2026-06-12 — Sprint-1 aufgesetzt, durable State + Robert-Backlog angelegt. #15/#16/#43-Konzept in PR #55. fable-Plan + #46 angestoßen.

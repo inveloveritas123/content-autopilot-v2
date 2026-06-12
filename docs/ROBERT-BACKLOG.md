@@ -17,8 +17,12 @@ Drei Realitäten: S6 = Sonnet-EU (Bedrock-Frankfurt) · kreative Pfade (ideation
 ### #43 — Werte-Entität: **neue DB-Tabelle** `tenant_customer_values` (freigabe-robert)
 Konzept liegt vor (`docs/CONCEPT-43-werte-entitaet.md`). Implementierung erfordert Alembic-Migration (neue Tabelle + ggf. `entity_type`-Spalte für P17-Drift). **→ Freigabe für DB-Migration + Migrations-Nummern (Kollision mit #26 050–052 prüfen).** Architekt legt Code/Migration vor, wendet sie aber nicht auf Prod an.
 
-### #46 — Tier-Mapping der Ex-Bypässe (falls mehrdeutig)
-voice_drift/md_converter/sensitive_detector werden auf den EU-Seam umgestellt. Falls kein eindeutiger EU-Tier für die günstigen Utility-Calls (Haiku-Klasse) existiert → hier Entscheid nötig. (Wird beim Bau geklärt; Eintrag nur falls offen.)
+### #46 — Modell-Familienwechsel bei 2 von 3 Ex-Bypässen (Qualität validieren)
+Umgestellt (US-Calls eliminiert, Compliance gefixt):
+- `voice_drift_task` → **S6** (`bedrock/claude-sonnet-4-6@eu-central-1`) = **dasselbe Modell wie zuvor, nur EU-Region** → kein Qualitätsrisiko. ✅
+- `md_converter` (MD→JSON) → **S2** (`mistral-small`, EU): Modell-Familienwechsel claude-haiku→mistral. Utility-Call, geringes Risiko.
+- `sensitive_detector` (PII-/Sensibilitäts-**Klassifikation**) → **S2** (`mistral-small`, EU): Modell-Familienwechsel. **Qualitätsrelevant** — die Trefferqualität der PII-Erkennung kann sich ändern.
+- **→ Robert-Entscheid:** `sensitive_detector` bei mistral-small belassen (günstig) **oder** auf **S6** (Claude-EU, näher am alten Haiku-Verhalten) heben? Empfehlung Architekt: kurzer A/B-Korpuslauf (Knecht) gegen bekannte PII-Beispiele, dann entscheiden. Kein Blocker für den Merge — der US-Leak ist so oder so behoben.
 
 ### #24 — Deploy-Pfad (mit Knecht)
 SSH Port 10022 vs. self-hosted GitHub-Runner. **→ Richtung entscheiden.**

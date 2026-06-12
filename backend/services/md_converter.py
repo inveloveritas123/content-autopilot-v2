@@ -11,10 +11,7 @@ import logging
 import os
 import re
 
-import anthropic
 import jsonschema
-
-from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +19,9 @@ logger = logging.getLogger(__name__)
 # Konstanten
 # ---------------------------------------------------------------------------
 
-ANTHROPIC_MODEL_ID = "claude-haiku-4-5-20251001"  # Haiku reicht fuer Konvertierung
+# ANTHROPIC_MODEL_ID entfernt (Issue #46): LLM-Call läuft über EU-Router-Seam
+# Tier MD_CONVERTER → S2 (mistral/mistral-small-latest) in pipeline_llm.py
+_MD_CONVERTER_PROMPT_KEY = "MD_CONVERTER"
 
 INJECTION_PATTERNS = [
     r"(?i)(ignore (previous|above|prior)|forget (the|your)|new instruction)",
@@ -106,8 +105,9 @@ def convert_md_to_p03_json(
         SessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         async with SessionLocal() as sess:
             mw = CostCapMiddleware(sess)
+            # Schätzung mit Haiku-Preis als konservativem Fallback (S2-Tier ist günstiger)
             est = estimate_anthropic_cost(
-                ANTHROPIC_MODEL_ID,
+                "claude-haiku-4-5",
                 len(md_content) // 4,  # grobe Token-Schaetzung
                 1000,  # Output-Budget
             )
@@ -128,16 +128,18 @@ def convert_md_to_p03_json(
             raise
 
     # ------------------------------------------------------------------
-    # 4. Anthropic-Call (sync)
+    # 4. LLM-Call über EU-Router-Seam (Issue #46: kein direkter Anthropic-Call)
+    #    Tier MD_CONVERTER → S2 (mistral/mistral-small-latest)
     # ------------------------------------------------------------------
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    response = client.messages.create(
-        model=ANTHROPIC_MODEL_ID,
-        max_tokens=2000,
-        system=[{"type": "text", "text": system_prompt}],
-        messages=[{"role": "user", "content": user_prompt}],
+    from services.pipeline_llm import call_pipeline_llm
+
+    llm_result = call_pipeline_llm(
+        prompt_key=_MD_CONVERTER_PROMPT_KEY,
+        system_prompt=system_prompt,
+        user_content=user_prompt,
+        tenant_id=tenant_id,
     )
-    raw_text = response.content[0].text.strip()
+    raw_text = llm_result.text.strip()
 
     # ------------------------------------------------------------------
     # 5. JSON-Parsing

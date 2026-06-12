@@ -379,15 +379,20 @@ def _pattern_check(text: str) -> tuple[list[str], list[FlaggedPhrase], float]:
     return list(found_categories), found_phrases, confidence
 
 
+_SENSITIVE_DETECT_SYSTEM_PROMPT = (
+    "Du bist ein Klassifikator für sensible Themen in LinkedIn-Posts. "
+    "Antworte ausschließlich mit einem JSON-Objekt, kein anderer Text."
+)
+
+
 def _llm_check(text: str) -> tuple[list[str], list[FlaggedPhrase], float]:
-    """Schicht B: LLM-Klassifikator mit Haiku (nur bei Schicht-A-Trigger)."""
-    import os
+    """Schicht B: LLM-Klassifikator über EU-Router-Seam (Issue #46).
 
-    import anthropic
-
-    LLM_MODEL = os.environ.get("BACKTEST_MODEL_OVERRIDE", "claude-haiku-4-5-20251001")
-
-    prompt = f"""Analysiere den folgenden LinkedIn-Post auf sensible Themen.
+    Früher: direkter anthropic.Anthropic()-Call (claude-haiku-4-5-20251001).
+    Jetzt: call_pipeline_llm mit Tier SENSITIVE_DETECT → S2 (mistral-small, EU).
+    Fachliches Verhalten unverändert: gleicher Prompt, gleiches JSON-Parsing.
+    """
+    user_prompt = f"""Analysiere den folgenden LinkedIn-Post auf sensible Themen.
 
 Antworte NUR mit einem JSON-Objekt, KEIN anderer Text.
 
@@ -405,13 +410,15 @@ Post:
 {text[:2000]}"""
 
     try:
-        client = anthropic.Anthropic()
-        response = client.messages.create(
-            model=LLM_MODEL,
-            max_tokens=512,
-            messages=[{"role": "user", "content": prompt}],
+        from services.pipeline_llm import call_pipeline_llm
+
+        llm_result = call_pipeline_llm(
+            prompt_key="SENSITIVE_DETECT",
+            system_prompt=_SENSITIVE_DETECT_SYSTEM_PROMPT,
+            user_content=user_prompt,
+            tenant_id="system",  # kein Tenant-Kontext bei Sensibilitäts-Check
         )
-        raw = response.content[0].text.strip()
+        raw = llm_result.text.strip()
         # Strip markdown code block if present
         if raw.startswith("```"):
             raw = raw.split("```")[1]
@@ -423,7 +430,7 @@ Post:
         ]
         return data.get("categories", []), phrases, float(data.get("confidence", 0.5))
     except Exception as e:
-        logger.warning(f"[SensitiveDetector] LLM check failed: {e}")
+        logger.warning("[SensitiveDetector] LLM check failed: %s", e)
         return [], [], 0.0
 
 
