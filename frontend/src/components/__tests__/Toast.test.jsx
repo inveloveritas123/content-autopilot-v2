@@ -35,17 +35,13 @@ describe('Toast-System', () => {
 
   it('zeigt Toast mit korrektem Text an', () => {
     renderWithProvider(<ToastTrigger message="Gespeichert!" variant="success" />)
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i }))
-    })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i })) })
     expect(screen.getByText('Gespeichert!')).toBeInTheDocument()
   })
 
   it('dismisst success-Toast automatisch nach 4 Sekunden', () => {
     renderWithProvider(<ToastTrigger message="Kurze Nachricht" variant="success" />)
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i }))
-    })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i })) })
     expect(screen.getByText('Kurze Nachricht')).toBeInTheDocument()
 
     act(() => {
@@ -56,9 +52,7 @@ describe('Toast-System', () => {
 
   it('dismisst error-Toast erst nach 8 Sekunden', () => {
     renderWithProvider(<ToastTrigger message="Fehler aufgetreten" variant="error" />)
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i }))
-    })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i })) })
 
     act(() => {
       vi.advanceTimersByTime(4001)
@@ -86,18 +80,10 @@ describe('Toast-System', () => {
     }
     renderWithProvider(<MultiTrigger />)
 
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: 'T1' }))
-    })
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: 'T2' }))
-    })
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: 'T3' }))
-    })
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: 'T4' }))
-    })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'T1' })) })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'T2' })) })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'T3' })) })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'T4' })) })
 
     // Max 3 — Toast 1 wurde verdrängt
     expect(screen.queryByText('Toast 1')).not.toBeInTheDocument()
@@ -108,15 +94,11 @@ describe('Toast-System', () => {
 
   it('manuelles Schließen via X-Button funktioniert', () => {
     renderWithProvider(<ToastTrigger message="Schließbar" variant="info" />)
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i }))
-    })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i })) })
     expect(screen.getByText('Schließbar')).toBeInTheDocument()
 
     const closeBtn = screen.getByRole('button', { name: /Schließen/i })
-    act(() => {
-      fireEvent.click(closeBtn)
-    })
+    act(() => { fireEvent.click(closeBtn) })
     expect(screen.queryByText('Schließbar')).not.toBeInTheDocument()
   })
 })
