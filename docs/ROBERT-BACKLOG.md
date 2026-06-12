@@ -15,7 +15,9 @@ Drei Realitäten: S6 = Sonnet-EU (Bedrock-Frankfurt) · kreative Pfade (ideation
 - **Entscheidung B (dringender):** Der Gemini-Flash-Lite-Remap der kreativen Pfade revidieren (zurück auf ein stärkeres EU-Modell) oder bewusst bestätigen? **Empfehlung: revidieren** — widerspricht dem Board stärker als Sonnet-statt-Opus.
 
 ### #43 — Werte-Entität: **neue DB-Tabelle** `tenant_customer_values` (freigabe-robert)
-Konzept liegt vor (`docs/CONCEPT-43-werte-entitaet.md`). Implementierung erfordert Alembic-Migration (neue Tabelle + ggf. `entity_type`-Spalte für P17-Drift). **→ Freigabe für DB-Migration + Migrations-Nummern (Kollision mit #26 050–052 prüfen).** Architekt legt Code/Migration vor, wendet sie aber nicht auf Prod an.
+Konzept (`docs/CONCEPT-43-werte-entitaet.md`) + Plan (`docs/SPRINT-2-PLAN-43.md`) liegen vor.
+**Migration `backend/alembic/versions/053_customer_values.py` ist GESCHRIEBEN, aber NICHT angewandt** (Kopfkommentar `freigabe-robert`). Inhalt: CREATE TABLE `tenant_customer_values` (1:1-Zwilling von `tenant_voice_profile`/018 + project_id + COALESCE-Unique-Aktiv-Index) + `entity_type`-Spalte auf `voice_drift_observation` (für P17). **down_revision='049'** (aktuell höchste echte Migration).
+**→ Robert:** (1) Freigabe, die Migration auf Prod/Staging anzuwenden. (2) **Reihenfolge mit #26 klären:** #26 reserviert 050–052, ist aber noch nicht gebaut — wenn #26 vor #43 mergt, muss 053.down_revision auf '052' gebumpt werden (sonst doppelter Alembic-Head). Code (TABLE_MAP/Resolver/Regex) ist mergebar; nur das *Anwenden* der Migration wartet auf dich.
 
 ### #46 — Modell-Familienwechsel bei 2 von 3 Ex-Bypässen (Qualität validieren)
 Umgestellt (US-Calls eliminiert, Compliance gefixt):

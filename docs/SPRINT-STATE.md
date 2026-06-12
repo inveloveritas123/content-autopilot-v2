@@ -67,7 +67,9 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 
 ### Sprint-2-Fortschritt
 - ✅ **#44 Wizard 6→8 Phasen fertig** — `api/wizard_phases.py` (dep-frei extrahiert), 8 Board-Phasen in Reihenfolge, hardcoded „6" entfernt; 101 Tests grün. Fragen-Wortlaut der neuen Phasen = Chris-Flag (board-konforme Defaults).
-- 📋 **#43-Detailplan fertig** (`docs/SPRINT-2-PLAN-43.md`): Tabelle `tenant_customer_values` (Migration **053**, Robert-Freigabe), P12-Eingriff `p12_task.py:83-114`+`:333-339`, P17-Vorbau `brand_voice.py:759-899`. Atomare Schritte: 1) Schema+Resolver (sonnet, Review opus) → 2) Backfill → 3) P12-Injektion → 4) P17-decide-generisch. **Nächste Aktion: #43 Schritt 1 bauen.**
+- 📋 **#43-Detailplan fertig** (`docs/SPRINT-2-PLAN-43.md`): Tabelle `tenant_customer_values` (Migration **053**, Robert-Freigabe), P12-Eingriff `p12_task.py:83-114`+`:333-339`, P17-Vorbau `brand_voice.py:759-899`. Atomare Schritte: 1) Schema+Resolver (sonnet, Review opus) → 2) Backfill → 3) P12-Injektion → 4) P17-decide-generisch.
+- ✅ **#43 Schritt 1 fertig**: Migration 053 (`tenant_customer_values`, down_revision=049, freigabe-robert, NICHT angewandt) + canonical_profiles TABLE_MAP/Resolver/Regex + schema_transformer. 29 Tests + 115 Anti-Pollution grün. Pre-existing Py3.9-Bug in canonical_profiles mitgefixt. Robert-Flag in ROBERT-BACKLOG.
+- **Nächste Aktion: #43 Schritt 3 (P12-Injektion in `p12_task._load_active_profiles` → 4-Tupel)** — macht Werte für die Post-Erstellung wirksam. Danach Schritt 2 (Backfill) + Schritt 4 (P17-decide-generisch).
 
 ---
 

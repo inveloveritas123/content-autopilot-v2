@@ -7,11 +7,13 @@ Stelle mit:
   - deterministischer Aktiv-Row-Auflösung (behebt den Multi-Active-Row-Bug seit
     Projekt-Rows / Migration 032: ohne project_id-Filter zog die alte Query ein
     nichtdeterministisches Profil),
-  - Kanonisch-Erkennung über `_meta.prompt_version` (`^p0X-vN.N$`).
+  - Kanonisch-Erkennung über `_meta.prompt_version` (`^p0X-vN.N$` oder `^values-vN.N$`).
 
 Der Resolver-Kern (is_canonical / pick_active) ist dep-frei und unit-testbar;
 nur der DB-Zugriff (load_active_profiles) importiert sqlalchemy/models lazy.
 """
+
+from __future__ import annotations
 
 import json
 import logging
@@ -24,9 +26,12 @@ TABLE_MAP = {
     "customer_context": "tenant_customer_context",  # P01
     "voice_profile": "tenant_voice_profile",  # P03
     "audience_avatar": "tenant_audience_avatar",  # P04
+    "customer_values": "tenant_customer_values",  # #43 — Werte-Entität
 }
 
-_PROMPT_VERSION_RE = re.compile(r"^p0[0-9]+-v[0-9]+\.[0-9]+$")
+# Erweitert um 'values'-Präfix (Issue #43): values-v1.0 ist gültig,
+# bestehende p0X-vN.N bleiben unverändert gültig.
+_PROMPT_VERSION_RE = re.compile(r"^(p0[0-9]+|values)-v[0-9]+\.[0-9]+$")
 
 
 def is_canonical(payload: dict | None) -> bool:
