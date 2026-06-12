@@ -81,8 +81,10 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 **Knecht arbeitet jetzt AKTIV auf `arch/weekloop`** (Commit 29e4b1c: ruff/eslint/yaml + Test-Collection-Pollution-Fixes). → **vor jedem Push `git fetch` + rebase** (nicht force-pushen). Arbeitsteilung: Architekt = Features (per-File-TDD grün), Knecht = CI-Grünung auf echter Py3.11-Umgebung.
 **Py3.9-Realität:** Lokaler venv = Py3.9; Code zielt auf Py3.11/3.12. Module mit `datetime.UTC` u.ä. sind lokal NICHT importierbar → kombinierte lokale Läufe können Collection-Errors zeigen, die in CI (Py3.11+) NICHT existieren. **Verifikations-Bar: Einzeldatei grün + per-File-Anti-Pollution; volle kombinierte Suite = CI (Knecht).**
 
+- ✅ **#37 Feedback-Loop fertig**: kein-aktive-Session + letzter Post (48h) + post_feedback-Intent → `regenerate_post_from_feedback` (neuer P12→P12b-Durchlauf mit Feedback im answers-Dict, Loop-Limit `TELEGRAM_FEEDBACK_MAX_ROUNDS`=2 migrationsfrei via content_pieces-COUNT, E3/fail-open). Mapping-Fix `voice_feedback_api→voice_feedback` (CHECK-Constraint 019:66). Cross-Model-Review GRÜN. 55 Tests beide Ordnungen grün. **Nebenbefund → neues Issue: layer1 cost-gate liest nicht-existente Tabelle `cost_tracking` (inert).**
+
 ### Nächste Architekt-Items (alle per-File-TDD, dann fetch+rebase+push)
-- #37 Feedback-Loop „nochmal anders" (opus, dep #19✅) · #38 Quality-Gate (opus) · #36 Intent-Routing P09/P13 (opus, dep #16✅) · #41 P17-Beobachter (fable, dep #43✅, jetzt entblockt) · #22 P17-Prompt (sonnet).
+- #36 Intent-Routing P09/P13 (opus, dep #16✅) · #41 P17-Beobachter (fable, dep #43✅) · #38 Quality-Gate (opus) · #22 P17-Prompt (sonnet) · cost_tracking-Fix (sonnet, neues Issue).
 - Sprint-2-Rest #29/#25/#26 (Schema) besser nach #33-Merge (Knecht).
 
 ---

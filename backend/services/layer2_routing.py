@@ -3,6 +3,8 @@ Schicht-2 Routing — deterministisches Intent-zu-Pipeline-Mapping.
 KEIN LLM in dieser Schicht. Pure Python if-elif Logic.
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass, field
 
@@ -120,18 +122,35 @@ def route_telegram_intent(
     return RoutingDecision("reviewer_queue", {}, "unmapped_intent")
 
 
-def persist_routing_decision(message_log_id: str, decision: RoutingDecision) -> None:
+_ROUTED_TO_MAP = {
+    # CHECK-Constraint (migration 019:66) kennt nur kurze Werte — kein '_api'-Suffix.
+    # Mapping migrationsfrei, kein Schema-Change. #37/D5.
+    "voice_feedback_api": "voice_feedback",
+    "p10_extract_post_kernel": "p10",
+    "help_response": "help",
+    "close_friendly": "close",
+    # 'p08_response', 'reviewer_queue', 'paused' bleiben unverändert /
+    # 'paused' ist nicht im Constraint (fail-open eingebaut).
+}
+
+
+def persist_routing_decision(message_log_id: str, decision) -> None:
     """
     Persistiert das Routing-Ziel in telegram_message_log.
     Fail-open: Ausnahmen werden nur geloggt, das Routing läuft weiter.
+
+    #37/D5: Target wird auf den im CHECK-Constraint erlaubten Wert gemappt
+    (voice_feedback_api → voice_feedback etc.) — migrationsfrei.
     """
+    target = getattr(decision, "target", "")
+    routed_to = _ROUTED_TO_MAP.get(target, target)
     try:
         from sqlalchemy import text
 
         with sync_session_factory() as session:
             session.execute(
                 text("UPDATE telegram_message_log SET routed_to = :rt WHERE id = :id"),
-                {"rt": decision.target, "id": message_log_id},
+                {"rt": routed_to, "id": message_log_id},
             )
             session.commit()
     except Exception as e:
