@@ -31,12 +31,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 TIER_MODELS: dict[str, str] = {
-    "S1": "google/gemini-2.5-flash-lite-preview-06-17",
+    "S1": "vertex/gemini-2.5-flash-lite@europe-north1",  # EU-Region (Finnland); direktes google/ ist auf EU-Router 404
     "S2": "mistral/mistral-small-latest",
     "S3": "mistral/devstral-small-latest",
     "S4": "mistral/mistral-large-latest",
     "S5": "mistral/devstral-latest",  # CONFIRM-pflichtig
-    "S6": "anthropic/claude-sonnet-4-6",  # CONFIRM-pflichtig — Freigabe Robert (P5, 2026-06-11)
+    "S6": "bedrock/claude-sonnet-4-6@eu-central-1",  # CONFIRM-pflichtig — Freigabe Robert (P5); EU-souverän via Bedrock-Frankfurt (direktes anthropic/ ist policy-geblockt)
 }
 
 # Pricing pro Tier ($/1M Tokens) — für Kosten-Schätzung und Actual-Cost.
