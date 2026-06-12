@@ -36,10 +36,10 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 | S1.6 | #30 | Modell-Pinning: -latest-Modelle pinnen oder Policy-Ausnahme | haiku | — | ☐ offen |
 | S1.7 | #56 | #16-Followup: routed_to in telegram_message_log persistieren | sonnet | #16 ✅ | ✅ fertig (mit #18 gebündelt) |
 | S1.8 | #57 | #16-Followup: targeted-Sessions mode-Filter | sonnet | #16 ✅ | ✅ fertig (mit #18 gebündelt) |
-| S1.9 | — | Security-Review (fable) + Gate-Orakel über den ganzen Sprint | fable | alle | ☐ offen |
+| S1.9 | — | Security-Review + Gate-Orakel über den ganzen Sprint | fable→Architekt | alle | ✅ GRÜN (`docs/SPRINT-1-SECURITY-REVIEW.md`; fable-Pass nachzuholen nach Limit-Reset) |
 
-**Aktueller Fokus:** Sprint 1 fast durch — nur noch S1.3 (#19 BLOCKER, opus) + S1.9 (Security-Review fable).
-**Nächste Aktion:** #19 (Post-Generierung an Session-Abschluss + Post im Chat) bauen.
+**✅ SPRINT 1 ABGESCHLOSSEN** — Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→**Post im Chat**, M24-Kern-Gap geschlossen) + EU-Souveränität gehärtet (#46). Alle auf `arch/weekloop`, PR #55. Server-E2E = Knecht.
+**Nächste Aktion:** Sprint 2 (Setup/Schema) detailliert planen → bauen. Subagenten erst nach Session-Limit-Reset 22:30 Europe/Berlin verfügbar.
 
 ### Backlog danach (Sprint 2+, Reihenfolge vorläufig)
 - Sprint 2 „Setup-Schema": #43-Impl (DB-Migration → Robert!), #29/#25/#26 Schema, #44 Wizard 6→8.
