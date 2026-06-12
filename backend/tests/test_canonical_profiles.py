@@ -78,4 +78,10 @@ class TestPickActive:
 
 
 def test_table_map_complete():
-    assert set(cp.TABLE_MAP) == {"customer_context", "voice_profile", "audience_avatar"}
+    # Issue #43: 4. Eintrag 'customer_values' hinzugefügt
+    assert set(cp.TABLE_MAP) == {
+        "customer_context",
+        "voice_profile",
+        "audience_avatar",
+        "customer_values",
+    }
