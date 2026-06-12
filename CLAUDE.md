@@ -86,9 +86,9 @@ docker compose -f docker-compose.v2.yml up -d --force-recreate backend-v2 celery
 curl -sf http://localhost:8601/api/health
 
 # API mit Auth
-curl -sf -H 'X-API-Key: cap-tenant-zfb-2026' http://localhost:8601/api/dashboard
-curl -sf -H 'X-API-Key: cap-tenant-zfb-2026' http://localhost:8601/api/sources
-curl -sf -H 'X-API-Key: cap-tenant-zfb-2026' http://localhost:8601/api/ideas
+curl -sf -H 'X-API-Key: <YOUR-API-KEY>' http://localhost:8601/api/dashboard
+curl -sf -H 'X-API-Key: <YOUR-API-KEY>' http://localhost:8601/api/sources
+curl -sf -H 'X-API-Key: <YOUR-API-KEY>' http://localhost:8601/api/ideas
 
 # Frontend
 curl -sf -o /dev/null -w '%{http_code}' http://localhost:8601/

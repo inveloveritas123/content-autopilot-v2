@@ -24,6 +24,8 @@ jobs:
       DB_PASSWORD: citestpw
       E2E_BASE_URL: http://localhost:8601
       E2E_API_KEY: ci-test-tenant-key
+      NEXTCLOUD_PASSWORD: ci-placeholder
+      NEXTCLOUD_DB_PASSWORD: ci-placeholder
 
     steps:
       - uses: actions/checkout@v4
@@ -47,6 +49,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client
+
+      - name: Build Frontend (fuer nginx-Image)
+        working-directory: frontend
+        run: npm ci && npm run build
 
       - name: Build + Start Stack
         run: |
@@ -82,7 +88,7 @@ jobs:
           # wir nutzen exec im Container fuer das Bootstrap-Script.
           docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml \
             exec -T postgres-ci psql -U autopilot -d content_autopilot_v2 \
-            -c "INSERT INTO tenants (id, api_key, name, created_at, updated_at) VALUES (gen_random_uuid(), '${{ env.E2E_API_KEY }}', 'CI Test Tenant', NOW(), NOW()) ON CONFLICT (api_key) DO NOTHING;"
+            -c "INSERT INTO tenants (id, api_key, name, slug, created_at) VALUES (gen_random_uuid(), '${{ env.E2E_API_KEY }}', 'CI Test Tenant', 'ci-test-tenant', NOW()) ON CONFLICT (api_key) DO NOTHING;"
 
       - name: Wait for /api/health
         timeout-minutes: 3

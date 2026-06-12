@@ -29,6 +29,7 @@ class Tenant(Base):
     )
     disabled_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     disabled_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
 
     sources = relationship("Source", back_populates="tenant", cascade="all, delete-orphan")
     source_items = relationship("SourceItem", back_populates="tenant", cascade="all, delete-orphan")

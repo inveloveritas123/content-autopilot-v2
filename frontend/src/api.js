@@ -543,7 +543,7 @@ export const deleteHook = (id) => request(`/hooks/library/${id}`, { method: 'DEL
 export const listResearchFindings = (params) => request('/research/findings', { params })
 export const dismissResearchFinding = (id) =>
   request(`/research/findings/${id}/dismiss`, { method: 'POST' })
-export const useFindingAsIdea = (id, hookIdx) =>
+export const markFindingAsIdea = (id, hookIdx) =>
   request(`/research/findings/${id}/use-as-idea?hook_index=${hookIdx}`, { method: 'POST' })
 
 export const listIdeaVariants = (ideaId) => request(`/ideas/${ideaId}/variants`)
