@@ -380,9 +380,13 @@ def client_b():
     app.dependency_overrides[get_tenant] = _tenant_dep(TENANT_B)
     app.dependency_overrides[get_tenant_id] = _tenant_id_dep(TENANT_B)
 
-    with TestClient(app, raise_server_exceptions=False) as c:
-        c.headers.update({"X-API-Key": KEY_B})
-        yield c
+    # Do NOT use 'with TestClient(app) as c' — that would re-enter the lifespan
+    # and conflict with client_a's already-running startup (slug UNIQUE constraint).
+    # Without the context manager no lifespan events fire; requests still work
+    # because all DB calls in these tests are mocked away.
+    c = TestClient(app, raise_server_exceptions=False)
+    c.headers.update({"X-API-Key": KEY_B})
+    yield c
 
     app.dependency_overrides.clear()
 
