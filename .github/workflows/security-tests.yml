@@ -33,19 +33,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install minimal test dependencies
-        run: |
-          pip install --quiet \
-            fastapi==0.115.* \
-            httpx==0.28.* \
-            pydantic==2.10.* \
-            pydantic-settings==2.7.* \
-            sqlalchemy[asyncio]==2.0.* \
-            asyncpg \
-            pytest \
-            pytest-asyncio \
-            starlette \
-            "python-multipart==0.0.*"
+      - name: Install dependencies
+        run: pip install --quiet -r requirements.txt pytest pytest-asyncio
 
       - name: Run tenant isolation tests
         run: |
