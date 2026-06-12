@@ -41,15 +41,15 @@ describe('Anomalie-Banner-Logik', () => {
   // Banner-Kondition aus LLMAnalytics: anomaly?.anomaly === true
   test('null anomaly → kein Banner', () => {
     const anomaly = null
-    expect(!!(anomaly?.anomaly)).toBe(false)
+    expect(!!anomaly?.anomaly).toBe(false)
   })
   test('anomaly=false → kein Banner', () => {
     const anomaly = { anomaly: false, factor: 1.5, current_hour_cost_cents: 5 }
-    expect(!!(anomaly?.anomaly)).toBe(false)
+    expect(!!anomaly?.anomaly).toBe(false)
   })
   test('anomaly=true → Banner sichtbar', () => {
     const anomaly = { anomaly: true, factor: 3.2, current_hour_cost_cents: 50 }
-    expect(!!(anomaly?.anomaly)).toBe(true)
+    expect(!!anomaly?.anomaly).toBe(true)
   })
 })
 
@@ -121,7 +121,7 @@ describe('TrendsCacheTab Hilfsfunktionen (#155)', () => {
 
   // chartData mapping aus costTrend
   function mapTrendToChartData(days) {
-    return (days || []).map(d => ({
+    return (days || []).map((d) => ({
       date: d.date,
       cost: d.total?.total_cost_cents ?? 0,
       input: d.total?.total_input_tokens ?? 0,
@@ -135,11 +135,13 @@ describe('TrendsCacheTab Hilfsfunktionen (#155)', () => {
     expect(mapTrendToChartData(null)).toEqual([])
   })
   test('Valid day entry maps correctly', () => {
-    const days = [{
-      date: '2026-05-01',
-      total: { total_cost_cents: 12.5, total_input_tokens: 1000, total_output_tokens: 500 },
-      models: [],
-    }]
+    const days = [
+      {
+        date: '2026-05-01',
+        total: { total_cost_cents: 12.5, total_input_tokens: 1000, total_output_tokens: 500 },
+        models: [],
+      },
+    ]
     const result = mapTrendToChartData(days)
     expect(result[0].cost).toBe(12.5)
     expect(result[0].input).toBe(1000)

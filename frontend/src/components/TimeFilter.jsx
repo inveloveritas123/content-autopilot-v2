@@ -39,7 +39,7 @@ export default function TimeFilter({ value = {}, onChange, count = null, label =
   }
 
   function labelFor(p) {
-    const f = QUICK_FILTERS.find(f => f.value === p)
+    const f = QUICK_FILTERS.find((f) => f.value === p)
     return f ? f.label : p
   }
 
@@ -54,7 +54,7 @@ export default function TimeFilter({ value = {}, onChange, count = null, label =
 
       {/* Quick-filter buttons — horizontally scrollable on mobile */}
       <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-hide">
-        {QUICK_FILTERS.map(f => (
+        {QUICK_FILTERS.map((f) => (
           <button
             key={f.value}
             onClick={() => selectPeriod(f.value)}
@@ -68,21 +68,24 @@ export default function TimeFilter({ value = {}, onChange, count = null, label =
           </button>
         ))}
         <button
-          onClick={() => setShowCustom(v => !v)}
+          onClick={() => setShowCustom((v) => !v)}
           className={`whitespace-nowrap px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
             isCustomActive || showCustom
               ? 'bg-primary-700 text-white border-primary-700'
               : 'bg-white text-ink-muted border-gray-200 hover:border-primary-300 hover:text-primary-700'
           }`}
         >
-          {isCustomActive ? `${value.date_from || '…'} → ${value.date_to || '…'}` : '📅 Benutzerdefiniert'}
+          {isCustomActive
+            ? `${value.date_from || '…'} → ${value.date_to || '…'}`
+            : '📅 Benutzerdefiniert'}
         </button>
       </div>
 
       {/* Result counter */}
       {count !== null && (
         <span className="text-xs text-ink-muted ml-1">
-          — <span className="font-semibold text-ink">{count}</span> Ergebnis{count !== 1 ? 'se' : ''}
+          — <span className="font-semibold text-ink">{count}</span> Ergebnis
+          {count !== 1 ? 'se' : ''}
         </span>
       )}
 
@@ -93,14 +96,14 @@ export default function TimeFilter({ value = {}, onChange, count = null, label =
           <input
             type="date"
             value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)}
+            onChange={(e) => setDateFrom(e.target.value)}
             className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-400"
           />
           <span className="text-xs text-ink-muted">Bis</span>
           <input
             type="date"
             value={dateTo}
-            onChange={e => setDateTo(e.target.value)}
+            onChange={(e) => setDateTo(e.target.value)}
             className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-400"
           />
           <button

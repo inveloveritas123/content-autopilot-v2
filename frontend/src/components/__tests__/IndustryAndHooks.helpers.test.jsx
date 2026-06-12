@@ -65,7 +65,8 @@ describe('Industry-Context-Display-Helpers', () => {
 describe('Hook-Sort-Order', () => {
   function sortHooks(hooks, by = 'performance') {
     const arr = [...hooks]
-    if (by === 'performance') return arr.sort((a, b) => (b.performance_score || 0) - (a.performance_score || 0))
+    if (by === 'performance')
+      return arr.sort((a, b) => (b.performance_score || 0) - (a.performance_score || 0))
     if (by === 'usage') return arr.sort((a, b) => (b.used_count || 0) - (a.used_count || 0))
     if (by === 'recent') return arr.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     return arr
@@ -76,12 +77,12 @@ describe('Hook-Sort-Order', () => {
     { id: '3', performance_score: 0.2, used_count: 50, created_at: '2026-02-01' },
   ]
   test('sort by performance', () => {
-    expect(sortHooks(sample, 'performance').map(h => h.id)).toEqual(['2', '1', '3'])
+    expect(sortHooks(sample, 'performance').map((h) => h.id)).toEqual(['2', '1', '3'])
   })
   test('sort by usage', () => {
-    expect(sortHooks(sample, 'usage').map(h => h.id)).toEqual(['3', '1', '2'])
+    expect(sortHooks(sample, 'usage').map((h) => h.id)).toEqual(['3', '1', '2'])
   })
   test('sort by recent', () => {
-    expect(sortHooks(sample, 'recent').map(h => h.id)).toEqual(['2', '3', '1'])
+    expect(sortHooks(sample, 'recent').map((h) => h.id)).toEqual(['2', '3', '1'])
   })
 })

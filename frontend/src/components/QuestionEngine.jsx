@@ -1,5 +1,13 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
-import { Send, ChevronRight, Loader2, BookmarkCheck, SkipForward, Sparkles, CheckCircle } from 'lucide-react'
+import {
+  Send,
+  ChevronRight,
+  Loader2,
+  BookmarkCheck,
+  SkipForward,
+  Sparkles,
+  CheckCircle,
+} from 'lucide-react'
 import { clsx } from 'clsx'
 import { Button } from './ui/Button'
 import { Dialog } from './ui/Dialog'
@@ -30,10 +38,7 @@ function PhaseSynthesisModal({ open, onClose, proposals, onAccept, onReject, pha
       <div className="space-y-3">
         {proposals && proposals.length > 0 ? (
           proposals.map((proposal, idx) => (
-            <div
-              key={idx}
-              className="border border-surface-border rounded-xl p-4 bg-primary-50"
-            >
+            <div key={idx} className="border border-surface-border rounded-xl p-4 bg-primary-50">
               <p className="text-sm text-ink mb-3 leading-relaxed">{proposal.suggestion}</p>
               <div className="flex gap-2">
                 <Button
@@ -79,9 +84,7 @@ function ChatBubble({ text, role }) {
       <div
         className={clsx(
           'max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed',
-          isUser
-            ? 'bg-primary-600 text-white rounded-br-sm'
-            : 'bg-gray-100 text-ink rounded-bl-sm'
+          isUser ? 'bg-primary-600 text-white rounded-br-sm' : 'bg-gray-100 text-ink rounded-bl-sm'
         )}
       >
         {text}
@@ -97,7 +100,7 @@ function HintChips({ hints, onSelect }) {
   if (!hints || hints.length === 0) return null
   return (
     <div className="flex flex-wrap gap-1.5 mt-2">
-      {hints.map(hint => (
+      {hints.map((hint) => (
         <button
           key={hint.id}
           type="button"
@@ -191,14 +194,18 @@ export function QuestionEngine({
 
   async function handleSubmit() {
     if (!input.trim() || loading || !currentQuestion) return
-    if (!onAnswer) return  // Sicherheits-Guard: onAnswer ist Pflicht-Prop
+    if (!onAnswer) return // Sicherheits-Guard: onAnswer ist Pflicht-Prop
     setLoading(true)
     setError(null)
     try {
       const result = (await onAnswer(currentQuestion.id, input.trim())) ?? {}
-      setHistory(prev => [
+      setHistory((prev) => [
         ...prev,
-        { questionId: currentQuestion.id, questionText: currentQuestion.text, answer: input.trim() },
+        {
+          questionId: currentQuestion.id,
+          questionText: currentQuestion.text,
+          answer: input.trim(),
+        },
       ])
       setInput('')
 
@@ -208,11 +215,11 @@ export function QuestionEngine({
         if (phaseSynthesis) {
           setShowSynthesisModal(true)
         } else {
-          setCurrentIndex(idx => idx + 1)
+          setCurrentIndex((idx) => idx + 1)
         }
       } else {
         // next_question
-        setCurrentIndex(idx => idx + 1)
+        setCurrentIndex((idx) => idx + 1)
       }
     } catch (e) {
       setError(e.message || 'Fehler beim Senden der Antwort')
@@ -232,12 +239,12 @@ export function QuestionEngine({
     if (!onSkip || !currentQuestion) return
     onSkip(currentQuestion.id)
     setInput('')
-    setCurrentIndex(idx => idx + 1)
+    setCurrentIndex((idx) => idx + 1)
   }
 
   function handleSynthesisClose() {
     setShowSynthesisModal(false)
-    setCurrentIndex(idx => idx + 1)
+    setCurrentIndex((idx) => idx + 1)
   }
 
   async function handleSaveAndContinue() {
@@ -258,7 +265,8 @@ export function QuestionEngine({
   // Synthese-Modal Phasen-Name ermitteln (letzte beantwortete Frage)
   const lastAnswered = history[history.length - 1]
   const synthesisPhaseLabel = lastAnswered
-    ? questions.find(q => q.id === lastAnswered.questionId)?.phase_name || `Phase ${lastAnswered.questionId}`
+    ? questions.find((q) => q.id === lastAnswered.questionId)?.phase_name ||
+      `Phase ${lastAnswered.questionId}`
     : 'diese Phase'
 
   if (sessionComplete) {
@@ -267,13 +275,12 @@ export function QuestionEngine({
         <SessionCompleteView source={source} />
         {onSaveAndContinue && (
           <div className="flex justify-end mt-4">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleSaveAndContinue}
-              disabled={saving}
-            >
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BookmarkCheck className="w-3.5 h-3.5" />}
+            <Button variant="secondary" size="sm" onClick={handleSaveAndContinue} disabled={saving}>
+              {saving ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <BookmarkCheck className="w-3.5 h-3.5" />
+              )}
               {saving ? 'Speichern…' : 'Speichern & Weiter'}
             </Button>
           </div>
@@ -283,11 +290,7 @@ export function QuestionEngine({
   }
 
   if (!currentQuestion) {
-    return (
-      <div className="py-8 text-center text-sm text-ink-muted">
-        Keine Fragen vorhanden.
-      </div>
-    )
+    return <div className="py-8 text-center text-sm text-ink-muted">Keine Fragen vorhanden.</div>
   }
 
   // -------------------------------------------------------------------------
@@ -334,7 +337,7 @@ export function QuestionEngine({
                 id="qe-textarea"
                 ref={textareaRef}
                 value={input}
-                onChange={e => setInput(e.target.value)}
+                onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 rows={4}
                 placeholder="Deine Antwort… (Enter zum Absenden, Shift+Enter für Zeilenumbruch)"
@@ -350,7 +353,9 @@ export function QuestionEngine({
                 <details className="mt-2 group">
                   <summary className="text-xs text-ink-muted cursor-pointer hover:text-ink select-none list-none flex items-center gap-1">
                     <span className="text-base leading-none">💡</span>
-                    <span className="underline decoration-dotted">Hilfe wenn du nicht weiterweißt</span>
+                    <span className="underline decoration-dotted">
+                      Hilfe wenn du nicht weiterweißt
+                    </span>
                   </summary>
                   <ul className="mt-2 space-y-1 pl-1 border-l-2 border-primary-100 ml-1">
                     {currentQuestion.nachhaken.map((hint, i) => (
@@ -365,9 +370,7 @@ export function QuestionEngine({
               <HintChips hints={hints} onSelect={handleHintSelect} />
             </div>
 
-            {error && (
-              <p className="text-xs text-red-600 bg-red-50 rounded-lg p-3">{error}</p>
-            )}
+            {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg p-3">{error}</p>}
 
             {/* Actions */}
             <div className="flex items-center justify-between gap-3">
@@ -395,7 +398,11 @@ export function QuestionEngine({
                     type="button"
                     className="text-ink-muted text-xs"
                   >
-                    {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BookmarkCheck className="w-3.5 h-3.5" />}
+                    {saving ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <BookmarkCheck className="w-3.5 h-3.5" />
+                    )}
                     {saving ? 'Speichern…' : 'Speichern & Weiter'}
                   </Button>
                 )}
@@ -524,13 +531,19 @@ function ChatAppearance({
       {/* Input-Bereich */}
       <div className="border-t border-surface-border px-4 py-3 bg-gray-50">
         {/* Inline-Hints über dem Input */}
-        <HintChips hints={hints} onSelect={val => { onHintSelect(val); if (textareaRef.current) textareaRef.current.focus() }} />
+        <HintChips
+          hints={hints}
+          onSelect={(val) => {
+            onHintSelect(val)
+            if (textareaRef.current) textareaRef.current.focus()
+          }}
+        />
 
         <div className="flex gap-2 mt-2">
           <textarea
             ref={textareaRef}
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={2}
             placeholder="Deine Antwort…"
@@ -552,17 +565,11 @@ function ChatAppearance({
             )}
             aria-label="Antwort absenden"
           >
-            {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Send className="w-4 h-4" />
-            )}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>
         </div>
 
-        {error && (
-          <p className="text-xs text-red-600 mt-2">{error}</p>
-        )}
+        {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
 
         {/* Skip + Save-Buttons */}
         <div className="flex items-center justify-between mt-2">
@@ -586,7 +593,11 @@ function ChatAppearance({
                 disabled={saving}
                 className="text-xs text-ink-muted hover:text-primary-600 flex items-center gap-1 transition-colors disabled:opacity-50"
               >
-                {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <BookmarkCheck className="w-3 h-3" />}
+                {saving ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <BookmarkCheck className="w-3 h-3" />
+                )}
                 {saving ? 'Speichern…' : 'Speichern & Weiter'}
               </button>
             )}

@@ -87,7 +87,9 @@ function ModelList({ models, loading, error, onRefresh }) {
                     <p className="text-sm font-medium text-ink truncate">
                       {m.display_name || m.model_id}
                     </p>
-                    <p className="text-xs text-ink-muted truncate">{m.provider} · {m.model_id}</p>
+                    <p className="text-xs text-ink-muted truncate">
+                      {m.provider} · {m.model_id}
+                    </p>
                   </div>
                   {isNew && (
                     <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[10px] font-medium text-blue-700">
@@ -161,9 +163,7 @@ function BacktestResults({ result, tenantId, adminToken, onReset }) {
             <li
               key={idx}
               className={`flex items-start gap-3 p-3 rounded-lg border text-xs ${
-                pass
-                  ? 'bg-emerald-50 border-emerald-200'
-                  : 'bg-red-50 border-red-200'
+                pass ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'
               }`}
             >
               {pass ? (
@@ -175,13 +175,16 @@ function BacktestResults({ result, tenantId, adminToken, onReset }) {
                 <p className="font-medium text-ink truncate">{truncateId(p.post_id || p.id, 28)}</p>
                 {pass && (p.original_length != null || p.new_length != null) && (
                   <p className="text-ink-muted mt-0.5">
-                    Original: {p.original_length ?? '—'} Zeichen · Neu: {p.new_length ?? '—'} Zeichen
+                    Original: {p.original_length ?? '—'} Zeichen · Neu: {p.new_length ?? '—'}{' '}
+                    Zeichen
                   </p>
                 )}
                 {!pass && p.issues && p.issues.length > 0 && (
                   <ul className="mt-1 space-y-0.5">
                     {p.issues.map((issue, i) => (
-                      <li key={i} className="text-red-700">{issue}</li>
+                      <li key={i} className="text-red-700">
+                        {issue}
+                      </li>
                     ))}
                   </ul>
                 )}
@@ -243,12 +246,8 @@ function BacktestResults({ result, tenantId, adminToken, onReset }) {
         </button>
       </div>
 
-      {notifyError && (
-        <p className="text-xs text-red-700 mt-1">{notifyError}</p>
-      )}
-      {applyError && (
-        <p className="text-xs text-red-700 mt-1">{applyError}</p>
-      )}
+      {notifyError && <p className="text-xs text-red-700 mt-1">{notifyError}</p>}
+      {applyError && <p className="text-xs text-red-700 mt-1">{applyError}</p>}
     </div>
   )
 }
@@ -291,7 +290,12 @@ function BacktestPanel({ models, adminToken }) {
     setPollError(null)
     setResult(null)
     try {
-      const res = await startBacktest(adminToken, tenantId.trim(), candidateModelId.trim(), postCount)
+      const res = await startBacktest(
+        adminToken,
+        tenantId.trim(),
+        candidateModelId.trim(),
+        postCount
+      )
       const id = res.backtest_run_id
       setRunId(id)
       // kick off polling
@@ -330,7 +334,8 @@ function BacktestPanel({ models, adminToken }) {
     setStartError(null)
   }
 
-  const isRunning = runId && pollData && (pollData.status === 'running' || pollData.status === 'pending')
+  const isRunning =
+    runId && pollData && (pollData.status === 'running' || pollData.status === 'pending')
   const testedCount = pollData?.tested_count ?? null
   const totalCount = pollData?.total_count ?? postCount
 
@@ -452,7 +457,12 @@ function BacktestPanel({ models, adminToken }) {
 
         {/* Results */}
         {result && (
-          <BacktestResults result={result} tenantId={tenantId} adminToken={adminToken} onReset={handleReset} />
+          <BacktestResults
+            result={result}
+            tenantId={tenantId}
+            adminToken={adminToken}
+            onReset={handleReset}
+          />
         )}
       </div>
     </div>
@@ -492,8 +502,8 @@ export default function AdminModels() {
           className="w-full border rounded px-3 py-2 mb-3 text-sm"
           placeholder="Admin-Token eingeben"
           value={tokenInput}
-          onChange={e => setTokenInput(e.target.value)}
-          onKeyDown={e => {
+          onChange={(e) => setTokenInput(e.target.value)}
+          onKeyDown={(e) => {
             if (e.key === 'Enter') {
               localStorage.setItem('admin_token', tokenInput)
               setAdminToken(tokenInput)
@@ -510,8 +520,10 @@ export default function AdminModels() {
           Anmelden
         </button>
         <p className="mt-3 text-xs text-gray-500">
-          Admin-Token steht in <code className="bg-gray-100 px-1 rounded">.env</code> unter <code className="bg-gray-100 px-1 rounded">ADMIN_TOKEN=...</code>.<br/>
-          Standard (falls nicht gesetzt): <code className="bg-gray-100 px-1 rounded">admin_backtest_2026</code>
+          Admin-Token steht in <code className="bg-gray-100 px-1 rounded">.env</code> unter{' '}
+          <code className="bg-gray-100 px-1 rounded">ADMIN_TOKEN=...</code>.<br />
+          Standard (falls nicht gesetzt):{' '}
+          <code className="bg-gray-100 px-1 rounded">admin_backtest_2026</code>
         </p>
       </div>
     )

@@ -1,6 +1,28 @@
 import { useState, useEffect, useMemo } from 'react'
-import { BarChart3, TrendingUp, FileText, CheckCircle2, Hash, Calendar, Clock, Radio, Award, Cpu } from 'lucide-react'
-import { getContentList, getBestPostingTimes, getSourceFunnel, getLLMCostHistory, getLLMProviders, getQualitySummary, getProductionHeatmap, getIdeasStats, getQualityByModel, getQualityRecent } from '../api'
+import {
+  BarChart3,
+  TrendingUp,
+  FileText,
+  CheckCircle2,
+  Hash,
+  Calendar,
+  Clock,
+  Radio,
+  Award,
+  Cpu,
+} from 'lucide-react'
+import {
+  getContentList,
+  getBestPostingTimes,
+  getSourceFunnel,
+  getLLMCostHistory,
+  getLLMProviders,
+  getQualitySummary,
+  getProductionHeatmap,
+  getIdeasStats,
+  getQualityByModel,
+  getQualityRecent,
+} from '../api'
 
 // Minimal quality scorer (mirrors Posts.jsx postScore)
 function quickScore(text) {
@@ -13,7 +35,7 @@ function quickScore(text) {
   if (/\?/.test(text.slice(0, 210))) pts += 1
   if (text.length > 30 && !text.slice(0, 210).startsWith(' ')) pts += 1
   if (text.split(/\n\n+/).length >= 3) pts += 1
-  const emojiCount = [...text].filter(c => /\p{Emoji}/u.test(c) && c !== ' ').length
+  const emojiCount = [...text].filter((c) => /\p{Emoji}/u.test(c) && c !== ' ').length
   if (emojiCount >= 1 && emojiCount <= 8) pts += 1
   if (/\?/.test(text.slice(-200))) pts += 1
   const score = Math.min(10, Math.round(pts))
@@ -22,8 +44,18 @@ function quickScore(text) {
 }
 
 function StatCard({ icon: Icon, label, value, sub, color = 'teal' }) {
-  const bg = { teal: 'bg-primary-50', emerald: 'bg-emerald-50', amber: 'bg-accent-50', purple: 'bg-purple-50' }[color]
-  const text = { teal: 'text-primary-700', emerald: 'text-emerald-700', amber: 'text-accent-700', purple: 'text-purple-700' }[color]
+  const bg = {
+    teal: 'bg-primary-50',
+    emerald: 'bg-emerald-50',
+    amber: 'bg-accent-50',
+    purple: 'bg-purple-50',
+  }[color]
+  const text = {
+    teal: 'text-primary-700',
+    emerald: 'text-emerald-700',
+    amber: 'text-accent-700',
+    purple: 'text-purple-700',
+  }[color]
   return (
     <div className="bg-white rounded-xl border border-surface-border p-4">
       <div className="flex items-center gap-3">
@@ -46,7 +78,10 @@ function HBar({ label, count, max, color = 'bg-primary-500', badge }) {
     <div className="flex items-center gap-3">
       <span className="w-24 text-xs text-ink-muted text-right shrink-0 truncate">{label}</span>
       <div className="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+        <div
+          className={`h-full rounded-full transition-all ${color}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
       <span className="w-10 text-xs font-semibold text-ink text-right shrink-0">{count}</span>
       {badge && <span className="text-[10px] text-ink-muted shrink-0">{badge}</span>}
@@ -78,8 +113,16 @@ function lastNWeeks(n) {
 }
 
 const DAY_NAMES = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
-const DAY_NAMES_LONG = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag']
-const HEAT_HOURS = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+const DAY_NAMES_LONG = [
+  'Montag',
+  'Dienstag',
+  'Mittwoch',
+  'Donnerstag',
+  'Freitag',
+  'Samstag',
+  'Sonntag',
+]
+const HEAT_HOURS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 
 function heatColor(v, max) {
   if (!v || !max) return 'bg-gray-100'
@@ -88,7 +131,7 @@ function heatColor(v, max) {
   if (t >= 0.7) return 'bg-emerald-500'
   if (t >= 0.5) return 'bg-emerald-400'
   if (t >= 0.3) return 'bg-emerald-300'
-  if (t > 0)   return 'bg-emerald-200'
+  if (t > 0) return 'bg-emerald-200'
   return 'bg-gray-100'
 }
 
@@ -109,17 +152,21 @@ function PostingHeatmap({ data }) {
         <div className="min-w-[420px]">
           {/* Hour labels */}
           <div className="flex mb-1 ml-8">
-            {HEAT_HOURS.map(h => (
-              <div key={h} className="flex-1 text-center text-[9px] text-ink-muted">{h}</div>
+            {HEAT_HOURS.map((h) => (
+              <div key={h} className="flex-1 text-center text-[9px] text-ink-muted">
+                {h}
+              </div>
             ))}
           </div>
           {/* Rows */}
-          {[0,1,2,3,4,5,6].map(day => {
+          {[0, 1, 2, 3, 4, 5, 6].map((day) => {
             const dayVals = heatmap[String(day)] || []
             return (
               <div key={day} className="flex items-center mb-1">
-                <span className="w-8 text-[10px] text-ink-muted text-right pr-2 shrink-0">{DAY_NAMES[day]}</span>
-                {HEAT_HOURS.map(h => {
+                <span className="w-8 text-[10px] text-ink-muted text-right pr-2 shrink-0">
+                  {DAY_NAMES[day]}
+                </span>
+                {HEAT_HOURS.map((h) => {
                   const v = dayVals[h] || 0
                   return (
                     <div
@@ -135,7 +182,13 @@ function PostingHeatmap({ data }) {
           {/* Legend */}
           <div className="flex items-center gap-2 mt-2 ml-8">
             <span className="text-[9px] text-ink-muted">Wenig</span>
-            {['bg-emerald-200','bg-emerald-300','bg-emerald-400','bg-emerald-500','bg-emerald-600'].map(c => (
+            {[
+              'bg-emerald-200',
+              'bg-emerald-300',
+              'bg-emerald-400',
+              'bg-emerald-500',
+              'bg-emerald-600',
+            ].map((c) => (
               <div key={c} className={`w-4 h-3 rounded-sm ${c}`} />
             ))}
             <span className="text-[9px] text-ink-muted">Viel</span>
@@ -146,16 +199,27 @@ function PostingHeatmap({ data }) {
       {/* Top recommendations */}
       {recommendations?.length > 0 && (
         <div className="mt-4 space-y-2">
-          <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide">Top Empfehlungen</p>
-          {recommendations.slice(0, 3).map(r => (
+          <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide">
+            Top Empfehlungen
+          </p>
+          {recommendations.slice(0, 3).map((r) => (
             <div key={r.day} className="flex items-center gap-3 bg-emerald-50 rounded-lg px-3 py-2">
-              <span className="w-20 text-xs font-semibold text-emerald-800 shrink-0">{r.day_name}</span>
+              <span className="w-20 text-xs font-semibold text-emerald-800 shrink-0">
+                {r.day_name}
+              </span>
               <div className="flex gap-1 flex-wrap">
-                {(r.hours || []).map(h => (
-                  <span key={h} className="px-1.5 py-0.5 bg-emerald-200 text-emerald-800 rounded text-[10px] font-mono">{h}:00</span>
+                {(r.hours || []).map((h) => (
+                  <span
+                    key={h}
+                    className="px-1.5 py-0.5 bg-emerald-200 text-emerald-800 rounded text-[10px] font-mono"
+                  >
+                    {h}:00
+                  </span>
                 ))}
               </div>
-              {r.note && <span className="text-[10px] text-emerald-700 ml-auto shrink-0">{r.note}</span>}
+              {r.note && (
+                <span className="text-[10px] text-emerald-700 ml-auto shrink-0">{r.note}</span>
+              )}
             </div>
           ))}
         </div>
@@ -165,17 +229,28 @@ function PostingHeatmap({ data }) {
 }
 
 // ─── Model Recommendations Panel ────────────────────────────────────────────
-const STEP_LABELS = { transcription: 'Transkription', analysis: 'Analyse', ideation: 'Ideation', post_generation: 'Post-Generierung', smart_questions: 'Smarte Fragen' }
+const STEP_LABELS = {
+  transcription: 'Transkription',
+  analysis: 'Analyse',
+  ideation: 'Ideation',
+  post_generation: 'Post-Generierung',
+  smart_questions: 'Smarte Fragen',
+}
 const KNOWN_COSTS = {
-  'gemini-2.0-flash': 0.075, 'gemini-2.5-flash': 0.15, 'gemini-2.5-flash-lite': 0.075,
-  'mistral-medium-latest': 0.40, 'mistral-small-latest': 0.10,
-  'gpt-4.1-mini': 0.40, 'claude-haiku-4-5': 0.80, 'claude-sonnet-4': 3.00,
+  'gemini-2.0-flash': 0.075,
+  'gemini-2.5-flash': 0.15,
+  'gemini-2.5-flash-lite': 0.075,
+  'mistral-medium-latest': 0.4,
+  'mistral-small-latest': 0.1,
+  'gpt-4.1-mini': 0.4,
+  'claude-haiku-4-5': 0.8,
+  'claude-sonnet-4': 3.0,
 }
 
 function ModelRecommendationsPanel({ models }) {
   // Group by step, find best model per step
   const byStep = {}
-  models.forEach(row => {
+  models.forEach((row) => {
     if (!byStep[row.step]) byStep[row.step] = []
     byStep[row.step].push(row)
   })
@@ -195,33 +270,53 @@ function ModelRecommendationsPanel({ models }) {
       <div className="flex items-center gap-2 mb-4">
         <TrendingUp className="w-4 h-4 text-emerald-600" />
         <h2 className="text-base font-semibold text-ink">Modell-Empfehlungen</h2>
-        <span className="text-xs text-ink-muted ml-1">Basierend auf gesammelten Qualitätsdaten</span>
+        <span className="text-xs text-ink-muted ml-1">
+          Basierend auf gesammelten Qualitätsdaten
+        </span>
       </div>
       <div className="space-y-2 mb-4">
         {recommendations.map(({ step, best, shortModel, cost, conf }) => (
-          <div key={step} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+          <div
+            key={step}
+            className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0"
+          >
             <div className="w-28 text-xs text-ink-muted shrink-0">{STEP_LABELS[step] || step}</div>
             <div className="flex-1 flex items-center gap-2 min-w-0">
               <span className="font-mono text-xs text-blue-700 truncate">{shortModel}</span>
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                best.avg_quality >= 80 ? 'bg-emerald-100 text-emerald-700' :
-                best.avg_quality >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-              }`}>{best.avg_quality.toFixed(0)}/100</span>
+              <span
+                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                  best.avg_quality >= 80
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : best.avg_quality >= 60
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-red-100 text-red-700'
+                }`}
+              >
+                {best.avg_quality.toFixed(0)}/100
+              </span>
               {cost != null && <span className="text-[10px] text-ink-muted">${cost}/1M</span>}
             </div>
-            <span className="text-[11px] shrink-0">{conf} {best.count} Tests</span>
+            <span className="text-[11px] shrink-0">
+              {conf} {best.count} Tests
+            </span>
           </div>
         ))}
       </div>
 
       {/* Cost optimization tip */}
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
-        <span className="font-semibold">💡 Kosten-Tipp:</span>{' '}
-        Gemini Flash (0.075$/1M) liefert {recommendations.find(r => r.shortModel.includes('gemini'))?.best.avg_quality.toFixed(0) || '~97'}/100 Qualität bei Analyse — 10× günstiger als Claude Haiku (0.80$/1M).
-        Routing-Konfiguration unter <strong>Einstellungen → KI-Provider → Live Routing Override</strong>.
+        <span className="font-semibold">💡 Kosten-Tipp:</span> Gemini Flash (0.075$/1M) liefert{' '}
+        {recommendations
+          .find((r) => r.shortModel.includes('gemini'))
+          ?.best.avg_quality.toFixed(0) || '~97'}
+        /100 Qualität bei Analyse — 10× günstiger als Claude Haiku (0.80$/1M). Routing-Konfiguration
+        unter <strong>Einstellungen → KI-Provider → Live Routing Override</strong>.
       </div>
 
-      <p className="text-[10px] text-ink-muted mt-2">🟢 verlässlich (n≥30) · 🟡 vorläufig (n≥5) · 🔴 wenig Daten · Daten wachsen mit jedem Pipeline-Lauf</p>
+      <p className="text-[10px] text-ink-muted mt-2">
+        🟢 verlässlich (n≥30) · 🟡 vorläufig (n≥5) · 🔴 wenig Daten · Daten wachsen mit jedem
+        Pipeline-Lauf
+      </p>
     </div>
   )
 }
@@ -246,7 +341,19 @@ export default function Analytics() {
     async function load() {
       setLoading(true)
       try {
-        const [page1, page2, times, funnel, costHist, providers, qualSum, heatmapData, ideaSt, modelComp, qualRecent] = await Promise.all([
+        const [
+          page1,
+          page2,
+          times,
+          funnel,
+          costHist,
+          providers,
+          qualSum,
+          heatmapData,
+          ideaSt,
+          modelComp,
+          qualRecent,
+        ] = await Promise.all([
           getContentList({ limit: 200, offset: 0 }),
           getContentList({ limit: 200, offset: 200 }),
           getBestPostingTimes().catch(() => null),
@@ -282,20 +389,20 @@ export default function Analytics() {
 
     // Status breakdown
     const byStatus = {}
-    posts.forEach(p => {
+    posts.forEach((p) => {
       byStatus[p.status] = (byStatus[p.status] || 0) + 1
     })
 
     // Channel breakdown
     const byChannel = {}
-    posts.forEach(p => {
+    posts.forEach((p) => {
       const ch = p.channel || 'unbekannt'
       byChannel[ch] = (byChannel[ch] || 0) + 1
     })
 
     // Angle breakdown (from metadata)
     const byAngle = {}
-    posts.forEach(p => {
+    posts.forEach((p) => {
       const angle = p.content_metadata?.angle
       if (angle) byAngle[angle] = (byAngle[angle] || 0) + 1
     })
@@ -303,8 +410,10 @@ export default function Analytics() {
     // Weekly volume (last 8 weeks)
     const weeks = lastNWeeks(8)
     const byWeek = {}
-    weeks.forEach(w => { byWeek[w] = 0 })
-    posts.forEach(p => {
+    weeks.forEach((w) => {
+      byWeek[w] = 0
+    })
+    posts.forEach((p) => {
       if (p.created_at) {
         const w = isoWeek(p.created_at)
         if (byWeek[w] !== undefined) byWeek[w]++
@@ -312,49 +421,56 @@ export default function Analytics() {
     })
 
     // Avg char count
-    const withText = posts.filter(p => p.content_text)
+    const withText = posts.filter((p) => p.content_text)
     const avgChars = withText.length
       ? Math.round(withText.reduce((a, p) => a + p.content_text.length, 0) / withText.length)
       : 0
 
     // Avg chars by channel (approved only)
     const approvedByChannel = {}
-    posts.filter(p => p.status === 'approved').forEach(p => {
-      const ch = p.channel || 'unbekannt'
-      if (!approvedByChannel[ch]) approvedByChannel[ch] = { total: 0, count: 0 }
-      approvedByChannel[ch].total += (p.content_text || '').length
-      approvedByChannel[ch].count++
-    })
+    posts
+      .filter((p) => p.status === 'approved')
+      .forEach((p) => {
+        const ch = p.channel || 'unbekannt'
+        if (!approvedByChannel[ch]) approvedByChannel[ch] = { total: 0, count: 0 }
+        approvedByChannel[ch].total += (p.content_text || '').length
+        approvedByChannel[ch].count++
+      })
 
     // Pillar distribution
     const PILLAR_CFG = {
       thought_leadership: { label: 'Thought Leadership', emoji: '💡', bar: 'bg-violet-400' },
-      how_to:            { label: 'How-To / Anleitung', emoji: '🛠', bar: 'bg-teal-400' },
-      personal_story:    { label: 'Persönliche Story', emoji: '📖', bar: 'bg-amber-400' },
-      industry_news:     { label: 'Branchennews', emoji: '📰', bar: 'bg-sky-400' },
-      product_service:   { label: 'Produkt / Service', emoji: '🎯', bar: 'bg-pink-400' },
+      how_to: { label: 'How-To / Anleitung', emoji: '🛠', bar: 'bg-teal-400' },
+      personal_story: { label: 'Persönliche Story', emoji: '📖', bar: 'bg-amber-400' },
+      industry_news: { label: 'Branchennews', emoji: '📰', bar: 'bg-sky-400' },
+      product_service: { label: 'Produkt / Service', emoji: '🎯', bar: 'bg-pink-400' },
     }
     const byPillar = {}
     let pillarAssigned = 0
-    posts.forEach(p => {
+    posts.forEach((p) => {
       const pillar = p.content_metadata?.pillar
-      if (pillar) { byPillar[pillar] = (byPillar[pillar] || 0) + 1; pillarAssigned++ }
+      if (pillar) {
+        byPillar[pillar] = (byPillar[pillar] || 0) + 1
+        pillarAssigned++
+      }
     })
 
     // Quality distribution across all drafts (Cycle 42)
     const gradeDist = { A: 0, B: 0, C: 0, D: 0, F: 0 }
     const scoreHist = { '0-2': 0, '3-4': 0, '5-6': 0, '7-8': 0, '9-10': 0 }
     const draftScores = []
-    posts.filter(p => p.status === 'draft' && p.content_text).forEach(p => {
-      const { score, grade } = quickScore(p.content_text)
-      gradeDist[grade] = (gradeDist[grade] || 0) + 1
-      if (score <= 2) scoreHist['0-2']++
-      else if (score <= 4) scoreHist['3-4']++
-      else if (score <= 6) scoreHist['5-6']++
-      else if (score <= 8) scoreHist['7-8']++
-      else scoreHist['9-10']++
-      draftScores.push({ id: p.id, score, grade, preview: (p.content_text || '').slice(0, 120) })
-    })
+    posts
+      .filter((p) => p.status === 'draft' && p.content_text)
+      .forEach((p) => {
+        const { score, grade } = quickScore(p.content_text)
+        gradeDist[grade] = (gradeDist[grade] || 0) + 1
+        if (score <= 2) scoreHist['0-2']++
+        else if (score <= 4) scoreHist['3-4']++
+        else if (score <= 6) scoreHist['5-6']++
+        else if (score <= 8) scoreHist['7-8']++
+        else scoreHist['9-10']++
+        draftScores.push({ id: p.id, score, grade, preview: (p.content_text || '').slice(0, 120) })
+      })
     const topPosts = draftScores.sort((a, b) => b.score - a.score).slice(0, 5)
     const readyToApprove = (gradeDist['A'] || 0) + (gradeDist['B'] || 0)
 
@@ -362,26 +478,62 @@ export default function Analytics() {
     const now = Date.now()
     const ageBuckets = { fresh: 0, week: 0, twoweeks: 0, month: 0, old: 0 }
     const oldestDrafts = []
-    posts.filter(p => p.status === 'draft' && p.created_at).forEach(p => {
-      const ageDays = Math.floor((now - new Date(p.created_at)) / 86400000)
-      if (ageDays < 7) ageBuckets.fresh++
-      else if (ageDays < 14) ageBuckets.week++
-      else if (ageDays < 30) ageBuckets.twoweeks++
-      else if (ageDays < 90) ageBuckets.month++
-      else ageBuckets.old++
-      oldestDrafts.push({ id: p.id, ageDays, preview: (p.content_text || '').slice(0, 100) })
-    })
+    posts
+      .filter((p) => p.status === 'draft' && p.created_at)
+      .forEach((p) => {
+        const ageDays = Math.floor((now - new Date(p.created_at)) / 86400000)
+        if (ageDays < 7) ageBuckets.fresh++
+        else if (ageDays < 14) ageBuckets.week++
+        else if (ageDays < 30) ageBuckets.twoweeks++
+        else if (ageDays < 90) ageBuckets.month++
+        else ageBuckets.old++
+        oldestDrafts.push({ id: p.id, ageDays, preview: (p.content_text || '').slice(0, 100) })
+      })
     oldestDrafts.sort((a, b) => b.ageDays - a.ageDays)
     const top5Oldest = oldestDrafts.slice(0, 5)
 
-    return { byStatus, byChannel, byAngle, byWeek, weeks, avgChars, approvedByChannel, byPillar, pillarAssigned, PILLAR_CFG, gradeDist, scoreHist, topPosts, readyToApprove, ageBuckets, top5Oldest }
+    return {
+      byStatus,
+      byChannel,
+      byAngle,
+      byWeek,
+      weeks,
+      avgChars,
+      approvedByChannel,
+      byPillar,
+      pillarAssigned,
+      PILLAR_CFG,
+      gradeDist,
+      scoreHist,
+      topPosts,
+      readyToApprove,
+      ageBuckets,
+      top5Oldest,
+    }
   }, [posts])
 
   if (loading) return <div className="text-center py-12 text-ink-muted">Lade Analytics...</div>
   if (error) return <div className="p-4 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
   if (!stats) return <div className="text-center py-12 text-ink-muted">Keine Daten vorhanden.</div>
 
-  const { byStatus, byChannel, byAngle, byWeek, weeks, avgChars, approvedByChannel, byPillar, pillarAssigned, PILLAR_CFG, gradeDist, scoreHist, topPosts, readyToApprove, ageBuckets, top5Oldest } = stats
+  const {
+    byStatus,
+    byChannel,
+    byAngle,
+    byWeek,
+    weeks,
+    avgChars,
+    approvedByChannel,
+    byPillar,
+    pillarAssigned,
+    PILLAR_CFG,
+    gradeDist,
+    scoreHist,
+    topPosts,
+    readyToApprove,
+    ageBuckets,
+    top5Oldest,
+  } = stats
 
   const totalPosts = posts.length
   const approved = byStatus.approved || 0
@@ -393,7 +545,14 @@ export default function Analytics() {
   const maxChannel = Math.max(...Object.values(byChannel), 1)
   const maxAngle = Math.max(...Object.values(byAngle), 1)
 
-  const channelColors = ['bg-primary-500', 'bg-teal-500', 'bg-blue-400', 'bg-purple-400', 'bg-amber-400', 'bg-emerald-400']
+  const channelColors = [
+    'bg-primary-500',
+    'bg-teal-500',
+    'bg-blue-400',
+    'bg-purple-400',
+    'bg-amber-400',
+    'bg-emerald-400',
+  ]
   const weekColors = 'bg-primary-400'
 
   const statusLabels = {
@@ -409,20 +568,42 @@ export default function Analytics() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-ink">Analytics</h1>
-          <p className="text-sm text-ink-light mt-0.5">Content-Volumen & Zusammensetzung — {totalPosts} Posts analysiert</p>
+          <p className="text-sm text-ink-light mt-0.5">
+            Content-Volumen & Zusammensetzung — {totalPosts} Posts analysiert
+          </p>
         </div>
       </div>
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <StatCard icon={FileText} label="Posts gesamt" value={totalPosts} color="teal"
-          sub={`Ø ${avgChars} Zeichen`} />
-        <StatCard icon={CheckCircle2} label="Freigegeben" value={approved} color="emerald"
-          sub={totalPosts > 0 ? `${Math.round(approved / totalPosts * 100)}% der Posts` : null} />
-        <StatCard icon={TrendingUp} label="Entwürfe" value={drafts} color="amber"
-          sub={published > 0 ? `${published} veröffentlicht` : 'Noch nichts publiziert'} />
-        <StatCard icon={Hash} label="Kanäle" value={channels} color="purple"
-          sub={Object.keys(byChannel).slice(0, 2).join(', ')} />
+        <StatCard
+          icon={FileText}
+          label="Posts gesamt"
+          value={totalPosts}
+          color="teal"
+          sub={`Ø ${avgChars} Zeichen`}
+        />
+        <StatCard
+          icon={CheckCircle2}
+          label="Freigegeben"
+          value={approved}
+          color="emerald"
+          sub={totalPosts > 0 ? `${Math.round((approved / totalPosts) * 100)}% der Posts` : null}
+        />
+        <StatCard
+          icon={TrendingUp}
+          label="Entwürfe"
+          value={drafts}
+          color="amber"
+          sub={published > 0 ? `${published} veröffentlicht` : 'Noch nichts publiziert'}
+        />
+        <StatCard
+          icon={Hash}
+          label="Kanäle"
+          value={channels}
+          color="purple"
+          sub={Object.keys(byChannel).slice(0, 2).join(', ')}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
@@ -432,13 +613,15 @@ export default function Analytics() {
             <Calendar className="w-4 h-4 text-primary-600" /> Posts pro Woche (letzte 8 Wochen)
           </h2>
           <div className="flex items-end gap-2 h-32">
-            {weeks.map(w => {
+            {weeks.map((w) => {
               const count = byWeek[w] || 0
               const pct = maxWeekCount > 0 ? (count / maxWeekCount) * 100 : 0
               const label = w.split('-W')[1] ? `KW${w.split('-W')[1]}` : w
               return (
                 <div key={w} className="flex-1 flex flex-col items-center gap-1">
-                  <span className="text-[10px] font-semibold text-ink-muted">{count > 0 ? count : ''}</span>
+                  <span className="text-[10px] font-semibold text-ink-muted">
+                    {count > 0 ? count : ''}
+                  </span>
                   <div className="w-full flex items-end" style={{ height: '80px' }}>
                     <div
                       className={`w-full rounded-t-md ${weekColors} transition-all`}
@@ -452,7 +635,8 @@ export default function Analytics() {
             })}
           </div>
           <p className="text-[11px] text-ink-muted mt-2 text-center">
-            Ø {Math.round(Object.values(byWeek).reduce((a, b) => a + b, 0) / weeks.length)} Posts/Woche
+            Ø {Math.round(Object.values(byWeek).reduce((a, b) => a + b, 0) / weeks.length)}{' '}
+            Posts/Woche
           </p>
         </div>
 
@@ -465,14 +649,23 @@ export default function Analytics() {
             {Object.entries(byStatus)
               .sort((a, b) => b[1] - a[1])
               .map(([status, count]) => {
-                const pct = totalPosts > 0 ? Math.round(count / totalPosts * 100) : 0
-                const info = statusLabels[status] || { label: status, color: 'bg-gray-100 text-gray-600' }
+                const pct = totalPosts > 0 ? Math.round((count / totalPosts) * 100) : 0
+                const info = statusLabels[status] || {
+                  label: status,
+                  color: 'bg-gray-100 text-gray-600',
+                }
                 return (
                   <div key={status} className="flex items-center gap-3">
-                    <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium ${info.color}`}>{info.label}</span>
+                    <span
+                      className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium ${info.color}`}
+                    >
+                      {info.label}
+                    </span>
                     <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${info.color.split(' ')[0].replace('bg-', 'bg-').replace('-100', '-400')}`}
-                        style={{ width: `${Math.max(pct, 3)}%` }} />
+                      <div
+                        className={`h-full rounded-full ${info.color.split(' ')[0].replace('bg-', 'bg-').replace('-100', '-400')}`}
+                        style={{ width: `${Math.max(pct, 3)}%` }}
+                      />
                     </div>
                     <span className="text-xs font-semibold text-ink w-8 text-right">{count}</span>
                     <span className="text-[10px] text-ink-muted w-8">{pct}%</span>
@@ -494,10 +687,17 @@ export default function Analytics() {
               .sort((a, b) => b[1] - a[1])
               .map(([ch, count], i) => {
                 const avgCh = approvedByChannel[ch]
-                const avgStr = avgCh?.count > 0 ? `Ø ${Math.round(avgCh.total / avgCh.count)} Z.` : null
+                const avgStr =
+                  avgCh?.count > 0 ? `Ø ${Math.round(avgCh.total / avgCh.count)} Z.` : null
                 return (
-                  <HBar key={ch} label={ch} count={count} max={maxChannel}
-                    color={channelColors[i % channelColors.length]} badge={avgStr} />
+                  <HBar
+                    key={ch}
+                    label={ch}
+                    count={count}
+                    max={maxChannel}
+                    color={channelColors[i % channelColors.length]}
+                    badge={avgStr}
+                  />
                 )
               })}
           </div>
@@ -509,14 +709,22 @@ export default function Analytics() {
             <TrendingUp className="w-4 h-4 text-primary-600" /> Post-Winkel (Angle)
           </h2>
           {Object.keys(byAngle).length === 0 ? (
-            <p className="text-sm text-ink-muted py-4 text-center">Kein Angle-Metadaten vorhanden</p>
+            <p className="text-sm text-ink-muted py-4 text-center">
+              Kein Angle-Metadaten vorhanden
+            </p>
           ) : (
             <div className="space-y-2.5">
               {Object.entries(byAngle)
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 8)
                 .map(([angle, count]) => (
-                  <HBar key={angle} label={angle} count={count} max={maxAngle} color="bg-accent-400" />
+                  <HBar
+                    key={angle}
+                    label={angle}
+                    count={count}
+                    max={maxAngle}
+                    color="bg-accent-400"
+                  />
                 ))}
             </div>
           )}
@@ -530,22 +738,27 @@ export default function Analytics() {
         </h2>
         <p className="text-[11px] text-ink-muted mb-4">
           {pillarAssigned > 0
-            ? `${pillarAssigned} von ${posts.length} Posts haben eine Content-Säule zugewiesen (${Math.round(pillarAssigned / posts.length * 100)}%)`
+            ? `${pillarAssigned} von ${posts.length} Posts haben eine Content-Säule zugewiesen (${Math.round((pillarAssigned / posts.length) * 100)}%)`
             : 'Noch keine Content-Säulen zugewiesen — öffne einen Post und weise eine Säule zu.'}
         </p>
         {pillarAssigned > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2.5">
             {Object.entries(PILLAR_CFG).map(([key, cfg]) => {
               const count = byPillar[key] || 0
-              const pct = pillarAssigned > 0 ? Math.round(count / pillarAssigned * 100) : 0
+              const pct = pillarAssigned > 0 ? Math.round((count / pillarAssigned) * 100) : 0
               return (
                 <div key={key} className="flex items-center gap-3">
                   <span className="w-6 text-base shrink-0 text-center">{cfg.emoji}</span>
                   <span className="w-36 text-xs text-ink-muted shrink-0 truncate">{cfg.label}</span>
                   <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${cfg.bar}`} style={{ width: `${Math.max(count > 0 ? 4 : 0, pct)}%` }} />
+                    <div
+                      className={`h-full rounded-full ${cfg.bar}`}
+                      style={{ width: `${Math.max(count > 0 ? 4 : 0, pct)}%` }}
+                    />
                   </div>
-                  <span className="text-xs font-semibold text-ink w-6 text-right shrink-0">{count}</span>
+                  <span className="text-xs font-semibold text-ink w-6 text-right shrink-0">
+                    {count}
+                  </span>
                   <span className="text-[10px] text-ink-muted w-8 shrink-0">{pct}%</span>
                 </div>
               )
@@ -554,8 +767,14 @@ export default function Analytics() {
         ) : (
           <div className="flex flex-wrap gap-2">
             {Object.entries(PILLAR_CFG).map(([key, cfg]) => (
-              <div key={key} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-xs text-ink-muted">
-                <span>{cfg.emoji}</span><span>{cfg.label}</span><span className="text-gray-300">—</span><span className="font-semibold">0</span>
+              <div
+                key={key}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-xs text-ink-muted"
+              >
+                <span>{cfg.emoji}</span>
+                <span>{cfg.label}</span>
+                <span className="text-gray-300">—</span>
+                <span className="font-semibold">0</span>
               </div>
             ))}
           </div>
@@ -586,28 +805,60 @@ export default function Analytics() {
               </thead>
               <tbody>
                 {sourceFunnel.slice(0, 12).map((s, i) => {
-                  const typeIcon = s.source_type === 'youtube' ? '▶' : s.source_type === 'rss' ? '📡' : s.source_type === 'podcast' ? '🎙' : '🌐'
+                  const typeIcon =
+                    s.source_type === 'youtube'
+                      ? '▶'
+                      : s.source_type === 'rss'
+                        ? '📡'
+                        : s.source_type === 'podcast'
+                          ? '🎙'
+                          : '🌐'
                   const approvalPct = s.approval_rate
-                  const barColor = approvalPct >= 50 ? 'bg-emerald-500' : approvalPct >= 20 ? 'bg-amber-400' : 'bg-red-400'
+                  const barColor =
+                    approvalPct >= 50
+                      ? 'bg-emerald-500'
+                      : approvalPct >= 20
+                        ? 'bg-amber-400'
+                        : 'bg-red-400'
                   return (
-                    <tr key={s.source_id} className={`border-b border-gray-50 ${i % 2 === 0 ? '' : 'bg-gray-50/50'} hover:bg-primary-50/30`}>
+                    <tr
+                      key={s.source_id}
+                      className={`border-b border-gray-50 ${i % 2 === 0 ? '' : 'bg-gray-50/50'} hover:bg-primary-50/30`}
+                    >
                       <td className="py-2 pr-4">
                         <div className="flex items-center gap-1.5 max-w-[220px]">
                           <span className="text-[10px]">{typeIcon}</span>
-                          <span className="truncate font-medium text-ink" title={s.source_name}>{s.source_name}</span>
+                          <span className="truncate font-medium text-ink" title={s.source_name}>
+                            {s.source_name}
+                          </span>
                         </div>
                       </td>
-                      <td className="text-right py-2 px-2 font-semibold text-ink tabular-nums">{s.items.toLocaleString('de')}</td>
-                      <td className="text-right py-2 px-2 text-ink-muted tabular-nums">{s.ideas.toLocaleString('de')}</td>
-                      <td className="text-right py-2 px-2 text-ink-muted tabular-nums">{s.posts.toLocaleString('de')}</td>
-                      <td className="text-right py-2 px-2 text-emerald-700 font-medium tabular-nums">{s.approved.toLocaleString('de')}</td>
-                      <td className="text-right py-2 px-2 text-primary-700 font-semibold tabular-nums">{s.published.toLocaleString('de')}</td>
+                      <td className="text-right py-2 px-2 font-semibold text-ink tabular-nums">
+                        {s.items.toLocaleString('de')}
+                      </td>
+                      <td className="text-right py-2 px-2 text-ink-muted tabular-nums">
+                        {s.ideas.toLocaleString('de')}
+                      </td>
+                      <td className="text-right py-2 px-2 text-ink-muted tabular-nums">
+                        {s.posts.toLocaleString('de')}
+                      </td>
+                      <td className="text-right py-2 px-2 text-emerald-700 font-medium tabular-nums">
+                        {s.approved.toLocaleString('de')}
+                      </td>
+                      <td className="text-right py-2 px-2 text-primary-700 font-semibold tabular-nums">
+                        {s.published.toLocaleString('de')}
+                      </td>
                       <td className="py-2 pl-2">
                         <div className="flex items-center gap-2 justify-end">
                           <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.max(approvalPct, s.approved > 0 ? 4 : 0)}%` }} />
+                            <div
+                              className={`h-full rounded-full ${barColor}`}
+                              style={{ width: `${Math.max(approvalPct, s.approved > 0 ? 4 : 0)}%` }}
+                            />
                           </div>
-                          <span className={`tabular-nums font-medium ${approvalPct >= 50 ? 'text-emerald-700' : approvalPct >= 20 ? 'text-amber-700' : 'text-red-600'}`}>
+                          <span
+                            className={`tabular-nums font-medium ${approvalPct >= 50 ? 'text-emerald-700' : approvalPct >= 20 ? 'text-amber-700' : 'text-red-600'}`}
+                          >
                             {approvalPct}%
                           </span>
                         </div>
@@ -619,13 +870,15 @@ export default function Analytics() {
             </table>
           </div>
           {sourceFunnel.length > 12 && (
-            <p className="text-[11px] text-ink-muted mt-3 text-center">Top 12 von {sourceFunnel.length} Quellen</p>
+            <p className="text-[11px] text-ink-muted mt-3 text-center">
+              Top 12 von {sourceFunnel.length} Quellen
+            </p>
           )}
         </div>
       )}
 
       {/* Draft Aging Report (Cycle 45) */}
-      {Object.values(ageBuckets).some(v => v > 0) && (
+      {Object.values(ageBuckets).some((v) => v > 0) && (
         <div className="bg-white rounded-xl border border-surface-border p-5 mb-6">
           <h2 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
             <Clock className="w-4 h-4 text-amber-500" /> Entwurfs-Alter — Backlog-Übersicht
@@ -633,44 +886,92 @@ export default function Analytics() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Age distribution bars */}
             <div>
-              <p className="text-xs font-semibold text-ink-muted mb-3">Altersverteilung der Entwürfe</p>
+              <p className="text-xs font-semibold text-ink-muted mb-3">
+                Altersverteilung der Entwürfe
+              </p>
               {[
-                { key: 'fresh',    label: '< 7 Tage',   color: 'bg-emerald-500', textColor: 'text-emerald-700' },
-                { key: 'week',     label: '7–14 Tage',  color: 'bg-amber-400',   textColor: 'text-amber-700'   },
-                { key: 'twoweeks', label: '14–30 Tage', color: 'bg-orange-400',  textColor: 'text-orange-700'  },
-                { key: 'month',    label: '1–3 Monate', color: 'bg-red-400',     textColor: 'text-red-600'     },
-                { key: 'old',      label: '> 3 Monate', color: 'bg-red-700',     textColor: 'text-red-700'     },
+                {
+                  key: 'fresh',
+                  label: '< 7 Tage',
+                  color: 'bg-emerald-500',
+                  textColor: 'text-emerald-700',
+                },
+                {
+                  key: 'week',
+                  label: '7–14 Tage',
+                  color: 'bg-amber-400',
+                  textColor: 'text-amber-700',
+                },
+                {
+                  key: 'twoweeks',
+                  label: '14–30 Tage',
+                  color: 'bg-orange-400',
+                  textColor: 'text-orange-700',
+                },
+                {
+                  key: 'month',
+                  label: '1–3 Monate',
+                  color: 'bg-red-400',
+                  textColor: 'text-red-600',
+                },
+                { key: 'old', label: '> 3 Monate', color: 'bg-red-700', textColor: 'text-red-700' },
               ].map(({ key, label, color, textColor }) => {
                 const count = ageBuckets[key] || 0
                 const total = Object.values(ageBuckets).reduce((a, v) => a + v, 0)
-                const pct = total > 0 ? Math.round(count / total * 100) : 0
+                const pct = total > 0 ? Math.round((count / total) * 100) : 0
                 return (
                   <div key={key} className="flex items-center gap-2 mb-2">
-                    <span className="text-[10px] text-ink-muted w-20 shrink-0 text-right">{label}</span>
+                    <span className="text-[10px] text-ink-muted w-20 shrink-0 text-right">
+                      {label}
+                    </span>
                     <div className="flex-1 h-5 bg-gray-100 rounded-md overflow-hidden">
-                      <div className={`h-full ${color} rounded-md flex items-center pl-2`} style={{ width: `${Math.max(pct, count > 0 ? 3 : 0)}%` }}>
-                        {pct >= 10 && <span className="text-[10px] text-white font-semibold">{count}</span>}
+                      <div
+                        className={`h-full ${color} rounded-md flex items-center pl-2`}
+                        style={{ width: `${Math.max(pct, count > 0 ? 3 : 0)}%` }}
+                      >
+                        {pct >= 10 && (
+                          <span className="text-[10px] text-white font-semibold">{count}</span>
+                        )}
                       </div>
                     </div>
-                    <span className={`text-[11px] tabular-nums font-medium w-12 text-right shrink-0 ${textColor}`}>{count} ({pct}%)</span>
+                    <span
+                      className={`text-[11px] tabular-nums font-medium w-12 text-right shrink-0 ${textColor}`}
+                    >
+                      {count} ({pct}%)
+                    </span>
                   </div>
                 )
               })}
               {ageBuckets.old > 0 && (
-                <p className="text-[11px] text-red-600 mt-2">⚠️ {ageBuckets.old + ageBuckets.month} Entwürfe älter als 1 Monat — Review empfohlen</p>
+                <p className="text-[11px] text-red-600 mt-2">
+                  ⚠️ {ageBuckets.old + ageBuckets.month} Entwürfe älter als 1 Monat — Review
+                  empfohlen
+                </p>
               )}
             </div>
             {/* Oldest drafts */}
             <div>
               <p className="text-xs font-semibold text-ink-muted mb-3">🕰 Älteste Entwürfe</p>
               <div className="space-y-2">
-                {top5Oldest.length === 0 && <p className="text-xs text-ink-muted italic">Keine Entwürfe mit Datum</p>}
+                {top5Oldest.length === 0 && (
+                  <p className="text-xs text-ink-muted italic">Keine Entwürfe mit Datum</p>
+                )}
                 {top5Oldest.map((p, i) => {
-                  const ageColor = p.ageDays >= 90 ? 'text-red-700 bg-red-50 border-red-200' : p.ageDays >= 30 ? 'text-orange-700 bg-orange-50 border-orange-200' : 'text-amber-700 bg-amber-50 border-amber-200'
+                  const ageColor =
+                    p.ageDays >= 90
+                      ? 'text-red-700 bg-red-50 border-red-200'
+                      : p.ageDays >= 30
+                        ? 'text-orange-700 bg-orange-50 border-orange-200'
+                        : 'text-amber-700 bg-amber-50 border-amber-200'
                   return (
-                    <div key={p.id} className={`flex items-start gap-2 p-2 rounded-lg border ${ageColor}`}>
-                      <span className="text-[10px] font-black shrink-0 mt-0.5 w-4">#{i+1}</span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/60 shrink-0">{p.ageDays}d</span>
+                    <div
+                      key={p.id}
+                      className={`flex items-start gap-2 p-2 rounded-lg border ${ageColor}`}
+                    >
+                      <span className="text-[10px] font-black shrink-0 mt-0.5 w-4">#{i + 1}</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/60 shrink-0">
+                        {p.ageDays}d
+                      </span>
                       <p className="text-[11px] leading-relaxed line-clamp-2 flex-1">{p.preview}</p>
                     </div>
                   )
@@ -682,7 +983,7 @@ export default function Analytics() {
       )}
 
       {/* Content Quality Distribution Report (Cycle 42) */}
-      {Object.values(gradeDist).some(v => v > 0) && (
+      {Object.values(gradeDist).some((v) => v > 0) && (
         <div className="bg-white rounded-xl border border-surface-border p-5 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
@@ -701,25 +1002,58 @@ export default function Analytics() {
               <p className="text-xs font-semibold text-ink-muted mb-3">Notenverteilung</p>
               <div className="space-y-2">
                 {[
-                  { grade: 'A', label: 'Hervorragend (9-10)', color: 'bg-emerald-500', textColor: 'text-emerald-700' },
-                  { grade: 'B', label: 'Gut (7-8)', color: 'bg-blue-500', textColor: 'text-blue-700' },
-                  { grade: 'C', label: 'Okay (5-6)', color: 'bg-amber-400', textColor: 'text-amber-700' },
-                  { grade: 'D', label: 'Schwach (3-4)', color: 'bg-orange-400', textColor: 'text-orange-700' },
-                  { grade: 'F', label: 'Ungenügend (0-2)', color: 'bg-red-400', textColor: 'text-red-600' },
+                  {
+                    grade: 'A',
+                    label: 'Hervorragend (9-10)',
+                    color: 'bg-emerald-500',
+                    textColor: 'text-emerald-700',
+                  },
+                  {
+                    grade: 'B',
+                    label: 'Gut (7-8)',
+                    color: 'bg-blue-500',
+                    textColor: 'text-blue-700',
+                  },
+                  {
+                    grade: 'C',
+                    label: 'Okay (5-6)',
+                    color: 'bg-amber-400',
+                    textColor: 'text-amber-700',
+                  },
+                  {
+                    grade: 'D',
+                    label: 'Schwach (3-4)',
+                    color: 'bg-orange-400',
+                    textColor: 'text-orange-700',
+                  },
+                  {
+                    grade: 'F',
+                    label: 'Ungenügend (0-2)',
+                    color: 'bg-red-400',
+                    textColor: 'text-red-600',
+                  },
                 ].map(({ grade, label, color, textColor }) => {
                   const count = gradeDist[grade] || 0
                   const total = Object.values(gradeDist).reduce((a, v) => a + v, 0)
-                  const pct = total > 0 ? Math.round(count / total * 100) : 0
+                  const pct = total > 0 ? Math.round((count / total) * 100) : 0
                   return (
                     <div key={grade} className="flex items-center gap-2">
-                      <span className={`w-5 text-xs font-black shrink-0 ${textColor}`}>{grade}</span>
+                      <span className={`w-5 text-xs font-black shrink-0 ${textColor}`}>
+                        {grade}
+                      </span>
                       <div className="flex-1 h-5 bg-gray-100 rounded-md overflow-hidden">
-                        <div className={`h-full ${color} rounded-md transition-all flex items-center pl-2`}
-                          style={{ width: `${Math.max(pct, count > 0 ? 4 : 0)}%` }}>
-                          {pct >= 12 && <span className="text-[10px] text-white font-semibold">{count}</span>}
+                        <div
+                          className={`h-full ${color} rounded-md transition-all flex items-center pl-2`}
+                          style={{ width: `${Math.max(pct, count > 0 ? 4 : 0)}%` }}
+                        >
+                          {pct >= 12 && (
+                            <span className="text-[10px] text-white font-semibold">{count}</span>
+                          )}
                         </div>
                       </div>
-                      <span className="text-[11px] text-ink-muted tabular-nums w-12 text-right">{count} ({pct}%)</span>
+                      <span className="text-[11px] text-ink-muted tabular-nums w-12 text-right">
+                        {count} ({pct}%)
+                      </span>
                     </div>
                   )
                 })}
@@ -732,25 +1066,43 @@ export default function Analytics() {
               <div className="space-y-2">
                 {Object.entries(scoreHist).map(([range, count]) => {
                   const maxHist = Math.max(...Object.values(scoreHist), 1)
-                  const pct = Math.round(count / maxHist * 100)
-                  const barColor = range === '9-10' ? 'bg-emerald-500' : range === '7-8' ? 'bg-blue-400' : range === '5-6' ? 'bg-amber-300' : range === '3-4' ? 'bg-orange-300' : 'bg-red-300'
+                  const pct = Math.round((count / maxHist) * 100)
+                  const barColor =
+                    range === '9-10'
+                      ? 'bg-emerald-500'
+                      : range === '7-8'
+                        ? 'bg-blue-400'
+                        : range === '5-6'
+                          ? 'bg-amber-300'
+                          : range === '3-4'
+                            ? 'bg-orange-300'
+                            : 'bg-red-300'
                   return (
                     <div key={range} className="flex items-center gap-2">
-                      <span className="text-[10px] text-ink-muted w-10 text-right shrink-0">{range}</span>
+                      <span className="text-[10px] text-ink-muted w-10 text-right shrink-0">
+                        {range}
+                      </span>
                       <div className="flex-1 h-5 bg-gray-100 rounded-md overflow-hidden">
-                        <div className={`h-full ${barColor} rounded-md`} style={{ width: `${Math.max(pct, count > 0 ? 3 : 0)}%` }} />
+                        <div
+                          className={`h-full ${barColor} rounded-md`}
+                          style={{ width: `${Math.max(pct, count > 0 ? 3 : 0)}%` }}
+                        />
                       </div>
-                      <span className="text-[11px] text-ink-muted tabular-nums w-8 text-right">{count}</span>
+                      <span className="text-[11px] text-ink-muted tabular-nums w-8 text-right">
+                        {count}
+                      </span>
                     </div>
                   )
                 })}
               </div>
               <p className="text-[10px] text-ink-muted mt-3">
-                Ø Score: <span className="font-semibold text-ink">
+                Ø Score:{' '}
+                <span className="font-semibold text-ink">
                   {topPosts.length > 0
-                    ? (topPosts.reduce((a, p) => a + p.score, 0) / topPosts.length * 2).toFixed(1)
+                    ? ((topPosts.reduce((a, p) => a + p.score, 0) / topPosts.length) * 2).toFixed(1)
                     : '–'}
-                </span> / 10 (Top 5 Ø)
+                </span>{' '}
+                / 10 (Top 5 Ø)
               </p>
             </div>
 
@@ -758,14 +1110,33 @@ export default function Analytics() {
             <div>
               <p className="text-xs font-semibold text-ink-muted mb-3">🏆 Top 5 Entwürfe</p>
               <div className="space-y-2">
-                {topPosts.length === 0 && <p className="text-xs text-ink-muted italic">Keine Entwürfe</p>}
+                {topPosts.length === 0 && (
+                  <p className="text-xs text-ink-muted italic">Keine Entwürfe</p>
+                )}
                 {topPosts.map((p, i) => {
-                  const gradeColor = { A: 'bg-emerald-100 text-emerald-800', B: 'bg-blue-100 text-blue-800', C: 'bg-amber-100 text-amber-800', D: 'bg-orange-100 text-orange-800', F: 'bg-red-100 text-red-700' }[p.grade]
+                  const gradeColor = {
+                    A: 'bg-emerald-100 text-emerald-800',
+                    B: 'bg-blue-100 text-blue-800',
+                    C: 'bg-amber-100 text-amber-800',
+                    D: 'bg-orange-100 text-orange-800',
+                    F: 'bg-red-100 text-red-700',
+                  }[p.grade]
                   return (
-                    <div key={p.id} className="flex items-start gap-2 p-2 rounded-lg border border-gray-100 hover:border-gray-200 bg-gray-50">
-                      <span className="text-[10px] font-black text-ink-muted shrink-0 mt-0.5">#{i + 1}</span>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${gradeColor}`}>{p.grade}</span>
-                      <p className="text-[11px] text-ink leading-relaxed line-clamp-2 flex-1">{p.preview}</p>
+                    <div
+                      key={p.id}
+                      className="flex items-start gap-2 p-2 rounded-lg border border-gray-100 hover:border-gray-200 bg-gray-50"
+                    >
+                      <span className="text-[10px] font-black text-ink-muted shrink-0 mt-0.5">
+                        #{i + 1}
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${gradeColor}`}
+                      >
+                        {p.grade}
+                      </span>
+                      <p className="text-[11px] text-ink leading-relaxed line-clamp-2 flex-1">
+                        {p.preview}
+                      </p>
                     </div>
                   )
                 })}
@@ -783,92 +1154,148 @@ export default function Analytics() {
               <span className="text-lg">🤖</span> KI-Kosten &amp; Nutzung
             </h3>
             <div className="flex gap-1">
-              {[7, 14, 30].map(d => (
-                <button key={d} onClick={() => setCostDays(d)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded border transition-colors ${costDays === d ? 'bg-primary-700 text-white border-primary-700' : 'bg-white text-ink-muted border-gray-200 hover:border-primary-300'}`}>
+              {[7, 14, 30].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setCostDays(d)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded border transition-colors ${costDays === d ? 'bg-primary-700 text-white border-primary-700' : 'bg-white text-ink-muted border-gray-200 hover:border-primary-300'}`}
+                >
                   {d}d
                 </button>
               ))}
             </div>
           </div>
 
-          {llmCostHistory && llmCostHistory.length > 0 && (() => {
-            const history = [...llmCostHistory].reverse()
-            const maxCents = Math.max(...history.map(d => d.total_cents), 1)
-            const totalCents = history.reduce((s, d) => s + d.total_cents, 0)
-            const totalCalls = history.reduce((s, d) => s + d.calls, 0)
-            const totalTokensIn = history.reduce((s, d) => s + (d.input_tokens || 0), 0)
-            const totalTokensOut = history.reduce((s, d) => s + (d.output_tokens || 0), 0)
-            const avgPerDay = totalCents / history.length
-            return (
-              <div className="space-y-4">
-                {/* Summary stats */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {[
-                    { label: `Gesamt (${costDays}d)`, value: `${(totalCents / 100).toFixed(2)} €`, sub: `${totalCalls} Aufrufe`, color: 'bg-purple-50 text-purple-700' },
-                    { label: 'Ø pro Tag', value: `${(avgPerDay / 100).toFixed(3)} €`, sub: `${Math.round(totalCalls / history.length)} Aufrufe/Tag`, color: 'bg-blue-50 text-blue-700' },
-                    { label: 'Input Tokens', value: (totalTokensIn / 1000).toFixed(0) + 'K', sub: 'Prompt-Tokens gesamt', color: 'bg-amber-50 text-amber-700' },
-                    { label: 'Output Tokens', value: (totalTokensOut / 1000).toFixed(0) + 'K', sub: 'Antwort-Tokens gesamt', color: 'bg-emerald-50 text-emerald-700' },
-                  ].map(s => (
-                    <div key={s.label} className={`rounded-lg p-3 ${s.color.split(' ')[0]}`}>
-                      <p className={`text-xs font-medium ${s.color.split(' ')[1]}`}>{s.label}</p>
-                      <p className={`text-lg font-bold ${s.color.split(' ')[1]}`}>{s.value}</p>
-                      <p className="text-[10px] opacity-70">{s.sub}</p>
-                    </div>
-                  ))}
-                </div>
+          {llmCostHistory &&
+            llmCostHistory.length > 0 &&
+            (() => {
+              const history = [...llmCostHistory].reverse()
+              const maxCents = Math.max(...history.map((d) => d.total_cents), 1)
+              const totalCents = history.reduce((s, d) => s + d.total_cents, 0)
+              const totalCalls = history.reduce((s, d) => s + d.calls, 0)
+              const totalTokensIn = history.reduce((s, d) => s + (d.input_tokens || 0), 0)
+              const totalTokensOut = history.reduce((s, d) => s + (d.output_tokens || 0), 0)
+              const avgPerDay = totalCents / history.length
+              return (
+                <div className="space-y-4">
+                  {/* Summary stats */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      {
+                        label: `Gesamt (${costDays}d)`,
+                        value: `${(totalCents / 100).toFixed(2)} €`,
+                        sub: `${totalCalls} Aufrufe`,
+                        color: 'bg-purple-50 text-purple-700',
+                      },
+                      {
+                        label: 'Ø pro Tag',
+                        value: `${(avgPerDay / 100).toFixed(3)} €`,
+                        sub: `${Math.round(totalCalls / history.length)} Aufrufe/Tag`,
+                        color: 'bg-blue-50 text-blue-700',
+                      },
+                      {
+                        label: 'Input Tokens',
+                        value: (totalTokensIn / 1000).toFixed(0) + 'K',
+                        sub: 'Prompt-Tokens gesamt',
+                        color: 'bg-amber-50 text-amber-700',
+                      },
+                      {
+                        label: 'Output Tokens',
+                        value: (totalTokensOut / 1000).toFixed(0) + 'K',
+                        sub: 'Antwort-Tokens gesamt',
+                        color: 'bg-emerald-50 text-emerald-700',
+                      },
+                    ].map((s) => (
+                      <div key={s.label} className={`rounded-lg p-3 ${s.color.split(' ')[0]}`}>
+                        <p className={`text-xs font-medium ${s.color.split(' ')[1]}`}>{s.label}</p>
+                        <p className={`text-lg font-bold ${s.color.split(' ')[1]}`}>{s.value}</p>
+                        <p className="text-[10px] opacity-70">{s.sub}</p>
+                      </div>
+                    ))}
+                  </div>
 
-                {/* Bar chart */}
-                <div>
-                  <p className="text-xs font-medium text-ink-muted mb-2">Tageskosten (Cent)</p>
-                  <div className="flex items-end gap-1 h-20">
-                    {history.map((day, i) => {
-                      const h = Math.max(4, Math.round((day.total_cents / maxCents) * 72))
-                      const isToday = i === history.length - 1
-                      return (
-                        <div key={day.date} className="flex-1 flex flex-col items-center gap-0.5 group relative">
-                          <div className={`w-full rounded-t transition-colors ${isToday ? 'bg-primary-600' : 'bg-primary-200 group-hover:bg-primary-400'}`}
-                            style={{ height: `${h}px` }} />
-                          <span className="text-[9px] text-ink-muted">{day.date.slice(5)}</span>
-                          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
-                            {day.date}: {day.total_cents.toFixed(1)}¢ / {day.calls} Calls
+                  {/* Bar chart */}
+                  <div>
+                    <p className="text-xs font-medium text-ink-muted mb-2">Tageskosten (Cent)</p>
+                    <div className="flex items-end gap-1 h-20">
+                      {history.map((day, i) => {
+                        const h = Math.max(4, Math.round((day.total_cents / maxCents) * 72))
+                        const isToday = i === history.length - 1
+                        return (
+                          <div
+                            key={day.date}
+                            className="flex-1 flex flex-col items-center gap-0.5 group relative"
+                          >
+                            <div
+                              className={`w-full rounded-t transition-colors ${isToday ? 'bg-primary-600' : 'bg-primary-200 group-hover:bg-primary-400'}`}
+                              style={{ height: `${h}px` }}
+                            />
+                            <span className="text-[9px] text-ink-muted">{day.date.slice(5)}</span>
+                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
+                              {day.date}: {day.total_cents.toFixed(1)}¢ / {day.calls} Calls
+                            </div>
                           </div>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )
-          })()}
+              )
+            })()}
 
           {/* Provider budget status */}
-          {llmProviders.filter(p => p.is_active).length > 0 && (
+          {llmProviders.filter((p) => p.is_active).length > 0 && (
             <div className="mt-4 space-y-2">
               <p className="text-xs font-medium text-ink-muted">Provider Budget-Status</p>
-              {llmProviders.filter(p => p.is_active).map(p => {
-                const limit = p.cost_limit_daily_cents || 0
-                const spent = p.cost_spent_today_cents || 0
-                const pct = limit > 0 ? Math.min(100, Math.round(spent / limit * 100)) : null
-                const barColor = pct == null ? 'bg-gray-300' : pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-400' : 'bg-emerald-500'
-                return (
-                  <div key={p.id} className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-ink">{p.name} <span className="text-[10px] text-ink-muted font-mono">{p.model_name?.split('/').pop()}</span></span>
-                      <span className="text-xs font-mono text-ink-muted">
-                        {spent.toFixed(1)}¢ {limit > 0 ? `/ ${limit}¢` : ''}
-                        {pct != null && <span className={`ml-1 font-semibold ${pct >= 90 ? 'text-red-600' : pct >= 70 ? 'text-amber-600' : 'text-emerald-600'}`}>{pct}%</span>}
-                      </span>
-                    </div>
-                    {limit > 0 && (
-                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+              {llmProviders
+                .filter((p) => p.is_active)
+                .map((p) => {
+                  const limit = p.cost_limit_daily_cents || 0
+                  const spent = p.cost_spent_today_cents || 0
+                  const pct = limit > 0 ? Math.min(100, Math.round((spent / limit) * 100)) : null
+                  const barColor =
+                    pct == null
+                      ? 'bg-gray-300'
+                      : pct >= 90
+                        ? 'bg-red-500'
+                        : pct >= 70
+                          ? 'bg-amber-400'
+                          : 'bg-emerald-500'
+                  return (
+                    <div key={p.id} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-ink">
+                          {p.name}{' '}
+                          <span className="text-[10px] text-ink-muted font-mono">
+                            {p.model_name?.split('/').pop()}
+                          </span>
+                        </span>
+                        <span className="text-xs font-mono text-ink-muted">
+                          {spent.toFixed(1)}¢ {limit > 0 ? `/ ${limit}¢` : ''}
+                          {pct != null && (
+                            <span
+                              className={`ml-1 font-semibold ${pct >= 90 ? 'text-red-600' : pct >= 70 ? 'text-amber-600' : 'text-emerald-600'}`}
+                            >
+                              {pct}%
+                            </span>
+                          )}
+                        </span>
                       </div>
-                    )}
-                    <p className="text-[10px] text-ink-muted">{p.last_test_status === 'ok' ? '🟢 Verbunden' : '🔴 Fehler'} · {p.task_assignment === 'all' ? 'Alle Aufgaben' : p.task_assignment}</p>
-                  </div>
-                )
-              })}
+                      {limit > 0 && (
+                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${barColor}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      )}
+                      <p className="text-[10px] text-ink-muted">
+                        {p.last_test_status === 'ok' ? '🟢 Verbunden' : '🔴 Fehler'} ·{' '}
+                        {p.task_assignment === 'all' ? 'Alle Aufgaben' : p.task_assignment}
+                      </p>
+                    </div>
+                  )
+                })}
             </div>
           )}
         </div>
@@ -880,51 +1307,80 @@ export default function Analytics() {
           <div className="flex items-center gap-2 mb-4">
             <Award className="w-4 h-4 text-purple-600" />
             <h2 className="text-base font-semibold text-ink">Pipeline-Qualität</h2>
-            <span className="ml-auto text-xs text-ink-muted">{qualitySummary.total_quality_checks} Messungen · letzte 30d</span>
+            <span className="ml-auto text-xs text-ink-muted">
+              {qualitySummary.total_quality_checks} Messungen · letzte 30d
+            </span>
           </div>
 
           {/* Overall score */}
           <div className="flex items-center gap-3 mb-4 p-3 bg-purple-50 rounded-lg">
-            <div className="text-3xl font-bold text-purple-700">{qualitySummary.avg_overall_score}</div>
+            <div className="text-3xl font-bold text-purple-700">
+              {qualitySummary.avg_overall_score}
+            </div>
             <div>
               <div className="text-sm font-medium text-ink">Gesamt-Score</div>
               <div className="text-xs text-ink-muted">Durchschnitt aller Pipeline-Schritte</div>
             </div>
             <div className="ml-auto">
-              <div className={`text-lg font-bold ${
-                qualitySummary.avg_overall_score >= 80 ? 'text-emerald-600' :
-                qualitySummary.avg_overall_score >= 60 ? 'text-amber-600' : 'text-red-500'
-              }`}>
-                {qualitySummary.avg_overall_score >= 80 ? 'A' : qualitySummary.avg_overall_score >= 60 ? 'B' : qualitySummary.avg_overall_score >= 40 ? 'C' : 'D'}
+              <div
+                className={`text-lg font-bold ${
+                  qualitySummary.avg_overall_score >= 80
+                    ? 'text-emerald-600'
+                    : qualitySummary.avg_overall_score >= 60
+                      ? 'text-amber-600'
+                      : 'text-red-500'
+                }`}
+              >
+                {qualitySummary.avg_overall_score >= 80
+                  ? 'A'
+                  : qualitySummary.avg_overall_score >= 60
+                    ? 'B'
+                    : qualitySummary.avg_overall_score >= 40
+                      ? 'C'
+                      : 'D'}
               </div>
             </div>
           </div>
 
           {/* Per-step breakdown */}
           <div className="space-y-2">
-            {(qualitySummary.steps || []).filter(s => s.count > 0).map(step => {
-              const stepLabels = {
-                transcription: 'Transkription',
-                analysis: 'Analyse',
-                ideation: 'Ideation',
-                post_generation: 'Post-Generierung',
-                smart_questions: 'Smarte Fragen',
-              }
-              const score = step.avg_overall
-              const barColor = score >= 80 ? 'bg-emerald-500' : score >= 60 ? 'bg-amber-500' : score >= 40 ? 'bg-orange-500' : 'bg-red-400'
-              return (
-                <div key={step.step}>
-                  <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-xs text-ink-muted">{stepLabels[step.step] || step.step}</span>
-                    <span className="text-xs font-medium text-ink">{score}/100</span>
-                    <span className="text-[10px] text-ink-muted ml-1">({step.count})</span>
+            {(qualitySummary.steps || [])
+              .filter((s) => s.count > 0)
+              .map((step) => {
+                const stepLabels = {
+                  transcription: 'Transkription',
+                  analysis: 'Analyse',
+                  ideation: 'Ideation',
+                  post_generation: 'Post-Generierung',
+                  smart_questions: 'Smarte Fragen',
+                }
+                const score = step.avg_overall
+                const barColor =
+                  score >= 80
+                    ? 'bg-emerald-500'
+                    : score >= 60
+                      ? 'bg-amber-500'
+                      : score >= 40
+                        ? 'bg-orange-500'
+                        : 'bg-red-400'
+                return (
+                  <div key={step.step}>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-xs text-ink-muted">
+                        {stepLabels[step.step] || step.step}
+                      </span>
+                      <span className="text-xs font-medium text-ink">{score}/100</span>
+                      <span className="text-[10px] text-ink-muted ml-1">({step.count})</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${barColor}`}
+                        style={{ width: `${score}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${barColor}`} style={{ width: `${score}%` }} />
-                  </div>
-                </div>
-              )
-            })}
+                )
+              })}
           </div>
 
           {qualitySummary.total_quality_checks === 0 && (
@@ -942,11 +1398,20 @@ export default function Analytics() {
           <h2 className="text-base font-semibold text-ink">Modell-Vergleich</h2>
           <span className="text-xs text-ink-muted ml-1">Qualität · Kosten · Latenz</span>
           <div className="ml-auto flex gap-1 flex-wrap">
-            {['', 'transcription', 'analysis', 'ideation', 'post_generation'].map(s => {
-              const labels = { '': 'Alle', transcription: 'Transkription', analysis: 'Analyse', ideation: 'Ideation', post_generation: 'Post' }
+            {['', 'transcription', 'analysis', 'ideation', 'post_generation'].map((s) => {
+              const labels = {
+                '': 'Alle',
+                transcription: 'Transkription',
+                analysis: 'Analyse',
+                ideation: 'Ideation',
+                post_generation: 'Post',
+              }
               return (
-                <button key={s} onClick={() => setModelStep(s)}
-                  className={`px-2 py-0.5 text-xs rounded border transition-colors ${modelStep === s ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-ink-muted border-gray-200 hover:border-blue-300'}`}>
+                <button
+                  key={s}
+                  onClick={() => setModelStep(s)}
+                  className={`px-2 py-0.5 text-xs rounded border transition-colors ${modelStep === s ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-ink-muted border-gray-200 hover:border-blue-300'}`}
+                >
                   {labels[s]}
                 </button>
               )
@@ -954,9 +1419,10 @@ export default function Analytics() {
           </div>
         </div>
 
-        {(!modelData || !modelData.models || modelData.models.length === 0) ? (
+        {!modelData || !modelData.models || modelData.models.length === 0 ? (
           <p className="text-xs text-ink-muted text-center py-6">
-            Noch keine Modell-Vergleichsdaten — werden automatisch gesammelt wenn die Pipeline läuft.
+            Noch keine Modell-Vergleichsdaten — werden automatisch gesammelt wenn die Pipeline
+            läuft.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -974,26 +1440,58 @@ export default function Analytics() {
               </thead>
               <tbody>
                 {modelData.models.map((row, i) => {
-                  const stepLabels = { transcription: 'Transkr.', analysis: 'Analyse', ideation: 'Ideation', post_generation: 'Post', smart_questions: 'Fragen' }
+                  const stepLabels = {
+                    transcription: 'Transkr.',
+                    analysis: 'Analyse',
+                    ideation: 'Ideation',
+                    post_generation: 'Post',
+                    smart_questions: 'Fragen',
+                  }
                   const shortModel = row.model ? row.model.split('/').pop() : '?'
-                  const qualColor = row.avg_quality >= 80 ? 'text-emerald-700 font-semibold' : row.avg_quality >= 60 ? 'text-amber-700' : 'text-red-600'
+                  const qualColor =
+                    row.avg_quality >= 80
+                      ? 'text-emerald-700 font-semibold'
+                      : row.avg_quality >= 60
+                        ? 'text-amber-700'
+                        : 'text-red-600'
                   const confIcon = { high: '🟢', medium: '🟡', low: '🔴' }[row.confidence] || ''
-                  const efficiencyLabel = row.quality_per_cent ? `${row.quality_per_cent.toFixed(1)} Q/ct` : '—'
+                  const efficiencyLabel = row.quality_per_cent
+                    ? `${row.quality_per_cent.toFixed(1)} Q/ct`
+                    : '—'
                   return (
-                    <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                      <td className="py-2 pr-3 font-mono text-blue-700 truncate max-w-[180px]" title={row.model}>{shortModel}</td>
-                      <td className="py-2 pr-3 text-ink-muted">{stepLabels[row.step] || row.step}</td>
+                    <tr
+                      key={i}
+                      className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                    >
+                      <td
+                        className="py-2 pr-3 font-mono text-blue-700 truncate max-w-[180px]"
+                        title={row.model}
+                      >
+                        {shortModel}
+                      </td>
+                      <td className="py-2 pr-3 text-ink-muted">
+                        {stepLabels[row.step] || row.step}
+                      </td>
                       <td className={`py-2 pr-3 text-right ${qualColor}`}>{row.avg_quality}/100</td>
-                      <td className="py-2 pr-3 text-right text-ink">{row.avg_cost_cents ? `${(row.avg_cost_cents / 100).toFixed(4)} €` : '—'}</td>
-                      <td className="py-2 pr-3 text-right text-ink-muted">{row.avg_latency_ms ? `${(row.avg_latency_ms / 1000).toFixed(1)}s` : '—'}</td>
+                      <td className="py-2 pr-3 text-right text-ink">
+                        {row.avg_cost_cents ? `${(row.avg_cost_cents / 100).toFixed(4)} €` : '—'}
+                      </td>
+                      <td className="py-2 pr-3 text-right text-ink-muted">
+                        {row.avg_latency_ms ? `${(row.avg_latency_ms / 1000).toFixed(1)}s` : '—'}
+                      </td>
                       <td className="py-2 pr-3 text-right text-purple-700">{efficiencyLabel}</td>
-                      <td className="py-2 text-right text-ink-muted">{confIcon} {row.count}</td>
+                      <td className="py-2 text-right text-ink-muted">
+                        {confIcon} {row.count}
+                      </td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
-            <p className="text-[10px] text-ink-muted mt-2">🟢 = verlässlich (n≥30) · 🟡 = vorläufig (n≥5) · 🔴 = wenig Daten (n&lt;5) · Effizienz = Qualität pro Eurocent</p>
+            <p className="text-[10px] text-ink-muted mt-2">
+              🟢 = verlässlich (n≥30) · 🟡 = vorläufig (n≥5) · 🔴 = wenig Daten (n&lt;5) · Effizienz
+              = Qualität pro Eurocent
+            </p>
           </div>
         )}
       </div>
@@ -1004,7 +1502,9 @@ export default function Analytics() {
           <div className="flex items-center gap-2 mb-4">
             <Award className="w-4 h-4 text-indigo-600" />
             <h2 className="text-sm font-semibold text-ink">Letzte Pipeline-Qualitätsmessungen</h2>
-            <span className="ml-auto text-[11px] text-ink-muted">{qualityRecent.length} Einträge</span>
+            <span className="ml-auto text-[11px] text-ink-muted">
+              {qualityRecent.length} Einträge
+            </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -1019,22 +1519,49 @@ export default function Analytics() {
               </thead>
               <tbody>
                 {qualityRecent.slice(0, 20).map((row, i) => {
-                  const stepLabels = { transcription: 'Transkr.', analysis: 'Analyse', ideation: 'Ideation', post_generation: 'Post', smart_questions: 'Fragen' }
+                  const stepLabels = {
+                    transcription: 'Transkr.',
+                    analysis: 'Analyse',
+                    ideation: 'Ideation',
+                    post_generation: 'Post',
+                    smart_questions: 'Fragen',
+                  }
                   const score = row.overall_score || 0
-                  const scoreColor = score >= 80 ? 'text-emerald-700 font-semibold' : score >= 60 ? 'text-amber-700' : 'text-red-600'
+                  const scoreColor =
+                    score >= 80
+                      ? 'text-emerald-700 font-semibold'
+                      : score >= 60
+                        ? 'text-amber-700'
+                        : 'text-red-600'
                   const shortModel = (row.model || '?').split('/').pop()
-                  const timeAgo = row.created_at ? (() => {
-                    const diff = (Date.now() - new Date(row.created_at).getTime()) / 1000
-                    if (diff < 3600) return `${Math.round(diff / 60)}m`
-                    if (diff < 86400) return `${Math.round(diff / 3600)}h`
-                    return `${Math.round(diff / 86400)}d`
-                  })() : '?'
+                  const timeAgo = row.created_at
+                    ? (() => {
+                        const diff = (Date.now() - new Date(row.created_at).getTime()) / 1000
+                        if (diff < 3600) return `${Math.round(diff / 60)}m`
+                        if (diff < 86400) return `${Math.round(diff / 3600)}h`
+                        return `${Math.round(diff / 86400)}d`
+                      })()
+                    : '?'
                   return (
-                    <tr key={i} className={`border-b border-gray-50 ${i % 2 === 0 ? '' : 'bg-gray-50/50'}`}>
-                      <td className="py-1.5 pr-3 text-ink-muted">{stepLabels[row.step] || row.step}</td>
-                      <td className="py-1.5 pr-3 font-mono text-blue-600 text-[10px] truncate max-w-[120px]" title={row.model}>{shortModel}</td>
-                      <td className={`py-1.5 pr-3 text-right tabular-nums ${scoreColor}`}>{score.toFixed(0)}/100</td>
-                      <td className="py-1.5 pr-3 text-right tabular-nums text-ink-muted">{(row.completeness_score || 0).toFixed(0)}</td>
+                    <tr
+                      key={i}
+                      className={`border-b border-gray-50 ${i % 2 === 0 ? '' : 'bg-gray-50/50'}`}
+                    >
+                      <td className="py-1.5 pr-3 text-ink-muted">
+                        {stepLabels[row.step] || row.step}
+                      </td>
+                      <td
+                        className="py-1.5 pr-3 font-mono text-blue-600 text-[10px] truncate max-w-[120px]"
+                        title={row.model}
+                      >
+                        {shortModel}
+                      </td>
+                      <td className={`py-1.5 pr-3 text-right tabular-nums ${scoreColor}`}>
+                        {score.toFixed(0)}/100
+                      </td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums text-ink-muted">
+                        {(row.completeness_score || 0).toFixed(0)}
+                      </td>
                       <td className="py-1.5 text-right text-ink-muted">{timeAgo}</td>
                     </tr>
                   )
@@ -1042,7 +1569,9 @@ export default function Analytics() {
               </tbody>
             </table>
           </div>
-          <p className="text-[10px] text-ink-muted mt-2">Automatisch erfasst nach jedem Pipeline-Schritt · regelbasiert (kein LLM-Budget nötig)</p>
+          <p className="text-[10px] text-ink-muted mt-2">
+            Automatisch erfasst nach jedem Pipeline-Schritt · regelbasiert (kein LLM-Budget nötig)
+          </p>
         </div>
       )}
 
@@ -1058,18 +1587,29 @@ export default function Analytics() {
               Content-Produktion (letzte 90 Tage)
             </h2>
             <div className="flex items-center gap-4 text-[11px] text-ink-muted">
-              <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-300 mr-1 align-middle" />Transkribiert: {heatmap.total_transcribed}</span>
-              <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-400 mr-1 align-middle" />Posts: {heatmap.total_content}</span>
+              <span>
+                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-300 mr-1 align-middle" />
+                Transkribiert: {heatmap.total_transcribed}
+              </span>
+              <span>
+                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-400 mr-1 align-middle" />
+                Posts: {heatmap.total_content}
+              </span>
             </div>
           </div>
           <div className="flex gap-[3px] flex-wrap">
             {heatmap.calendar.map((day) => {
               const intensity = heatmap.peak > 0 ? day.total / heatmap.peak : 0
-              const bg = day.total === 0 ? 'bg-gray-100'
-                : intensity >= 0.7 ? 'bg-emerald-500'
-                : intensity >= 0.4 ? 'bg-emerald-400'
-                : intensity >= 0.2 ? 'bg-emerald-300'
-                : 'bg-emerald-200'
+              const bg =
+                day.total === 0
+                  ? 'bg-gray-100'
+                  : intensity >= 0.7
+                    ? 'bg-emerald-500'
+                    : intensity >= 0.4
+                      ? 'bg-emerald-400'
+                      : intensity >= 0.2
+                        ? 'bg-emerald-300'
+                        : 'bg-emerald-200'
               const isMonday = new Date(day.date).getDay() === 1
               return (
                 <div
@@ -1082,7 +1622,13 @@ export default function Analytics() {
           </div>
           <div className="flex items-center gap-1 mt-2 justify-end">
             <span className="text-[10px] text-ink-muted mr-1">Wenig</span>
-            {['bg-gray-100','bg-emerald-200','bg-emerald-300','bg-emerald-400','bg-emerald-500'].map(c => (
+            {[
+              'bg-gray-100',
+              'bg-emerald-200',
+              'bg-emerald-300',
+              'bg-emerald-400',
+              'bg-emerald-500',
+            ].map((c) => (
               <div key={c} className={`w-[10px] h-[10px] rounded-sm ${c}`} />
             ))}
             <span className="text-[10px] text-ink-muted ml-1">Viel</span>
@@ -1098,7 +1644,9 @@ export default function Analytics() {
               <span className="text-base">💡</span> Ideen-Pipeline
             </h2>
             <div className="flex gap-3 text-[11px] text-ink-muted">
-              <span className="font-semibold text-ink">{ideasStats.total.toLocaleString('de')} Ideen</span>
+              <span className="font-semibold text-ink">
+                {ideasStats.total.toLocaleString('de')} Ideen
+              </span>
               {ideasStats.with_posts > 0 && (
                 <span className="text-emerald-700">{ideasStats.with_posts} Posts generiert</span>
               )}
@@ -1109,13 +1657,28 @@ export default function Analytics() {
           <div className="flex flex-wrap gap-2 mb-4">
             {Object.entries(ideasStats.by_status).map(([status, count]) => {
               const cfg = {
-                new: { label: 'Neu / Wartend', color: 'bg-amber-100 text-amber-800 border-amber-200' },
-                answered: { label: 'Beantwortet', color: 'bg-blue-100 text-blue-800 border-blue-200' },
-                post_generated: { label: 'Post erstellt', color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-                skipped: { label: 'Übersprungen', color: 'bg-gray-100 text-gray-600 border-gray-200' },
+                new: {
+                  label: 'Neu / Wartend',
+                  color: 'bg-amber-100 text-amber-800 border-amber-200',
+                },
+                answered: {
+                  label: 'Beantwortet',
+                  color: 'bg-blue-100 text-blue-800 border-blue-200',
+                },
+                post_generated: {
+                  label: 'Post erstellt',
+                  color: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+                },
+                skipped: {
+                  label: 'Übersprungen',
+                  color: 'bg-gray-100 text-gray-600 border-gray-200',
+                },
               }[status] || { label: status, color: 'bg-gray-100 text-gray-600 border-gray-200' }
               return (
-                <span key={status} className={`px-2.5 py-1 rounded-full text-xs font-medium border ${cfg.color}`}>
+                <span
+                  key={status}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border ${cfg.color}`}
+                >
                   {cfg.label}: {count.toLocaleString('de')}
                 </span>
               )
@@ -1130,10 +1693,12 @@ export default function Analytics() {
           {/* Angle distribution */}
           {ideasStats.by_angle.length > 0 && (
             <div>
-              <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-2">Post-Winkel (Angle)</p>
+              <p className="text-[11px] font-semibold text-ink-muted uppercase tracking-wide mb-2">
+                Post-Winkel (Angle)
+              </p>
               <div className="space-y-1.5">
                 {(() => {
-                  const maxAngle = Math.max(...ideasStats.by_angle.map(a => a.count), 1)
+                  const maxAngle = Math.max(...ideasStats.by_angle.map((a) => a.count), 1)
                   const ANGLE_LABELS = {
                     howto: { label: 'How-To / Anleitung', color: 'bg-teal-400' },
                     meinung: { label: 'Meinung / Perspektive', color: 'bg-violet-400' },
@@ -1145,14 +1710,21 @@ export default function Analytics() {
                   }
                   return ideasStats.by_angle.slice(0, 8).map(({ angle, count }) => {
                     const cfg = ANGLE_LABELS[angle] || { label: angle, color: 'bg-gray-400' }
-                    const pct = Math.max(4, count / maxAngle * 100)
+                    const pct = Math.max(4, (count / maxAngle) * 100)
                     return (
                       <div key={angle} className="flex items-center gap-3">
-                        <span className="w-36 text-xs text-ink-muted shrink-0 truncate">{cfg.label}</span>
+                        <span className="w-36 text-xs text-ink-muted shrink-0 truncate">
+                          {cfg.label}
+                        </span>
                         <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${cfg.color} transition-all`} style={{ width: `${pct}%` }} />
+                          <div
+                            className={`h-full rounded-full ${cfg.color} transition-all`}
+                            style={{ width: `${pct}%` }}
+                          />
                         </div>
-                        <span className="text-xs font-semibold text-ink w-10 text-right shrink-0">{count}</span>
+                        <span className="text-xs font-semibold text-ink w-10 text-right shrink-0">
+                          {count}
+                        </span>
                       </div>
                     )
                   })
@@ -1163,8 +1735,9 @@ export default function Analytics() {
 
           {ideasStats.total > 0 && (
             <p className="text-[11px] text-ink-muted mt-3 pt-3 border-t border-gray-100">
-              Durchschnittlich ~{Math.round(ideasStats.total / Math.max(ideasStats.by_angle.length, 1))} Ideen pro Angle ·
-              Potenzial: {ideasStats.total.toLocaleString('de')} Posts ausstehend
+              Durchschnittlich ~
+              {Math.round(ideasStats.total / Math.max(ideasStats.by_angle.length, 1))} Ideen pro
+              Angle · Potenzial: {ideasStats.total.toLocaleString('de')} Posts ausstehend
             </p>
           )}
         </div>

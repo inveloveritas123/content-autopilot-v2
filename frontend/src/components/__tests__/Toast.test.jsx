@@ -16,11 +16,7 @@ import { ToastProvider, useToast } from '../ui/Toast'
 
 function ToastTrigger({ message, variant }) {
   const toast = useToast()
-  return (
-    <button onClick={() => toast.show(message, variant)}>
-      Toast anzeigen
-    </button>
-  )
+  return <button onClick={() => toast.show(message, variant)}>Toast anzeigen</button>
 }
 
 function renderWithProvider(ui) {
@@ -49,7 +45,9 @@ describe('Toast-System', () => {
     await userEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i }))
     expect(screen.getByText('Kurze Nachricht')).toBeInTheDocument()
 
-    act(() => { vi.advanceTimersByTime(4001) })
+    act(() => {
+      vi.advanceTimersByTime(4001)
+    })
     await waitFor(() => {
       expect(screen.queryByText('Kurze Nachricht')).not.toBeInTheDocument()
     })
@@ -59,11 +57,15 @@ describe('Toast-System', () => {
     renderWithProvider(<ToastTrigger message="Fehler aufgetreten" variant="error" />)
     await userEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i }))
 
-    act(() => { vi.advanceTimersByTime(4001) })
+    act(() => {
+      vi.advanceTimersByTime(4001)
+    })
     // Nach 4s noch da (error = 8s)
     expect(screen.getByText('Fehler aufgetreten')).toBeInTheDocument()
 
-    act(() => { vi.advanceTimersByTime(4001) })
+    act(() => {
+      vi.advanceTimersByTime(4001)
+    })
     await waitFor(() => {
       expect(screen.queryByText('Fehler aufgetreten')).not.toBeInTheDocument()
     })

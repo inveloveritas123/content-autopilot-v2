@@ -1,5 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Check, X, Edit2, ChevronDown, ChevronUp, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
+import {
+  Check,
+  X,
+  Edit2,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
+  Loader2,
+  CheckCircle2,
+} from 'lucide-react'
 import { getDriftObservations, decideDriftObservation } from '../api'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -46,11 +55,16 @@ function statusBadge(status) {
 
 function statusLabel(status) {
   switch (status) {
-    case 'pending_review': return 'Ausstehend'
-    case 'accepted': return 'Übernommen'
-    case 'rejected': return 'Abgelehnt'
-    case 'partial': return 'Teilweise'
-    default: return status
+    case 'pending_review':
+      return 'Ausstehend'
+    case 'accepted':
+      return 'Übernommen'
+    case 'rejected':
+      return 'Abgelehnt'
+    case 'partial':
+      return 'Teilweise'
+    default:
+      return status
   }
 }
 
@@ -174,9 +188,7 @@ function ObservationCard({ obs, onDecided }) {
         decision,
         // pre-fill editedValue when switching to edit
         editedValue:
-          decision === 'edit'
-            ? next[idx].editedValue
-            : displayValue(changes[idx]?.new_value),
+          decision === 'edit' ? next[idx].editedValue : displayValue(changes[idx]?.new_value),
       }
       return next
     })
@@ -302,9 +314,7 @@ export default function DriftReview() {
   }, [load])
 
   function handleDecided(obsId, newStatus) {
-    setObservations((prev) =>
-      prev.map((o) => (o.id === obsId ? { ...o, status: newStatus } : o))
-    )
+    setObservations((prev) => prev.map((o) => (o.id === obsId ? { ...o, status: newStatus } : o)))
   }
 
   const pendingCount = observations.filter((o) => o.status === 'pending_review').length
@@ -333,10 +343,7 @@ export default function DriftReview() {
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
-          <button
-            onClick={load}
-            className="ml-auto text-xs underline hover:no-underline shrink-0"
-          >
+          <button onClick={load} className="ml-auto text-xs underline hover:no-underline shrink-0">
             Erneut laden
           </button>
         </div>

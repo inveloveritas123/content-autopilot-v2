@@ -133,4 +133,3 @@ except Exception as exc:  # noqa: BLE001
 - **Keine deprecated-APIs explizit markiert:** Wenn v1 noch am Laufen ist, sollten Migrationshinweise pro Endpoint stehen
 - **Frontend-Bundle-Size:** 3460Z Posts.jsx → likely >100KB beim Build → Performance-Check empfohlen
 - **Email-Fallback (setup_pipeline_task.py:10):** TODO, aber nicht kritisch (Telegram ist Primary)
-

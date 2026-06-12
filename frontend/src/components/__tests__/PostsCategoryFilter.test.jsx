@@ -7,7 +7,7 @@ import { describe, test, expect } from 'vitest'
 // Reproduziere die Filter-Logik aus Posts.jsx visibleList (Z. 2346-2371)
 function applyCategoryFilter(list, categoryFilter) {
   if (!categoryFilter) return list
-  return list.filter(p => p.category === categoryFilter)
+  return list.filter((p) => p.category === categoryFilter)
 }
 
 const samplePosts = [
@@ -41,7 +41,7 @@ describe('Posts category-Filter (#145 Phase 4.1)', () => {
   })
   test('alte Posts mit category=null werden ausgefiltert wenn Kategorie aktiv', () => {
     const r = applyCategoryFilter(samplePosts, 'news')
-    expect(r.find(p => p.category === null)).toBeUndefined()
+    expect(r.find((p) => p.category === null)).toBeUndefined()
   })
   test('ungültiger Filter-Wert → leer (kein Match)', () => {
     expect(applyCategoryFilter(samplePosts, 'unknown').length).toBe(0)

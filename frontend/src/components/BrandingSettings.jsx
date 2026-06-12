@@ -4,7 +4,10 @@ import { request } from '../api'
 
 function ColorSwatch({ color }) {
   return (
-    <div className="w-6 h-6 rounded border border-gray-200 shrink-0" style={{ background: color }} />
+    <div
+      className="w-6 h-6 rounded border border-gray-200 shrink-0"
+      style={{ background: color }}
+    />
   )
 }
 
@@ -22,10 +25,12 @@ export default function BrandingSettings() {
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    request('/carousels/branding').then(d => {
-      setForm(f => ({ ...f, ...d }))
-      setLoading(false)
-    }).catch(() => setLoading(false))
+    request('/carousels/branding')
+      .then((d) => {
+        setForm((f) => ({ ...f, ...d }))
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
   }, [])
 
   async function handleSave() {
@@ -55,14 +60,14 @@ export default function BrandingSettings() {
             <input
               type="text"
               value={form.primary_color}
-              onChange={e => setForm(f => ({ ...f, primary_color: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, primary_color: e.target.value }))}
               placeholder="#0F766E"
               className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-400"
             />
             <input
               type="color"
               value={form.primary_color}
-              onChange={e => setForm(f => ({ ...f, primary_color: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, primary_color: e.target.value }))}
               className="w-8 h-8 rounded cursor-pointer"
             />
           </div>
@@ -75,14 +80,14 @@ export default function BrandingSettings() {
             <input
               type="text"
               value={form.secondary_color}
-              onChange={e => setForm(f => ({ ...f, secondary_color: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, secondary_color: e.target.value }))}
               placeholder="#F59E0B"
               className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-400"
             />
             <input
               type="color"
               value={form.secondary_color}
-              onChange={e => setForm(f => ({ ...f, secondary_color: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, secondary_color: e.target.value }))}
               className="w-8 h-8 rounded cursor-pointer"
             />
           </div>
@@ -92,7 +97,7 @@ export default function BrandingSettings() {
           <label className="block text-xs font-semibold text-ink-muted mb-1">Schrift</label>
           <select
             value={form.font_family}
-            onChange={e => setForm(f => ({ ...f, font_family: e.target.value }))}
+            onChange={(e) => setForm((f) => ({ ...f, font_family: e.target.value }))}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-400"
           >
             <option value="Helvetica">Helvetica (Standard)</option>
@@ -101,11 +106,13 @@ export default function BrandingSettings() {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-ink-muted mb-1">Wasserzeichen-Text (optional)</label>
+          <label className="block text-xs font-semibold text-ink-muted mb-1">
+            Wasserzeichen-Text (optional)
+          </label>
           <input
             type="text"
             value={form.watermark_text || ''}
-            onChange={e => setForm(f => ({ ...f, watermark_text: e.target.value }))}
+            onChange={(e) => setForm((f) => ({ ...f, watermark_text: e.target.value }))}
             placeholder="z.B. @dein-linkedin-profil"
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-400"
           />

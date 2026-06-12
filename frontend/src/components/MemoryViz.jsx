@@ -79,12 +79,17 @@ export default function MemoryViz() {
       setLoading(false)
     }
   }
-  useEffect(() => { load() /* eslint-disable-line */ }, [])
+  useEffect(() => {
+    load() /* eslint-disable-line */
+  }, [])
 
-  const graphData = useMemo(() => ({
-    nodes: data.nodes.map(n => ({ ...n })),
-    links: data.edges.map(e => ({ source: e.source, target: e.target, value: e.weight })),
-  }), [data])
+  const graphData = useMemo(
+    () => ({
+      nodes: data.nodes.map((n) => ({ ...n })),
+      links: data.edges.map((e) => ({ source: e.source, target: e.target, value: e.weight })),
+    }),
+    [data]
+  )
 
   const handleNodeClick = useCallback((n) => {
     setSelectedNode(n)
@@ -117,23 +122,39 @@ export default function MemoryViz() {
         Gedächtnis-Vektor-Karte
       </h1>
       <p style={{ color: '#6b7280', marginBottom: 16, fontSize: 14 }}>
-        Jeder Punkt = ein Memory-Chunk. Verbindungen = Cosine-Similarity ≥ {edgeThreshold}.
-        Klick auf Punkt = Details.
+        Jeder Punkt = ein Memory-Chunk. Verbindungen = Cosine-Similarity ≥ {edgeThreshold}. Klick
+        auf Punkt = Details.
       </p>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          marginBottom: 16,
+          flexWrap: 'wrap',
+          alignItems: 'flex-end',
+        }}
+      >
         <div>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600 }}>Zeitraum (Tage)</label>
-          <input type="number" min="1" max="3650" value={days}
-                 onChange={(e) => setDays(parseInt(e.target.value, 10) || 180)}
-                 data-testid="viz-days"
-                 style={{ width: 100, padding: 6, border: '1px solid #d1d5db', borderRadius: 4 }} />
+          <input
+            type="number"
+            min="1"
+            max="3650"
+            value={days}
+            onChange={(e) => setDays(parseInt(e.target.value, 10) || 180)}
+            data-testid="viz-days"
+            style={{ width: 100, padding: 6, border: '1px solid #d1d5db', borderRadius: 4 }}
+          />
         </div>
         <div>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600 }}>Klassifikation</label>
-          <select value={classification} onChange={(e) => setClassification(e.target.value)}
-                  data-testid="viz-class"
-                  style={{ padding: 6, border: '1px solid #d1d5db', borderRadius: 4 }}>
+          <select
+            value={classification}
+            onChange={(e) => setClassification(e.target.value)}
+            data-testid="viz-class"
+            style={{ padding: 6, border: '1px solid #d1d5db', borderRadius: 4 }}
+          >
             <option value="">— alle —</option>
             <option value="werte">werte</option>
             <option value="stories">stories</option>
@@ -142,9 +163,12 @@ export default function MemoryViz() {
         </div>
         <div>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600 }}>Quelle</label>
-          <select value={sourceType} onChange={(e) => setSourceType(e.target.value)}
-                  data-testid="viz-source"
-                  style={{ padding: 6, border: '1px solid #d1d5db', borderRadius: 4 }}>
+          <select
+            value={sourceType}
+            onChange={(e) => setSourceType(e.target.value)}
+            data-testid="viz-source"
+            style={{ padding: 6, border: '1px solid #d1d5db', borderRadius: 4 }}
+          >
             <option value="">— alle —</option>
             <option value="voice_telegram">voice_telegram</option>
             <option value="voice_whatsapp">voice_whatsapp</option>
@@ -155,10 +179,16 @@ export default function MemoryViz() {
         </div>
         <div>
           <label style={{ display: 'block', fontSize: 12, fontWeight: 600 }}>Edge-Schwelle</label>
-          <input type="number" min="0.5" max="1" step="0.05" value={edgeThreshold}
-                 onChange={(e) => setEdgeThreshold(parseFloat(e.target.value) || 0.75)}
-                 data-testid="viz-threshold"
-                 style={{ width: 80, padding: 6, border: '1px solid #d1d5db', borderRadius: 4 }} />
+          <input
+            type="number"
+            min="0.5"
+            max="1"
+            step="0.05"
+            value={edgeThreshold}
+            onChange={(e) => setEdgeThreshold(parseFloat(e.target.value) || 0.75)}
+            data-testid="viz-threshold"
+            style={{ width: 80, padding: 6, border: '1px solid #d1d5db', borderRadius: 4 }}
+          />
         </div>
         <Button data-testid="btn-viz-reload" onClick={load} disabled={loading}>
           {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
@@ -166,14 +196,42 @@ export default function MemoryViz() {
         </Button>
       </div>
 
-      {error && <div style={{ padding: 12, background: '#fee2e2', color: '#991b1b', borderRadius: 6, marginBottom: 12 }}>{error}</div>}
+      {error && (
+        <div
+          style={{
+            padding: 12,
+            background: '#fee2e2',
+            color: '#991b1b',
+            borderRadius: 6,
+            marginBottom: 12,
+          }}
+        >
+          {error}
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
         {/* Should-Fix: ref auf Container, graphWidth aus ResizeObserver */}
-        <div ref={containerRef}
-             style={{ height: 600, background: '#0f172a', borderRadius: 8, position: 'relative', overflow: 'hidden' }}>
+        <div
+          ref={containerRef}
+          style={{
+            height: 600,
+            background: '#0f172a',
+            borderRadius: 8,
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
           {graphData.nodes.length === 0 ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                color: '#9ca3af',
+              }}
+            >
               <AlertCircle size={20} style={{ marginRight: 8 }} />
               {loading ? 'Lade Daten…' : 'Keine Memory-Chunks im gewählten Zeitraum / Filter.'}
             </div>
@@ -184,7 +242,9 @@ export default function MemoryViz() {
               backgroundColor="#0f172a"
               nodeRelSize={5}
               nodeColor={(n) => n.color || '#6b7280'}
-              nodeLabel={(n) => `<div style="max-width:300px;background:#fff;padding:6px;border-radius:4px;font-size:12px">${escapeHtml(n.label)}<br/><i style="color:#64748b">${escapeHtml(n.classification || '')} · ${escapeHtml(n.source_type)}</i></div>`}
+              nodeLabel={(n) =>
+                `<div style="max-width:300px;background:#fff;padding:6px;border-radius:4px;font-size:12px">${escapeHtml(n.label)}<br/><i style="color:#64748b">${escapeHtml(n.classification || '')} · ${escapeHtml(n.source_type)}</i></div>`
+              }
               linkColor={() => 'rgba(255,255,255,0.2)'}
               linkWidth={(l) => Math.max(0.3, (l.value - 0.5) * 3)}
               onNodeClick={handleNodeClick}
@@ -195,26 +255,44 @@ export default function MemoryViz() {
           )}
         </div>
 
-        <div data-testid="viz-sidebar" style={{ background: '#f9fafb', padding: 16, borderRadius: 8, fontSize: 13 }}>
+        <div
+          data-testid="viz-sidebar"
+          style={{ background: '#f9fafb', padding: 16, borderRadius: 8, fontSize: 13 }}
+        >
           <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Statistik</h3>
-          <div>Gesamt: <strong>{data.stats?.total || 0}</strong></div>
-          <div>Mit Embedding: <strong>{data.stats?.with_embedding || 0}</strong></div>
+          <div>
+            Gesamt: <strong>{data.stats?.total || 0}</strong>
+          </div>
+          <div>
+            Mit Embedding: <strong>{data.stats?.with_embedding || 0}</strong>
+          </div>
           <div>Soft-Deleted: {data.stats?.soft_deleted || 0}</div>
-          <div>Angezeigt: {data.stats?.shown_nodes || 0} Knoten · {data.stats?.shown_edges || 0} Kanten</div>
+          <div>
+            Angezeigt: {data.stats?.shown_nodes || 0} Knoten · {data.stats?.shown_edges || 0} Kanten
+          </div>
 
           <h4 style={{ marginTop: 16, fontSize: 14, fontWeight: 600 }}>Klassifikation</h4>
-          {(data.stats?.by_classification || []).map(c => (
-            <div key={c.name} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
-              <span style={{ width: 10, height: 10, borderRadius: 5,
-                             background: CLASS_COLORS[c.name] || CLASS_COLORS.unklassifiziert,
-                             display: 'inline-block' }} />
+          {(data.stats?.by_classification || []).map((c) => (
+            <div
+              key={c.name}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}
+            >
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 5,
+                  background: CLASS_COLORS[c.name] || CLASS_COLORS.unklassifiziert,
+                  display: 'inline-block',
+                }}
+              />
               <span style={{ flex: 1 }}>{c.name}</span>
               <span style={{ color: '#6b7280' }}>{c.count}</span>
             </div>
           ))}
 
           <h4 style={{ marginTop: 16, fontSize: 14, fontWeight: 600 }}>Quellen</h4>
-          {(data.stats?.by_source_type || []).map(s => (
+          {(data.stats?.by_source_type || []).map((s) => (
             <div key={s.name} style={{ display: 'flex', padding: '2px 0' }}>
               <span style={{ flex: 1 }}>{s.name}</span>
               <span style={{ color: '#6b7280' }}>{s.count}</span>
@@ -222,7 +300,16 @@ export default function MemoryViz() {
           ))}
 
           {selectedNode && (
-            <div data-testid="viz-detail" style={{ marginTop: 20, padding: 12, background: 'white', border: '1px solid #e5e7eb', borderRadius: 6 }}>
+            <div
+              data-testid="viz-detail"
+              style={{
+                marginTop: 20,
+                padding: 12,
+                background: 'white',
+                border: '1px solid #e5e7eb',
+                borderRadius: 6,
+              }}
+            >
               <h4 style={{ fontWeight: 600, marginBottom: 6 }}>Ausgewählt</h4>
               <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
                 {selectedNode.classification || 'unklassifiziert'} · {selectedNode.source_type}
@@ -245,7 +332,15 @@ export default function MemoryViz() {
                     </Button>
                   )}
                   {showConfirmDialog && (
-                    <div style={{ marginTop: 8, padding: 8, background: '#fef3c7', borderRadius: 4, fontSize: 12 }}>
+                    <div
+                      style={{
+                        marginTop: 8,
+                        padding: 8,
+                        background: '#fef3c7',
+                        borderRadius: 4,
+                        fontSize: 12,
+                      }}
+                    >
                       <p style={{ fontWeight: 600, marginBottom: 4 }}>
                         Vollständigen Inhalt anzeigen?
                       </p>
@@ -258,10 +353,19 @@ export default function MemoryViz() {
                         value={confirmReason}
                         onChange={(e) => setConfirmReason(e.target.value)}
                         data-testid="viz-confirm-reason"
-                        style={{ width: '100%', padding: '4px 6px', border: '1px solid #d1d5db', borderRadius: 4, marginBottom: 6, fontSize: 12 }}
+                        style={{
+                          width: '100%',
+                          padding: '4px 6px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: 4,
+                          marginBottom: 6,
+                          fontSize: 12,
+                        }}
                       />
                       {fullTextError && (
-                        <div style={{ color: '#991b1b', fontSize: 11, marginBottom: 4 }}>{fullTextError}</div>
+                        <div style={{ color: '#991b1b', fontSize: 11, marginBottom: 4 }}>
+                          {fullTextError}
+                        </div>
                       )}
                       <div style={{ display: 'flex', gap: 6 }}>
                         <Button
@@ -270,12 +374,24 @@ export default function MemoryViz() {
                           disabled={fullTextLoading || !confirmReason.trim()}
                           style={{ fontSize: 11, padding: '4px 8px' }}
                         >
-                          {fullTextLoading ? <Loader2 size={12} className="animate-spin" /> : 'OK, anzeigen'}
+                          {fullTextLoading ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            'OK, anzeigen'
+                          )}
                         </Button>
                         <Button
                           data-testid="btn-viz-confirm-cancel"
-                          onClick={() => { setShowConfirmDialog(false); setConfirmReason('') }}
-                          style={{ fontSize: 11, padding: '4px 8px', background: 'transparent', border: '1px solid #d1d5db' }}
+                          onClick={() => {
+                            setShowConfirmDialog(false)
+                            setConfirmReason('')
+                          }}
+                          style={{
+                            fontSize: 11,
+                            padding: '4px 8px',
+                            background: 'transparent',
+                            border: '1px solid #d1d5db',
+                          }}
                         >
                           Abbrechen
                         </Button>
@@ -296,7 +412,13 @@ export default function MemoryViz() {
                   </div>
                   <Button
                     onClick={() => setFullTextData(null)}
-                    style={{ marginTop: 6, fontSize: 11, padding: '2px 6px', background: 'transparent', border: '1px solid #d1d5db' }}
+                    style={{
+                      marginTop: 6,
+                      fontSize: 11,
+                      padding: '2px 6px',
+                      background: 'transparent',
+                      border: '1px solid #d1d5db',
+                    }}
                   >
                     Vorschau
                   </Button>

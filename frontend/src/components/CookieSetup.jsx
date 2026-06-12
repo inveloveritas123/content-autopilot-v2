@@ -36,32 +36,46 @@ export default function CookieSetup({ open, onClose, onSaved }) {
       <div className="space-y-4">
         {/* Why */}
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Warum braucht der Autopilot Cookies?</p>
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+            Warum braucht der Autopilot Cookies?
+          </p>
           <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-            YouTube blockiert automatische Transkript-Anfragen nach kurzer Zeit (Rate-Limit).
-            Mit einem Cookie aus deinem Browser erkennt YouTube die Anfragen als eingeloggt
-            und erlaubt deutlich mehr Zugriffe.
+            YouTube blockiert automatische Transkript-Anfragen nach kurzer Zeit (Rate-Limit). Mit
+            einem Cookie aus deinem Browser erkennt YouTube die Anfragen als eingeloggt und erlaubt
+            deutlich mehr Zugriffe.
           </p>
         </div>
 
         {/* Steps */}
         <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">3 einfache Schritte:</h4>
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            3 einfache Schritte:
+          </h4>
 
           {/* Step 1 */}
           <div className="flex gap-3">
-            <span className="flex-shrink-0 w-6 h-6 bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+            <span className="flex-shrink-0 w-6 h-6 bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded-full flex items-center justify-center text-xs font-bold">
+              1
+            </span>
             <div>
-              <p className="text-sm text-gray-700 dark:text-gray-300">Browser-Extension installieren:</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                Browser-Extension installieren:
+              </p>
               <div className="flex gap-2 mt-1.5">
-                <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
-                   target="_blank" rel="noopener noreferrer"
-                   className="inline-flex items-center gap-1 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                <a
+                  href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
                   Chrome: Get cookies.txt LOCALLY
                 </a>
-                <a href="https://addons.mozilla.org/de/firefox/addon/cookies-txt/"
-                   target="_blank" rel="noopener noreferrer"
-                   className="inline-flex items-center gap-1 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                <a
+                  href="https://addons.mozilla.org/de/firefox/addon/cookies-txt/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
                   Firefox: cookies.txt
                 </a>
               </div>
@@ -70,20 +84,34 @@ export default function CookieSetup({ open, onClose, onSaved }) {
 
           {/* Step 2 */}
           <div className="flex gap-3">
-            <span className="flex-shrink-0 w-6 h-6 bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+            <span className="flex-shrink-0 w-6 h-6 bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded-full flex items-center justify-center text-xs font-bold">
+              2
+            </span>
             <div>
               <p className="text-sm text-gray-700 dark:text-gray-300">
-                Oeffne <a href="https://www.youtube.com" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">youtube.com</a> im Browser (eingeloggt), klicke auf die Extension und exportiere die Cookies.
+                Oeffne{' '}
+                <a
+                  href="https://www.youtube.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary-600 hover:underline"
+                >
+                  youtube.com
+                </a>{' '}
+                im Browser (eingeloggt), klicke auf die Extension und exportiere die Cookies.
               </p>
             </div>
           </div>
 
           {/* Step 3 */}
           <div className="flex gap-3">
-            <span className="flex-shrink-0 w-6 h-6 bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded-full flex items-center justify-center text-xs font-bold">3</span>
+            <span className="flex-shrink-0 w-6 h-6 bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded-full flex items-center justify-center text-xs font-bold">
+              3
+            </span>
             <div>
               <p className="text-sm text-gray-700 dark:text-gray-300">
-                Oeffne die exportierte Datei mit einem Texteditor, kopiere den gesamten Inhalt und fuege ihn hier ein:
+                Oeffne die exportierte Datei mit einem Texteditor, kopiere den gesamten Inhalt und
+                fuege ihn hier ein:
               </p>
             </div>
           </div>
@@ -93,25 +121,28 @@ export default function CookieSetup({ open, onClose, onSaved }) {
         <Textarea
           label="Cookie-Inhalt hier einfuegen"
           value={cookieText}
-          onChange={e => setCookieText(e.target.value)}
+          onChange={(e) => setCookieText(e.target.value)}
           rows={6}
-          placeholder={"# Netscape HTTP Cookie File\n# https://curl.se/docs/http-cookies.html\n.youtube.com\tTRUE\t/\tTRUE\t..."}
+          placeholder={
+            '# Netscape HTTP Cookie File\n# https://curl.se/docs/http-cookies.html\n.youtube.com\tTRUE\t/\tTRUE\t...'
+          }
           className="font-mono text-xs"
         />
 
         {cookieText && (
           <p className="text-xs text-gray-500">
-            {cookieText.split('\n').filter(l => l.trim() && !l.startsWith('#')).length} Cookie-Eintraege erkannt
+            {cookieText.split('\n').filter((l) => l.trim() && !l.startsWith('#')).length}{' '}
+            Cookie-Eintraege erkannt
           </p>
         )}
 
         {/* Actions */}
         <div className="flex items-center justify-between pt-2">
-          <div>
-            {saved && <Badge color="green">Gespeichert!</Badge>}
-          </div>
+          <div>{saved && <Badge color="green">Gespeichert!</Badge>}</div>
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={onClose}>Abbrechen</Button>
+            <Button variant="secondary" onClick={onClose}>
+              Abbrechen
+            </Button>
             <Button onClick={handleSave} disabled={saving || !cookieText.trim()}>
               {saving ? 'Speichern...' : 'Cookies speichern'}
             </Button>
@@ -120,9 +151,12 @@ export default function CookieSetup({ open, onClose, onSaved }) {
 
         {/* Alternative: SCP */}
         <details className="text-xs text-gray-400">
-          <summary className="cursor-pointer hover:text-gray-600">Alternativ: Per Terminal hochladen</summary>
+          <summary className="cursor-pointer hover:text-gray-600">
+            Alternativ: Per Terminal hochladen
+          </summary>
           <div className="mt-2 bg-gray-50 dark:bg-gray-800 p-2 rounded font-mono select-all">
-            scp -P 10022 cookies.txt meister@152.53.142.163:/opt/content-autopilot-v2/data/youtube_cookies.txt
+            scp -P 10022 cookies.txt
+            meister@152.53.142.163:/opt/content-autopilot-v2/data/youtube_cookies.txt
           </div>
         </details>
       </div>

@@ -33,7 +33,11 @@ const getActiveProjectId = () => localStorage.getItem('activeProjectId') || null
 function formatDate(iso) {
   if (!iso) return ''
   try {
-    return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    return new Date(iso).toLocaleDateString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
   } catch {
     return iso
   }
@@ -87,9 +91,7 @@ function ColumnSelectModal({ open, onClose, onConfirm }) {
 
   return (
     <Dialog open={open} onClose={onClose} title="Profil-Typ auswählen">
-      <p className="text-sm text-ink-muted mb-4">
-        Welchem Brand-Voice-Bereich gehört diese Datei?
-      </p>
+      <p className="text-sm text-ink-muted mb-4">Welchem Brand-Voice-Bereich gehört diese Datei?</p>
       <div className="space-y-3">
         {PROFILE_OPTIONS.map((opt) => {
           const Icon = opt.icon
@@ -104,11 +106,15 @@ function ColumnSelectModal({ open, onClose, onConfirm }) {
                   : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
               }`}
             >
-              <Icon className={`w-5 h-5 mt-0.5 shrink-0 ${isSelected ? 'text-primary-600' : 'text-gray-400'}`} />
+              <Icon
+                className={`w-5 h-5 mt-0.5 shrink-0 ${isSelected ? 'text-primary-600' : 'text-gray-400'}`}
+              />
               <div>
                 <span className="text-sm font-semibold text-ink block">{opt.label}</span>
                 <span className="text-xs text-ink-muted">{opt.desc}</span>
-                <span className="text-xs text-primary-600 block mt-1 cursor-default">Vorlage anzeigen</span>
+                <span className="text-xs text-primary-600 block mt-1 cursor-default">
+                  Vorlage anzeigen
+                </span>
               </div>
             </button>
           )
@@ -147,7 +153,10 @@ function Breadcrumb({ path, onNavigate }) {
         return (
           <span key={partPath} className="flex items-center gap-1">
             <ChevronRight className="w-3 h-3" />
-            <button onClick={() => onNavigate(partPath)} className="hover:text-primary-700 font-medium">
+            <button
+              onClick={() => onNavigate(partPath)}
+              className="hover:text-primary-700 font-medium"
+            >
               {part}
             </button>
           </span>
@@ -190,10 +199,9 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
       // use the nc/list endpoint
       const API_BASE = '/api'
       const apiKey = localStorage.getItem('apiKey') || ''
-      const resp = await fetch(
-        `${API_BASE}/nc/list?path=${encodeURIComponent(path)}`,
-        { headers: { 'X-API-Key': apiKey } }
-      )
+      const resp = await fetch(`${API_BASE}/nc/list?path=${encodeURIComponent(path)}`, {
+        headers: { 'X-API-Key': apiKey },
+      })
       const TEMPLATE_PATH = '/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/'
       if (!resp.ok) {
         if (resp.status === 404) {
@@ -247,13 +255,21 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
   }
 
   return (
-    <Dialog open={open} onClose={onClose} title="Datei aus Nextcloud importieren" className="max-w-xl">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Datei aus Nextcloud importieren"
+      className="max-w-xl"
+    >
       {/* Manueller Pfad-Input */}
       <div className="mb-2 flex gap-1.5">
         <input
           value={pathInput}
-          onChange={e => setPathInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') setCurrentPath(pathInput.endsWith('/') ? pathInput : pathInput + '/') }}
+          onChange={(e) => setPathInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter')
+              setCurrentPath(pathInput.endsWith('/') ? pathInput : pathInput + '/')
+          }}
           placeholder="Pfad eingeben..."
           className="flex-1 text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500 font-mono"
         />
@@ -273,11 +289,20 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
         <p className="text-xs text-ink-muted mb-1.5">Schnell-Navigation:</p>
         <div className="flex flex-wrap gap-1.5 mb-2">
           {[
-            { label: '📋 Vorlagen-Ordner', path: '/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/' },
-            { label: '📁 Meine Voice-Dateien', path: `/content-autopilot/v2/Kunde/${tenantSlug || 'default'}/voice/` },
-          ].map(q => (
-            <button key={q.path} onClick={() => setCurrentPath(q.path)}
-              className="text-xs px-2.5 py-1 bg-primary-50 text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-100">
+            {
+              label: '📋 Vorlagen-Ordner',
+              path: '/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/',
+            },
+            {
+              label: '📁 Meine Voice-Dateien',
+              path: `/content-autopilot/v2/Kunde/${tenantSlug || 'default'}/voice/`,
+            },
+          ].map((q) => (
+            <button
+              key={q.path}
+              onClick={() => setCurrentPath(q.path)}
+              className="text-xs px-2.5 py-1 bg-primary-50 text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-100"
+            >
               {q.label}
             </button>
           ))}
@@ -288,18 +313,23 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
             { label: '🏢 P01 Kundenkontext', name: 'P01-kundenkontext-extraktion.md' },
             { label: '🎙️ P03 Voice-Profil', name: 'P03-voice-profile.md' },
             { label: '👤 P04 Audience-Avatar', name: 'P04-audience-avatar.md' },
-            { label: '📦 1-main-linkedin-ki', name: '1-main-notion-file-linkedin-ki-assets-prompts.md' },
-          ].map(t => {
+            {
+              label: '📦 1-main-linkedin-ki',
+              name: '1-main-notion-file-linkedin-ki-assets-prompts.md',
+            },
+          ].map((t) => {
             const filePath = `/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/${t.name}`
             const isSelected = selectedFile?.path === filePath
             return (
-              <button key={t.name}
+              <button
+                key={t.name}
                 onClick={() => setSelectedFile({ name: t.name, path: filePath })}
                 className={`text-xs px-2.5 py-1 border rounded-lg transition-colors ${
                   isSelected
                     ? 'bg-primary-700 text-white border-primary-700'
                     : 'bg-gray-50 text-ink border-gray-200 hover:bg-primary-50 hover:text-primary-700 hover:border-primary-200'
-                }`}>
+                }`}
+              >
                 {t.label}
               </button>
             )
@@ -324,16 +354,22 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
         ) : items.length === 0 && !error ? (
           <div className="flex flex-col items-center justify-center py-10 text-ink-muted text-sm px-4 text-center">
             <FolderOpen className="w-8 h-8 mb-2 text-gray-300" />
-            <p className="text-xs font-medium text-ink-light mb-1">Verzeichnis leer oder nicht gefunden</p>
+            <p className="text-xs font-medium text-ink-light mb-1">
+              Verzeichnis leer oder nicht gefunden
+            </p>
             <p className="text-[11px]">
               Klicke{' '}
               <button
-                onClick={() => setCurrentPath('/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/')}
+                onClick={() =>
+                  setCurrentPath(
+                    '/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/'
+                  )
+                }
                 className="text-primary-700 underline hover:no-underline"
               >
                 Vorlagen-Ordner
-              </button>
-              {' '}für Beispiel-Dateien.
+              </button>{' '}
+              für Beispiel-Dateien.
             </p>
           </div>
         ) : (
@@ -441,8 +477,8 @@ function PipelineRunBanner({ runId, onDone }) {
         isDone
           ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
           : isError
-          ? 'bg-red-50 border-red-200 text-red-700'
-          : 'bg-blue-50 border-blue-200 text-blue-700'
+            ? 'bg-red-50 border-red-200 text-red-700'
+            : 'bg-blue-50 border-blue-200 text-blue-700'
       }`}
     >
       {isDone ? (
@@ -456,8 +492,8 @@ function PipelineRunBanner({ runId, onDone }) {
         {isDone
           ? 'Setup-Pipeline abgeschlossen.'
           : isError
-          ? 'Pipeline-Fehler: ' + (status.error || 'Unbekannt')
-          : `Pipeline läuft — Stage: ${status.stage || '...'} (${status.status || '...'})`}
+            ? 'Pipeline-Fehler: ' + (status.error || 'Unbekannt')
+            : `Pipeline läuft — Stage: ${status.stage || '...'} (${status.status || '...'})`}
       </span>
     </div>
   )
@@ -501,7 +537,7 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
     { key: 'customer_context', label: 'Kundenkontext', value: customer_context },
     { key: 'audience_avatar', label: 'Zielgruppen-Avatar', value: audience_avatar },
   ]
-  const pillarsCount = pillars.filter(p => p.value).length
+  const pillarsCount = pillars.filter((p) => p.value).length
   const pillarsPercent = Math.round((pillarsCount / 3) * 100)
 
   return (
@@ -509,7 +545,9 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
       {/* QW5: Säulen-Progress-Leiste */}
       <div className="bg-white rounded-xl border border-surface-border p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-ink-muted uppercase tracking-wide">Brand Voice Fortschritt</span>
+          <span className="text-xs font-semibold text-ink-muted uppercase tracking-wide">
+            Brand Voice Fortschritt
+          </span>
           <span className="text-xs font-bold text-ink">{pillarsCount}/3 Säulen abgeschlossen</span>
         </div>
         <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -520,7 +558,7 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
         </div>
         {/* Badge pro Säule */}
         <div className="flex flex-wrap gap-2 mt-3">
-          {pillars.map(p => (
+          {pillars.map((p) => (
             <span
               key={p.key}
               className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
@@ -529,11 +567,7 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
                   : 'bg-amber-50 text-amber-700 border-amber-200'
               }`}
             >
-              {p.value ? (
-                <CheckCircle2 className="w-3 h-3" />
-              ) : (
-                <Loader2 className="w-3 h-3" />
-              )}
+              {p.value ? <CheckCircle2 className="w-3 h-3" /> : <Loader2 className="w-3 h-3" />}
               {p.label}
               {p.value ? ' Erledigt' : ' Offen'}
             </span>
@@ -542,9 +576,7 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
         {/* Banner wenn alle 3 fertig */}
         {allPresent && (
           <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between gap-3">
-            <p className="text-xs font-semibold text-emerald-800">
-              Brand Voice komplett.
-            </p>
+            <p className="text-xs font-semibold text-emerald-800">Brand Voice komplett.</p>
             <Link
               to="/brand-voice/wizard"
               className="text-xs font-medium text-emerald-700 underline hover:no-underline whitespace-nowrap"
@@ -570,22 +602,14 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
 
       <div
         className={`bg-white rounded-xl border p-5 ${
-          allPresent
-            ? 'border-emerald-200'
-            : nonePresent
-            ? 'border-red-200'
-            : 'border-amber-200'
+          allPresent ? 'border-emerald-200' : nonePresent ? 'border-red-200' : 'border-amber-200'
         }`}
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div
               className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-                allPresent
-                  ? 'bg-emerald-50'
-                  : nonePresent
-                  ? 'bg-red-50'
-                  : 'bg-amber-50'
+                allPresent ? 'bg-emerald-50' : nonePresent ? 'bg-red-50' : 'bg-amber-50'
               }`}
             >
               {allPresent ? (
@@ -633,7 +657,9 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
               )}
               {nonePresent && (
                 <>
-                  <p className="text-sm font-semibold text-red-700">Kein Brand Voice eingerichtet</p>
+                  <p className="text-sm font-semibold text-red-700">
+                    Kein Brand Voice eingerichtet
+                  </p>
                   <p className="text-xs text-ink-muted mt-0.5">
                     Lade eine Datei hoch oder importiere aus Nextcloud, um zu starten.
                   </p>
@@ -643,17 +669,26 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {allPresent && (
-              <button onClick={onSetup} className="px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100">
+              <button
+                onClick={onSetup}
+                className="px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100"
+              >
                 Neu generieren
               </button>
             )}
             {!allPresent && !nonePresent && (
-              <button onClick={onSetup} className="px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100">
+              <button
+                onClick={onSetup}
+                className="px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100"
+              >
                 Profil vervollständigen
               </button>
             )}
             {nonePresent && (
-              <button onClick={onSetup} className="px-4 py-2 text-xs font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600 flex items-center gap-1.5">
+              <button
+                onClick={onSetup}
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600 flex items-center gap-1.5"
+              >
                 Jetzt einrichten <ChevronRight className="w-3.5 h-3.5" />
               </button>
             )}
@@ -689,7 +724,9 @@ function UploadZone({ onUploadSuccess }) {
 
   // FileReader-Cleanup bei Unmount
   useEffect(() => {
-    return () => { if (activeReaderRef.current) activeReaderRef.current.abort() }
+    return () => {
+      if (activeReaderRef.current) activeReaderRef.current.abort()
+    }
   }, [])
 
   function validateAndSetFile(f) {
@@ -783,9 +820,7 @@ function UploadZone({ onUploadSuccess }) {
     e.target.value = ''
   }
 
-  const previewLines = fileContent
-    ? fileContent.split('\n').slice(0, 30).join('\n')
-    : null
+  const previewLines = fileContent ? fileContent.split('\n').slice(0, 30).join('\n') : null
 
   return (
     <div className="bg-white rounded-xl border border-surface-border p-5">
@@ -971,15 +1006,22 @@ export default function BrandVoice() {
         >
           <ShieldAlert className="w-4 h-4 shrink-0" />
           <span className="flex-1">
-            <span className="font-semibold">{reviewQueueCount} {reviewQueueCount === 1 ? 'Post' : 'Posts'} in Review-Queue</span>
-            {' '}— Sensible Themen warten auf Freigabe.
+            <span className="font-semibold">
+              {reviewQueueCount} {reviewQueueCount === 1 ? 'Post' : 'Posts'} in Review-Queue
+            </span>{' '}
+            — Sensible Themen warten auf Freigabe.
           </span>
           <span className="text-xs font-medium underline shrink-0">Jetzt prüfen →</span>
         </Link>
       )}
 
       {/* Status Tile — shows skeleton when statusData is undefined */}
-      <StatusTile data={statusData} onRefresh={loadStatus} onDriftReview={() => navigate('/brand-voice/drift-review')} onSetup={() => navigate('/brand-voice/wizard')} />
+      <StatusTile
+        data={statusData}
+        onRefresh={loadStatus}
+        onDriftReview={() => navigate('/brand-voice/drift-review')}
+        onSetup={() => navigate('/brand-voice/wizard')}
+      />
 
       {/* Upload Zone */}
       <UploadZone onUploadSuccess={loadStatus} />

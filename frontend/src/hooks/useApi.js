@@ -28,7 +28,9 @@ export function useApi(fetcher, deps = []) {
       const result = await fetcher()
       // flushSync forces React to commit setData synchronously before returning,
       // so window.scrollTo runs AFTER the DOM is updated (not before).
-      flushSync(() => { setData(result) })
+      flushSync(() => {
+        setData(result)
+      })
       if (savedScrollY > 0) {
         window.scrollTo({ top: savedScrollY, behavior: 'instant' })
       }

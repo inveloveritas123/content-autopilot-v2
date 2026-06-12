@@ -4,12 +4,12 @@
 import { describe, test, expect } from 'vitest'
 
 const CATEGORY_LABELS = {
-  rules_constraints:   { de: 'Regulierung',    color: 'bg-rose-100 text-rose-700' },
-  demand_behavior:     { de: 'Marktnachfrage', color: 'bg-amber-100 text-amber-700' },
-  tools_methods:       { de: 'Tools & Methoden', color: 'bg-emerald-100 text-emerald-700' },
-  competition_market:  { de: 'Wettbewerb',     color: 'bg-violet-100 text-violet-700' },
-  costs_resources:     { de: 'Kosten & Ressourcen', color: 'bg-blue-100 text-blue-700' },
-  emerging_topics:     { de: 'Trend-Themen',   color: 'bg-teal-100 text-teal-700' },
+  rules_constraints: { de: 'Regulierung', color: 'bg-rose-100 text-rose-700' },
+  demand_behavior: { de: 'Marktnachfrage', color: 'bg-amber-100 text-amber-700' },
+  tools_methods: { de: 'Tools & Methoden', color: 'bg-emerald-100 text-emerald-700' },
+  competition_market: { de: 'Wettbewerb', color: 'bg-violet-100 text-violet-700' },
+  costs_resources: { de: 'Kosten & Ressourcen', color: 'bg-blue-100 text-blue-700' },
+  emerging_topics: { de: 'Trend-Themen', color: 'bg-teal-100 text-teal-700' },
 }
 
 const IMPACT_ICONS = { positive: '🟢', neutral: '🟡', negative: '🔴' }
@@ -26,7 +26,7 @@ describe('ResearchFindings CATEGORY_LABELS', () => {
     expect(keys).toContain('emerging_topics')
   })
   test('jede Kategorie hat de + color', () => {
-    Object.values(CATEGORY_LABELS).forEach(c => {
+    Object.values(CATEGORY_LABELS).forEach((c) => {
       expect(c.de).toBeTruthy()
       expect(c.color).toBeTruthy()
     })
@@ -45,10 +45,10 @@ describe('Findings-Lifecycle (Status-Transitions)', () => {
   // active → dismissed (kein use)
   // active → used (after use_finding_as_idea)
   function applyDismiss(findings, id) {
-    return findings.filter(f => f.id !== id)  // UI-Optimistic-Update
+    return findings.filter((f) => f.id !== id) // UI-Optimistic-Update
   }
   function applyUseAsIdea(findings, id) {
-    return findings.filter(f => f.id !== id)  // UI: Aus Liste entfernen
+    return findings.filter((f) => f.id !== id) // UI: Aus Liste entfernen
   }
 
   const sample = [
@@ -59,12 +59,12 @@ describe('Findings-Lifecycle (Status-Transitions)', () => {
   test('dismiss: aus aktiver Liste entfernt', () => {
     const after = applyDismiss(sample, '2')
     expect(after.length).toBe(2)
-    expect(after.find(f => f.id === '2')).toBeUndefined()
+    expect(after.find((f) => f.id === '2')).toBeUndefined()
   })
   test('use-as-idea: aus Liste entfernt (Status wird Backend-side auf used)', () => {
     const after = applyUseAsIdea(sample, '1')
     expect(after.length).toBe(2)
-    expect(after.find(f => f.id === '1')).toBeUndefined()
+    expect(after.find((f) => f.id === '1')).toBeUndefined()
   })
 })
 

@@ -6,7 +6,20 @@ import { useApi } from '../hooks/useApi'
 import { getContentList } from '../api'
 
 const DAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
-const MONTHS = ['Januar', 'Februar', 'Maerz', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
+const MONTHS = [
+  'Januar',
+  'Februar',
+  'Maerz',
+  'April',
+  'Mai',
+  'Juni',
+  'Juli',
+  'August',
+  'September',
+  'Oktober',
+  'November',
+  'Dezember',
+]
 
 export default function ContentCalendar() {
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -30,7 +43,7 @@ export default function ContentCalendar() {
   const getContentForDay = (day) => {
     if (!content || !day) return []
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    return content.filter(c => c.scheduled_for && c.scheduled_for.startsWith(dateStr))
+    return content.filter((c) => c.scheduled_for && c.scheduled_for.startsWith(dateStr))
   }
 
   const navigate = (dir) => {
@@ -45,18 +58,30 @@ export default function ContentCalendar() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>&larr;</Button>
-          <CardTitle>{MONTHS[month]} {year}</CardTitle>
-          <Button variant="ghost" size="sm" onClick={() => navigate(1)}>&rarr;</Button>
+          <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+            &larr;
+          </Button>
+          <CardTitle>
+            {MONTHS[month]} {year}
+          </CardTitle>
+          <Button variant="ghost" size="sm" onClick={() => navigate(1)}>
+            &rarr;
+          </Button>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-7 gap-1">
-            {DAYS.map(d => (
-              <div key={d} className="text-center text-xs font-semibold text-gray-500 py-2">{d}</div>
+            {DAYS.map((d) => (
+              <div key={d} className="text-center text-xs font-semibold text-gray-500 py-2">
+                {d}
+              </div>
             ))}
             {days.map((day, i) => {
               const dayContent = getContentForDay(day)
-              const isToday = day && new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year
+              const isToday =
+                day &&
+                new Date().getDate() === day &&
+                new Date().getMonth() === month &&
+                new Date().getFullYear() === year
               return (
                 <div
                   key={i}
@@ -66,9 +91,13 @@ export default function ContentCalendar() {
                 >
                   {day && (
                     <>
-                      <span className={`text-xs font-medium ${isToday ? 'text-primary-600' : 'text-gray-500'}`}>{day}</span>
+                      <span
+                        className={`text-xs font-medium ${isToday ? 'text-primary-600' : 'text-gray-500'}`}
+                      >
+                        {day}
+                      </span>
                       <div className="mt-1 space-y-1">
-                        {dayContent.map(c => (
+                        {dayContent.map((c) => (
                           <div key={c.id} className="text-xs">
                             <Badge color="blue">{c.channel}</Badge>
                           </div>

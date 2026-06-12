@@ -125,4 +125,3 @@ grep -rn "LLM_PROVIDER\|OPENAI_API_KEY\|requesty\|vertex\|gemini\|claude" backen
 1. `MessengerAdapter`-ABC + Factory für Telegram, WhatsApp, Signal, Discord (später)
 2. `StorageAdapter`-ABC mit Nextcloud, Local, S3 (ermöglicht Multi-Tenant-Storage)
 3. `LLMProvider`-Routing explizit machen: Config-basierte Model-Selection mit Fallback-Kette
-

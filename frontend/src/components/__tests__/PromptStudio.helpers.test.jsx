@@ -85,21 +85,31 @@ describe('isBaseNewerThanOverlay', () => {
   const newer = '2024-06-01T10:00:00Z'
 
   test('false wenn kein Overlay vorhanden', () => {
-    expect(isBaseNewerThanOverlay({ has_overlay: false, base_mtime: newer, mtime: older })).toBe(false)
+    expect(isBaseNewerThanOverlay({ has_overlay: false, base_mtime: newer, mtime: older })).toBe(
+      false
+    )
   })
   test('false wenn base_mtime fehlt', () => {
-    expect(isBaseNewerThanOverlay({ has_overlay: true, base_mtime: null, mtime: older })).toBe(false)
+    expect(isBaseNewerThanOverlay({ has_overlay: true, base_mtime: null, mtime: older })).toBe(
+      false
+    )
   })
   test('true wenn Base neuer ist als Overlay', () => {
     // mtime = Overlay-Zeit (älter), base_mtime = Base-Zeit (neuer)
-    expect(isBaseNewerThanOverlay({ has_overlay: true, base_mtime: newer, mtime: older })).toBe(true)
+    expect(isBaseNewerThanOverlay({ has_overlay: true, base_mtime: newer, mtime: older })).toBe(
+      true
+    )
   })
   test('false wenn Overlay neuer ist als Base', () => {
     // Normaler Fall: Overlay wurde nach dem Base-Stand erstellt
-    expect(isBaseNewerThanOverlay({ has_overlay: true, base_mtime: older, mtime: newer })).toBe(false)
+    expect(isBaseNewerThanOverlay({ has_overlay: true, base_mtime: older, mtime: newer })).toBe(
+      false
+    )
   })
   test('false wenn Zeiten gleich sind', () => {
-    expect(isBaseNewerThanOverlay({ has_overlay: true, base_mtime: older, mtime: older })).toBe(false)
+    expect(isBaseNewerThanOverlay({ has_overlay: true, base_mtime: older, mtime: older })).toBe(
+      false
+    )
   })
 })
 

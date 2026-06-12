@@ -1,5 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
-import { AlertTriangle, Check, X, ChevronDown, ChevronUp, Loader2, ShieldAlert, Tag, AlertCircle, CheckCircle2 } from 'lucide-react'
+import {
+  AlertTriangle,
+  Check,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  ShieldAlert,
+  Tag,
+  AlertCircle,
+  CheckCircle2,
+} from 'lucide-react'
 import { getReviewQueue, decideReviewQueueItem } from '../api'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -41,9 +52,12 @@ function severityClasses(severity) {
 
 function severityLabel(severity) {
   switch (severity) {
-    case 'high': return 'Hoch'
-    case 'medium': return 'Mittel'
-    default: return 'Niedrig'
+    case 'high':
+      return 'Hoch'
+    case 'medium':
+      return 'Mittel'
+    default:
+      return 'Niedrig'
   }
 }
 
@@ -116,11 +130,12 @@ function QueueItemCard({ item, onRemoved }) {
       {/* Card body */}
       {expanded && (
         <div className="px-5 pb-5 space-y-4 border-t border-surface-border pt-4">
-
           {/* Post text */}
           {displayText && (
             <div>
-              <p className="text-xs font-semibold text-ink-muted uppercase tracking-wide mb-2">Post-Text</p>
+              <p className="text-xs font-semibold text-ink-muted uppercase tracking-wide mb-2">
+                Post-Text
+              </p>
               <p className="text-sm text-ink bg-gray-50 border border-gray-200 rounded-lg px-3 py-3 leading-relaxed whitespace-pre-wrap break-words">
                 {displayText}
               </p>
@@ -135,13 +150,13 @@ function QueueItemCard({ item, onRemoved }) {
               </p>
               <div className="space-y-1.5">
                 {phrases.map((phrase, idx) => {
-                  const phraseText = typeof phrase === 'string' ? phrase : phrase.text || phrase.phrase || String(phrase)
+                  const phraseText =
+                    typeof phrase === 'string'
+                      ? phrase
+                      : phrase.text || phrase.phrase || String(phrase)
                   const phraseCategory = typeof phrase === 'object' ? phrase.category : null
                   return (
-                    <div
-                      key={idx}
-                      className="flex items-start gap-2 text-sm"
-                    >
+                    <div key={idx} className="flex items-start gap-2 text-sm">
                       {phraseCategory && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[11px] border border-gray-200 shrink-0 mt-0.5">
                           <Tag className="w-2.5 h-2.5" />
@@ -260,10 +275,7 @@ export default function ReviewQueue() {
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
-          <button
-            onClick={load}
-            className="ml-auto text-xs underline hover:no-underline shrink-0"
-          >
+          <button onClick={load} className="ml-auto text-xs underline hover:no-underline shrink-0">
             Erneut laden
           </button>
         </div>
@@ -282,7 +294,9 @@ export default function ReviewQueue() {
         <div className="flex flex-col items-center justify-center py-16 text-ink-muted">
           <CheckCircle2 className="w-10 h-10 text-emerald-400 mb-3" />
           <p className="text-sm font-medium">Keine ausstehenden Reviews</p>
-          <p className="text-xs text-ink-light mt-1">Alle Posts freigegeben oder noch keine Einträge.</p>
+          <p className="text-xs text-ink-light mt-1">
+            Alle Posts freigegeben oder noch keine Einträge.
+          </p>
         </div>
       )}
 

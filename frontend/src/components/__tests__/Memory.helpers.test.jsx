@@ -64,9 +64,15 @@ describe('timeAgo', () => {
 
 describe('Source-Type-Mapping', () => {
   test('alle 6 erlaubten source_types haben Icon', () => {
-    const types = ['voice_telegram', 'voice_whatsapp', 'photo_telegram',
-                   'photo_whatsapp', 'manual_note', 'transcript_extra']
-    types.forEach(t => expect(SOURCE_ICONS_MAP[t]).toBeTruthy())
+    const types = [
+      'voice_telegram',
+      'voice_whatsapp',
+      'photo_telegram',
+      'photo_whatsapp',
+      'manual_note',
+      'transcript_extra',
+    ]
+    types.forEach((t) => expect(SOURCE_ICONS_MAP[t]).toBeTruthy())
   })
   test('Telegram + WhatsApp Voice teilen Icon', () => {
     expect(SOURCE_ICONS_MAP.voice_telegram).toBe(SOURCE_ICONS_MAP.voice_whatsapp)
@@ -87,9 +93,12 @@ describe('Classification-Color-Mapping', () => {
 describe('Picker-Suggestion-Reproduktion (aus Backend-Logik)', () => {
   function suggestionText(classification, days_ago) {
     const when = days_ago ? `vor ${days_ago} Tagen` : 'kürzlich'
-    if (classification === 'stories') return `Du hast ${when} eine Geschichte erzählt — daraus wird ein guter Post.`
-    if (classification === 'werte') return `Vor ${when} hast du über deine Werte gesprochen — Material für Trust-Content.`
-    if (classification === 'konflikte') return `Vor ${when} hast du eine Spannung beschrieben — gut für ehrlichen Content.`
+    if (classification === 'stories')
+      return `Du hast ${when} eine Geschichte erzählt — daraus wird ein guter Post.`
+    if (classification === 'werte')
+      return `Vor ${when} hast du über deine Werte gesprochen — Material für Trust-Content.`
+    if (classification === 'konflikte')
+      return `Vor ${when} hast du eine Spannung beschrieben — gut für ehrlichen Content.`
     return `Du hast ${when} etwas notiert — willst du daraus einen Post machen?`
   }
   test('stories → Geschichte-Suggestion', () => {
@@ -120,8 +129,12 @@ describe('Search-Result-Similarity-Format', () => {
 
 describe('Filter-Validation (Backend-API-Konstanten reproduziert)', () => {
   const ALLOWED_SOURCE_TYPES = new Set([
-    'voice_telegram', 'voice_whatsapp', 'photo_telegram',
-    'photo_whatsapp', 'manual_note', 'transcript_extra',
+    'voice_telegram',
+    'voice_whatsapp',
+    'photo_telegram',
+    'photo_whatsapp',
+    'manual_note',
+    'transcript_extra',
   ])
   const ALLOWED_CLASSIFICATIONS = new Set(['werte', 'stories', 'konflikte'])
 

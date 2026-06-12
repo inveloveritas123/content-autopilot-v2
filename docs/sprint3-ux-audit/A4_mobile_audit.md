@@ -169,4 +169,3 @@
 - 🟡 Sidebar-Responsive-Strategie unklar (code-seitig nicht geprüft)
 
 **Nächster Schritt:** Robert/Louis mit echtem iPhone SE (375×812) testen, dann Fixes in Sprint 3 Phase B implementieren.
-
