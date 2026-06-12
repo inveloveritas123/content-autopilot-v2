@@ -229,10 +229,54 @@ async def _run_for_tenant_async(tenant_id: str) -> dict:
     return {"tenant_id": tenant_id, "inserted": inserted, "skipped": skipped}
 
 
+def _push_research_to_telegram(tenant_id: str, inserted: int) -> None:
+    """Nach dem P07-Lauf neue Findings per Telegram an den Tenant schicken (Issue #35)."""
+    if inserted <= 0:
+        return
+    try:
+        from api.telegram import _send_telegram_message
+        from models.base import sync_session_factory
+
+        with sync_session_factory() as db:
+            link = db.execute(
+                text(
+                    "SELECT telegram_chat_id FROM tenant_telegram_link "
+                    "WHERE tenant_id = CAST(:tid AS uuid) AND status = 'active' LIMIT 1"
+                ),
+                {"tid": tenant_id},
+            ).fetchone()
+            if not link:
+                return
+            chat_id: int = link.telegram_chat_id
+
+            findings = db.execute(
+                text(
+                    "SELECT title, hooks FROM research_findings "
+                    "WHERE tenant_id = CAST(:tid AS uuid) AND status = 'active' "
+                    "ORDER BY created_at DESC LIMIT 3"
+                ),
+                {"tid": tenant_id},
+            ).fetchall()
+
+        lines = [f"🔍 {inserted} neue Research-Vorschläge sind verfügbar:\n"]
+        for i, f in enumerate(findings, 1):
+            hooks = f.hooks if isinstance(f.hooks, list) else []
+            first_hook = hooks[0] if hooks else ""
+            lines.append(f"{i}. {f.title[:100]}")
+            if first_hook:
+                lines.append(f'   → „{first_hook[:120]}"')
+        lines.append("\nAlle Vorschläge im Dashboard unter Research-Findings.")
+        _send_telegram_message(chat_id, "\n".join(lines))
+    except Exception as exc:
+        logger.warning("p07 telegram push failed for %s: %s", tenant_id, exc)
+
+
 @celery_app.task(name="tasks.p07_research_task.run_research_for_tenant", bind=True, max_retries=1)
 def run_research_for_tenant(self, tenant_id: str) -> dict:
     try:
-        return asyncio.run(_run_for_tenant_async(tenant_id))
+        result = asyncio.run(_run_for_tenant_async(tenant_id))
+        _push_research_to_telegram(tenant_id, result.get("inserted", 0))
+        return result
     except Exception as exc:
         logger.warning("p07 top-level fail %s: %s", tenant_id, exc)
         return {"status": "error", "reason": str(exc)[:200]}
