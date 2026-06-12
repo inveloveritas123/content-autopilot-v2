@@ -24,6 +24,7 @@ jobs:
       DB_PASSWORD: citestpw
       E2E_BASE_URL: http://localhost:8601
       E2E_API_KEY: ci-test-tenant-key
+      NEXTCLOUD_PASSWORD: ci-placeholder
 
     steps:
       - uses: actions/checkout@v4
