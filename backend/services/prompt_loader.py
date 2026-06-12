@@ -5,6 +5,15 @@ Cache-Logik:
 - Innerhalb TTL: stat()-Check gegen mtime, Refresh nur bei aenderung
 - Ausserhalb TTL oder kein Cache: Vollstaendiges Laden
 - Bei Storage-Fehler: direkte Exception, kein Stale-Fallback
+
+Extraktion (Ansatz B — Loader tolerant, Dateien unangetastet):
+- system_prompt  = Text zwischen ^## System-Prompt und ^## User-Prompt (oder Dateiende).
+                   Zwischenliegende ## / ### Abschnitte BLEIBEN Teil des Blocks.
+- user_prompt    = Text zwischen ^## User-Prompt und naechstem ^## (oder Dateiende).
+                   Falls kein exakter ^## User-Prompt vorhanden: leerer String.
+- Fence-Bereinigung: fuehrende ```lang und abschliessende ``` werden entfernt;
+                     unbalancierte Einzelfences an Blockanfang/-ende ebenfalls.
+                     Interne, balancierte Fences bleiben unveraendert.
 """
 import hashlib
 import logging
@@ -22,22 +31,25 @@ logger = logging.getLogger(__name__)
 # Prompt-Pfade
 # ---------------------------------------------------------------------------
 
-def _prompt_base() -> str:
-    from config import settings as _s
-    return _s.prompt_nc_base_path
-
-
-_PROMPT_BASE = _prompt_base()
-
+# Relative Pfade unter der content-truth-Wurzel (werden vom Storage-Adapter aufgeloest).
+# NC-Pfad-Logik ist deprecated — der LocalFsAdapter haengt base_dir vorne an.
 PROMPT_PATHS: dict[str, str] = {
-    "P01":          _PROMPT_BASE + "P01-kundenkontext-extraktion.md",
-    "P03":          _PROMPT_BASE + "P03-voice-profile.md",
-    "P04":          _PROMPT_BASE + "P04-audience-avatar.md",
-    "P12":          _PROMPT_BASE + "P12-content-generator.md",
-    "P12b":         _PROMPT_BASE + "P12b-content-generator-short.md",
-    "P12c":         _PROMPT_BASE + "P12c-carousel-generator.md",
-    "fragenkatalog": _PROMPT_BASE + "fragenkatalog.md",
-    "hookmaster":   _PROMPT_BASE + "hookmaster.md",
+    "P01":           "prompts/P01-kundenkontext-extraktion.md",
+    "P03":           "prompts/P03-voice-analyse.md",
+    "P04":           "prompts/P04-kundenavatar-vertiefung.md",
+    "P07":           "prompts/P07-themen-research.md",
+    "P08":           "prompts/P08-fragen-konversation.md",
+    "P09":           "prompts/P09-content-ideen.md",
+    "P10":           "prompts/P10-content-kern-aufbau.md",
+    "P12":           "prompts/P12-post-generierung.md",
+    "P12b":          "prompts/P12b-post-optimierung.md",
+    "P12c":          "prompts/P12c-carousel-generator.md",
+    "P13":           "prompts/P13-hook-varianten.md",
+    "P15":           "prompts/P15-eigene-idee.md",
+    "P16":           "prompts/P16-post-ueberarbeitung.md",
+    "P17":           "prompts/P17-kundenkontext-update.md",
+    "fragenkatalog": "rules/fragenkatalog.md",
+    "hookmaster":    "rules/hookmaster.md",
 }
 
 
@@ -56,19 +68,130 @@ class LoadedPrompt:
 
 
 # ---------------------------------------------------------------------------
-# Hilfsfunktion: Markdown-Sektion extrahieren
+# Hilfsfunktion: Fence-Bereinigung
+# ---------------------------------------------------------------------------
+
+def _strip_outer_fence(block: str) -> str:
+    """Entfernt den aeusseren Code-Fence eines Markdown-Blocks.
+
+    Faelle:
+    1. Block beginnt mit ``` (oeffnender Fence) UND enthaelt eine abschliessende
+       ```-Zeile (allein auf der Zeile): Inhalt zwischen beiden Fences wird
+       zurueckgegeben. Moeglicher Inhalt NACH dem schliessenden Fence
+       (z.B. '---'-Trennzeilen) wird verworfen — er gehoert zum Markdown-
+       Rahmen, nicht zum Prompt-Inhalt.
+    2. Block beginnt mit ``` aber hat keinen Abschluss: fuehrendes ``` entfernen.
+    3. Block beginnt nicht mit ```: unveraendert zurueckgeben.
+
+    Interne, balancierte Fences (z.B. Code-Beispiele im System-Prompt) bleiben
+    vollstaendig erhalten, da nur der aeussere Wrapper entfernt wird.
+    """
+    stripped = block.strip()
+    if not stripped.startswith("```"):
+        return stripped
+
+    # Finde die erste Zeile (oeffnender Fence)
+    first_nl = stripped.find("\n")
+    if first_nl < 0:
+        # Nur ein ```, kein Inhalt
+        return ""
+
+    after_open = stripped[first_nl + 1:]
+
+    # Suche nach abschliessendem ``` (allein auf einer Zeile).
+    # Zwei Formen:
+    #   (a) Innerhalb des Texts: nach einem Zeilenumbruch: \n```...
+    #   (b) Direkt am Anfang von after_open (z.B. bei "```\n```")
+    close_m = re.search(r"(?:^|\n)[ \t]*```[ \t]*(?:\n|$)", after_open)
+    if close_m:
+        # Alles vor dem schliessenden Fence-Marker ist der Prompt-Inhalt
+        return after_open[: close_m.start()].strip()
+
+    # Kein schliessender Fence — gesamten Rest nach oeffnendem Fence zurueckgeben
+    return after_open.strip()
+
+
+# ---------------------------------------------------------------------------
+# Hilfsfunktion: Markdown-Sektion extrahieren (robuste Version)
 # ---------------------------------------------------------------------------
 
 def _extract_section(content: str, section: str) -> str:
-    """Extrahiert den Inhalt einer Markdown-Sektion (## section ... ## next)."""
+    """Extrahiert den Inhalt einer Markdown-Sektion robust.
+
+    Ansatz B: Fuer 'System-Prompt' wird der gesamte Text bis zum naechsten
+    ^## User-Prompt extrahiert — zwischenliegende ##/### Abschnitte bleiben
+    Teil des Blocks (sie gehoeren zum System-Prompt-Inhalt der Datei).
+
+    Fuer 'User-Prompt' wird nur der Text bis zur naechsten ^## Ueberschrift
+    extrahiert.
+
+    Fence-Bereinigung: aeusserer Code-Fence wird entfernt.
+    Interne Fences bleiben unveraendert.
+
+    Rueckwaertskompatibel fuer beliebige section-Namen: falls weder
+    'System-Prompt' noch 'User-Prompt' uebergeben wird, faellt die Funktion
+    auf das alte Verhalten zurueck (naechstes ^## oder Dateiende).
+    """
+    if section == "System-Prompt":
+        return _extract_system_prompt(content)
+    if section == "User-Prompt":
+        return _extract_user_prompt(content)
+
+    # Generischer Fallback fuer andere Sektionsnamen (altes Verhalten)
     pattern = rf"^##\s+{re.escape(section)}\s*\n(.*?)(?=^##\s|\Z)"
     m = re.search(pattern, content, re.MULTILINE | re.DOTALL)
     if not m:
         return ""
     block = m.group(1).strip()
-    # Code-Zaun entfernen, falls vorhanden
     fence_m = re.match(r"^```\w*\n(.*?)```\s*$", block, re.DOTALL)
     return fence_m.group(1).strip() if fence_m else block
+
+
+def _extract_system_prompt(content: str) -> str:
+    """Extrahiert den System-Prompt: alles von ^## System-Prompt bis ^## User-Prompt.
+
+    Falls kein ^## User-Prompt existiert: bis Dateiende.
+    Zwischenliegende ##/### Abschnitte BLEIBEN Teil des System-Prompts.
+    """
+    sys_m = re.search(r"^## System-Prompt\b", content, re.MULTILINE)
+    if sys_m is None:
+        return ""
+
+    # Suche nach ^## User-Prompt (beliebiger Suffix erlaubt: "User-Prompt: MODE OPENER" etc.)
+    user_m = re.search(r"^## User-Prompt\b", content[sys_m.end():], re.MULTILINE)
+
+    if user_m is not None:
+        end_pos = sys_m.end() + user_m.start()
+        block = content[sys_m.end():end_pos].strip()
+    else:
+        block = content[sys_m.end():].strip()
+
+    return _strip_outer_fence(block)
+
+
+def _extract_user_prompt(content: str) -> str:
+    """Extrahiert den User-Prompt: alles von ^## User-Prompt bis naechstes ^##.
+
+    Benoetigt eine EXAKT mit 'User-Prompt' (ohne weiteren Text auf derselben Zeile,
+    abgesehen von Leerzeichen) beginnende Ueberschrift. Varianten wie
+    '## User-Prompt: MODE OPENER' werden fuer den Extrakt NICHT verwendet;
+    sie gelten als Teil des System-Prompt-Blocks.
+
+    Falls kein exaktes ^## User-Prompt existiert: leerer String.
+    """
+    # Nur exakten Match verwenden (kein Suffix ausser Whitespace)
+    user_m = re.search(r"^## User-Prompt[ \t]*$", content, re.MULTILINE)
+    if user_m is None:
+        return ""
+
+    rest = content[user_m.end():]
+    next_h = re.search(r"^## ", rest, re.MULTILINE)
+    if next_h:
+        block = rest[: next_h.start()].strip()
+    else:
+        block = rest.strip()
+
+    return _strip_outer_fence(block)
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +287,20 @@ class PromptLoader:
         sha = hashlib.sha256(raw).hexdigest()
         loaded_at = datetime.now(timezone.utc)
 
+        # Warnung bei leeren oder strukturell auffaelligen Prompts
+        if not system_prompt:
+            logger.warning(
+                "prompt_loader: %r — system_prompt ist LEER (kein ## System-Prompt gefunden in %r)",
+                prompt_name,
+                path,
+            )
+        elif system_prompt.startswith("```") or system_prompt.endswith("```"):
+            logger.warning(
+                "prompt_loader: %r — system_prompt hat unbalancierte Fences (erste 80 Zeichen: %r)",
+                prompt_name,
+                system_prompt[:80],
+            )
+
         prompt = LoadedPrompt(
             content=content,
             system_prompt=system_prompt,
@@ -188,5 +325,7 @@ class PromptLoader:
 # ---------------------------------------------------------------------------
 
 def get_default_prompt_loader() -> PromptLoader:
-    from services.brand_voice_storage import get_default_nc_adapter
-    return PromptLoader(storage_adapter=get_default_nc_adapter())
+    # Nutzt get_default_storage_adapter() — defaultmaessig LocalFsStorageAdapter.
+    # get_default_nc_adapter bleibt importierbar fuer Rueckwaertskompatibilitaet (deprecated).
+    from services.brand_voice_storage import get_default_storage_adapter
+    return PromptLoader(storage_adapter=get_default_storage_adapter())

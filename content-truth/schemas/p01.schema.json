@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://linkedin-autopilot.local/schemas/p01.schema.json",
+  "title": "P01 — Kundenkontext-Extraktion Output",
+  "description": "Strukturierter Kundenkontext aus dem Onboarding-Transkript. Wird in P03/P04/P12 als System-Kontext injiziert.",
+  "type": "object",
+  "required": ["_meta", "person", "zielkunde", "angebot", "positionierung", "markt", "vertrauen", "sprache", "content_reservoir"],
+  "additionalProperties": false,
+  "properties": {
+    "_iststand_vs_zielbild": {
+      "type": "object",
+      "description": "Optional. Markiert Felder, die der Kunde im Onboarding als Zielbild (SOLL) statt Iststand (IST) geliefert hat. Downstream-Prompts (P03/P04/P12) sollen diese Felder beim Konsum entsprechend gewichten. Nur setzen, wenn der Kunde explizit auf den Unterschied hingewiesen hat.",
+      "additionalProperties": false,
+      "required": ["zielbild_felder"],
+      "properties": {
+        "zielbild_felder": {
+          "type": "array",
+          "description": "Dotted-Path-Strings der betroffenen Felder, z.B. 'zielkunde' oder 'person.antrieb'.",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "hinweis": {
+          "type": ["string", "null"],
+          "description": "Freitext-Kontext für nachgelagerte Prompts/Reviewer. Optional."
+        }
+      }
+    },
+    "_meta": {
+      "type": "object",
+      "description": "Tenant-Wrapper + Generierungs-Metadaten. Pflicht für alle Outputs.",
+      "required": ["agentur_id", "kunde_id", "prompt_version", "model", "generated_at"],
+      "additionalProperties": true,
+      "properties": {
+        "agentur_id": {
+          "type": "string",
+          "description": "Slug der Agentur, z.B. '1991' (wirsind1991), 'zb' (Zukunftsbund).",
+          "pattern": "^[a-z0-9-]+$",
+          "minLength": 1
+        },
+        "kunde_id": {
+          "type": "string",
+          "description": "Slug des Kunden, z.B. 'eric-spielhaus'. Kebab-case.",
+          "pattern": "^[a-z0-9-]+$",
+          "minLength": 1
+        },
+        "prompt_version": {
+          "type": "string",
+          "description": "Version des verwendeten Prompts, z.B. 'p01-v1.0'.",
+          "pattern": "^p01-v[0-9]+\\.[0-9]+$"
+        },
+        "model": {
+          "type": "string",
+          "description": "Verwendetes Claude-Modell, z.B. 'claude-haiku-4-5-20251001'."
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 Timestamp der Generierung."
+        },
+        "generation_id": {
+          "type": "string",
+          "description": "Eindeutige ID dieses Laufs (z.B. nanoid). Für Audit-Trail.",
+          "minLength": 1
+        },
+        "transkript_source": {
+          "type": "string",
+          "description": "Relativer Pfad zum verwendeten Transkript."
+        },
+        "token_usage": {
+          "type": "object",
+          "properties": {
+            "input_tokens": {"type": "integer", "minimum": 0},
+            "output_tokens": {"type": "integer", "minimum": 0}
+          }
+        },
+        "luecken": {"type": "array", "items": {"type": "string"}},
+        "p04_aufgaben": {"type": "array", "items": {"type": "string"}},
+        "transkript_qualitaet": {"type": ["string", "null"]},
+        "empfehlung_naechste_schritte": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "person": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": ["string", "null"]},
+        "rolle": {"type": ["string", "null"]},
+        "unternehmen": {"type": ["string", "null"]},
+        "branche": {"type": ["string", "null"]},
+        "branche_seit": {"type": ["string", "null"]},
+        "standort": {"type": ["string", "null"]},
+        "teamgroesse": {"type": ["string", "null"]},
+        "gruendungsgeschichte": {"type": ["string", "null"]},
+        "wendepunkt": {"type": ["string", "null"]},
+        "fehler_und_learnings": {"type": "array", "items": {"type": "string"}},
+        "tagesablauf": {"type": ["string", "null"]},
+        "antrieb": {"type": ["string", "null"]}
+      }
+    },
+    "zielkunde": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "beschreibung": {"type": ["string", "null"]},
+        "psychografie": {"type": ["string", "null"]},
+        "schmerzpunkte_oberflaeche": {"type": ["string", "array", "null"], "items": {"type": "string"}},
+        "schmerzpunkte_tiefe": {"type": ["string", "array", "null"], "items": {"type": "string"}},
+        "bisherige_loesungsversuche": {"type": ["string", "null"]},
+        "haeufigste_frage": {"type": ["string", "null"]},
+        "fehlglauben": {"type": ["string", "array", "null"], "items": {"type": "string"}},
+        "filter_positiv": {"type": ["string", "array", "null"], "items": {"type": "string"}},
+        "filter_negativ": {"type": ["string", "array", "null"], "items": {"type": "string"}},
+        "wunschzustand": {"type": "null", "description": "Wird von P04 abgeleitet. Hier IMMER null."},
+        "innenwelt": {"type": "null", "description": "Wird von P04 abgeleitet. Hier IMMER null."}
+      }
+    },
+    "angebot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "elevator_pitch": {"type": ["string", "null"]},
+        "kernleistung": {"type": ["string", "null"]},
+        "transformation": {"type": ["string", "null"]},
+        "angebotsstruktur": {"type": ["string", "null"]}
+      }
+    },
+    "positionierung": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "differenzierung": {"type": ["string", "null"]},
+        "werte_schwerpunkt": {"type": ["string", "null"]},
+        "usp_in_eigenen_worten": {"type": ["string", "null"]}
+      }
+    },
+    "markt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mitbewerber": {"type": ["string", "null"]},
+        "branchenblick": {"type": ["string", "null"]},
+        "trends": {"type": ["string", "null"]}
+      }
+    },
+    "vertrauen": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "erfahrung_jahre": {"type": ["integer", "string", "null"]},
+        "kunden_anzahl": {"type": ["string", "integer", "null"]},
+        "zertifikate": {"type": ["string", "null"]},
+        "auszeichnungen": {"type": ["string", "null"]},
+        "erfolgsgeschichte": {"type": ["string", "null"]},
+        "kundenzitate": {"type": ["string", "null"]}
+      }
+    },
+    "sprache": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "du_oder_sie": {"type": ["string", "null"]},
+        "lieblingswörter": {"type": "array", "items": {"type": "string"}},
+        "vermeidungswörter": {"type": "array", "items": {"type": "string"}},
+        "fachbegriffe": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["begriff", "bedeutung"],
+            "properties": {
+              "begriff": {"type": "string"},
+              "bedeutung": {"type": "string"}
+            }
+          }
+        },
+        "beispiel_posts": {"type": ["string", "null"]}
+      }
+    },
+    "content_reservoir": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "starke_meinungen": {"type": "array", "items": {"type": "string"}},
+        "wiederkehrende_themen": {"type": "array", "items": {"type": "string"}},
+        "analogien_und_metaphern": {"type": "array", "items": {"type": "string"}},
+        "rat_an_frueheres_ich": {"type": ["string", "null"]},
+        "offene_fragen": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import os
 import xml.etree.ElementTree as ET
@@ -297,14 +299,19 @@ class NextcloudWebDAVAdapter:
 
 _ADAPTER_REGISTRY: dict[str, type] = {
     "nc": NextcloudWebDAVAdapter,
+    # "localfs" wird lazy registriert um Zirkular-Imports zu vermeiden
 }
 
 
 def get_adapter(adapter_name: str, config: dict) -> BrandVoiceStorageAdapter:
+    # Lazy-Import fuer localfs, damit kein Zirkular-Import entsteht
+    if adapter_name == "localfs":
+        from services.local_fs_storage import LocalFsStorageAdapter
+        return LocalFsStorageAdapter(**config)
     cls = _ADAPTER_REGISTRY.get(adapter_name)
     if cls is None:
         raise ValueError(
-            f"Unknown storage adapter: {adapter_name!r}. Available: {list(_ADAPTER_REGISTRY)}"
+            f"Unknown storage adapter: {adapter_name!r}. Available: {list(_ADAPTER_REGISTRY) + ['localfs']}"
         )
     return cls(**config)
 
@@ -319,6 +326,28 @@ def get_default_nc_adapter() -> NextcloudWebDAVAdapter:
         user=os.getenv("NC_SERVICE_USER", settings.nextcloud_user),
         token=os.getenv("NC_SERVICE_TOKEN", settings.nextcloud_password),
     )
+
+
+def get_default_storage_adapter() -> BrandVoiceStorageAdapter:
+    """Liefert den konfigurierten Default-Adapter (localfs oder nc).
+
+    Gesteuert ueber settings.prompt_storage_backend:
+    - "localfs" (Standard): LayeredStorageAdapter(overlay, base) —
+      Overlay-first-Lesen, Schreiben nur ins Overlay (Base ist :ro gemountet).
+      Overlay-Verzeichnis muss nicht existieren (robuster Fallback auf Base).
+    - "nc": nutzt get_default_nc_adapter()
+    """
+    backend = getattr(settings, "prompt_storage_backend", "localfs")
+    if backend == "localfs":
+        from services.local_fs_storage import LocalFsStorageAdapter
+        from services.layered_storage import LayeredStorageAdapter
+        base_dir = getattr(settings, "content_truth_base_path", "/app/content-truth")
+        overlay_dir = getattr(settings, "content_truth_overlay_path", "/app/data/prompts-custom")
+        return LayeredStorageAdapter(
+            overlay=LocalFsStorageAdapter(base_dir=overlay_dir),
+            base=LocalFsStorageAdapter(base_dir=base_dir),
+        )
+    return get_default_nc_adapter()
 
 
 # ---------------------------------------------------------------------------

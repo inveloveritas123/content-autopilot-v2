@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://linkedin-autopilot.local/schemas/p03.schema.json",
+  "title": "P03 — Voice-Profil Output",
+  "description": "Reproduzierbares Voice-Profil. Beschreibt WIE der Kunde spricht (Form), nicht WAS (Inhalt). Wird in P12 als System-Kontext injiziert.",
+  "type": "object",
+  "required": [
+    "_meta",
+    "grundton",
+    "satzarchitektur",
+    "wortschatz",
+    "erzaehlmuster",
+    "emotionaler_ausdruck",
+    "persoenlichkeits_stance",
+    "emotionaler_subtext",
+    "ueberzeugungsstil",
+    "zielgruppen_sprachfilter",
+    "vermeidungsprofil",
+    "referenz_saetze"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "description": "Tenant-Wrapper + Generierungs-Metadaten. Pflicht für alle Outputs.",
+      "required": ["agentur_id", "kunde_id", "prompt_version", "model", "generated_at"],
+      "additionalProperties": true,
+      "properties": {
+        "agentur_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "minLength": 1
+        },
+        "kunde_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "minLength": 1
+        },
+        "prompt_version": {
+          "type": "string",
+          "pattern": "^p03-v[0-9]+\\.[0-9]+$"
+        },
+        "model": {"type": "string"},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "generation_id": {"type": "string", "minLength": 1},
+        "transkript_source": {"type": "string"},
+        "primaerquelle": {"type": ["string", "null"]},
+        "sekundaerquelle": {"type": ["string", "null"]},
+        "confidence": {"type": ["string", "null"]},
+        "kalibrierungs_empfehlung": {"type": ["string", "null"]},
+        "offene_fragen": {"type": "array", "items": {"type": "string"}},
+        "token_usage": {
+          "type": "object",
+          "properties": {
+            "input_tokens": {"type": "integer", "minimum": 0},
+            "output_tokens": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "grundton": {
+      "type": "object",
+      "required": ["charakterisierung", "spektrum", "linkedin_kalibrierung"],
+      "additionalProperties": true,
+      "properties": {
+        "charakterisierung": {"type": "string"},
+        "spektrum": {"type": "string"},
+        "linkedin_kalibrierung": {"type": "string"}
+      }
+    },
+    "satzarchitektur": {
+      "type": "object",
+      "required": ["laenge", "typische_satzanfaenge", "verbindungen", "beispiele"],
+      "additionalProperties": true,
+      "properties": {
+        "laenge": {"type": "string"},
+        "typische_satzanfaenge": {"type": "array", "items": {"type": "string"}, "minItems": 3},
+        "verbindungen": {"type": "string"},
+        "fragmente": {"type": ["string", "null"]},
+        "beispiele": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+      }
+    },
+    "wortschatz": {
+      "type": "object",
+      "required": ["signalwoerter", "fuellwoerter", "verbotene_woerter"],
+      "additionalProperties": true,
+      "properties": {
+        "signalwoerter": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {"type": "string"},
+              {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "wort": {"type": "string"},
+                  "haeufigkeit": {"type": ["string", "integer", "null"]},
+                  "kontext": {"type": ["string", "null"]}
+                }
+              }
+            ]
+          },
+          "minItems": 1
+        },
+        "fuellwoerter": {
+          "type": ["array", "string"],
+          "items": {
+            "oneOf": [
+              {"type": "string"},
+              {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "wort": {"type": "string"},
+                  "haeufigkeit": {"type": ["string", "integer", "null"]},
+                  "empfehlung": {"type": ["string", "null"]}
+                }
+              }
+            ]
+          }
+        },
+        "fachsprache_level": {"type": ["integer", "string", "null"]},
+        "fachsprache_beschreibung": {"type": ["string", "null"]},
+        "anglizismen": {"type": ["string", "null"]},
+        "intensitaetsmarker": {"type": "array", "items": {"type": "string"}},
+        "verbotene_woerter": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {"type": "string"},
+              {
+                "type": "object",
+                "required": ["wort"],
+                "additionalProperties": true,
+                "properties": {
+                  "wort": {"type": "string"},
+                  "grund": {"type": ["string", "null"]}
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "erzaehlmuster": {
+      "type": "object",
+      "required": ["story_einstieg", "argumentation", "perspektive"],
+      "additionalProperties": true,
+      "properties": {
+        "story_einstieg": {"type": "string"},
+        "argumentation": {"type": "string"},
+        "perspektive": {"type": "string"},
+        "rhetorische_fragen": {"type": ["string", "null"]},
+        "pointen_stil": {"type": ["string", "null"]},
+        "kontrastierung": {"type": ["string", "null"]}
+      }
+    },
+    "emotionaler_ausdruck": {
+      "type": "object",
+      "required": ["spektrum", "humor_typ"],
+      "additionalProperties": true,
+      "properties": {
+        "spektrum": {"type": "string"},
+        "humor_typ": {"type": "string"},
+        "verletzlichkeit_level": {"type": ["string", "integer", "null"]},
+        "empathie_muster": {"type": ["string", "null"]},
+        "begeisterung": {"type": ["string", "null"]}
+      }
+    },
+    "persoenlichkeits_stance": {
+      "type": "object",
+      "required": ["archetyp", "stance_in_aktion"],
+      "additionalProperties": true,
+      "properties": {
+        "archetyp": {"type": "string"},
+        "stance_in_aktion": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "wann_wechselt_er": {"type": ["string", "null"]}
+      }
+    },
+    "emotionaler_subtext": {
+      "type": "object",
+      "required": ["subtext"],
+      "additionalProperties": true,
+      "properties": {
+        "subtext": {"type": "string"},
+        "subtext_woher": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "ueberzeugungsstil": {
+      "type": "object",
+      "required": ["primaer"],
+      "additionalProperties": true,
+      "properties": {
+        "primaer": {"type": "string"},
+        "sekundaer": {"type": ["string", "null"]},
+        "nie": {"type": ["string", "null"]},
+        "beispiel": {
+          "type": ["array", "string", "null"],
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "zielgruppen_sprachfilter": {
+      "type": "object",
+      "required": ["leser_profil", "sprachbarrieren"],
+      "additionalProperties": true,
+      "properties": {
+        "leser_profil": {"type": "string"},
+        "sprachbarrieren": {
+          "type": ["array", "string"],
+          "items": {"type": "string"}
+        },
+        "uebersetzungsregel": {"type": ["string", "null"]},
+        "lesbarkeits_level": {"type": ["string", "integer", "null"]}
+      }
+    },
+    "vermeidungsprofil": {
+      "type": "object",
+      "required": ["nie_sagen"],
+      "additionalProperties": true,
+      "properties": {
+        "nie_sagen": {
+          "type": "array",
+          "items": {
+            "type": ["object", "string"],
+            "properties": {
+              "item": {"type": "string"},
+              "grund": {"type": ["string", "null"]}
+            }
+          },
+          "minItems": 1
+        },
+        "nie_tun": {"type": "array", "items": {"type": "string"}},
+        "floskeln_filter": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "referenz_saetze": {
+      "type": "object",
+      "required": ["original", "adaptiert"],
+      "additionalProperties": true,
+      "properties": {
+        "original": {"type": "array", "items": {"type": "string"}, "minItems": 5},
+        "adaptiert": {"type": "array", "items": {"type": "string"}, "minItems": 3}
+      }
+    },
+    "schriftlich_vs_muendlich": {
+      "type": ["object", "null"],
+      "additionalProperties": true,
+      "properties": {
+        "unterschiede": {"type": ["string", "null"]},
+        "empfehlung": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

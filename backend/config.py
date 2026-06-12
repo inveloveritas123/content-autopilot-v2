@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     brand_voice_nc_base_path: str = "/content-autopilot/v2/Kunde/"
     prompt_nc_base_path: str = "/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/"
 
+    # Storage-Backend: "localfs" (Standard) oder "nc" (Nextcloud, deprecated)
+    prompt_storage_backend: str = "localfs"
+    # Basisverzeichnis fuer lokales Dateisystem-Backend (content-truth/)
+    content_truth_base_path: str = "/app/content-truth"
+    # Beschreibbares Overlay fuer Prompt-Studio-Edits (gitignored, ./data-Mount)
+    # ENV: CONTENT_TRUTH_OVERLAY_PATH
+    content_truth_overlay_path: str = "/app/data/prompts-custom"
+
     # VoiceScriptor
     voicescriptor_bot_token: Optional[str] = None
     voicescriptor_chat_id: Optional[str] = None

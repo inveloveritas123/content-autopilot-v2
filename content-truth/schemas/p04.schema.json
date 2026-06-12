@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://linkedin-autopilot.local/schemas/p04.schema.json",
+  "title": "P04 — Kundenavatar-Vertiefung Output",
+  "description": "Psychologisches Avatar-Profil der ZIELGRUPPE. Leitet aus P01 die weichen Dimensionen ab: Innenwelt, Wunschbild, Content-Trigger, Alltagsszenen, Blockaden, Auslösemoment.",
+  "type": "object",
+  "required": [
+    "_meta",
+    "identitaet",
+    "innenwelt",
+    "wunschbild",
+    "content_trigger",
+    "sprache_der_zielgruppe",
+    "alltagsszenen",
+    "blockaden",
+    "ausloesemoment"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "required": ["agentur_id", "kunde_id", "prompt_version", "model", "generated_at"],
+      "additionalProperties": true,
+      "properties": {
+        "agentur_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "minLength": 1
+        },
+        "kunde_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "minLength": 1
+        },
+        "prompt_version": {
+          "type": "string",
+          "pattern": "^p04-v[0-9]+\\.[0-9]+$"
+        },
+        "model": {"type": "string"},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "generation_id": {"type": "string", "minLength": 1},
+        "p01_source": {"type": "string"},
+        "hypothesen": {"type": "array", "items": {"type": "string"}},
+        "staerke_der_ableitung": {"type": ["string", "null"]},
+        "empfehlung_messenger_loop": {"type": "array", "items": {"type": "string"}},
+        "token_usage": {
+          "type": "object",
+          "properties": {
+            "input_tokens": {"type": "integer", "minimum": 0},
+            "output_tokens": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "avatar_basis": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "abgeleitet_von": {"type": ["string", "null"]},
+        "zielkunde_kurzprofil": {"type": ["string", "null"]}
+      }
+    },
+    "identitaet": {
+      "type": "object",
+      "required": ["rolle_und_alltag", "selbstbild"],
+      "additionalProperties": true,
+      "properties": {
+        "rolle_und_alltag": {"type": "string"},
+        "selbstbild": {"type": "string"},
+        "fremdwahrnehmung": {"type": ["string", "null"]}
+      }
+    },
+    "innenwelt": {
+      "type": "object",
+      "required": ["innerer_monolog", "unausgesprochene_angst"],
+      "additionalProperties": true,
+      "properties": {
+        "innerer_monolog": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 3
+        },
+        "unausgesprochene_angst": {"type": "string"},
+        "schuldgefuehl": {"type": ["string", "null"]},
+        "erschoepfung": {"type": ["string", "null"]}
+      }
+    },
+    "wunschbild": {
+      "type": "object",
+      "required": ["wunschzustand", "wunschidentitaet"],
+      "additionalProperties": true,
+      "properties": {
+        "wunschzustand": {"type": "string"},
+        "wunschidentitaet": {"type": "string"},
+        "status_signal": {"type": ["string", "null"]}
+      }
+    },
+    "content_trigger": {
+      "type": "object",
+      "required": ["scroll_stopper", "resonanz_saetze", "abstoss_trigger"],
+      "additionalProperties": true,
+      "properties": {
+        "scroll_stopper": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 3
+        },
+        "resonanz_saetze": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 5
+        },
+        "vertrauens_trigger": {"type": "array", "items": {"type": "string"}},
+        "abstoss_trigger": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 2
+        }
+      }
+    },
+    "sprache_der_zielgruppe": {
+      "type": "object",
+      "required": ["redewendungen", "ansprache"],
+      "additionalProperties": true,
+      "properties": {
+        "redewendungen": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 3
+        },
+        "tabu_woerter": {"type": "array", "items": {"type": "string"}},
+        "ansprache": {"type": "string"}
+      }
+    },
+    "alltagsszenen": {
+      "type": "object",
+      "required": ["szenen", "wiederkehrende_muster"],
+      "additionalProperties": true,
+      "properties": {
+        "szenen": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 5
+        },
+        "wiederkehrende_muster": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 3
+        }
+      }
+    },
+    "blockaden": {
+      "type": "object",
+      "required": ["glaubenssaetze", "denkfehler"],
+      "additionalProperties": true,
+      "properties": {
+        "glaubenssaetze": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 3
+        },
+        "denkfehler": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 2
+        },
+        "schutzverhalten": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "ausloesemoment": {
+      "type": "object",
+      "required": ["trigger_events", "emotional_tipping_point"],
+      "additionalProperties": true,
+      "properties": {
+        "trigger_events": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 3
+        },
+        "emotional_tipping_point": {"type": "string"},
+        "content_implikation": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

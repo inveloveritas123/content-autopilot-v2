@@ -34,18 +34,13 @@ INJECTION_PATTERNS = [
 # ---------------------------------------------------------------------------
 
 def _extract_section(content: str, section: str) -> str:
-    """Extrahiert den Inhalt einer Markdown-Sektion (## section ... ## next).
+    """Extrahiert den Inhalt einer Markdown-Sektion.
 
-    Analog zur Implementierung in prompt_loader.py.
+    Delegiert an die zentrale robuste Implementierung in prompt_loader.py.
+    Identisches Verhalten: System-Prompt umfasst alle zwischenliegenden ##-Abschnitte.
     """
-    pattern = rf"^##\s+{re.escape(section)}\s*\n(.*?)(?=^##\s|\Z)"
-    m = re.search(pattern, content, re.MULTILINE | re.DOTALL)
-    if not m:
-        return ""
-    block = m.group(1).strip()
-    # Code-Zaun entfernen, falls vorhanden
-    fence_m = re.match(r"^```\w*\n(.*?)```\s*$", block, re.DOTALL)
-    return fence_m.group(1).strip() if fence_m else block
+    from services.prompt_loader import _extract_section as _pl_extract
+    return _pl_extract(content, section)
 
 
 # ---------------------------------------------------------------------------

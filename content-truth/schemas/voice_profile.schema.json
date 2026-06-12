@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://linkedin-autopilot.local/schemas/voice_profile.schema.json",
+  "title": "Voice Profile — kuratierter Merge aus P01 + P03 + P04",
+  "description": "Kuratiertes Konsum-Format für nachgelagerte Prompts (P07–P17). Nicht alle Felder aus p01/p03/p04 sind enthalten — nur die, die von ≥1 Downstream-Prompt referenziert werden, plus _iststand_vs_zielbild-Bias-Markierung. Drei Layer: kern (immer injizieren), voice_detail (nur P12/P12b/P13), avatar_detail (nur P09/P12). Archive nicht hier, sondern bei Bedarf direkt aus den Quell-JSONs lesen. Siehe ADR-0006.",
+  "type": "object",
+  "required": ["_meta", "kern"],
+  "additionalProperties": false,
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "description": "Tenant-Wrapper + Merge-Metadaten + Quellen-Versionen.",
+      "required": [
+        "agentur_id",
+        "kunde_id",
+        "merge_version",
+        "generated_at",
+        "generation_id",
+        "sources"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "agentur_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "minLength": 1
+        },
+        "kunde_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "minLength": 1
+        },
+        "merge_version": {
+          "type": "string",
+          "pattern": "^merge-v[0-9]+\\.[0-9]+$",
+          "description": "Version der Merge-Logik, z.B. 'merge-v1.0'."
+        },
+        "generated_at": {"type": "string", "format": "date-time"},
+        "generation_id": {"type": "string", "minLength": 1},
+        "sources": {
+          "type": "object",
+          "description": "Pfade + Prompt-Versionen + Modelle der Quell-JSONs. Audit-Trail.",
+          "required": ["p01", "p03", "p04"],
+          "additionalProperties": false,
+          "properties": {
+            "p01": {"$ref": "#/$defs/sourceRef"},
+            "p03": {"$ref": "#/$defs/sourceRef"},
+            "p04": {"$ref": "#/$defs/sourceRef"}
+          }
+        }
+      }
+    },
+
+    "_iststand_vs_zielbild": {
+      "type": "object",
+      "description": "Aus p01 durchgereicht. Wenn gesetzt: P09/P10/P12/P15 müssen die genannten Felder als Zielbild behandeln, nicht als Iststand. Siehe ADR-0005.",
+      "required": ["zielbild_felder"],
+      "additionalProperties": false,
+      "properties": {
+        "zielbild_felder": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "hinweis": {"type": ["string", "null"]}
+      }
+    },
+
+    "kern": {
+      "type": "object",
+      "description": "Immer in System-Prompt injizieren. ~1.500 Tokens. Felder, die von ≥2 nachgelagerten Prompts genutzt werden, plus Voice-Grundlagen.",
+      "required": ["person", "voice", "avatar"],
+      "additionalProperties": false,
+      "properties": {
+        "person": {
+          "type": "object",
+          "description": "Basis-Identifikation. Aus p01.person + p01.positionierung.",
+          "additionalProperties": false,
+          "properties": {
+            "name": {"type": ["string", "null"]},
+            "branche": {"type": ["string", "null"]},
+            "teamgroesse": {"type": ["string", "null"]},
+            "standort": {"type": ["string", "null"]},
+            "differenzierung": {"type": ["string", "null"]},
+            "du_oder_sie": {"type": ["string", "null"]}
+          }
+        },
+        "voice": {
+          "type": "object",
+          "description": "Voice-Kern (aus p03). Felder mit ≥3 Konsumenten unter P07–P17.",
+          "additionalProperties": false,
+          "properties": {
+            "grundton": {"type": ["string", "null"], "description": "p03.grundton.charakterisierung"},
+            "referenz_saetze_original": {"type": "array", "items": {"type": "string"}},
+            "vermeidungsprofil": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "nie_sagen": {"type": "array"},
+                "nie_tun": {"type": "array", "items": {"type": "string"}},
+                "floskeln_filter": {"type": "array", "items": {"type": "string"}}
+              }
+            },
+            "pointen_stil": {"type": ["string", "null"]},
+            "verletzlichkeit_level": {"type": ["string", "integer", "null"]},
+            "stance": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "archetyp": {"type": ["string", "null"]},
+                "stance_in_aktion": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          }
+        },
+        "avatar": {
+          "type": "object",
+          "description": "Avatar-Kern (aus p04). Felder mit ≥3 Konsumenten.",
+          "additionalProperties": false,
+          "properties": {
+            "rolle_und_alltag": {"type": ["string", "null"]},
+            "scroll_stopper": {"type": "array", "items": {"type": "string"}},
+            "resonanz_saetze": {"type": "array", "items": {"type": "string"}},
+            "abstoss_trigger": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      }
+    },
+
+    "voice_detail": {
+      "type": "object",
+      "description": "Nur für P12/P12b/P13 (Post-Generierung). Vollständiges p03-Material ohne kern-Duplikate.",
+      "additionalProperties": true,
+      "properties": {
+        "satzarchitektur": {"type": "object", "additionalProperties": true},
+        "wortschatz": {"type": "object", "additionalProperties": true},
+        "erzaehlmuster": {"type": "object", "additionalProperties": true},
+        "emotionaler_ausdruck": {"type": "object", "additionalProperties": true},
+        "emotionaler_subtext": {"type": "object", "additionalProperties": true},
+        "ueberzeugungsstil": {"type": "object", "additionalProperties": true},
+        "zielgruppen_sprachfilter": {"type": "object", "additionalProperties": true},
+        "referenz_saetze_adaptiert": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+
+    "avatar_detail": {
+      "type": "object",
+      "description": "Nur für P09/P12. p04-Vertiefung + p01-content_reservoir.",
+      "additionalProperties": false,
+      "properties": {
+        "alltagsszenen": {"type": "object", "additionalProperties": true},
+        "sprache_der_zielgruppe": {"type": "object", "additionalProperties": true},
+        "vertrauens_trigger": {"type": "array", "items": {"type": "string"}},
+        "content_reservoir": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "starke_meinungen": {"type": "array", "items": {"type": "string"}},
+            "wiederkehrende_themen": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "sourceRef": {
+      "type": "object",
+      "required": ["path", "prompt_version"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "prompt_version": {"type": "string", "minLength": 1},
+        "model": {"type": ["string", "null"]},
+        "generated_at": {"type": ["string", "null"], "format": "date-time"},
+        "generation_id": {"type": ["string", "null"]}
+      }
+    }
+  }
+}
