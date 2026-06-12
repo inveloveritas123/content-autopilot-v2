@@ -331,7 +331,7 @@ async def health():
 
     status_code = 200 if overall == "ok" else 503
     return JSONResponse(
-        {"status": overall, "version": "2.0.0", "checks": checks},
+        {"status": overall, "overall": overall, "version": "2.0.0", "checks": checks},
         status_code=status_code,
     )
 
