@@ -1,0 +1,137 @@
+name: Deploy (Server B)
+
+# Deployt main auf Server B (/opt/content-autopilot-v2), NACHDEM die bestehende
+# CI gruen ist. Trigger: workflow_run der beiden Pflicht-Workflows; ein Gate-Job
+# verifiziert, dass BEIDE fuer denselben Commit erfolgreich waren.
+#
+# Constraints (CLAUDE.md): nur Ports 8601/8180, keine Firewall-/systemd-/
+# Postgres-Aenderungen, v1 unter /opt/zukunftsbund-content-autopilot/ tabu.
+# Dieses Deploy beruehrt ausschliesslich /opt/content-autopilot-v2.
+#
+# Benoetigt GitHub-Secrets (einmalig setzen — Anleitung: docs/DEPLOY.md):
+#   DEPLOY_SSH_KEY        privater ed25519-Key
+#   DEPLOY_HOST           152.53.142.163
+#   DEPLOY_PORT           10022
+#   DEPLOY_USER           meister
+#   DEPLOY_KNOWN_HOSTS    Ausgabe von ssh-keyscan -p 10022 152.53.142.163
+
+on:
+  workflow_run:
+    workflows:
+      - "Tests (pytest)"
+      - "Lint (ruff + eslint + prettier)"
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-server-b
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  gate:
+    name: CI-Gate (Tests + Lint gruen fuer diesen Commit?)
+    runs-on: ubuntu-latest
+    # workflow_run: nur weitermachen, wenn der ausloesende Lauf selbst gruen war
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+      sha: ${{ steps.check.outputs.sha }}
+    steps:
+      - name: Beide Pflicht-Workflows fuer head_sha pruefen
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          ready=true
+          for wf in tests.yml lint.yml; do
+            conclusion=$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${wf}/runs?head_sha=${SHA}&status=completed&per_page=1" \
+              --jq '.workflow_runs[0].conclusion // "pending"')
+            echo "${wf}: ${conclusion}"
+            if [ "${conclusion}" != "success" ]; then ready=false; fi
+          done
+          echo "ready=${ready}" >> "$GITHUB_OUTPUT"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy auf Server B
+    needs: gate
+    if: needs.gate.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: SSH-Key und known_hosts einrichten
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Remote-Deploy ausfuehren
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          TARGET_SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key \
+              -p "${DEPLOY_PORT}" \
+              -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=15 \
+              "${DEPLOY_USER}@${DEPLOY_HOST}" \
+              "TARGET_SHA='${TARGET_SHA}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd /opt/content-autopilot-v2
+
+          echo "=== 1/6 Git-Update (GitHub = Source of Truth) ==="
+          git fetch origin main
+          git checkout main
+          git merge --ff-only "${TARGET_SHA:-origin/main}"
+          # content-truth/ ist damit bereits aktualisiert (Bind-Mount, kein Build noetig)
+
+          echo "=== 2/6 Frontend auf dem HOST bauen (LXC: npm im Docker geht nicht) ==="
+          cd frontend
+          npm ci
+          npm run build
+          cd ..
+
+          echo "=== 3/6 Images bauen (nur betroffene Services) ==="
+          docker compose -f docker-compose.v2.yml build \
+            backend-v2 celery-worker-v2 celery-beat-v2 nginx-v2
+
+          echo "=== 4/6 Services neu erstellen ==="
+          docker compose -f docker-compose.v2.yml up -d --force-recreate \
+            backend-v2 celery-worker-v2 celery-beat-v2 nginx-v2
+
+          echo "=== 5/6 nginx restart (IP-Cache nach Backend-Recreate) ==="
+          docker compose -f docker-compose.v2.yml restart nginx-v2
+
+          echo "=== 6/6 Health-Check ==="
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8601/api/health > /dev/null; then
+              echo "Health OK (Versuch ${i})"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Health-Check fehlgeschlagen — letzte Backend-Logs:" >&2
+          docker compose -f docker-compose.v2.yml logs backend-v2 --tail 50 >&2
+          exit 1
+          REMOTE

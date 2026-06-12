@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 node_modules/
+.DS_Store
 dist/
 data/
 *.egg-info/
@@ -25,3 +26,5 @@ eval_results/
 *.dump
 *.pem
 *.key
+WERKBANK-GATE-REPORT.md
+frontend/.env.local

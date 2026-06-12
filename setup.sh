@@ -213,6 +213,35 @@ APP_PORT="${APP_PORT:-8601}"
 HEALTH_URL="http://localhost:${APP_PORT}/api/health"
 info "App-Port: ${APP_PORT} | Health-URL: ${HEALTH_URL}"
 
+# ─── STEP 2b: content-truth Preflight ────────────────────────────────────────
+# Docker legt ./content-truth stumm als leeres root-Verzeichnis an, falls es
+# nicht existiert. Prompts wuerden dann lautlos fehlen. Deshalb: frueher Abbruch.
+step "STEP 2b: content-truth Preflight"
+
+CONTENT_TRUTH_DIR="${SCRIPT_DIR}/content-truth"
+
+if [ ! -d "${CONTENT_TRUTH_DIR}/prompts" ] || [ -z "$(ls -A "${CONTENT_TRUTH_DIR}/prompts" 2>/dev/null)" ]; then
+    die \
+        "content-truth/prompts/ fehlt oder ist leer." \
+        "git pull ausfuehren — content-truth/ ist Teil des Repos und muss befuellt sein."
+fi
+
+# Stichproben-Check: drei Pflichtdateien aus dem bekannten Repo-Layout
+for f in \
+    "prompts/P01-kundenkontext-extraktion.md" \
+    "rules/hookmaster.md" \
+    "schemas/p01.schema.json"
+do
+    if [ ! -f "${CONTENT_TRUTH_DIR}/${f}" ]; then
+        die \
+            "content-truth/${f} fehlt." \
+            "git pull ausfuehren — content-truth/ ist Teil des Repos.
+  Vollstaendiges Layout: content-truth/{prompts,rules,schemas}/"
+    fi
+done
+
+ok "content-truth/ vollstaendig (prompts/, rules/, schemas/ gefunden)"
+
 # ─── STEP 3: Images pullen oder bauen ─────────────────────────────────────────
 step "STEP 3: Images pullen / bauen"
 

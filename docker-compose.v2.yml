@@ -39,6 +39,11 @@ services:
       APP_ENV: ${APP_ENV:-production}
       BRAND_VOICE_NC_BASE_PATH: ${BRAND_VOICE_NC_BASE_PATH:-/content-autopilot/v2/Kunde/}
       PROMPT_NC_BASE_PATH: ${PROMPT_NC_BASE_PATH:-/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/}
+      # Kanonische Prompt/Rule/Schema-Quelle (Repo-Verzeichnis content-truth/)
+      CONTENT_TRUTH_BASE_PATH: ${CONTENT_TRUTH_BASE_PATH:-/app/content-truth}
+      PROMPT_STORAGE_BACKEND: ${PROMPT_STORAGE_BACKEND:-localfs}
+      # Beschreibbares Overlay fuer Prompt-Studio-Edits
+      CONTENT_TRUTH_OVERLAY_PATH: ${CONTENT_TRUTH_OVERLAY_PATH:-/app/data/prompts-custom}
       UVICORN_LOOP: asyncio
       COST_CAP_USD_PER_DAY: ${COST_CAP_USD_PER_DAY:-5.0}
       COST_CAP_USD_GLOBAL_PER_DAY: ${COST_CAP_USD_GLOBAL_PER_DAY:-10.0}
@@ -54,6 +59,7 @@ services:
       start_period: 15s
     volumes:
       - ./data:/app/data
+      - ./content-truth:/app/content-truth:ro
     networks:
       - cap-v2-net
 
@@ -94,6 +100,14 @@ services:
       COST_CAP_USD_PER_DAY: ${COST_CAP_USD_PER_DAY:-5.0}
       COST_CAP_USD_GLOBAL_PER_DAY: ${COST_CAP_USD_GLOBAL_PER_DAY:-10.0}
       TELEGRAM_ADMIN_CHAT_ID: ${TELEGRAM_ADMIN_CHAT_ID:-}  # Setzen für 50%-Cost-Cap-Alert via Telegram
+      # Kanonische Prompt/Rule/Schema-Quelle (Repo-Verzeichnis content-truth/)
+      CONTENT_TRUTH_BASE_PATH: ${CONTENT_TRUTH_BASE_PATH:-/app/content-truth}
+      PROMPT_STORAGE_BACKEND: ${PROMPT_STORAGE_BACKEND:-localfs}
+      # Beschreibbares Overlay fuer Prompt-Studio-Edits (muss Worker sehen koennen!)
+      CONTENT_TRUTH_OVERLAY_PATH: ${CONTENT_TRUTH_OVERLAY_PATH:-/app/data/prompts-custom}
+    volumes:
+      - ./data:/app/data
+      - ./content-truth:/app/content-truth:ro
     depends_on:
       redis-v2:
         condition: service_healthy
@@ -131,6 +145,14 @@ services:
       DATABASE_URL: postgresql+asyncpg://autopilot:${DB_PASSWORD}@host.docker.internal:5432/content_autopilot_v2
       SYNC_DATABASE_URL: postgresql://autopilot:${DB_PASSWORD}@host.docker.internal:5432/content_autopilot_v2
       REDIS_URL: redis://redis-v2:6379/1
+      # Kanonische Prompt/Rule/Schema-Quelle (Repo-Verzeichnis content-truth/)
+      CONTENT_TRUTH_BASE_PATH: ${CONTENT_TRUTH_BASE_PATH:-/app/content-truth}
+      PROMPT_STORAGE_BACKEND: ${PROMPT_STORAGE_BACKEND:-localfs}
+      # Beschreibbares Overlay fuer Prompt-Studio-Edits (muss Beat sehen koennen!)
+      CONTENT_TRUTH_OVERLAY_PATH: ${CONTENT_TRUTH_OVERLAY_PATH:-/app/data/prompts-custom}
+    volumes:
+      - ./data:/app/data
+      - ./content-truth:/app/content-truth:ro
     depends_on:
       redis-v2:
         condition: service_healthy
