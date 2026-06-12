@@ -713,10 +713,10 @@ class TestResolveModel:
     def test_policy_file_override_applied(self, monkeypatch, tmp_path):
         monkeypatch.setenv("MODEL_POLICY_PATH", str(tmp_path / "policy.json"))
         model_policy._CACHE.update(mtime=None, data=None, path=None)
-        model_policy.set_override("P03", "google/gemini-2.5-flash-lite-preview-06-17")
+        model_policy.set_override("P03", "vertex/gemini-2.5-flash-lite@europe-north1")
         res = resolve_model("P03")
         assert res["source"] == "policy"
-        assert res["effective_model"] == "google/gemini-2.5-flash-lite-preview-06-17"
+        assert res["effective_model"] == "vertex/gemini-2.5-flash-lite@europe-north1"
         # Diese Modell-ID ist S1 → Reverse-Lookup setzt Pricing-Tier S1
         assert res["effective_tier"] == "S1"
 

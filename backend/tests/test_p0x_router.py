@@ -154,13 +154,13 @@ class TestTaskModuleImports:
             sys.path.pop(0)
 
     def test_tier_registry_has_s6(self):
-        """TIER_MODELS muss S6 = 'anthropic/claude-sonnet-4-6' enthalten."""
+        """TIER_MODELS muss S6 = 'bedrock/claude-sonnet-4-6@eu-central-1' enthalten."""
         sys.path.insert(0, _BACKEND_DIR)
         try:
             from services.pipeline_llm import TIER_MODELS
 
             assert "S6" in TIER_MODELS
-            assert TIER_MODELS["S6"] == "anthropic/claude-sonnet-4-6"
+            assert TIER_MODELS["S6"] == "bedrock/claude-sonnet-4-6@eu-central-1"
         finally:
             sys.path.pop(0)
 
@@ -210,7 +210,7 @@ class TestTierResolutionIntegration:
 
         tier, model_id = resolve_tier("P01")
         assert tier == "S6"
-        assert model_id == "anthropic/claude-sonnet-4-6"
+        assert model_id == "bedrock/claude-sonnet-4-6@eu-central-1"
 
     def test_p03_resolves_to_s6_by_default(self):
         from services.pipeline_llm import resolve_tier
