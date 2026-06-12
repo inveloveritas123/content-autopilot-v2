@@ -53,6 +53,12 @@ jobs:
       - name: Install dependencies
         run: pip install --quiet -r requirements.txt pytest pytest-asyncio
 
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Enable pgvector extension
+        run: PGPASSWORD=test psql -h localhost -U test -d test -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
       - name: Run database migrations
         run: PYTHONPATH=. alembic upgrade head
         env:
