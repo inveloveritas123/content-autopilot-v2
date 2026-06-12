@@ -36,6 +36,7 @@ import jsonschema
 from sqlalchemy import text
 
 from models.base import sync_session_factory
+from services.llm_json import parse_json_from_text as _parse_json_from_text
 from services.pipeline_llm import (
     call_pipeline_llm,
     estimate_tier_cost,
@@ -127,28 +128,6 @@ def _prune_for_p12(
     pruned_voice = _prune_keys(voice_profile, VOICE_KEYS_FOR_P12)
     pruned_avatar = _prune_keys(audience_avatar, AVATAR_KEYS_FOR_P12)
     return pruned_context, pruned_voice, pruned_avatar
-
-
-def _parse_json_from_text(raw: str) -> dict:
-    """Extrahiert JSON aus dem LLM-Output — entfernt Markdown-Fencing falls vorhanden."""
-    raw = raw.strip()
-    # Direkter Parse-Versuch
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        pass
-    # Fenced code block: ```json ... ``` oder ``` ... ```
-    for fence in ("```json", "```"):
-        if fence in raw:
-            start = raw.index(fence) + len(fence)
-            end = raw.find("```", start)
-            if end != -1:
-                candidate = raw[start:end].strip()
-                try:
-                    return json.loads(candidate)
-                except json.JSONDecodeError:
-                    pass
-    raise ValueError(f"Konnte kein JSON aus LLM-Output extrahieren. Anfang: {raw[:200]!r}")
 
 
 async def _run_cost_check(tenant_id: str, estimated_cost: float) -> None:

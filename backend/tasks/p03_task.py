@@ -30,6 +30,7 @@ import uuid
 from sqlalchemy import text
 
 from models.base import sync_session_factory
+from services.llm_json import parse_json_from_text as _parse_json_from_text
 from services.pipeline_llm import (
     call_pipeline_llm,
     estimate_tier_cost,
@@ -41,36 +42,6 @@ from tasks.canonical_wiring import fetch_tenant_meta, now_iso
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Hilfsfunktionen
-# ---------------------------------------------------------------------------
-
-
-def _parse_json_from_text(raw: str) -> dict:
-    """Extrahiert JSON aus dem LLM-Output.
-
-    Versucht zuerst direktes Parsen, danach Extraktion aus einem ```json-Block.
-    """
-    raw = raw.strip()
-    # Direkter Parse-Versuch
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        pass
-    # Fenced code block: ```json ... ```
-    for fence in ("```json", "```"):
-        if fence in raw:
-            start = raw.index(fence) + len(fence)
-            end = raw.find("```", start)
-            if end != -1:
-                candidate = raw[start:end].strip()
-                try:
-                    return json.loads(candidate)
-                except json.JSONDecodeError:
-                    pass
-    raise ValueError(f"Konnte kein JSON aus LLM-Output extrahieren. Anfang: {raw[:200]!r}")
 
 
 def _insert_voice_profile(
