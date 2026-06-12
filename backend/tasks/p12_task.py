@@ -57,39 +57,15 @@ _P12_SCHEMA = _load_schema()
 
 
 # ---------------------------------------------------------------------------
-# Pruning-Konstanten
+# Pruning-Konstanten — zentral + kanonisch-korrekt (Wortschatz-Bugfix 2026-06-12)
 # ---------------------------------------------------------------------------
 
-VOICE_KEYS_FOR_P12 = [
-    "grundton",
-    "satzarchitektur",
-    "signalwoerter",
-    "fuellwoerter",
-    "verbotene_woerter",
-    "intensitaetsmarker",
-    "erzaehlmuster",
-    "emotionaler_ausdruck",
-    "persoenlichkeits_stance",
-    "emotionaler_subtext",
-    "ueberzeugungsstil",
-    "zielgruppen_sprachfilter",
-    "vermeidungsprofil",
-    "referenz_saetze",
-]
-
-CONTEXT_KEYS_FOR_P12 = [
-    "person",
-    "angebot",
-    "positionierung",
-    "kernbotschaft",
-    "expertise",
-]
-
-AVATAR_KEYS_FOR_P12 = [
-    "identitaet",
-    "content_trigger",
-    "sprache_der_zielgruppe",
-]
+from tasks.p12_pruning import (  # noqa: E402
+    VOICE_KEYS_FOR_P12,
+    CONTEXT_KEYS_FOR_P12,
+    AVATAR_KEYS_FOR_P12,
+    prune as _prune_keys,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -97,48 +73,26 @@ AVATAR_KEYS_FOR_P12 = [
 # ---------------------------------------------------------------------------
 
 def _load_active_profiles(tenant_id: str) -> tuple[dict, dict, dict]:
-    """Lädt die aktiven Profile aus den 3 Setup-Tabellen.
+    """Lädt die aktiven Profile aus den 3 Setup-Tabellen über die Lese-Fassade.
 
-    Gibt jeweils das payload-Dict zurück, oder ein leeres Dict wenn kein
-    aktiver Eintrag gefunden wurde.
+    Nutzt services.canonical_profiles (deterministische Aktiv-Row-Auflösung,
+    behebt den Multi-Active-Row-Bug) und gibt jeweils das payload-Dict zurück
+    (leeres Dict, wenn kein aktiver Eintrag). Loggt eine Warnung bei Alt-v2-Rows.
     """
-    customer_context: dict = {}
-    voice_profile: dict = {}
-    audience_avatar: dict = {}
+    from services.canonical_profiles import load_active_profiles
 
-    with sync_session_factory() as session:
-        row = session.execute(
-            text(
-                "SELECT payload FROM tenant_customer_context "
-                "WHERE tenant_id = :t AND is_active = true "
-                "ORDER BY version DESC LIMIT 1"
-            ),
-            {"t": tenant_id},
-        ).fetchone()
-        if row:
-            customer_context = row.payload if isinstance(row.payload, dict) else json.loads(row.payload)
+    profiles = load_active_profiles(tenant_id)
+    customer_context = profiles["customer_context"]["payload"]
+    voice_profile = profiles["voice_profile"]["payload"]
+    audience_avatar = profiles["audience_avatar"]["payload"]
 
-        row = session.execute(
-            text(
-                "SELECT payload FROM tenant_voice_profile "
-                "WHERE tenant_id = :t AND is_active = true "
-                "ORDER BY version DESC LIMIT 1"
-            ),
-            {"t": tenant_id},
-        ).fetchone()
-        if row:
-            voice_profile = row.payload if isinstance(row.payload, dict) else json.loads(row.payload)
-
-        row = session.execute(
-            text(
-                "SELECT payload FROM tenant_audience_avatar "
-                "WHERE tenant_id = :t AND is_active = true "
-                "ORDER BY version DESC LIMIT 1"
-            ),
-            {"t": tenant_id},
-        ).fetchone()
-        if row:
-            audience_avatar = row.payload if isinstance(row.payload, dict) else json.loads(row.payload)
+    for ptype, info in profiles.items():
+        if info["payload"] and not info["is_canonical"]:
+            logger.warning(
+                "p12 tenant=%s: aktives %s ist NICHT kanonisch (Alt-v2-Row) "
+                "→ Re-Run von P0x empfohlen, Voice-Qualität eingeschränkt",
+                tenant_id, ptype,
+            )
 
     logger.debug(
         "p12 _load_active_profiles tenant=%s: "
@@ -160,9 +114,9 @@ def _prune_for_p12(
 
     Nur vorhandene Keys werden übernommen — kein KeyError bei fehlenden Feldern.
     """
-    pruned_context = {k: customer_context[k] for k in CONTEXT_KEYS_FOR_P12 if k in customer_context}
-    pruned_voice = {k: voice_profile[k] for k in VOICE_KEYS_FOR_P12 if k in voice_profile}
-    pruned_avatar = {k: audience_avatar[k] for k in AVATAR_KEYS_FOR_P12 if k in audience_avatar}
+    pruned_context = _prune_keys(customer_context, CONTEXT_KEYS_FOR_P12)
+    pruned_voice = _prune_keys(voice_profile, VOICE_KEYS_FOR_P12)
+    pruned_avatar = _prune_keys(audience_avatar, AVATAR_KEYS_FOR_P12)
     return pruned_context, pruned_voice, pruned_avatar
 
 

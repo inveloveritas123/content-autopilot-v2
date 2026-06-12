@@ -69,16 +69,8 @@ class P12bContext:
 # Pruning-Konstanten
 # ---------------------------------------------------------------------------
 
-VOICE_KEYS_FOR_P12B = [
-    "grundton",
-    "satzarchitektur",
-    "verbotene_woerter",
-    "intensitaetsmarker",
-    "persoenlichkeits_stance",
-    "vermeidungsprofil",
-]
-
-AVATAR_KEYS_FOR_P12B = ["sprache_der_zielgruppe", "content_trigger"]
+# Zentral + kanonisch-korrekt (Wortschatz-Bugfix 2026-06-12):
+from tasks.p12_pruning import VOICE_KEYS_FOR_P12B, AVATAR_KEYS_FOR_P12B, prune as _prune_keys
 
 # Pflichtfelder im P12-Output
 _P12_REQUIRED_FIELDS = {"post", "alternative_opener", "design_notizen", "ki_signal_check", "potenzielle_schwaechen"}
@@ -255,8 +247,8 @@ def run_p12b(
         # ------------------------------------------------------------------
         # 2. Defensives Pruning (auch wenn Caller schon geprunt hat)
         # ------------------------------------------------------------------
-        voice_pruned = {k: voice_payload[k] for k in VOICE_KEYS_FOR_P12B if k in voice_payload}
-        avatar_pruned = {k: avatar_payload[k] for k in AVATAR_KEYS_FOR_P12B if k in avatar_payload}
+        voice_pruned = _prune_keys(voice_payload, VOICE_KEYS_FOR_P12B)
+        avatar_pruned = _prune_keys(avatar_payload, AVATAR_KEYS_FOR_P12B)
         logger.debug(
             "p12b run_id=%s: pruned keys — voice=%d avatar=%d",
             run_id,
