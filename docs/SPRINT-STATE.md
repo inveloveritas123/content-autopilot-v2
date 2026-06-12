@@ -75,7 +75,15 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 - ✅ **#43 KOMPLETT** — Board-Trias Voice/WERTE/Avatar hergestellt (Schema+Resolver+P12-Injektion+Backfill+P17-Ziel). Volle Wirkung nach Migration 053 (Robert) + Backfill-Lauf (Knecht). Test-Infra durabel saniert: **307 Stub-Tests reihenfolge-unabhängig grün** über 14 Suiten.
 ### Sprint 3 (begonnen)
 - ✅ **#35 P07-Research-Push fertig**: `p07_research_task` sendet neue Findings + Hooks pro Tenant in den Chat (`_resolve_chat_id`+`_send_telegram_message`), idempotent (natürlich über bestehenden source_item_id-SELECT, keine Migration), E3-gescopet, fail-open. 21 Tests, 301 Anti-Pollution grün. Bahn 4 Pfad A geschlossen.
-- **Nächste Aktion:** #37 Feedback-Loop „nochmal anders" (opus, dep #19✅) ODER #38 Quality-Gate (opus) ODER #40 Voice-Fallback (sonnet). Sprint-2-Rest (#29/#25/#26) besser nach #33-Merge (Knecht).
+- ✅ **#40 Voice-Fallback fertig**: bei fehlender Stimmquelle generiert P03 ein kanonisches Voice-Profil aus Kontext+Avatar über den EU-Seam (VOICE_FALLBACK→S6), Fallback-Provenance, fail-open. 26 Tests grün.
+
+### ⚠️ Branch-Koordination (NEU, 2026-06-13)
+**Knecht arbeitet jetzt AKTIV auf `arch/weekloop`** (Commit 29e4b1c: ruff/eslint/yaml + Test-Collection-Pollution-Fixes). → **vor jedem Push `git fetch` + rebase** (nicht force-pushen). Arbeitsteilung: Architekt = Features (per-File-TDD grün), Knecht = CI-Grünung auf echter Py3.11-Umgebung.
+**Py3.9-Realität:** Lokaler venv = Py3.9; Code zielt auf Py3.11/3.12. Module mit `datetime.UTC` u.ä. sind lokal NICHT importierbar → kombinierte lokale Läufe können Collection-Errors zeigen, die in CI (Py3.11+) NICHT existieren. **Verifikations-Bar: Einzeldatei grün + per-File-Anti-Pollution; volle kombinierte Suite = CI (Knecht).**
+
+### Nächste Architekt-Items (alle per-File-TDD, dann fetch+rebase+push)
+- #37 Feedback-Loop „nochmal anders" (opus, dep #19✅) · #38 Quality-Gate (opus) · #36 Intent-Routing P09/P13 (opus, dep #16✅) · #41 P17-Beobachter (fable, dep #43✅, jetzt entblockt) · #22 P17-Prompt (sonnet).
+- Sprint-2-Rest #29/#25/#26 (Schema) besser nach #33-Merge (Knecht).
 
 ---
 
