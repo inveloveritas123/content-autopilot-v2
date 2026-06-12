@@ -23,7 +23,6 @@ Abgedeckte Fälle (#37)
 from __future__ import annotations
 
 import importlib.util as _ilu
-import json
 import os
 import sys
 import types
@@ -96,9 +95,9 @@ if _existing_pft is None or not hasattr(_existing_pft, "regenerate_post_from_fee
     pass  # wird nach der Datei-Existenzprüfung geladen
 
 _task_file = os.path.join(_BACKEND_DIR, "tasks", "post_feedback_task.py")
-assert os.path.exists(_task_file), (
-    f"tasks/post_feedback_task.py noch nicht erstellt — RED-Phase bestätigt."
-)
+assert os.path.exists(
+    _task_file
+), "tasks/post_feedback_task.py noch nicht erstellt — RED-Phase bestätigt."
 
 _spec_pft = _ilu.spec_from_file_location(
     "tasks.post_feedback_task",
@@ -304,12 +303,12 @@ class TestRegeneratePostFromFeedback:
 
         # Steering-Keys für Feedback + Vorgänger-Post injiziert
         q_texts = [p["question_text"] for p in answers_list]
-        assert any("kundenfeedback" in q.lower() or "feedback" in q.lower() for q in q_texts), (
-            f"Feedback-Key fehlt in {q_texts}"
-        )
-        assert any("vorheriger" in q.lower() or "post" in q.lower() for q in q_texts), (
-            f"Vorgänger-Post-Key fehlt in {q_texts}"
-        )
+        assert any(
+            "kundenfeedback" in q.lower() or "feedback" in q.lower() for q in q_texts
+        ), f"Feedback-Key fehlt in {q_texts}"
+        assert any(
+            "vorheriger" in q.lower() or "post" in q.lower() for q in q_texts
+        ), f"Vorgänger-Post-Key fehlt in {q_texts}"
 
         # Feedback-Text im answers_list vorhanden
         ans_vals = [p["answer_text"] for p in answers_list]
@@ -325,12 +324,12 @@ class TestRegeneratePostFromFeedback:
         session_ctx = _make_ctx((_SESSION_MESSAGES, "closed", "random_smart"))
 
         send_mock = MagicMock()
-        pipeline_mock = MagicMock(
-            return_value={"status": "error", "reason": "paused_for_cost"}
-        )
+        pipeline_mock = MagicMock(return_value={"status": "error", "reason": "paused_for_cost"})
         with (
             patch.object(
-                pft, "sync_session_factory", side_effect=[gate_ctx, piece_ctx, count_ctx, session_ctx]
+                pft,
+                "sync_session_factory",
+                side_effect=[gate_ctx, piece_ctx, count_ctx, session_ctx],
             ),
             patch("api.ideas._run_p12_p12b_pipeline", pipeline_mock, create=True),
             patch("api.telegram._send_telegram_message", send_mock, create=True),
@@ -398,7 +397,9 @@ class TestRegeneratePostFromFeedback:
         send_mock = MagicMock()
         with (
             patch.object(
-                pft, "sync_session_factory", side_effect=[gate_ctx, piece_ctx, count_ctx, session_ctx]
+                pft,
+                "sync_session_factory",
+                side_effect=[gate_ctx, piece_ctx, count_ctx, session_ctx],
             ),
             patch("api.ideas._run_p12_p12b_pipeline", pipeline_mock, create=True),
             patch("api.telegram._send_telegram_message", send_mock, create=True),
@@ -409,7 +410,12 @@ class TestRegeneratePostFromFeedback:
             ),
             patch(
                 "services.canonical_profiles.load_active_profiles",
-                MagicMock(return_value={"voice_profile": {"payload": {}}, "audience_avatar": {"payload": {}}}),
+                MagicMock(
+                    return_value={
+                        "voice_profile": {"payload": {}},
+                        "audience_avatar": {"payload": {}},
+                    }
+                ),
                 create=True,
             ),
         ):
@@ -435,7 +441,9 @@ class TestRegeneratePostFromFeedback:
         crashing_send = MagicMock(side_effect=RuntimeError("telegram down"))
         with (
             patch.object(
-                pft, "sync_session_factory", side_effect=[gate_ctx, piece_ctx, count_ctx, session_ctx, marker_ctx]
+                pft,
+                "sync_session_factory",
+                side_effect=[gate_ctx, piece_ctx, count_ctx, session_ctx, marker_ctx],
             ),
             patch("api.ideas._run_p12_p12b_pipeline", pipeline_mock, create=True),
             patch("api.telegram._send_telegram_message", crashing_send, create=True),
@@ -446,7 +454,12 @@ class TestRegeneratePostFromFeedback:
             ),
             patch(
                 "services.canonical_profiles.load_active_profiles",
-                MagicMock(return_value={"voice_profile": {"payload": {}}, "audience_avatar": {"payload": {}}}),
+                MagicMock(
+                    return_value={
+                        "voice_profile": {"payload": {}},
+                        "audience_avatar": {"payload": {}},
+                    }
+                ),
                 create=True,
             ),
         ):
@@ -520,17 +533,18 @@ class TestRegeneratePostFromFeedback:
             ),
             patch(
                 "services.canonical_profiles.load_active_profiles",
-                MagicMock(return_value={"voice_profile": {"payload": {}}, "audience_avatar": {"payload": {}}}),
+                MagicMock(
+                    return_value={
+                        "voice_profile": {"payload": {}},
+                        "audience_avatar": {"payload": {}},
+                    }
+                ),
                 create=True,
             ),
         ):
-            pft.regenerate_post_from_feedback(
-                None, "post-42", "tenant-e3", "Feedback!", "log-e3"
-            )
+            pft.regenerate_post_from_feedback(None, "post-42", "tenant-e3", "Feedback!", "log-e3")
 
         # Jede DB-Query, die :tid hat, muss "tenant-e3" setzen
         for params in captured_params:
             if "tid" in params:
-                assert params["tid"] == "tenant-e3", (
-                    f"E3 verletzt: query params={params}"
-                )
+                assert params["tid"] == "tenant-e3", f"E3 verletzt: query params={params}"

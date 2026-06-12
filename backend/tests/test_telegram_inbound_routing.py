@@ -606,9 +606,7 @@ class TestFeedbackLoopRouting:
     def test_enqueue_failure_fail_open(self):
         """apply_async wirft → routing_info bleibt intakt, kein Raise, regen_enqueued=False."""
         last_post = _make_last_post()
-        result, regen_mock = self._run(
-            last_post, enqueue_side_effect=RuntimeError("broker down")
-        )
+        result, regen_mock = self._run(last_post, enqueue_side_effect=RuntimeError("broker down"))
         assert result is not None
         assert result.get("routed_to") == "voice_feedback_api"
         assert result.get("regen_enqueued") is False
@@ -633,9 +631,7 @@ class TestFeedbackLoopRouting:
                     "p08_response", {"session_id": "sess-1", "features": {}}
                 ),
             ),
-            patch.object(
-                sys.modules["services.p08_service"], "p08_response", p08_mock
-            ),
+            patch.object(sys.modules["services.p08_service"], "p08_response", p08_mock),
             patch.object(tt, "_resolve_chat_id", return_value=None),
             patch.object(sys.modules["api.telegram"], "_send_telegram_message", MagicMock()),
             patch.object(
@@ -712,6 +708,6 @@ class TestPersistMappingFix:
         with patch.object(_l2_real, "sync_session_factory", return_value=mock_db):
             _l2_real.persist_routing_decision("log-map-1", decision)
 
-        assert written_vals == ["voice_feedback"], (
-            f"Erwartet 'voice_feedback', bekommen {written_vals}"
-        )
+        assert written_vals == [
+            "voice_feedback"
+        ], f"Erwartet 'voice_feedback', bekommen {written_vals}"

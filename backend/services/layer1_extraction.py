@@ -10,9 +10,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import timezone as _timezone
-
-UTC = _timezone.utc  # datetime.UTC requires Python 3.11+; alias for Py3.9 compat
+from datetime import UTC
 
 from models.base import sync_session_factory
 from services.pipeline_llm import call_pipeline_llm
