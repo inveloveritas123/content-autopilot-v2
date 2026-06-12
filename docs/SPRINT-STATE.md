@@ -90,6 +90,7 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 ---
 
 ## LOG (jüngste zuerst)
+- 2026-06-13 (autonom) — **#37 Feedback-Loop** (M25, Konversationsschleife komplett) + **#65** Cost-Gate-Fix (daily_cost_tenant, +Py3.9-datetime-Fix) fertig & gepusht. Knecht parallel weiter am CI-Grünen (ruff/eslint). Branch-Disziplin: fetch+rebase vor jedem Push hält sauber. **Nächste Aktion: #36 Intent-Routing (P09 on-demand + P13 aus dem Chat), opus, dep #16✅** — danach #41 (P17, fable) / #38 (Quality-Gate, opus).
 - 2026-06-12 — **S1.2/S1.7/S1.8 (#18/#56/#57) fertig**: Idempotenz 2-Schicht (routed_to-Guard in _route_inbound_message + update_id-Dedupe in _store_and_dispatch), persist_routing_decision verdrahtet, targeted-mode-Filter. Test-Infra durabel saniert: gemeinsamer `tests/_telegram_task_env.py` (eine geteilte tasks.telegram_task-Instanz) → 112 Stub-Tests reihenfolge-unabhängig grün. Optionaler update_id-Unique-Index → ROBERT-BACKLOG (nicht blockierend).
 - 2026-06-12 — **S1.4 #46 fertig**: 3 US-Anthropic-Calls auf EU-Seam (voice_drift→S6 gleiches Modell EU; md_converter/sensitive_detector→S2 mistral-EU). Test-Pollution (eu_router stubte services.pipeline_llm) in 2 Iterationen sauber gefixt → 99 Stub-Tests reihenfolge-unabhängig grün. sensitive_detector-Modellwahl → ROBERT-BACKLOG.
 - 2026-06-12 — Sprint-1-Detailplan (fable) in `docs/SPRINT-1-PLAN.md`: Bau-Reihenfolge #18→#17→#19, keine zwingende DB-Migration.
