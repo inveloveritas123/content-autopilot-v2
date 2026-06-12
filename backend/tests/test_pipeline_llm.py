@@ -644,3 +644,58 @@ class TestCallPipelineLlm:
 
         # Kein Retry — genau 1 Call (kein weiterer bezahlter API-Call)
         assert call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Tests: resolve_model / describe_pipeline_models (Modell-Hoheit, SOLL-IST §5)
+# ---------------------------------------------------------------------------
+
+from services.pipeline_llm import resolve_model, describe_pipeline_models
+import services.model_policy as model_policy
+
+
+class TestResolveModel:
+    def test_no_override_equals_default(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("MODEL_POLICY_PATH", str(tmp_path / "policy.json"))
+        model_policy._CACHE.update(mtime=None, data=None, path=None)
+        res = resolve_model("P01")
+        assert res["source"] == "default"
+        assert res["effective_model"] == TIER_MODELS["S6"]
+        assert res["effective_model"] == res["default_model"]
+        assert res["effective_tier"] == res["default_tier"] == "S6"
+
+    def test_explicit_model_override_wins(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("MODEL_POLICY_PATH", str(tmp_path / "policy.json"))
+        model_policy._CACHE.update(mtime=None, data=None, path=None)
+        res = resolve_model("P01", model_override="some/experimental-model")
+        assert res["source"] == "model_override"
+        assert res["effective_model"] == "some/experimental-model"
+        # Unbekanntes Modell → Pricing-Tier fällt auf Default zurück
+        assert res["effective_tier"] == "S6"
+
+    def test_policy_file_override_applied(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("MODEL_POLICY_PATH", str(tmp_path / "policy.json"))
+        model_policy._CACHE.update(mtime=None, data=None, path=None)
+        model_policy.set_override("P03", "google/gemini-2.5-flash-lite-preview-06-17")
+        res = resolve_model("P03")
+        assert res["source"] == "policy"
+        assert res["effective_model"] == "google/gemini-2.5-flash-lite-preview-06-17"
+        # Diese Modell-ID ist S1 → Reverse-Lookup setzt Pricing-Tier S1
+        assert res["effective_tier"] == "S1"
+
+    def test_explicit_override_beats_policy(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("MODEL_POLICY_PATH", str(tmp_path / "policy.json"))
+        model_policy._CACHE.update(mtime=None, data=None, path=None)
+        model_policy.set_override("P01", "policy/model")
+        res = resolve_model("P01", model_override="explicit/model")
+        assert res["effective_model"] == "explicit/model"
+        assert res["source"] == "model_override"
+
+    def test_describe_lists_all_seam_phases(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("MODEL_POLICY_PATH", str(tmp_path / "policy.json"))
+        model_policy._CACHE.update(mtime=None, data=None, path=None)
+        rows = describe_pipeline_models()
+        phases = {r["phase"] for r in rows}
+        assert phases == set(MODEL_PER_PROMPT.keys())
+        for r in rows:
+            assert "default_model" in r and "effective_model" in r and "override" in r

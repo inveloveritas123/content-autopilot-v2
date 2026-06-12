@@ -25,6 +25,7 @@ import CompanyProfile from './components/CompanyProfile'
 import DataDeletion from './components/DataDeletion'
 import MemoryViz from './components/MemoryViz'
 import PromptStudio from './components/PromptStudio'
+import PipelineModels from './components/PipelineModels'
 function App() {
   return (
     <ToastProvider>
@@ -52,6 +53,7 @@ function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/settings/export-import" element={<ExportImport />} />
         <Route path="/settings/analytics" element={<LLMAnalytics />} />
+        <Route path="/settings/pipeline-models" element={<PipelineModels />} />
         <Route path="/memory" element={<Memory />} />
         <Route path="/settings/company-profile" element={<CompanyProfile />} />
         <Route path="/settings/data-deletion" element={<DataDeletion />} />

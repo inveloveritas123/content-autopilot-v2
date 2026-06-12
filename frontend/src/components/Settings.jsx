@@ -519,6 +519,20 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      {/* Modell-Hoheit */}
+      <Card>
+        <CardHeader><CardTitle>Modell-Hoheit · Pipeline-Phasen</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Offizielles Default-Modell pro Phase (P01–P12c) ansehen und bei Bedarf einen
+            globalen Test-Override (beliebige Requesty-Modell-ID, z.B. Gemini Flash) setzen.
+          </p>
+          <Link to="/settings/pipeline-models">
+            <Button variant="secondary">Zu Modell-Hoheit</Button>
+          </Link>
+        </CardContent>
+      </Card>
+
       <div className="sticky bottom-4 z-10">
         <Button onClick={handleSave} disabled={saving} className="w-full shadow-lg">
           {saving ? 'Speichern...' : '💾 Alle Einstellungen speichern'}

@@ -129,6 +129,84 @@ def resolve_tier(prompt_key: str, override: Optional[str] = None) -> tuple[str, 
     return tier, model_id
 
 
+def _tier_for_model(model_id: str) -> Optional[str]:
+    """Reverse-Lookup: bekannte Router-Modell-ID → Tier-Name (für Pricing/Label)."""
+    for tier, mid in TIER_MODELS.items():
+        if mid == model_id:
+            return tier
+    return None
+
+
+def resolve_model(
+    prompt_key: str,
+    tier_override: Optional[str] = None,
+    model_override: Optional[str] = None,
+) -> dict:
+    """Löst das EFFEKTIVE Modell für eine Phase auf — inkl. globaler Test-Policy.
+
+    Trennung "offiziell vs. Test" (SOLL-IST §5):
+      - default_tier/default_model: der offizielle Default (resolve_tier → Code).
+      - override (beliebige Requesty-Modell-ID) gewinnt, Reihenfolge:
+          1. expliziter ``model_override`` (z.B. A-B-Test pro Call)
+          2. globale Policy-Datei (services.model_policy.get_override)
+      - effective_model: was wirklich an den Router geht.
+      - effective_tier: Tier für Pricing/Label (Reverse-Lookup; Fallback default_tier).
+
+    Returns:
+        dict mit phase, default_tier, default_model, override, source,
+        effective_tier, effective_model.
+    """
+    key = prompt_key.upper()
+    default_tier, default_model = resolve_tier(prompt_key, tier_override)
+
+    override = model_override
+    source = "model_override" if model_override else None
+    if not override:
+        try:
+            from services.model_policy import get_override
+            override = get_override(key)
+            if override:
+                source = "policy"
+        except Exception as exc:  # pragma: no cover - fail-open auf Default
+            logger.warning("resolve_model: Policy-Lookup fehlgeschlagen: %s", exc)
+            override = None
+
+    if override:
+        effective_model = override
+        effective_tier = _tier_for_model(override) or default_tier
+    else:
+        effective_model = default_model
+        effective_tier = default_tier
+        source = "default"
+
+    return {
+        "phase": key,
+        "default_tier": default_tier,
+        "default_model": default_model,
+        "override": override,
+        "source": source,
+        "effective_tier": effective_tier,
+        "effective_model": effective_model,
+    }
+
+
+def describe_pipeline_models() -> list:
+    """Beschreibt pro Pipeline-Phase Default + aktiven Test-Override (für das Dashboard).
+
+    Phasen = die Prompt-Keys, die über diesen Seam laufen (MODEL_PER_PROMPT).
+    """
+    out = []
+    for phase in MODEL_PER_PROMPT:
+        res = resolve_model(phase)
+        env_tier = os.environ.get(f"MODEL_TIER_{phase}") or None
+        out.append({
+            **res,
+            "max_tokens": PROMPT_MAX_TOKENS.get(phase),
+            "env_tier_override": env_tier,
+        })
+    return out
+
+
 def estimate_tier_cost(tier: str, input_tokens: int, output_tokens: int) -> float:
     """Schätzt die Kosten (USD) für einen Call mit dem angegebenen Tier.
 
@@ -230,8 +308,16 @@ def call_pipeline_llm(
         KEIN Direkt-SDK-Fallback. Wenn kein Router konfiguriert ist, wird
         RuntimeError geworfen — alle Calls müssen über den Router laufen.
     """
-    # 1. Modell-Auflösung via Tier-Registry
-    tier, model_id = resolve_tier(prompt_key, tier_override)
+    # 1. Modell-Auflösung via Tier-Registry + globale Test-Policy (Modell-Hoheit).
+    #    Ohne Override ist effective_* identisch zum offiziellen Default.
+    _resolution = resolve_model(prompt_key, tier_override=tier_override)
+    tier = _resolution["effective_tier"]
+    model_id = _resolution["effective_model"]
+    if _resolution["source"] != "default":
+        logger.info(
+            "call_pipeline_llm: %s Test-Override aktiv (%s) → model=%s (Default war %s)",
+            prompt_key, _resolution["source"], model_id, _resolution["default_model"],
+        )
 
     # 2. max_tokens festlegen
     if max_tokens is None:

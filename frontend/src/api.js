@@ -44,6 +44,18 @@ async function request(path, options = {}) {
   return resp.json()
 }
 
+// --- Pipeline-Modell-Hoheit (offizieller Default vs. Test-Override pro Phase) ---
+export async function getPipelineModels() {
+  return request('/settings/pipeline-models')
+}
+
+export async function setPipelineModelOverride(phase, modelId) {
+  return request('/settings/pipeline-models', {
+    method: 'PATCH',
+    body: { phase, model_id: modelId || null },
+  })
+}
+
 // Dashboard
 export const getDashboard = () => request('/dashboard')
 

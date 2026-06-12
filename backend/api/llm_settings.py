@@ -767,3 +767,54 @@ async def run_voice_compare(
         "item_title": source_item.title[:80] if source_item.title else "—",
         "results": list(results),
     }
+
+
+# ---------------------------------------------------------------------------
+# Pipeline-Modell-Hoheit (SOLL-IST-2026-06-12-wiring.md §5)
+# Offizieller Default pro Phase (Code) vs. globaler Test-Override (Policy-Datei,
+# beliebige Requesty-Modell-ID). Kein DB-Schema → hot-reload.
+# ---------------------------------------------------------------------------
+
+class PipelineModelOverride(BaseModel):
+    phase: str
+    model_id: Optional[str] = None  # None/"" entfernt den Override
+
+
+@router.get("/pipeline-models")
+async def get_pipeline_models(tenant: Tenant = Depends(get_tenant)):
+    """Listet pro Pipeline-Phase: offizieller Default + aktiver Test-Override.
+
+    Zusätzlich der Tier-Katalog (bekannte Router-Modelle als Auswahl-Vorschläge);
+    Overrides dürfen aber jede beliebige Requesty-Modell-ID sein.
+    """
+    from services.pipeline_llm import describe_pipeline_models, TIER_MODELS
+    return {
+        "phases": describe_pipeline_models(),
+        "tier_catalog": [
+            {"tier": t, "model_id": m} for t, m in TIER_MODELS.items()
+        ],
+    }
+
+
+@router.patch("/pipeline-models")
+async def patch_pipeline_models(
+    body: PipelineModelOverride,
+    tenant: Tenant = Depends(get_tenant),
+):
+    """Setzt/entfernt den globalen Test-Override für eine Phase.
+
+    Body: {"phase": "P01", "model_id": "google/gemini-2.5-flash-lite-preview-06-17"}
+    model_id null/"" → Override entfernen (zurück auf offiziellen Default).
+    """
+    from services.pipeline_llm import describe_pipeline_models, MODEL_PER_PROMPT
+    from services.model_policy import set_override
+
+    phase = (body.phase or "").upper()
+    if phase not in MODEL_PER_PROMPT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unbekannte Phase '{body.phase}'. Erlaubt: {sorted(MODEL_PER_PROMPT)}",
+        )
+    set_override(phase, body.model_id)
+    logger.info("pipeline-models: %s override → %s (by tenant=%s)", phase, body.model_id, tenant.id)
+    return {"status": "ok", "phases": describe_pipeline_models()}
