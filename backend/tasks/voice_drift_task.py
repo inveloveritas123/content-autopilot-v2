@@ -213,26 +213,37 @@ def run_voice_drift(
         # ------------------------------------------------------------------
         # 3. Aktives Voice-Profil laden
         # ------------------------------------------------------------------
+        # Deterministische Aktiv-Row-Auflösung über den Fassaden-Resolver
+        # (behebt Nichtdeterminismus bei mehreren aktiven Rows / Projekt-Rows;
+        # vorher: WHERE is_active=true LIMIT 1 ohne ORDER BY/Projektfilter).
+        from services.canonical_profiles import pick_active
+
         with sync_session_factory() as session:
-            profile_row = session.execute(
+            rows = session.execute(
                 text(
-                    "SELECT id, version, payload FROM tenant_voice_profile "
-                    "WHERE tenant_id = :t AND is_active = true "
-                    "LIMIT 1"
+                    "SELECT project_id, version, payload FROM tenant_voice_profile "
+                    "WHERE tenant_id = :t AND is_active = true"
                 ),
                 {"t": tenant_id},
-            ).fetchone()
+            ).fetchall()
 
-        if not profile_row:
+        candidates = [
+            {
+                "project_id": r[0],
+                "version": r[1],
+                "payload": r[2] if isinstance(r[2], dict) else json.loads(r[2]),
+            }
+            for r in rows
+        ]
+        chosen = pick_active(candidates)
+        if not chosen:
             logger.warning(
                 "run_voice_drift: tenant=%s — kein aktives Voice-Profil gefunden", tenant_id
             )
             return {"status": "failed", "error": "no_active_voice_profile"}
 
-        voice_version = profile_row[1]
-        voice_payload = profile_row[2]
-        if isinstance(voice_payload, str):
-            voice_payload = json.loads(voice_payload)
+        voice_version = chosen["version"]
+        voice_payload = chosen["payload"]
 
         # ------------------------------------------------------------------
         # 4. Letzte 10 freigegebene Posts laden
