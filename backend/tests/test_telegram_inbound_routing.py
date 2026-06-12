@@ -16,7 +16,7 @@ import types
 from unittest.mock import MagicMock, patch
 
 # Gemeinsame Stub-Umgebung + Modul-Instanz
-from tests._telegram_task_env import (  # noqa: E402
+from tests._telegram_task_env import (
     active_session,
     make_decision,
     make_extraction,
@@ -24,7 +24,6 @@ from tests._telegram_task_env import (  # noqa: E402
     make_p08_result,
     tt,
 )
-
 
 # ---------------------------------------------------------------------------
 # _process_text — Routing-Tests
@@ -57,7 +56,9 @@ class TestProcessTextRouting:
 
         payload = {"text": "Das ist eine ausführliche Antwort auf deine Frage."}
         # #56: sync_session_factory wird für Guard-SELECT gebraucht → (None,) = noch nicht geroutet
-        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+        with patch(
+            "tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)
+        ):
             result = tt._process_text("log-1", "tenant-1", payload)
 
         assert result["status"] == "ok"
@@ -86,7 +87,9 @@ class TestProcessTextRouting:
         mock_load_session.return_value = None
 
         payload = {"text": "Irgendeine Notiz die lang genug ist."}
-        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+        with patch(
+            "tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)
+        ):
             result = tt._process_text("log-2", "tenant-1", payload)
 
         assert result["status"] == "ok"
@@ -110,7 +113,9 @@ class TestProcessTextRouting:
         mock_route.return_value = make_decision("reviewer_queue", {})
 
         payload = {"text": "Eine spontane Idee die lang genug ist."}
-        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+        with patch(
+            "tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)
+        ):
             result = tt._process_text("log-3", "tenant-1", payload)
 
         assert result["status"] == "ok"
@@ -131,7 +136,9 @@ class TestProcessTextRouting:
         mock_extract.side_effect = RuntimeError("layer1 boom")
 
         payload = {"text": "Antwort die einen Routing-Fehler auslöst."}
-        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+        with patch(
+            "tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)
+        ):
             result = tt._process_text("log-4", "tenant-1", payload)
 
         # Chunk-Ergebnis bleibt intakt, kein Crash, kein routed_to
@@ -160,7 +167,9 @@ class TestProcessTextRouting:
         mock_p08.side_effect = RuntimeError("p08 boom")
 
         payload = {"text": "Antwort, deren p08-Verarbeitung crasht."}
-        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+        with patch(
+            "tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)
+        ):
             result = tt._process_text("log-5", "tenant-1", payload)
 
         assert result["status"] == "ok"
@@ -211,7 +220,9 @@ class TestProcessVoiceRouting:
 
         payload = {"voice": {"file_id": "f1", "duration": 12, "mime_type": "audio/ogg"}}
         # #56: Guard-SELECT für log_id="log-v" → (None,) = noch nicht geroutet
-        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+        with patch(
+            "tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)
+        ):
             result = tt._process_voice("log-v", "tenant-1", payload)
 
         assert result["status"] == "ok"
@@ -248,7 +259,6 @@ class TestFollowupMessageSend:
         decision_target="p08_response",
     ):
         """Hilfsmethode: _route_inbound_message mit allen Stubs fahren."""
-        import sys
 
         with (
             patch.object(tt, "_load_active_session", return_value=active_session()),
@@ -319,7 +329,6 @@ class TestFollowupMessageSend:
 
     def test_send_failure_fail_open(self):
         """_send_telegram_message wirft → routing_info bleibt intakt, kein Raise."""
-        import sys
 
         crashing_send = MagicMock(side_effect=RuntimeError("Telegram down"))
         p08_result = make_p08_result(next_action="vertiefen", message="Frage?", is_closed=False)
@@ -367,7 +376,6 @@ class TestClosePostGenerationTrigger:
         (dessen .apply_async automatisch existiert) — robust unabhängig davon,
         ob das echte Task-Modul oder der Env-Stub in sys.modules liegt.
         """
-        import sys
 
         gen_task_mock = MagicMock()
         with (
@@ -391,9 +399,7 @@ class TestClosePostGenerationTrigger:
             ),
             # chat_id/Send sind für den Trigger irrelevant — neutralisieren.
             patch.object(tt, "_resolve_chat_id", return_value=4711),
-            patch.object(
-                sys.modules["api.telegram"], "_send_telegram_message", MagicMock()
-            ),
+            patch.object(sys.modules["api.telegram"], "_send_telegram_message", MagicMock()),
             patch.object(
                 sys.modules["tasks.session_post_task"],
                 "generate_post_from_session",
@@ -464,7 +470,6 @@ class TestClosePostGenerationTrigger:
 
     def _run_route_with_crash(self, p08_result):
         """Wie _run_route, aber apply_async wirft (fail-open-Test)."""
-        import sys
 
         gen_task_mock = MagicMock()
         gen_task_mock.apply_async.side_effect = RuntimeError("broker down")
@@ -488,9 +493,7 @@ class TestClosePostGenerationTrigger:
                 return_value=p08_result,
             ),
             patch.object(tt, "_resolve_chat_id", return_value=4711),
-            patch.object(
-                sys.modules["api.telegram"], "_send_telegram_message", MagicMock()
-            ),
+            patch.object(sys.modules["api.telegram"], "_send_telegram_message", MagicMock()),
             patch.object(
                 sys.modules["tasks.session_post_task"],
                 "generate_post_from_session",

@@ -33,7 +33,7 @@ ANTHROPIC_MODEL_ID = "claude-sonnet-4-6-20251022"
 # Phasen-Konstante (aus wizard_phases.py — dep-frei, direkt testbar)
 # ---------------------------------------------------------------------------
 
-from api.wizard_phases import WIZARD_PHASES, WIZARD_PHASE_COUNT  # noqa: E402
+from api.wizard_phases import WIZARD_PHASE_COUNT, WIZARD_PHASES
 
 # Backward-Compat: alte question IDs (vor 2026-05-03) weiterhin akzeptieren
 _LEGACY_QUESTION_IDS: set[str] = {
@@ -126,7 +126,9 @@ def compute_inline_hints(
         )
     # Phase 8 (Abschluss): LinkedIn-Stil-Hinweis aus Phase 7 (Sprache & Stil, q7_3)
     if current_phase == 8 and "q7_3" in all_answers:
-        hints.append("Deine Fachbegriffe aus Phase 7 (Sprache & Stil) können hier als Aufhänger dienen.")
+        hints.append(
+            "Deine Fachbegriffe aus Phase 7 (Sprache & Stil) können hier als Aufhänger dienen."
+        )
 
     return hints[:3]
 

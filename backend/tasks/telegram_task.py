@@ -151,9 +151,7 @@ def _route_inbound_message(
         if log_id is not None:
             with sync_session_factory() as db:
                 guard_row = db.execute(
-                    text(
-                        "SELECT routed_to FROM telegram_message_log WHERE id = :id"
-                    ),
+                    text("SELECT routed_to FROM telegram_message_log WHERE id = :id"),
                     {"id": log_id},
                 ).fetchone()
             if guard_row is not None and guard_row[0] is not None:
@@ -207,7 +205,10 @@ def _route_inbound_message(
             chat_id = _resolve_chat_id(tenant_id)
             if chat_id is not None and result.message:
                 try:
-                    from api.telegram import _send_telegram_message  # Lazy-Import wie scheduler.py:104
+                    from api.telegram import (
+                        _send_telegram_message,  # Lazy-Import wie scheduler.py:104
+                    )
+
                     _send_telegram_message(chat_id, result.message)
                     routing_info["p08_message_sent"] = True
                 except Exception as exc:
@@ -232,9 +233,7 @@ def _route_inbound_message(
                     )
                     routing_info["post_generation_enqueued"] = True
                 except Exception as exc:
-                    logger.warning(
-                        "post generation enqueue failed: %s", type(exc).__name__
-                    )
+                    logger.warning("post generation enqueue failed: %s", type(exc).__name__)
                     routing_info["post_generation_enqueued"] = False
 
         return routing_info

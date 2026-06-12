@@ -25,7 +25,7 @@ import types
 from unittest.mock import MagicMock, patch
 
 # Gemeinsame Stub-Umgebung + Modul-Instanz
-from tests._telegram_task_env import (  # noqa: E402
+from tests._telegram_task_env import (
     active_session,
     make_decision,
     make_extraction,
@@ -33,7 +33,6 @@ from tests._telegram_task_env import (  # noqa: E402
     make_p08_result,
     tt,
 )
-
 
 # ---------------------------------------------------------------------------
 # _store_and_dispatch stub (für #18 Schicht B Tests)
@@ -104,7 +103,9 @@ class TestIdempotencyGuard:
         with (
             patch.object(tt, "sync_session_factory", return_value=mock_db),
             patch.object(tt, "_load_active_session") as mock_session,
-            patch.object(sys.modules["services.layer1_extraction"], "extract_intent_features") as mock_extract,
+            patch.object(
+                sys.modules["services.layer1_extraction"], "extract_intent_features"
+            ) as mock_extract,
             patch.object(sys.modules["services.p08_service"], "p08_response") as mock_p08,
         ):
             result = tt._route_inbound_message("tenant-1", "eine Antwort", log_id="log-dup")
@@ -195,7 +196,9 @@ class TestIdempotencyGuard:
 
         assert result is not None
         assert result.get("deduped") is not True
-        assert len(persisted) == 0, "persist_routing_decision darf bei log_id=None nicht aufgerufen werden"
+        assert (
+            len(persisted) == 0
+        ), "persist_routing_decision darf bei log_id=None nicht aufgerufen werden"
         assert result.get("routed_to") == "p08_response"
 
 
@@ -262,7 +265,9 @@ class TestUpdateIdDedup:
         # Nur ein execute möglich (INSERT), da kein Dedup-Check
         mock_db.execute.return_value = insert_result
 
-        factory = lambda: mock_db
+        def factory():
+            return mock_db
+
         message = {"text": "Ohne update_id"}
 
         result = _store_and_dispatch_impl("tenant-1", message, "text", factory)
@@ -289,7 +294,9 @@ class TestUpdateIdDedup:
         mock_db.__exit__ = MagicMock(return_value=False)
         mock_db.execute.side_effect = fake_execute
 
-        factory = lambda: mock_db
+        def factory():
+            return mock_db
+
         message = {"text": "Hallo", "_update_id": 55}
 
         _store_and_dispatch_impl("tenant-1", message, "text", factory)

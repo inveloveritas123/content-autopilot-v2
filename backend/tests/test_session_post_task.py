@@ -22,7 +22,7 @@ from unittest.mock import MagicMock, patch
 
 # Geteilte Stub-Umgebung ZUERST — richtet sqlalchemy/config/models.base/celery/
 # tasks.telegram_task (real)/api.telegram/services.* konsistent ein.
-from tests import _telegram_task_env as _env  # noqa: E402,F401
+from tests import _telegram_task_env as _env  # noqa: F401
 
 _BACKEND_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
 if _BACKEND_DIR not in sys.path:
@@ -38,7 +38,7 @@ def _stub(name: str) -> types.ModuleType:
 
 
 # api.ideas — Lazy-Import-Ziel (_run_p12_p12b_pipeline). Env stubbt es NICHT.
-import api as _api_pkg  # noqa: E402  (env hat api als Paket registriert)
+import api as _api_pkg
 
 if "api.ideas" not in sys.modules:
     _ai = _stub("api.ideas")
@@ -46,7 +46,7 @@ if "api.ideas" not in sys.modules:
 _api_pkg.ideas = sys.modules["api.ideas"]
 
 # services.canonical_profiles — Lazy-Import-Ziel (load_active_profiles).
-import services as _services_pkg  # noqa: E402
+import services as _services_pkg
 
 if "services.canonical_profiles" not in sys.modules:
     _cp = _stub("services.canonical_profiles")
@@ -95,9 +95,24 @@ def _closed_session_row(messages):
 
 _SESSION_MESSAGES = [
     {"bot": "Opener-Frage?", "user_features_summary": None, "category": "x", "question_index": 1},
-    {"bot": "Frage 1?", "user_features_summary": "f1", "user_transcript": "Antwort 1 Text", "question_index": 1},
-    {"bot": "Frage 2?", "user_features_summary": "f2", "user_transcript": "Antwort 2 Text", "question_index": 2},
-    {"bot": "Danke!", "user_features_summary": "f3", "user_transcript": "Antwort 3 Text", "question_index": 3},
+    {
+        "bot": "Frage 1?",
+        "user_features_summary": "f1",
+        "user_transcript": "Antwort 1 Text",
+        "question_index": 1,
+    },
+    {
+        "bot": "Frage 2?",
+        "user_features_summary": "f2",
+        "user_transcript": "Antwort 2 Text",
+        "question_index": 2,
+    },
+    {
+        "bot": "Danke!",
+        "user_features_summary": "f3",
+        "user_transcript": "Antwort 3 Text",
+        "question_index": 3,
+    },
 ]
 
 
@@ -145,12 +160,8 @@ class TestGeneratePostFromSession:
         send_mock = MagicMock()
         with (
             patch.object(spt, "sync_session_factory", side_effect=db_contexts),
-            patch(
-                "api.ideas._run_p12_p12b_pipeline", pipeline_mock, create=True
-            ),
-            patch(
-                "api.telegram._send_telegram_message", send_mock, create=True
-            ),
+            patch("api.ideas._run_p12_p12b_pipeline", pipeline_mock, create=True),
+            patch("api.telegram._send_telegram_message", send_mock, create=True),
             patch(
                 "tasks.telegram_task._resolve_chat_id",
                 MagicMock(return_value=chat_id),
@@ -271,7 +282,9 @@ class TestGeneratePostFromSession:
         )
         crashing_send = MagicMock(side_effect=RuntimeError("telegram down"))
         with (
-            patch.object(spt, "sync_session_factory", side_effect=[gate_ctx, session_ctx, marker_ctx]),
+            patch.object(
+                spt, "sync_session_factory", side_effect=[gate_ctx, session_ctx, marker_ctx]
+            ),
             patch("api.ideas._run_p12_p12b_pipeline", pipeline_mock, create=True),
             patch("api.telegram._send_telegram_message", crashing_send, create=True),
             patch(

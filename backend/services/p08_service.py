@@ -13,7 +13,7 @@ import os
 import random
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import text
 
@@ -108,7 +108,7 @@ def _load_p08_prompt():
                 system_prompt=_extract_section(content, "System-Prompt"),
                 user_prompt_template=_extract_section(content, "User-Prompt"),
                 sha=sha,
-                loaded_at=datetime.now(timezone.utc),
+                loaded_at=datetime.now(UTC),
                 source_path=local_path,
             )
         except Exception as le:
@@ -125,7 +125,7 @@ def _load_p08_prompt():
         system_prompt=_FALLBACK_SYSTEM,
         user_prompt_template=_FALLBACK_USER_TEMPLATE,
         sha="fallback",
-        loaded_at=datetime.now(timezone.utc),
+        loaded_at=datetime.now(UTC),
         source_path="hardcoded",
     )
 
@@ -354,9 +354,7 @@ def p08_response(
         # Summary + raw transcript in die Session, NIE in den P08-Prompt.
         try:
             messages_list = (
-                json.loads(messages_raw)
-                if isinstance(messages_raw, str)
-                else (messages_raw or [])
+                json.loads(messages_raw) if isinstance(messages_raw, str) else (messages_raw or [])
             )
             messages_list.append(
                 {
@@ -376,7 +374,9 @@ def p08_response(
                 )
                 s.commit()
         except Exception as exc:
-            logger.warning("[P08] letzte Antwort vor Close nicht gespeichert: %s", type(exc).__name__)
+            logger.warning(
+                "[P08] letzte Antwort vor Close nicht gespeichert: %s", type(exc).__name__
+            )
         _close_session_db(session_id, tenant_id)
         return ResponseResult(
             next_action="close",

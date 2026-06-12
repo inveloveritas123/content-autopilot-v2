@@ -1,5 +1,12 @@
 """Tests für kill_switch.py"""
 
+import sys as _sys
+
+# test_eu_router_migration.py (collected alphabetically before this file) installs
+# a partial stub for services.kill_switch that lacks is_tenant_enabled.  Remove it
+# so that the real module is imported below with the full public API.
+_sys.modules.pop("services.kill_switch", None)
+
 from unittest.mock import MagicMock, patch
 
 import pytest

@@ -74,6 +74,8 @@ from tasks.p12_pruning import (
 )
 from tasks.p12_pruning import (
     prune as _prune_keys,
+)
+from tasks.p12_pruning import (
     prune_values as _prune_values,
 )
 
@@ -316,8 +318,8 @@ def run_p12(
         # ------------------------------------------------------------------
         # 3. Aktive Profile aus DB laden
         # ------------------------------------------------------------------
-        customer_context, voice_profile, audience_avatar, customer_values = (
-            _load_active_profiles(tenant_id)
+        customer_context, voice_profile, audience_avatar, customer_values = _load_active_profiles(
+            tenant_id
         )
 
         # ------------------------------------------------------------------

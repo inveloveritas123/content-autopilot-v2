@@ -10,7 +10,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import timezone
+from datetime import UTC
 
 from models.base import sync_session_factory
 from services.pipeline_llm import call_pipeline_llm
@@ -175,7 +175,7 @@ def _load_prompt():
                 system_prompt=_extract_section(content, "System-Prompt"),
                 user_prompt_template=_extract_section(content, "User-Prompt"),
                 sha=sha,
-                loaded_at=datetime.now(timezone.utc),
+                loaded_at=datetime.now(UTC),
                 source_path=local_path,
             )
         except Exception as le:
@@ -194,7 +194,7 @@ def _load_prompt():
         system_prompt=_FALLBACK_SYSTEM,
         user_prompt_template=_FALLBACK_USER_TEMPLATE,
         sha="fallback",
-        loaded_at=datetime.now(timezone.utc),
+        loaded_at=datetime.now(UTC),
         source_path="hardcoded",
     )
 

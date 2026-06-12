@@ -35,7 +35,8 @@ import json
 import os
 import sys
 import types
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from datetime import UTC
 from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
@@ -125,7 +126,10 @@ class _FakeCeleryApp:
         return deco
 
 
-_stub("tasks")
+_tasks_mod = _stub("tasks")
+if not hasattr(_tasks_mod, "__path__"):
+    _tasks_mod.__path__ = [os.path.join(_BACKEND_DIR, "tasks")]
+    _tasks_mod.__package__ = "tasks"
 _ca = _stub("tasks.celery_app")
 if not hasattr(_ca, "celery_app"):
     _ca.celery_app = _FakeCeleryApp()
@@ -144,6 +148,7 @@ _stub("cryptography.fernet")
 
 _llm_stub = _stub("services.llm")
 if not hasattr(_llm_stub, "BudgetExceededError"):
+
     class _BudgetExceededError(Exception):
         pass
 
@@ -160,6 +165,7 @@ if not hasattr(_nc_stub, "nextcloud_client"):
 
 _throttle_stub = _stub("services.throttle")
 if not hasattr(_throttle_stub, "RateLimitExceededError"):
+
     class _RateLimit(Exception):
         pass
 
@@ -181,14 +187,16 @@ if not hasattr(_pl_stub, "get_default_prompt_loader"):
             "services.prompt_loader stub: get_default_prompt_loader nicht verfügbar in Tests."
             " Bitte patch.object(_voice_drift, 'get_default_prompt_loader', ...) nutzen."
         )
+
     _pl_stub.get_default_prompt_loader = _pl_stub_get_default_prompt_loader
     # _extract_section: leere Zeichenkette zurückgeben (neutral, .format() funktioniert darauf)
     _pl_stub._extract_section = lambda content, name: ""
 if not hasattr(_pl_stub, "LoadedPrompt"):
     # LoadedPrompt als dataclass-Ersatz — nötig für layer1_extraction.py's Hardcoded-Fallback.
     # Muss dieselbe Signatur wie das echte LoadedPrompt haben.
-    from dataclasses import dataclass as _dc, field as _field
-    from datetime import datetime as _datetime, timezone as _timezone
+    from dataclasses import dataclass as _dc
+    from dataclasses import field as _field
+    from datetime import datetime as _datetime
 
     @_dc
     class _LoadedPromptStub:
@@ -196,7 +204,7 @@ if not hasattr(_pl_stub, "LoadedPrompt"):
         system_prompt: str
         user_prompt_template: str
         sha: str
-        loaded_at: _datetime = _field(default_factory=lambda: _datetime.now(_timezone.utc))
+        loaded_at: _datetime = _field(default_factory=lambda: _datetime.now(UTC))
         source_path: str = "stub"
 
     _pl_stub.LoadedPrompt = _LoadedPromptStub
@@ -204,6 +212,7 @@ if not hasattr(_pl_stub, "LoadedPrompt"):
 
 class _FakeLoaded:
     """Fake für loader.load('VOICE_DRIFT') — wird pro VoiceDrift-Test via patch.object gesetzt."""
+
     sha = "abc123def456"
     system_prompt = "Du bist ein Voice-Drift-Analyst."
     user_prompt_template = "Analysiere {context_json}"
@@ -215,8 +224,10 @@ def _make_voice_drift_loader():
     loader.load.return_value = _FakeLoaded()
     return loader
 
+
 _ks_stub = _stub("services.kill_switch")
 if not hasattr(_ks_stub, "KillSwitchTriggered"):
+
     class _KillSwitchTriggered(Exception):
         pass
 
@@ -229,6 +240,7 @@ if not hasattr(_cp_stub, "pick_active"):
 
 _cc_stub = _stub("services.cost_cap")
 if not hasattr(_cc_stub, "CostCapExceeded"):
+
     class _CostCapExceeded(Exception):
         pass
 
@@ -247,13 +259,11 @@ if not hasattr(_cc_stub, "CostCapExceeded"):
 # die dynamisch importiert und reihenfolge-unabhängig ist.
 # ---------------------------------------------------------------------------
 
-import services.pipeline_llm as _pipeline_llm_mod  # noqa: E402
 
 # Echte Registry-Objekte als Modul-Level-Kopien für Registry-Tests.
 # Diese Werte bleiben auch nach sys.modules-Cleanup durch test_pipeline_llm.py
 # korrekt gebunden (Python-Variablenbindung, nicht dynamischer sys.modules-Lookup).
-from services.pipeline_llm import MODEL_PER_PROMPT, PROMPT_MAX_TOKENS  # noqa: E402
-
+from services.pipeline_llm import MODEL_PER_PROMPT, PROMPT_MAX_TOKENS
 
 # ---------------------------------------------------------------------------
 # FakeLLMResult — kompatibel mit echtem PipelineLLMResult (gleiche Felder)
@@ -323,12 +333,13 @@ def _ensure_pipeline_llm_in_sysmods():
     Fix: beide Referenzen immer synchronisieren.
     """
     if "services.pipeline_llm" not in sys.modules:
-        import services.pipeline_llm  # noqa: F401  (Seiteneffekt: sys.modules-Eintrag)
+        import services.pipeline_llm
 
     # Sicherstellen, dass das services-Paket-Attribut auf dasselbe Objekt zeigt
     # wie sys.modules['services.pipeline_llm']. Nur dann greifen String-Form-Patches
     # UND lazy Imports auf denselben Namespace.
     import services as _svc_pkg
+
     _canonical = sys.modules["services.pipeline_llm"]
     if getattr(_svc_pkg, "pipeline_llm", None) is not _canonical:
         _svc_pkg.pipeline_llm = _canonical
@@ -364,25 +375,28 @@ class TestVoiceDriftSeam:
         s.execute.return_value.scalar.return_value = 0
         return s
 
-    def _make_factory(self, voice_rows=None, post_rows=None, feedback_rows=None,
-                      obs_rows=None):
+    def _make_factory(self, voice_rows=None, post_rows=None, feedback_rows=None, obs_rows=None):
         """Gibt eine Factory zurück, die pro Aufruf den richtigen Session-Mock zurückgibt."""
-        _voice_rows = voice_rows if voice_rows is not None else [
-            (None, 1, '{"voice_name": "Test"}')
-        ]
-        _post_rows = post_rows if post_rows is not None else [
-            ("00000000-0000-0000-0000-000000000001", "Mein erster Post."),
-            ("00000000-0000-0000-0000-000000000002", "Mein zweiter Post."),
-        ]
+        _voice_rows = (
+            voice_rows if voice_rows is not None else [(None, 1, '{"voice_name": "Test"}')]
+        )
+        _post_rows = (
+            post_rows
+            if post_rows is not None
+            else [
+                ("00000000-0000-0000-0000-000000000001", "Mein erster Post."),
+                ("00000000-0000-0000-0000-000000000002", "Mein zweiter Post."),
+            ]
+        )
         _feedback_rows = feedback_rows if feedback_rows is not None else []
         _obs_rows = obs_rows if obs_rows is not None else []
 
         sessions = [
-            self._make_ctx([]),              # 0: Doppel-Trigger-Guard
-            self._make_ctx(_voice_rows),     # 1: voice_profile
-            self._make_ctx(_post_rows),      # 2: content_pieces
+            self._make_ctx([]),  # 0: Doppel-Trigger-Guard
+            self._make_ctx(_voice_rows),  # 1: voice_profile
+            self._make_ctx(_post_rows),  # 2: content_pieces
             self._make_ctx(_feedback_rows),  # 3: voice_feedback
-            self._make_ctx(_obs_rows),       # 4: INSERT (commit-session)
+            self._make_ctx(_obs_rows),  # 4: INSERT (commit-session)
         ]
         call_count = [0]
 
@@ -402,20 +416,22 @@ class TestVoiceDriftSeam:
 
     def test_seam_called_not_anthropic(self):
         """call_pipeline_llm wird aufgerufen — anthropic.Anthropic() NICHT."""
-        drift_output = json.dumps({
-            "proposals": [{"field": "tone", "suggestion": "mehr Lockerheit"}],
-            "summary": "Voice leicht nach casual gedriftet.",
-            "confidence": 0.75,
-        })
+        drift_output = json.dumps(
+            {
+                "proposals": [{"field": "tone", "suggestion": "mehr Lockerheit"}],
+                "summary": "Voice leicht nach casual gedriftet.",
+                "confidence": 0.75,
+            }
+        )
         mock_result = self._make_drift_result(drift_output)
 
         with (
-            patch.object(_voice_drift, "sync_session_factory",
-                         side_effect=self._make_factory()),
+            patch.object(_voice_drift, "sync_session_factory", side_effect=self._make_factory()),
             patch.object(_voice_drift, "_has_pending_observation", return_value=False),
             patch.object(_voice_drift, "_run_cost_check"),
-            patch.object(_voice_drift, "get_default_prompt_loader",
-                         return_value=_make_voice_drift_loader()),
+            patch.object(
+                _voice_drift, "get_default_prompt_loader", return_value=_make_voice_drift_loader()
+            ),
             patch("asyncio.run"),
             patch(_PLLLM_PATCH_TARGET, return_value=mock_result) as mock_llm,
         ):
@@ -438,12 +454,12 @@ class TestVoiceDriftSeam:
             return self._make_drift_result(drift_output)
 
         with (
-            patch.object(_voice_drift, "sync_session_factory",
-                         side_effect=self._make_factory()),
+            patch.object(_voice_drift, "sync_session_factory", side_effect=self._make_factory()),
             patch.object(_voice_drift, "_has_pending_observation", return_value=False),
             patch.object(_voice_drift, "_run_cost_check"),
-            patch.object(_voice_drift, "get_default_prompt_loader",
-                         return_value=_make_voice_drift_loader()),
+            patch.object(
+                _voice_drift, "get_default_prompt_loader", return_value=_make_voice_drift_loader()
+            ),
             patch("asyncio.run"),
             patch(_PLLLM_PATCH_TARGET, side_effect=_capture),
         ):
@@ -457,20 +473,22 @@ class TestVoiceDriftSeam:
             {"field": "formality", "suggestion": "lockerer"},
             {"field": "emoji_use", "suggestion": "weniger"},
         ]
-        drift_output = json.dumps({
-            "proposals": proposals,
-            "summary": "Zwei kleine Drift-Trends erkannt.",
-            "confidence": 0.82,
-        })
+        drift_output = json.dumps(
+            {
+                "proposals": proposals,
+                "summary": "Zwei kleine Drift-Trends erkannt.",
+                "confidence": 0.82,
+            }
+        )
         mock_result = self._make_drift_result(drift_output)
 
         with (
-            patch.object(_voice_drift, "sync_session_factory",
-                         side_effect=self._make_factory()),
+            patch.object(_voice_drift, "sync_session_factory", side_effect=self._make_factory()),
             patch.object(_voice_drift, "_has_pending_observation", return_value=False),
             patch.object(_voice_drift, "_run_cost_check"),
-            patch.object(_voice_drift, "get_default_prompt_loader",
-                         return_value=_make_voice_drift_loader()),
+            patch.object(
+                _voice_drift, "get_default_prompt_loader", return_value=_make_voice_drift_loader()
+            ),
             patch("asyncio.run"),
             patch(_PLLLM_PATCH_TARGET, return_value=mock_result),
         ):
@@ -485,15 +503,20 @@ class TestVoiceDriftSeam:
 
         try:
             with (
-                patch.object(_voice_drift, "sync_session_factory",
-                             side_effect=self._make_factory(voice_rows=[])),
+                patch.object(
+                    _voice_drift,
+                    "sync_session_factory",
+                    side_effect=self._make_factory(voice_rows=[]),
+                ),
                 patch.object(_voice_drift, "_has_pending_observation", return_value=False),
                 patch.object(_voice_drift, "_run_cost_check"),
-                patch.object(_voice_drift, "get_default_prompt_loader",
-                             return_value=_make_voice_drift_loader()),
+                patch.object(
+                    _voice_drift,
+                    "get_default_prompt_loader",
+                    return_value=_make_voice_drift_loader(),
+                ),
                 patch("asyncio.run"),
-                patch(_PLLLM_PATCH_TARGET,
-                      return_value=_FakeLLMResult(text="{}")) as mock_llm,
+                patch(_PLLLM_PATCH_TARGET, return_value=_FakeLLMResult(text="{}")) as mock_llm,
             ):
                 result = self._call_task("tenant-uuid-004")
                 call_count = mock_llm.call_count
@@ -606,16 +629,17 @@ class TestSensitiveDetectorSeam:
 
     def test_seam_called_when_pattern_triggers(self):
         """Wenn Schicht A triggert, ruft _llm_check call_pipeline_llm auf (nicht anthropic)."""
-        llm_response = json.dumps({
-            "is_sensitive": True,
-            "categories": ["politics"],
-            "confidence": 0.9,
-            "flagged_phrases": [{"phrase": "AfD-Wähler", "category": "politics"}],
-        })
+        llm_response = json.dumps(
+            {
+                "is_sensitive": True,
+                "categories": ["politics"],
+                "confidence": 0.9,
+                "flagged_phrases": [{"phrase": "AfD-Wähler", "category": "politics"}],
+            }
+        )
 
-        with patch(_PLLLM_PATCH_TARGET,
-                   return_value=_FakeLLMResult(text=llm_response)) as mock_llm:
-            result = _sensitive_detector.detect_sensitive_topics(
+        with patch(_PLLLM_PATCH_TARGET, return_value=_FakeLLMResult(text=llm_response)) as mock_llm:
+            _sensitive_detector.detect_sensitive_topics(
                 "AfD-Wähler sollten aufhören zu jammern", use_llm=True
             )
 
@@ -625,8 +649,7 @@ class TestSensitiveDetectorSeam:
 
     def test_llm_not_called_when_use_llm_false(self):
         """Wenn use_llm=False, wird call_pipeline_llm nicht aufgerufen."""
-        with patch(_PLLLM_PATCH_TARGET,
-                   return_value=_FakeLLMResult(text="{}")) as mock_llm:
+        with patch(_PLLLM_PATCH_TARGET, return_value=_FakeLLMResult(text="{}")) as mock_llm:
             _sensitive_detector.detect_sensitive_topics(
                 "AfD-Wähler sollten aufhören zu jammern", use_llm=False
             )
@@ -636,15 +659,17 @@ class TestSensitiveDetectorSeam:
 
     def test_json_parsing_with_mocked_response(self):
         """FlaggedPhrases und Confidence werden aus Seam-Antwort korrekt geparst."""
-        llm_response = json.dumps({
-            "is_sensitive": True,
-            "categories": ["politics", "hate"],
-            "confidence": 0.88,
-            "flagged_phrases": [
-                {"phrase": "Volksverräter", "category": "hate"},
-                {"phrase": "Bundestag", "category": "politics"},
-            ],
-        })
+        llm_response = json.dumps(
+            {
+                "is_sensitive": True,
+                "categories": ["politics", "hate"],
+                "confidence": 0.88,
+                "flagged_phrases": [
+                    {"phrase": "Volksverräter", "category": "hate"},
+                    {"phrase": "Bundestag", "category": "politics"},
+                ],
+            }
+        )
 
         with patch(_PLLLM_PATCH_TARGET, return_value=_FakeLLMResult(text=llm_response)):
             categories, phrases, confidence = _sensitive_detector._llm_check(
@@ -658,8 +683,7 @@ class TestSensitiveDetectorSeam:
 
     def test_llm_failure_returns_empty(self):
         """Bei LLM-Fehler (Exception) gibt _llm_check leere Listen zurück (fail-open)."""
-        with patch(_PLLLM_PATCH_TARGET,
-                   side_effect=RuntimeError("Router nicht erreichbar")):
+        with patch(_PLLLM_PATCH_TARGET, side_effect=RuntimeError("Router nicht erreichbar")):
             categories, phrases, confidence = _sensitive_detector._llm_check("AfD ist super")
 
         assert categories == []

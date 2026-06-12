@@ -49,6 +49,7 @@ if _BACKEND_DIR not in sys.path:
 # Interner Stub-Helfer — nur wenn noch nicht in sys.modules
 # ---------------------------------------------------------------------------
 
+
 def _stub(name: str) -> types.ModuleType:
     """Stub-Modul nur anlegen, wenn noch nicht in sys.modules."""
     if name in sys.modules:
@@ -143,7 +144,7 @@ if "services.nextcloud" not in sys.modules:
     _nc.nextcloud_client = None
 
 # Jetzt services als echtes Paket importieren (damit __path__ gesetzt ist)
-import services as _services_pkg  # noqa: E402
+import services as _services_pkg
 
 # services.voice_transcription — telegram_task importiert es auf Modulebene
 if "services.voice_transcription" not in sys.modules:
@@ -202,6 +203,7 @@ _services_pkg.p08_service = sys.modules["services.p08_service"]
 _api_pkg = _stub("api")
 if not hasattr(_api_pkg, "__path__"):
     _api_pkg.__path__ = [os.path.join(_BACKEND_DIR, "api")]
+    _api_pkg.__package__ = "api"
 if "api.telegram" not in sys.modules:
     _at = _stub("api.telegram")
     _at._send_telegram_message = MagicMock()
@@ -226,6 +228,12 @@ class _FakeCeleryApp:
 
 if "tasks" not in sys.modules:
     _stub("tasks")
+# Ensure tasks is a real package (may be a plain ModuleType stub without __path__).
+# Without __path__, submodule imports like "from tasks.p03_task import ..." fail.
+_tasks_pkg = sys.modules["tasks"]
+if not hasattr(_tasks_pkg, "__path__"):
+    _tasks_pkg.__path__ = [os.path.join(_BACKEND_DIR, "tasks")]
+    _tasks_pkg.__package__ = "tasks"
 if "tasks.celery_app" not in sys.modules:
     _ca = _stub("tasks.celery_app")
     _ca.celery_app = _FakeCeleryApp()
@@ -311,7 +319,7 @@ def active_session() -> types.SimpleNamespace:
     return types.SimpleNamespace(id="sess-1", status="active")
 
 
-def make_guard_db_mock(routed_to: "str | None" = None) -> MagicMock:
+def make_guard_db_mock(routed_to: str | None = None) -> MagicMock:
     """Erzeugt einen Mock-DB-Kontext-Manager für den Idempotenz-Guard-SELECT.
 
     routed_to=None  → (None,)        — Nachricht noch nicht geroutet (Guard lässt durch).

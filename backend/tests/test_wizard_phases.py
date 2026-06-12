@@ -21,8 +21,6 @@ from __future__ import annotations
 import os
 import sys
 
-import pytest
-
 # ---------------------------------------------------------------------------
 # Path sicherstellen und dep-freien Import
 # ---------------------------------------------------------------------------
@@ -31,7 +29,7 @@ _BACKEND_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
 if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
-from api.wizard_phases import WIZARD_PHASE_COUNT, WIZARD_PHASES  # noqa: E402
+from api.wizard_phases import WIZARD_PHASE_COUNT, WIZARD_PHASES
 
 # Auch _phase_complete und _next_question aus wizard_phases testen?
 # Die Funktionen liegen in api/wizard.py (Heavy-deps nötig).
@@ -73,12 +71,11 @@ BOARD_PHASE_TITLES = [
 # Tests: Anzahl und Reihenfolge
 # ---------------------------------------------------------------------------
 
+
 class TestWizardPhasesCount:
     def test_exactly_8_phases(self):
         """WIZARD_PHASES muss genau 8 Phasen haben (Board-SOLL)."""
-        assert len(WIZARD_PHASES) == 8, (
-            f"Erwartet 8 Phasen, gefunden: {len(WIZARD_PHASES)}"
-        )
+        assert len(WIZARD_PHASES) == 8, f"Erwartet 8 Phasen, gefunden: {len(WIZARD_PHASES)}"
 
     def test_wizard_phase_count_constant_is_8(self):
         """WIZARD_PHASE_COUNT muss 8 sein."""
@@ -87,9 +84,7 @@ class TestWizardPhasesCount:
     def test_phase_numbers_sequential_1_to_8(self):
         """Phase-Nummern müssen 1–8 lückenlos aufsteigend sein."""
         phase_nums = [p["phase"] for p in WIZARD_PHASES]
-        assert phase_nums == list(range(1, 9)), (
-            f"Phase-Nummern: {phase_nums}"
-        )
+        assert phase_nums == list(range(1, 9)), f"Phase-Nummern: {phase_nums}"
 
 
 class TestBoardPhaseOrder:
@@ -111,8 +106,7 @@ class TestBoardPhaseOrder:
     def test_phase_3_expertise(self):
         """Expertise & Fachwissen muss als eigene Phase 3 existieren (war komplett fehlend)."""
         assert WIZARD_PHASES[2]["title"] == "Expertise & Fachwissen", (
-            "Phase 3 fehlt oder falsch benannt: "
-            f"'{WIZARD_PHASES[2]['title']}'"
+            "Phase 3 fehlt oder falsch benannt: " f"'{WIZARD_PHASES[2]['title']}'"
         )
 
     def test_phase_4_zielkunde(self):
@@ -124,8 +118,7 @@ class TestBoardPhaseOrder:
     def test_phase_6_vertrauen(self):
         """Vertrauen & Integrität muss GETRENNT von Abschluss sein."""
         assert WIZARD_PHASES[5]["title"] == "Vertrauen & Integrität", (
-            "Phase 6 falsch: "
-            f"'{WIZARD_PHASES[5]['title']}'"
+            "Phase 6 falsch: " f"'{WIZARD_PHASES[5]['title']}'"
         )
 
     def test_phase_7_sprache(self):
@@ -134,8 +127,7 @@ class TestBoardPhaseOrder:
     def test_phase_8_abschluss(self):
         """Abschluss muss GETRENNT von Vertrauen & Integrität sein."""
         assert WIZARD_PHASES[7]["title"] == "Abschluss", (
-            "Phase 8 falsch: "
-            f"'{WIZARD_PHASES[7]['title']}'"
+            "Phase 8 falsch: " f"'{WIZARD_PHASES[7]['title']}'"
         )
 
 
@@ -164,6 +156,7 @@ class TestExpertisePhaseSeparate:
 # Tests: Schema-Vollständigkeit
 # ---------------------------------------------------------------------------
 
+
 class TestPhaseSchema:
     REQUIRED_FIELDS = {"phase", "title", "goal", "questions"}
 
@@ -172,54 +165,42 @@ class TestPhaseSchema:
         for p in WIZARD_PHASES:
             missing = self.REQUIRED_FIELDS - set(p.keys())
             assert not missing, (
-                f"Phase {p.get('phase', '?')} '{p.get('title', '?')}' "
-                f"fehlen Felder: {missing}"
+                f"Phase {p.get('phase', '?')} '{p.get('title', '?')}' " f"fehlen Felder: {missing}"
             )
 
     def test_all_phases_have_at_least_one_question(self):
         """Jede Phase muss mindestens 1 Frage haben."""
         for p in WIZARD_PHASES:
-            assert len(p["questions"]) >= 1, (
-                f"Phase {p['phase']} '{p['title']}' hat keine Fragen"
-            )
+            assert len(p["questions"]) >= 1, f"Phase {p['phase']} '{p['title']}' hat keine Fragen"
 
     def test_all_questions_have_id_and_text(self):
         """Jede Frage muss 'id' haben; 'text' oder 'label' (Sondertypen wie linkedin_posts)."""
         for p in WIZARD_PHASES:
             for q in p["questions"]:
-                assert "id" in q, (
-                    f"Phase {p['phase']}: Frage ohne 'id': {q}"
-                )
+                assert "id" in q, f"Phase {p['phase']}: Frage ohne 'id': {q}"
                 # Sondertypen (z.B. linkedin_posts-Widget) haben 'label' statt 'text' — akzeptiert
                 if q.get("type") in ("linkedin_posts",):
-                    assert "label" in q, (
-                        f"Phase {p['phase']}: Sonder-Frage {q['id']} ohne 'label': {q}"
-                    )
+                    assert (
+                        "label" in q
+                    ), f"Phase {p['phase']}: Sonder-Frage {q['id']} ohne 'label': {q}"
                 else:
-                    assert "text" in q, (
-                        f"Phase {p['phase']}: Frage ohne 'text': {q}"
-                    )
-                    assert q["text"].strip(), (
-                        f"Phase {p['phase']}: Frage {q['id']} hat leeren Text"
-                    )
+                    assert "text" in q, f"Phase {p['phase']}: Frage ohne 'text': {q}"
+                    assert q["text"].strip(), f"Phase {p['phase']}: Frage {q['id']} hat leeren Text"
 
     def test_all_questions_have_hints_field(self):
         """Jede Frage muss das 'hints'-Feld haben (kann leer sein)."""
         for p in WIZARD_PHASES:
             for q in p["questions"]:
-                assert "hints" in q, (
-                    f"Phase {p['phase']}: Frage {q.get('id', '?')} fehlt 'hints'"
-                )
-                assert isinstance(q["hints"], list), (
-                    f"Phase {p['phase']}: Frage {q['id']}: 'hints' ist kein list"
-                )
+                assert "hints" in q, f"Phase {p['phase']}: Frage {q.get('id', '?')} fehlt 'hints'"
+                assert isinstance(
+                    q["hints"], list
+                ), f"Phase {p['phase']}: Frage {q['id']}: 'hints' ist kein list"
 
     def test_question_ids_unique_across_all_phases(self):
         """Alle question-IDs müssen über alle Phasen hinweg eindeutig sein."""
         all_ids = [q["id"] for p in WIZARD_PHASES for q in p["questions"]]
         assert len(all_ids) == len(set(all_ids)), (
-            f"Doppelte question_ids: "
-            f"{[id_ for id_ in all_ids if all_ids.count(id_) > 1]}"
+            f"Doppelte question_ids: " f"{[id_ for id_ in all_ids if all_ids.count(id_) > 1]}"
         )
 
     def test_question_ids_follow_phase_naming_convention(self):
@@ -242,10 +223,11 @@ class TestPhaseSchema:
 # Tests: WIZARD_PHASE_COUNT Konsistenz
 # ---------------------------------------------------------------------------
 
+
 class TestPhaseCountConstant:
     def test_phase_count_equals_len_wizard_phases(self):
         """WIZARD_PHASE_COUNT muss mit len(WIZARD_PHASES) übereinstimmen."""
-        assert WIZARD_PHASE_COUNT == len(WIZARD_PHASES)
+        assert len(WIZARD_PHASES) == WIZARD_PHASE_COUNT
 
     def test_phase_count_is_8(self):
         assert WIZARD_PHASE_COUNT == 8
@@ -254,6 +236,7 @@ class TestPhaseCountConstant:
 # ---------------------------------------------------------------------------
 # Tests: Logik-Funktionen (pure Reimplementierung)
 # ---------------------------------------------------------------------------
+
 
 class TestPhaseFunctions:
     def test_phase_complete_empty_answers(self):
@@ -288,25 +271,17 @@ class TestPhaseFunctions:
 
     def test_next_question_phase_3_is_expertise(self):
         """Nach Phases 1+2 kommen Fragen aus Phase 3 (Expertise & Fachwissen)."""
-        answered = {
-            q["id"]
-            for p in WIZARD_PHASES[:2]
-            for q in p["questions"]
-        }
+        answered = {q["id"] for p in WIZARD_PHASES[:2] for q in p["questions"]}
         nq = _next_question_pure(3, answered)
         assert nq is not None
         assert nq["phase"] == 3
-        assert nq["id"].startswith("q3_"), (
-            f"Erste Frage in Phase 3 sollte q3_... sein, gefunden: {nq['id']}"
-        )
+        assert nq["id"].startswith(
+            "q3_"
+        ), f"Erste Frage in Phase 3 sollte q3_... sein, gefunden: {nq['id']}"
 
     def test_next_question_after_phase_3_is_phase_4_zielkunde(self):
         """Nach Phase 3 kommen Fragen aus Phase 4 (Zielkunde)."""
-        answered = {
-            q["id"]
-            for p in WIZARD_PHASES[:3]
-            for q in p["questions"]
-        }
+        answered = {q["id"] for p in WIZARD_PHASES[:3] for q in p["questions"]}
         nq = _next_question_pure(4, answered)
         assert nq is not None
         assert nq["phase"] == 4

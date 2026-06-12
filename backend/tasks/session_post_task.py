@@ -93,14 +93,10 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
                 {"tid": tenant_id, "sid": session_id},
             ).fetchone()
         if existing is not None:
-            logger.info(
-                "session_post_task: session=%s already has a post — skip", session_id
-            )
+            logger.info("session_post_task: session=%s already has a post — skip", session_id)
             return {"status": "already_generated"}
     except Exception as exc:
-        logger.warning(
-            "session_post_task: idempotency gate failed: %s", type(exc).__name__
-        )
+        logger.warning("session_post_task: idempotency gate failed: %s", type(exc).__name__)
         return {"status": "error", "reason": "idempotency_gate_failed"}
 
     # 2. Session laden (Tenant-Scope im WHERE = E3-Mandantentrennung)
@@ -114,9 +110,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
                 {"id": session_id, "tid": tenant_id},
             ).fetchone()
     except Exception as exc:
-        logger.warning(
-            "session_post_task: session load failed: %s", type(exc).__name__
-        )
+        logger.warning("session_post_task: session load failed: %s", type(exc).__name__)
         return {"status": "error", "reason": "session_load_failed"}
 
     if row is None:
@@ -133,9 +127,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
     # 3. Q/A-Paare bauen — 0 Paare → skip (Alt-Session ohne Transkripte / leer)
     answers_list = _build_qa_pairs(messages_list)
     if not answers_list:
-        logger.info(
-            "session_post_task: session=%s has no answer transcripts — skip", session_id
-        )
+        logger.info("session_post_task: session=%s has no answer transcripts — skip", session_id)
         return {"status": "skipped", "reason": "no_answers"}
 
     # 4. Aktive Profile (voice/avatar) sync laden (Fassade, Muster p12_task)
@@ -162,9 +154,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             tenant_id, None, answers_list, voice_payload, avatar_payload
         )
     except Exception as exc:
-        logger.warning(
-            "session_post_task: pipeline raised: %s", type(exc).__name__
-        )
+        logger.warning("session_post_task: pipeline raised: %s", type(exc).__name__)
         return {"status": "error", "reason": "pipeline_exception"}
 
     if not isinstance(pipeline_result, dict) or pipeline_result.get("status") != "ok":
@@ -207,16 +197,12 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
                 )
                 db.commit()
     except Exception as exc:
-        logger.warning(
-            "session_post_task: piece marker update failed: %s", type(exc).__name__
-        )
+        logger.warning("session_post_task: piece marker update failed: %s", type(exc).__name__)
 
     # 7. Post in den Chat. Geflaggt → NICHT roh senden (Review-Queue-Pfad #83).
     chat_id = _resolve_chat_id(tenant_id)
     if chat_id is None:
-        logger.info(
-            "session_post_task: no active chat link for tenant — post stored, not sent"
-        )
+        logger.info("session_post_task: no active chat link for tenant — post stored, not sent")
         return {
             "status": "ok",
             "sent": False,
@@ -238,9 +224,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             _send_telegram_message(chat_id, final_post[:_TELEGRAM_MAX_CHARS])
             sent_kind = "post"
     except Exception as exc:
-        logger.warning(
-            "session_post_task: telegram send failed: %s", type(exc).__name__
-        )
+        logger.warning("session_post_task: telegram send failed: %s", type(exc).__name__)
         return {
             "status": "ok",
             "sent": False,
@@ -276,7 +260,5 @@ def _resolve_chat_id(tenant_id: str) -> int | None:
 
         return _resolve(tenant_id)
     except Exception as exc:
-        logger.warning(
-            "session_post_task: chat_id resolve failed: %s", type(exc).__name__
-        )
+        logger.warning("session_post_task: chat_id resolve failed: %s", type(exc).__name__)
         return None

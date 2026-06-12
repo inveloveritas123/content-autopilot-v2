@@ -16,13 +16,12 @@ Reihenfolge-Unabhängigkeit: Modul wird via importlib.util geladen, nicht via no
 
 import ast
 import importlib.util
-import sys
-import types
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Dep-freier Loader für canonical_profiles — identisch zu test_canonical_profiles.py
 # ---------------------------------------------------------------------------
+
 
 def _load_canonical_profiles():
     p = Path(__file__).parent.parent / "services" / "canonical_profiles.py"
@@ -39,11 +38,12 @@ cp = _load_canonical_profiles()
 # 1. TABLE_MAP — 4. Eintrag vorhanden
 # ---------------------------------------------------------------------------
 
+
 class TestTableMap:
     def test_customer_values_registered(self):
-        assert "customer_values" in cp.TABLE_MAP, (
-            "TABLE_MAP muss 'customer_values' enthalten (Issue #43 Schritt 1)"
-        )
+        assert (
+            "customer_values" in cp.TABLE_MAP
+        ), "TABLE_MAP muss 'customer_values' enthalten (Issue #43 Schritt 1)"
 
     def test_customer_values_table_name(self):
         assert cp.TABLE_MAP["customer_values"] == "tenant_customer_values"
@@ -66,6 +66,7 @@ class TestTableMap:
 # ---------------------------------------------------------------------------
 # 2. is_canonical — Regex erweitert um 'values'-Präfix
 # ---------------------------------------------------------------------------
+
 
 class TestIsCanonicalExtended:
     # Neue Werte-Quelle muss akzeptiert werden
@@ -113,6 +114,7 @@ class TestIsCanonicalExtended:
 # 3. pick_active — funktioniert identisch für customer_values-Rows
 # ---------------------------------------------------------------------------
 
+
 class TestPickActiveForCustomerValues:
     """Stellt sicher, dass pick_active() mit customer_values-ähnlichen Rows
     dasselbe Verhalten zeigt wie mit voice/avatar-Rows (generischer Resolver)."""
@@ -158,18 +160,16 @@ class TestPickActiveForCustomerValues:
 # 4. Migration 053 — Syntaxcheck + freigabe-robert-Kopfkommentar
 # ---------------------------------------------------------------------------
 
+
 class TestMigration053:
     _migration_path = (
-        Path(__file__).parent.parent
-        / "alembic"
-        / "versions"
-        / "053_customer_values.py"
+        Path(__file__).parent.parent / "alembic" / "versions" / "053_customer_values.py"
     )
 
     def test_migration_file_exists(self):
-        assert self._migration_path.exists(), (
-            f"Migration 053 nicht gefunden: {self._migration_path}"
-        )
+        assert (
+            self._migration_path.exists()
+        ), f"Migration 053 nicht gefunden: {self._migration_path}"
 
     def test_migration_is_valid_python(self):
         source = self._migration_path.read_text(encoding="utf-8")
@@ -180,9 +180,9 @@ class TestMigration053:
 
     def test_migration_has_freigabe_comment(self):
         source = self._migration_path.read_text(encoding="utf-8")
-        assert "freigabe-robert" in source, (
-            "Migration 053 muss den Kopfkommentar 'freigabe-robert' tragen."
-        )
+        assert (
+            "freigabe-robert" in source
+        ), "Migration 053 muss den Kopfkommentar 'freigabe-robert' tragen."
 
     def test_migration_revision_is_053(self):
         source = self._migration_path.read_text(encoding="utf-8")
