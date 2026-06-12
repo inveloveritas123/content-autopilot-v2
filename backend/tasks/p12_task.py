@@ -70,10 +70,12 @@ _P12_SCHEMA = _load_schema()
 from tasks.p12_pruning import (
     AVATAR_KEYS_FOR_P12,
     CONTEXT_KEYS_FOR_P12,
+    VALUES_KEYS_FOR_P12,  # noqa: F401 — importiert für Vollständigkeit / Tests
     VOICE_KEYS_FOR_P12,
 )
 from tasks.p12_pruning import (
     prune as _prune_keys,
+    prune_values as _prune_values,
 )
 
 # ---------------------------------------------------------------------------
@@ -81,19 +83,50 @@ from tasks.p12_pruning import (
 # ---------------------------------------------------------------------------
 
 
-def _load_active_profiles(tenant_id: str) -> tuple[dict, dict, dict]:
-    """Lädt die aktiven Profile aus den 3 Setup-Tabellen über die Lese-Fassade.
+def _load_active_profiles(tenant_id: str) -> tuple[dict, dict, dict, dict]:
+    """Lädt die aktiven Profile aus den 4 Setup-Tabellen über die Lese-Fassade.
 
     Nutzt services.canonical_profiles (deterministische Aktiv-Row-Auflösung,
     behebt den Multi-Active-Row-Bug) und gibt jeweils das payload-Dict zurück
     (leeres Dict, wenn kein aktiver Eintrag). Loggt eine Warnung bei Alt-v2-Rows.
-    """
-    from services.canonical_profiles import load_active_profiles
 
+    Fail-open für customer_values (#43): Die Tabelle tenant_customer_values
+    existiert erst nach Migration 053. Schlägt der Load fehl (Tabelle fehlt,
+    kein aktives Profil, Netzwerkfehler), wird customer_values={} gesetzt und
+    P12 läuft unverändert mit context/voice/avatar weiter — kein Crash.
+    Dadurch ist der Code sicher deploybar VOR der Migration.
+    """
+    from services.canonical_profiles import load_active_profile, load_active_profiles
+
+    # Bestehende 3 Tabellen — existieren auf Prod, kein Fail-open nötig.
     profiles = load_active_profiles(tenant_id)
     customer_context = profiles["customer_context"]["payload"]
     voice_profile = profiles["voice_profile"]["payload"]
     audience_avatar = profiles["audience_avatar"]["payload"]
+
+    # Fail-open: customer_values (#43) — Tabelle existiert erst nach Migration 053.
+    # load_active_profiles() iteriert alle TABLE_MAP-Keys; schlägt die Query für
+    # tenant_customer_values fehl (Tabelle fehlt auf Prod vor der Migration),
+    # fängt dieser Block den Fehler ab und setzt customer_values = {} damit
+    # P12 unverändert weiterläuft.
+    try:
+        values_payload, values_canonical = load_active_profile("customer_values", tenant_id)
+        customer_values = values_payload or {}
+        if customer_values and not values_canonical:
+            logger.warning(
+                "p12 tenant=%s: aktives customer_values ist NICHT kanonisch (Alt-Row) "
+                "→ Re-Run empfohlen",
+                tenant_id,
+            )
+    except Exception as exc:
+        logger.warning(
+            "p12 tenant=%s: customer_values-Load fehlgeschlagen (%s: %s) "
+            "— fail-open, weiter ohne Werte-Profil",
+            tenant_id,
+            type(exc).__name__,
+            exc,
+        )
+        customer_values = {}
 
     for ptype, info in profiles.items():
         if info["payload"] and not info["is_canonical"]:
@@ -106,28 +139,34 @@ def _load_active_profiles(tenant_id: str) -> tuple[dict, dict, dict]:
 
     logger.debug(
         "p12 _load_active_profiles tenant=%s: "
-        "customer_context=%d keys, voice_profile=%d keys, audience_avatar=%d keys",
+        "customer_context=%d keys, voice_profile=%d keys, "
+        "audience_avatar=%d keys, customer_values=%d keys",
         tenant_id,
         len(customer_context),
         len(voice_profile),
         len(audience_avatar),
+        len(customer_values),
     )
-    return customer_context, voice_profile, audience_avatar
+    return customer_context, voice_profile, audience_avatar, customer_values
 
 
 def _prune_for_p12(
     customer_context: dict,
     voice_profile: dict,
     audience_avatar: dict,
-) -> tuple[dict, dict, dict]:
+    customer_values: dict,
+) -> tuple[dict, dict, dict, dict]:
     """Reduziert die Profile auf die für P12 relevanten Felder.
 
     Nur vorhandene Keys werden übernommen — kein KeyError bei fehlenden Feldern.
+    customer_values wird über prune_values() verarbeitet (Status-Filter +
+    quellen/status-Stripping für Token-Hygiene). Leerer Payload → {} (fail-open).
     """
     pruned_context = _prune_keys(customer_context, CONTEXT_KEYS_FOR_P12)
     pruned_voice = _prune_keys(voice_profile, VOICE_KEYS_FOR_P12)
     pruned_avatar = _prune_keys(audience_avatar, AVATAR_KEYS_FOR_P12)
-    return pruned_context, pruned_voice, pruned_avatar
+    pruned_values = _prune_values(customer_values)
+    return pruned_context, pruned_voice, pruned_avatar, pruned_values
 
 
 async def _run_cost_check(tenant_id: str, estimated_cost: float) -> None:
@@ -256,20 +295,23 @@ def run_p12(
         # ------------------------------------------------------------------
         # 3. Aktive Profile aus DB laden
         # ------------------------------------------------------------------
-        customer_context, voice_profile, audience_avatar = _load_active_profiles(tenant_id)
+        customer_context, voice_profile, audience_avatar, customer_values = (
+            _load_active_profiles(tenant_id)
+        )
 
         # ------------------------------------------------------------------
         # 4. Profile prunen
         # ------------------------------------------------------------------
-        pruned_context, pruned_voice, pruned_avatar = _prune_for_p12(
-            customer_context, voice_profile, audience_avatar
+        pruned_context, pruned_voice, pruned_avatar, pruned_values = _prune_for_p12(
+            customer_context, voice_profile, audience_avatar, customer_values
         )
         logger.debug(
-            "p12 run_id=%s: pruned keys — context=%d voice=%d avatar=%d",
+            "p12 run_id=%s: pruned keys — context=%d voice=%d avatar=%d values=%d",
             run_id,
             len(pruned_context),
             len(pruned_voice),
             len(pruned_avatar),
+            len(pruned_values),
         )
 
         # ------------------------------------------------------------------
@@ -316,6 +358,11 @@ def run_p12(
             "answers": answers,
             "idea_id": idea_id,
         }
+        # #43 Schritt 3: Werte-Entität in den Prompt-Kontext injizieren.
+        # Fail-open: pruned_values ist {} wenn Tabelle noch nicht existiert
+        # (vor Migration 053) oder kein aktives Profil → P12 läuft unverändert.
+        if pruned_values:
+            context_payload["customer_values"] = pruned_values
         if hook_inspirations:
             context_payload["hook_inspirations"] = hook_inspirations
         context_json_str = json.dumps(context_payload, ensure_ascii=False)

@@ -68,7 +68,8 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 ### Sprint-2-Fortschritt
 - ✅ **#44 Wizard 6→8 Phasen fertig** — `api/wizard_phases.py` (dep-frei extrahiert), 8 Board-Phasen in Reihenfolge, hardcoded „6" entfernt; 101 Tests grün. Fragen-Wortlaut der neuen Phasen = Chris-Flag (board-konforme Defaults).
 - ✅ **#43 Schritt 1 fertig**: Migration 053 (`tenant_customer_values`, down_revision=049, freigabe-robert, NICHT angewandt) + canonical_profiles TABLE_MAP/Resolver/Regex + schema_transformer. 29 Tests + 115 Anti-Pollution grün. Pre-existing Py3.9-Bug in canonical_profiles mitgefixt. Robert-Flag in ROBERT-BACKLOG.
-- **Nächste Aktion: #43 Schritt 3 (P12-Injektion in `p12_task._load_active_profiles` → 4-Tupel)** — macht Werte für die Post-Erstellung wirksam. Danach Schritt 2 (Backfill) + Schritt 4 (P17-decide-generisch).
+- ✅ **#43 Schritt 3 fertig**: P12-Injektion — `_load_active_profiles` → 4-Tupel inkl. customer_values, fail-open (Tabelle fehlt vor Migration → Werte leer, P12 unverändert → sicher vor Migration deploybar). `VALUES_KEYS_FOR_P12`-Whitelist. 158 Anti-Pollution grün.
+- **Nächste Aktion: #43 Schritt 2 (Backfill memory_chunks 'werte' → Entität) + Schritt 4 (P17 decide-generisch via entity_type)** — danach ist die Board-Trias komplett.
 
 ---
 
