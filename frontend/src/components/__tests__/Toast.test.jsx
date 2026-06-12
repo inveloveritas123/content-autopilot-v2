@@ -8,8 +8,7 @@
  * Ausführen: npx vitest run Toast.test.jsx
  */
 
-import { act, render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { ToastProvider, useToast } from '../ui/Toast'
 
 // ─── Hilfs-Komponente ────────────────────────────────────────────────────────
@@ -34,28 +33,26 @@ describe('Toast-System', () => {
     vi.useRealTimers()
   })
 
-  it('zeigt Toast mit korrektem Text an', async () => {
+  it('zeigt Toast mit korrektem Text an', () => {
     renderWithProvider(<ToastTrigger message="Gespeichert!" variant="success" />)
-    await userEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i }))
+    act(() => { fireEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i })) })
     expect(screen.getByText('Gespeichert!')).toBeInTheDocument()
   })
 
-  it('dismisst success-Toast automatisch nach 4 Sekunden', async () => {
+  it('dismisst success-Toast automatisch nach 4 Sekunden', () => {
     renderWithProvider(<ToastTrigger message="Kurze Nachricht" variant="success" />)
-    await userEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i }))
+    act(() => { fireEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i })) })
     expect(screen.getByText('Kurze Nachricht')).toBeInTheDocument()
 
     act(() => {
       vi.advanceTimersByTime(4001)
     })
-    await waitFor(() => {
-      expect(screen.queryByText('Kurze Nachricht')).not.toBeInTheDocument()
-    })
+    expect(screen.queryByText('Kurze Nachricht')).not.toBeInTheDocument()
   })
 
-  it('dismisst error-Toast erst nach 8 Sekunden', async () => {
+  it('dismisst error-Toast erst nach 8 Sekunden', () => {
     renderWithProvider(<ToastTrigger message="Fehler aufgetreten" variant="error" />)
-    await userEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i }))
+    act(() => { fireEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i })) })
 
     act(() => {
       vi.advanceTimersByTime(4001)
@@ -66,12 +63,10 @@ describe('Toast-System', () => {
     act(() => {
       vi.advanceTimersByTime(4001)
     })
-    await waitFor(() => {
-      expect(screen.queryByText('Fehler aufgetreten')).not.toBeInTheDocument()
-    })
+    expect(screen.queryByText('Fehler aufgetreten')).not.toBeInTheDocument()
   })
 
-  it('stacked max 3 Toasts — ältester wird verdrängt', async () => {
+  it('stacked max 3 Toasts — ältester wird verdrängt', () => {
     function MultiTrigger() {
       const toast = useToast()
       return (
@@ -85,10 +80,10 @@ describe('Toast-System', () => {
     }
     renderWithProvider(<MultiTrigger />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'T1' }))
-    await userEvent.click(screen.getByRole('button', { name: 'T2' }))
-    await userEvent.click(screen.getByRole('button', { name: 'T3' }))
-    await userEvent.click(screen.getByRole('button', { name: 'T4' }))
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'T1' })) })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'T2' })) })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'T3' })) })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'T4' })) })
 
     // Max 3 — Toast 1 wurde verdrängt
     expect(screen.queryByText('Toast 1')).not.toBeInTheDocument()
@@ -97,13 +92,13 @@ describe('Toast-System', () => {
     expect(screen.getByText('Toast 4')).toBeInTheDocument()
   })
 
-  it('manuelles Schließen via X-Button funktioniert', async () => {
+  it('manuelles Schließen via X-Button funktioniert', () => {
     renderWithProvider(<ToastTrigger message="Schließbar" variant="info" />)
-    await userEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i }))
+    act(() => { fireEvent.click(screen.getByRole('button', { name: /Toast anzeigen/i })) })
     expect(screen.getByText('Schließbar')).toBeInTheDocument()
 
     const closeBtn = screen.getByRole('button', { name: /Schließen/i })
-    await userEvent.click(closeBtn)
+    act(() => { fireEvent.click(closeBtn) })
     expect(screen.queryByText('Schließbar')).not.toBeInTheDocument()
   })
 })
