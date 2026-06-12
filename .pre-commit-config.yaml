@@ -15,7 +15,7 @@ repos:
         exclude: '^backend/alembic/versions/|^frontend/dist/'
       - id: check-yaml
         args: [--allow-multiple-documents]
-        exclude: '^backend/eval/.*\.ya?ml$'
+        exclude: '^backend/eval/.*\.ya?ml$|^deploy/helm/'
       - id: check-json
         exclude: '^backend/eval/.*\.json$|^frontend/dist/'
       - id: check-added-large-files
