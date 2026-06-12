@@ -28,7 +28,9 @@ export default [
       ...js.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      // PascalCase vars (React components) are used in JSX but not detected without
+      // eslint-plugin-react/jsx-uses-vars — exclude them from unused-vars check.
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_|^[A-Z]' }],
       // allowEmptyCatch: leere catch-Blöcke sind in UI-fire-and-forget-Aktionen
       // absichtlich — Fehler werden still ignoriert ohne die UI zu unterbrechen.
       // Das Pattern ist im gesamten Codebase konsistent eingesetzt.

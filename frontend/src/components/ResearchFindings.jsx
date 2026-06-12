@@ -4,7 +4,7 @@
  */
 import { useState, useEffect } from 'react'
 import { Sparkles, ExternalLink, X, Plus } from 'lucide-react'
-import { listResearchFindings, dismissResearchFinding, useFindingAsIdea } from '../api'
+import { listResearchFindings, dismissResearchFinding, convertFindingToIdea } from '../api'
 
 const CATEGORY_LABELS = {
   rules_constraints: { de: 'Regulierung', color: 'bg-rose-100 text-rose-700' },
@@ -54,7 +54,7 @@ export default function ResearchFindings({ limit = 8 }) {
 
   async function handleUseAsIdea(id, hookIdx) {
     try {
-      const r = await useFindingAsIdea(id, hookIdx)
+      const r = await convertFindingToIdea(id, hookIdx)
       setFindings((prev) => prev.filter((f) => f.id !== id))
       // Optional: navigate(`/ideas#${r.idea_id}`) — leave to Robert preference
     } catch (e) {

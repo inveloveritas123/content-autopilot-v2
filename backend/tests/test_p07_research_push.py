@@ -33,7 +33,7 @@ from unittest.mock import MagicMock, patch
 # Geteilte Stub-Umgebung ZUERST — liefert sqlalchemy/config/models.base/
 # celery/api.telegram/tasks.telegram_task/services.* konsistent ein.
 # ---------------------------------------------------------------------------
-from tests import _telegram_task_env as _env  # noqa: E402,F401
+from tests import _telegram_task_env as _env  # noqa: F401
 
 _BACKEND_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
 if _BACKEND_DIR not in sys.path:
@@ -53,7 +53,7 @@ def _stub(name: str) -> types.ModuleType:
 # services.llm.set_llm_tenant — p07_research_task importiert es lazy in
 # _process_item_async. Sicherstellen dass set_llm_tenant vorhanden ist.
 # ---------------------------------------------------------------------------
-import services as _services_pkg  # noqa: E402 (env hat services als Paket)
+import services as _services_pkg
 
 _llm_mod = sys.modules.get("services.llm") or _stub("services.llm")
 if not hasattr(_llm_mod, "set_llm_tenant"):

@@ -20,8 +20,6 @@ Anti-Pollution: Stubs nur mit `if name not in sys.modules`-Guards.
 """
 
 import importlib.util
-import sys
-import types
 from pathlib import Path
 
 # ---------------------------------------------------------------------------

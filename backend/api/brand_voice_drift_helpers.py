@@ -21,7 +21,7 @@ SICHERHEIT:
 """
 
 import copy
-from typing import Any, Optional
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Whitelist: entity_type → Tabellenname
@@ -37,7 +37,7 @@ _ENTITY_TABLE: dict[str, str] = {
 }
 
 
-def get_entity_table(entity_type: Optional[str] = "voice") -> str:
+def get_entity_table(entity_type: str | None = "voice") -> str:
     """Gibt den Tabellennamen für einen entity_type zurück.
 
     Args:
