@@ -41,9 +41,29 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 **✅ SPRINT 1 ABGESCHLOSSEN** — Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→**Post im Chat**, M24-Kern-Gap geschlossen) + EU-Souveränität gehärtet (#46). Alle auf `arch/weekloop`, PR #55. Server-E2E = Knecht.
 **Nächste Aktion:** Sprint 2 (Setup/Schema) detailliert planen → bauen. Subagenten erst nach Session-Limit-Reset 22:30 Europe/Berlin verfügbar.
 
-### Backlog danach (Sprint 2+, Reihenfolge vorläufig)
-- Sprint 2 „Setup-Schema": #43-Impl (DB-Migration → Robert!), #29/#25/#26 Schema, #44 Wizard 6→8.
-- Sprint 3 „Board-Vervollständigung": #35 P07-Push, #36 Intent-Routing, #37 Feedback-Loop, #41 P17-Ausrichtung, #38 Quality-Gate, #39 P02, #40 Voice-Fallback.
+### GitHub-Sprint-Struktur (angelegt)
+- Milestones 1/2/3 = Sprint 1/2/3; alle Issues zugeordnet.
+- **Master-Tracking-Issue #59** = detaillierter Fahrplan Architekt+Knecht (Reihenfolge, Deps, Akzeptanz, Robert-Entscheide).
+
+---
+
+## BOOTSTRAP (bei Wiederaufnahme — z.B. nach Limit-Reset/Kompaktierung)
+1. Diese Datei lesen → `git -C content-autopilot-v2 log --oneline -10` (Stand prüfen).
+2. Branch `arch/weekloop`. Test-Sanity (sollte grün sein): `cd content-autopilot-v2/backend && PYTHONPATH=. ../../.venv/bin/python -m pytest tests/test_idempotency_routing.py tests/test_telegram_inbound_routing.py tests/test_p08_service.py tests/test_session_post_task.py tests/test_eu_router_migration.py tests/test_pipeline_llm.py tests/test_layer1_extraction.py -q` → 138 passed erwartet.
+3. **Subagenten verfügbar?** (Session-Limit-Reset 22:30 Europe/Berlin). Wenn ja → Sprint 2 bauen; wenn nein → Hauptloop-eigene, kleine, sichere Items oder erneut warten.
+4. Sprint-2-Plan: fable Detailplan je Issue gegen den Code (wie SPRINT-1-PLAN.md), dann sonnet/opus-Impl mit TDD + geteiltem Test-Helper `tests/_telegram_task_env.py` (Anti-Pollution!), Gate-Orakel, push, Issue kommentieren.
+
+### Sprint 2 — Reihenfolge & autonom-Machbarkeit
+| Issue | Tier | autonom jetzt? | Hinweis |
+|---|---|---|---|
+| #44 Wizard 6→8 Phasen | sonnet | ✅ Struktur (Fragen-Content später Chris) | self-contained in `api/wizard.py:WIZARD_PHASES`; Board 2.2 listet die 8 Phasen |
+| #43 Werte-Entität | fable→sonnet | ⚠️ Code ja, **Migration→Robert** | Konzept `docs/CONCEPT-43-werte-entitaet.md`; Tabelle `tenant_customer_values` NICHT auf Prod anwenden |
+| #29 Schema-Konsumenten | opus | ⚠️ besser nach #33-Merge | gradual rewire; ohne echte Schema-Läufe riskant |
+| #25/#26 Alt-Rows/_meta | sonnet | ⚠️ dep #29 | |
+| #30 Modell-Pinning | haiku | ⚠️ vorsichtig | -latest pinnen ändert Verhalten → eher Policy-Ausnahme dokumentieren |
+| #33/#32/#34/#47/#48/#49 | knecht | ❌ Knecht-Revier | nicht anfassen |
+
+**Empfohlener erster Sprint-2-Schritt nach Reset:** fable-Detailplan #44 + #43 → #44 sonnet bauen (sicher, board-anchored) → #43 Code+Migration vorlegen (Robert-Flag).
 
 ---
 
