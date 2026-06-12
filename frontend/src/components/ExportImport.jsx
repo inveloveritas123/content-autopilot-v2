@@ -112,8 +112,8 @@ export default function ExportImport() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Exportiert alle Tenant-Daten (Quellen, Items, Content, Einstellungen).
-            Die Datei kann als Backup oder zur Migration genutzt werden.
+            Exportiert alle Tenant-Daten (Quellen, Items, Content, Einstellungen). Die Datei kann
+            als Backup oder zur Migration genutzt werden.
           </p>
 
           {/* Format-Selector */}
@@ -129,9 +129,10 @@ export default function ExportImport() {
                 <label
                   key={opt.value}
                   className={`flex items-start gap-2 p-3 rounded-lg border cursor-pointer transition-colors
-                    ${exportFormat === opt.value
-                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                    ${
+                      exportFormat === opt.value
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                     }`}
                 >
                   <input
@@ -143,7 +144,9 @@ export default function ExportImport() {
                     className="mt-0.5 accent-primary-500"
                   />
                   <div>
-                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{opt.label}</p>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                      {opt.label}
+                    </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{opt.desc}</p>
                   </div>
                 </label>
@@ -177,38 +180,51 @@ export default function ExportImport() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Importiert Tenant-Daten aus einer zuvor exportierten ZIP-Datei. Maximale Dateigröße: 100 MB.
+            Importiert Tenant-Daten aus einer zuvor exportierten ZIP-Datei. Maximale Dateigröße: 100
+            MB.
           </p>
 
           {importResult ? (
             <div className="space-y-3">
               <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-                <p className="font-medium text-green-800 dark:text-green-200 text-sm">Import erfolgreich</p>
+                <p className="font-medium text-green-800 dark:text-green-200 text-sm">
+                  Import erfolgreich
+                </p>
                 {importResult.imported_counts && (
                   <ul className="mt-2 space-y-1 text-sm text-green-700 dark:text-green-300">
                     {Object.entries(importResult.imported_counts).map(([key, val]) => (
-                      <li key={key}>{key}: {val} importiert</li>
+                      <li key={key}>
+                        {key}: {val} importiert
+                      </li>
                     ))}
                   </ul>
                 )}
                 {importResult.message && (
-                  <p className="mt-2 text-sm text-green-700 dark:text-green-300">{importResult.message}</p>
+                  <p className="mt-2 text-sm text-green-700 dark:text-green-300">
+                    {importResult.message}
+                  </p>
                 )}
               </div>
-              <Button variant="secondary" onClick={resetImport}>Neuen Import starten</Button>
+              <Button variant="secondary" onClick={resetImport}>
+                Neuen Import starten
+              </Button>
             </div>
           ) : (
             <>
               {/* Drop zone */}
               <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setDragOver(true)
+                }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors
-                  ${dragOver
-                    ? 'border-primary-400 bg-primary-50 dark:bg-primary-900/20'
-                    : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 bg-gray-50 dark:bg-gray-800/50'
+                  ${
+                    dragOver
+                      ? 'border-primary-400 bg-primary-50 dark:bg-primary-900/20'
+                      : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 bg-gray-50 dark:bg-gray-800/50'
                   }`}
               >
                 <input
@@ -220,12 +236,18 @@ export default function ExportImport() {
                 />
                 {selectedFile ? (
                   <div className="space-y-1">
-                    <p className="font-medium text-gray-700 dark:text-gray-300 text-sm">{selectedFile.name}</p>
-                    <p className="text-xs text-gray-500">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p className="font-medium text-gray-700 dark:text-gray-300 text-sm">
+                      {selectedFile.name}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">ZIP-Datei hier ablegen oder klicken</p>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                      ZIP-Datei hier ablegen oder klicken
+                    </p>
                     <p className="text-xs text-gray-400 dark:text-gray-500">max. 100 MB</p>
                   </div>
                 )}
@@ -245,10 +267,14 @@ export default function ExportImport() {
 
               {dryRunResult && !dryRunResult.valid && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 space-y-2">
-                  <p className="font-medium text-red-800 dark:text-red-200 text-sm">ZIP-Datei ungültig</p>
+                  <p className="font-medium text-red-800 dark:text-red-200 text-sm">
+                    ZIP-Datei ungültig
+                  </p>
                   {dryRunResult.errors && (
                     <ul className="text-sm text-red-700 dark:text-red-300 list-disc list-inside space-y-1">
-                      {dryRunResult.errors.map((err, i) => <li key={i}>{err}</li>)}
+                      {dryRunResult.errors.map((err, i) => (
+                        <li key={i}>{err}</li>
+                      ))}
                     </ul>
                   )}
                 </div>
@@ -256,11 +282,15 @@ export default function ExportImport() {
 
               {dryRunResult?.valid && (
                 <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-2">
-                  <p className="font-medium text-blue-800 dark:text-blue-200 text-sm">Vorschau (Dry-Run)</p>
+                  <p className="font-medium text-blue-800 dark:text-blue-200 text-sm">
+                    Vorschau (Dry-Run)
+                  </p>
                   {dryRunResult.preview && (
                     <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
                       {Object.entries(dryRunResult.preview).map(([key, val]) => (
-                        <li key={key}>{key}: {typeof val === 'object' ? JSON.stringify(val) : val}</li>
+                        <li key={key}>
+                          {key}: {typeof val === 'object' ? JSON.stringify(val) : val}
+                        </li>
                       ))}
                     </ul>
                   )}
@@ -279,7 +309,9 @@ export default function ExportImport() {
                   </Button>
                 )}
                 {selectedFile && (
-                  <Button variant="secondary" onClick={resetImport}>Zurücksetzen</Button>
+                  <Button variant="secondary" onClick={resetImport}>
+                    Zurücksetzen
+                  </Button>
                 )}
               </div>
             </>
@@ -297,19 +329,23 @@ export default function ExportImport() {
           <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
             <p className="font-medium text-amber-800 dark:text-amber-200 text-sm">Warnung</p>
             <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-              Der Import merged bestehende Daten mit den importierten Daten. Bestehende Einträge können
-              überschrieben werden. Diese Aktion kann nicht rückgängig gemacht werden.
+              Der Import merged bestehende Daten mit den importierten Daten. Bestehende Einträge
+              können überschrieben werden. Diese Aktion kann nicht rückgängig gemacht werden.
             </p>
           </div>
 
           {dryRunResult?.preview && (
             <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Was wird importiert:</p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Was wird importiert:
+              </p>
               <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
                 {Object.entries(dryRunResult.preview).map(([key, val]) => (
                   <li key={key} className="flex justify-between">
                     <span>{key}</span>
-                    <span className="font-medium">{typeof val === 'object' ? JSON.stringify(val) : val}</span>
+                    <span className="font-medium">
+                      {typeof val === 'object' ? JSON.stringify(val) : val}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -317,9 +353,7 @@ export default function ExportImport() {
           )}
 
           <div className="flex gap-3 pt-2">
-            <Button onClick={handleConfirmImport}>
-              Ja, jetzt importieren
-            </Button>
+            <Button onClick={handleConfirmImport}>Ja, jetzt importieren</Button>
             <Button variant="secondary" onClick={() => setShowConfirmModal(false)}>
               Abbrechen
             </Button>

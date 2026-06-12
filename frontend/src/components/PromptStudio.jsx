@@ -6,7 +6,15 @@
  * UI-Bausteine: Card/CardHeader/CardTitle/CardContent, Button, Badge, useToast
  */
 import { useState, useEffect, useCallback } from 'react'
-import { FileCode, AlertTriangle, RefreshCw, CheckCircle, XCircle, ChevronDown, ChevronRight } from 'lucide-react'
+import {
+  FileCode,
+  AlertTriangle,
+  RefreshCw,
+  CheckCircle,
+  XCircle,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card'
 import { Button } from './ui/Button'
 import { Badge } from './ui/Badge'
@@ -70,24 +78,25 @@ function FileList({ files, selectedPath, onSelect }) {
   }
 
   const groupOrder = ['Prompts', 'Rules', 'Schemas', 'Sonstige']
-  const sortedGroups = groupOrder.filter(g => grouped[g])
+  const sortedGroups = groupOrder.filter((g) => grouped[g])
 
   function toggleGroup(g) {
-    setCollapsed(prev => ({ ...prev, [g]: !prev[g] }))
+    setCollapsed((prev) => ({ ...prev, [g]: !prev[g] }))
   }
 
   return (
     <div className="space-y-2">
-      {sortedGroups.map(group => (
+      {sortedGroups.map((group) => (
         <div key={group}>
           <button
             onClick={() => toggleGroup(group)}
             className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs font-semibold uppercase tracking-wider text-ink-muted hover:text-ink transition-colors"
           >
-            {collapsed[group]
-              ? <ChevronRight className="w-3 h-3 flex-shrink-0" />
-              : <ChevronDown className="w-3 h-3 flex-shrink-0" />
-            }
+            {collapsed[group] ? (
+              <ChevronRight className="w-3 h-3 flex-shrink-0" />
+            ) : (
+              <ChevronDown className="w-3 h-3 flex-shrink-0" />
+            )}
             {group}
             <span className="ml-auto font-normal normal-case tracking-normal">
               {grouped[group].length}
@@ -96,7 +105,7 @@ function FileList({ files, selectedPath, onSelect }) {
 
           {!collapsed[group] && (
             <div className="space-y-0.5 ml-1">
-              {grouped[group].map(f => {
+              {grouped[group].map((f) => {
                 const isSelected = f.path === selectedPath
                 const warnBaseNewer = isBaseNewerThanOverlay(f)
                 return (
@@ -113,11 +122,16 @@ function FileList({ files, selectedPath, onSelect }) {
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="truncate font-medium text-xs">{f.name}</span>
                         {f.prompt_key && (
-                          <span className="text-[10px] text-ink-muted shrink-0">{f.prompt_key}</span>
+                          <span className="text-[10px] text-ink-muted shrink-0">
+                            {f.prompt_key}
+                          </span>
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <Badge color={sourceBadgeColor(f.source)} className="text-[10px] py-0 px-1.5">
+                        <Badge
+                          color={sourceBadgeColor(f.source)}
+                          className="text-[10px] py-0 px-1.5"
+                        >
                           {f.source}
                         </Badge>
                         {warnBaseNewer && (
@@ -145,22 +159,27 @@ function ValidationPanel({ result }) {
 
   const ok = result.valid
   return (
-    <div className={`rounded-lg border p-3 text-sm ${
-      ok
-        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-        : 'bg-amber-50 border-amber-200 text-amber-800'
-    }`}>
+    <div
+      className={`rounded-lg border p-3 text-sm ${
+        ok
+          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+          : 'bg-amber-50 border-amber-200 text-amber-800'
+      }`}
+    >
       <div className="flex items-center gap-2 font-medium mb-1">
-        {ok
-          ? <CheckCircle className="w-4 h-4 text-emerald-600" />
-          : <XCircle className="w-4 h-4 text-amber-600" />
-        }
+        {ok ? (
+          <CheckCircle className="w-4 h-4 text-emerald-600" />
+        ) : (
+          <XCircle className="w-4 h-4 text-amber-600" />
+        )}
         {ok ? 'Validierung OK' : 'Validierung: Probleme gefunden'}
       </div>
 
       {result.health && (
         <div className="text-xs space-y-0.5">
-          <div>System: {result.health.system_chars} Zeichen · User: {result.health.user_chars} Zeichen</div>
+          <div>
+            System: {result.health.system_chars} Zeichen · User: {result.health.user_chars} Zeichen
+          </div>
           {result.health.issues.length > 0 && (
             <ul className="list-disc list-inside">
               {result.health.issues.map((issue, i) => (
@@ -193,7 +212,7 @@ function SectionPreview({ fileContent }) {
   return (
     <div className="border border-surface-border rounded-lg text-xs">
       <button
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setOpen((v) => !v)}
         className="w-full flex items-center gap-2 px-3 py-2 text-ink-muted hover:text-ink transition-colors"
       >
         {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
@@ -235,14 +254,14 @@ export default function PromptStudio() {
 
   // Ausgewählte Datei
   const [selectedPath, setSelectedPath] = useState(null)
-  const [fileContent, setFileContent] = useState(null)  // PromptFileContentResponse
+  const [fileContent, setFileContent] = useState(null) // PromptFileContentResponse
   const [fileLoading, setFileLoading] = useState(false)
   const [fileError, setFileError] = useState(null)
 
   // Editor-State
   const [editorText, setEditorText] = useState('')
-  const [loadedText, setLoadedText] = useState('')  // Stand beim Laden (für dirty-Erkennung)
-  const [loadedSha, setLoadedSha] = useState(null)  // base_sha256 für optimistisches Locking
+  const [loadedText, setLoadedText] = useState('') // Stand beim Laden (für dirty-Erkennung)
+  const [loadedSha, setLoadedSha] = useState(null) // base_sha256 für optimistisches Locking
 
   // Aktions-States
   const [validating, setValidating] = useState(false)
@@ -265,7 +284,9 @@ export default function PromptStudio() {
     }
   }, [])
 
-  useEffect(() => { loadFileList() }, [loadFileList])
+  useEffect(() => {
+    loadFileList()
+  }, [loadFileList])
 
   // ─── Datei öffnen ────────────────────────────────────────────────────────
 
@@ -328,9 +349,10 @@ export default function PromptStudio() {
       if (e.status === 409 || (e.message && e.message.includes('Konflikt'))) {
         toastError('Konflikt — Datei wurde extern geändert. Bitte neu laden.')
       } else if (e.status === 422) {
-        const errs = e.detail && Array.isArray(e.detail.schema_errors)
-          ? e.detail.schema_errors.join('; ')
-          : e.message
+        const errs =
+          e.detail && Array.isArray(e.detail.schema_errors)
+            ? e.detail.schema_errors.join('; ')
+            : e.message
         toastError('Ungültiges Schema — Speichern blockiert: ' + errs)
       } else {
         toastError('Speichern fehlgeschlagen: ' + e.message)
@@ -366,7 +388,7 @@ export default function PromptStudio() {
   // ─── Aktueller Dateizustand ──────────────────────────────────────────────
 
   const dirty = fileContent ? isDirty(editorText, loadedText) : false
-  const currentFileInfo = files.find(f => f.path === selectedPath)
+  const currentFileInfo = files.find((f) => f.path === selectedPath)
   const showRevert = fileContent?.has_overlay || currentFileInfo?.has_overlay
 
   // ─── Render ──────────────────────────────────────────────────────────────
@@ -381,7 +403,8 @@ export default function PromptStudio() {
         </h1>
         <p className="text-sm text-ink-muted mt-1">
           Prompts, Rules und Schemas durchsehen, bearbeiten und validieren — ohne Container-Rebuild.
-          Änderungen landen im beschreibbaren Overlay (<code className="text-xs bg-gray-100 px-1 rounded">data/prompts-custom/</code>).
+          Änderungen landen im beschreibbaren Overlay (
+          <code className="text-xs bg-gray-100 px-1 rounded">data/prompts-custom/</code>).
         </p>
       </div>
 
@@ -399,7 +422,6 @@ export default function PromptStudio() {
 
       {/* Zweispalten-Layout */}
       <div className="flex gap-6 items-start">
-
         {/* Linke Spalte: Datei-Liste */}
         <div className="w-64 shrink-0">
           <Card>
@@ -421,11 +443,7 @@ export default function PromptStudio() {
               ) : files.length === 0 ? (
                 <p className="text-xs text-ink-muted py-4 text-center">Keine Dateien gefunden.</p>
               ) : (
-                <FileList
-                  files={files}
-                  selectedPath={selectedPath}
-                  onSelect={loadFile}
-                />
+                <FileList files={files} selectedPath={selectedPath} onSelect={loadFile} />
               )}
             </CardContent>
           </Card>
@@ -448,12 +466,8 @@ export default function PromptStudio() {
               {fileContent && (
                 <div className="flex items-center gap-3 flex-wrap">
                   <h2 className="text-base font-semibold text-ink">{fileContent.path}</h2>
-                  <Badge color={sourceBadgeColor(fileContent.source)}>
-                    {fileContent.source}
-                  </Badge>
-                  {fileContent.prompt_key && (
-                    <Badge color="blue">{fileContent.prompt_key}</Badge>
-                  )}
+                  <Badge color={sourceBadgeColor(fileContent.source)}>{fileContent.source}</Badge>
+                  {fileContent.prompt_key && <Badge color="blue">{fileContent.prompt_key}</Badge>}
                   {isBaseNewerThanOverlay(fileContent) && (
                     <span className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
                       <AlertTriangle className="w-3 h-3" />
@@ -483,7 +497,7 @@ export default function PromptStudio() {
                   ) : (
                     <textarea
                       value={editorText}
-                      onChange={e => setEditorText(e.target.value)}
+                      onChange={(e) => setEditorText(e.target.value)}
                       spellCheck={false}
                       className="w-full font-mono text-sm p-4 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 min-h-[480px] bg-white text-ink leading-relaxed"
                       style={{ height: 'clamp(480px, 60vh, 900px)' }}
@@ -516,12 +530,7 @@ export default function PromptStudio() {
                   </Button>
 
                   {showRevert && (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={handleRevert}
-                      disabled={reverting}
-                    >
+                    <Button variant="danger" size="sm" onClick={handleRevert} disabled={reverting}>
                       {reverting ? 'Setze zurück…' : 'Auf Base zurücksetzen'}
                     </Button>
                   )}

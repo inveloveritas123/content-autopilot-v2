@@ -30,7 +30,13 @@ const statusColors = {
 export function Badge({ color, status, className, children }) {
   const resolvedColor = color || statusColors[status] || 'orange'
   return (
-    <span className={clsx('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium', colors[resolvedColor], className)}>
+    <span
+      className={clsx(
+        'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
+        colors[resolvedColor],
+        className
+      )}
+    >
       {children || status}
     </span>
   )

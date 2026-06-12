@@ -22,7 +22,9 @@ function UsageBar({ current, limit, label }) {
     <div className="space-y-1">
       <div className="flex items-center justify-between text-sm">
         <span className="text-ink-muted">{label}</span>
-        <span className={`font-semibold ${isCrit ? 'text-red-700' : isWarn ? 'text-amber-600' : 'text-ink'}`}>
+        <span
+          className={`font-semibold ${isCrit ? 'text-red-700' : isWarn ? 'text-amber-600' : 'text-ink'}`}
+        >
           {current.toLocaleString()} / {limit.toLocaleString()}
         </span>
       </div>
@@ -99,17 +101,15 @@ export default function ThrottleStatusCard({ adminToken, tenantId, className = '
         >
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
           <span>
-            <strong>Pipeline pausiert</strong> — Rate-Limit erreicht. Neue Calls
-            werden erst nach Ablauf des Stunden-Fensters zugelassen.
+            <strong>Pipeline pausiert</strong> — Rate-Limit erreicht. Neue Calls werden erst nach
+            Ablauf des Stunden-Fensters zugelassen.
           </span>
         </div>
       )}
 
       {/* Content */}
       <div className="p-4 pt-2 space-y-4">
-        {error && (
-          <p className="text-sm text-red-600">{error}</p>
-        )}
+        {error && <p className="text-sm text-red-600">{error}</p>}
 
         {!data && !loading && !error && (
           <p className="text-sm text-ink-muted">Kein Admin-Token konfiguriert.</p>

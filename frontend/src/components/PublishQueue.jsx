@@ -1,6 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useToast } from './ui/Toast'
-import { CheckCircle2, Copy, Check, Clock, CalendarDays, Linkedin, ArrowUpRight, Flame } from 'lucide-react'
+import {
+  CheckCircle2,
+  Copy,
+  Check,
+  Clock,
+  CalendarDays,
+  Linkedin,
+  ArrowUpRight,
+  Flame,
+} from 'lucide-react'
 import { getScheduledPosts, markPublished } from '../api'
 
 const PILLAR_EMOJI = {
@@ -14,7 +23,8 @@ const PILLAR_EMOJI = {
 function dayLabel(dateStr) {
   const d = new Date(dateStr)
   const today = new Date()
-  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
+  const tomorrow = new Date(today)
+  tomorrow.setDate(today.getDate() + 1)
   const toStr = (x) => x.toDateString()
   if (toStr(d) === toStr(today)) return 'Heute'
   if (toStr(d) === toStr(tomorrow)) return 'Morgen'
@@ -42,10 +52,12 @@ function PostQueueCard({ post, onPublished }) {
       await markPublished(post.content_piece_id)
       setDone(true)
       onPublished(post.id)
-    } catch(e) {
+    } catch (e) {
       const detail = e?.detail || e?.message || ''
       if (typeof detail === 'object' && detail?.error === 'unapproved_post') {
-        toast.warning('Dieser Post muss zuerst in der App freigegeben werden, bevor er veröffentlicht werden kann.')
+        toast.warning(
+          'Dieser Post muss zuerst in der App freigegeben werden, bevor er veröffentlicht werden kann.'
+        )
       } else {
         console.error(e)
       }
@@ -60,14 +72,20 @@ function PostQueueCard({ post, onPublished }) {
   }
 
   return (
-    <div className={`bg-white rounded-xl border p-4 transition-all ${done ? 'opacity-50 border-gray-200' : isOverdue ? 'border-orange-300 bg-orange-50' : isToday ? 'border-teal-300' : 'border-surface-border'}`}>
+    <div
+      className={`bg-white rounded-xl border p-4 transition-all ${done ? 'opacity-50 border-gray-200' : isOverdue ? 'border-orange-300 bg-orange-50' : isToday ? 'border-teal-300' : 'border-surface-border'}`}
+    >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-            isOverdue && !done ? 'bg-orange-100 text-orange-700' :
-            isToday ? 'bg-teal-100 text-teal-700' :
-            'bg-gray-100 text-gray-600'
-          }`}>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+              isOverdue && !done
+                ? 'bg-orange-100 text-orange-700'
+                : isToday
+                  ? 'bg-teal-100 text-teal-700'
+                  : 'bg-gray-100 text-gray-600'
+            }`}
+          >
             {isOverdue && !done ? '🔴 Überfällig' : isToday ? '🟢 Heute' : day}
           </span>
           <span className="flex items-center gap-1 text-[11px] text-ink-muted">
@@ -75,9 +93,15 @@ function PostQueueCard({ post, onPublished }) {
             {timeLabel(post.scheduled_at)} Uhr
           </span>
           {post.angle && (
-            <span className="text-[11px] text-ink-muted">{pillarEmoji} {post.angle}</span>
+            <span className="text-[11px] text-ink-muted">
+              {pillarEmoji} {post.angle}
+            </span>
           )}
-          {done && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">✓ Gepostet</span>}
+          {done && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">
+              ✓ Gepostet
+            </span>
+          )}
         </div>
         {!done && (
           <div className="flex items-center gap-1.5 shrink-0">
@@ -125,11 +149,11 @@ export default function PublishQueue() {
       try {
         const data = await getScheduledPosts({ status: 'scheduled' })
         // Sort by scheduled_at ascending
-        const sorted = (Array.isArray(data) ? data : []).sort((a, b) =>
-          new Date(a.scheduled_at) - new Date(b.scheduled_at)
+        const sorted = (Array.isArray(data) ? data : []).sort(
+          (a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at)
         )
         setPosts(sorted)
-      } catch(e) {
+      } catch (e) {
         console.error(e)
       }
       setLoading(false)
@@ -138,20 +162,21 @@ export default function PublishQueue() {
   }, [])
 
   function handlePublished(postId) {
-    setPublishedIds(prev => new Set([...prev, postId]))
+    setPublishedIds((prev) => new Set([...prev, postId]))
   }
 
   const now = new Date()
-  const cutoff = new Date(now); cutoff.setDate(cutoff.getDate() + viewDays)
+  const cutoff = new Date(now)
+  cutoff.setDate(cutoff.getDate() + viewDays)
 
   const visiblePosts = useMemo(() => {
-    return posts.filter(p => new Date(p.scheduled_at) <= cutoff)
+    return posts.filter((p) => new Date(p.scheduled_at) <= cutoff)
   }, [posts, viewDays])
 
   // Group by day
   const grouped = useMemo(() => {
     const groups = {}
-    visiblePosts.forEach(p => {
+    visiblePosts.forEach((p) => {
       const day = p.scheduled_at.slice(0, 10)
       if (!groups[day]) groups[day] = []
       groups[day].push(p)
@@ -159,11 +184,16 @@ export default function PublishQueue() {
     return groups
   }, [visiblePosts])
 
-  const overdueCount = posts.filter(p => new Date(p.scheduled_at) < now && !publishedIds.has(p.id)).length
-  const todayCount = posts.filter(p => p.scheduled_at.slice(0, 10) === now.toISOString().slice(0, 10)).length
+  const overdueCount = posts.filter(
+    (p) => new Date(p.scheduled_at) < now && !publishedIds.has(p.id)
+  ).length
+  const todayCount = posts.filter(
+    (p) => p.scheduled_at.slice(0, 10) === now.toISOString().slice(0, 10)
+  ).length
   const publishedThisSession = publishedIds.size
 
-  if (loading) return <div className="text-center py-12 text-ink-muted">Lade Publishing Queue...</div>
+  if (loading)
+    return <div className="text-center py-12 text-ink-muted">Lade Publishing Queue...</div>
 
   return (
     <div>
@@ -181,12 +211,14 @@ export default function PublishQueue() {
           {publishedThisSession > 0 && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
               <Flame className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="text-xs font-semibold text-emerald-700">{publishedThisSession} heute gepostet</span>
+              <span className="text-xs font-semibold text-emerald-700">
+                {publishedThisSession} heute gepostet
+              </span>
             </div>
           )}
           <select
             value={viewDays}
-            onChange={e => setViewDays(Number(e.target.value))}
+            onChange={(e) => setViewDays(Number(e.target.value))}
             className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400"
           >
             <option value={1}>Heute</option>
@@ -199,12 +231,24 @@ export default function PublishQueue() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className={`rounded-xl border p-4 ${overdueCount > 0 ? 'bg-orange-50 border-orange-200' : 'bg-white border-surface-border'}`}>
-          <p className={`text-2xl font-bold tabular-nums ${overdueCount > 0 ? 'text-orange-700' : 'text-ink'}`}>{overdueCount}</p>
+        <div
+          className={`rounded-xl border p-4 ${overdueCount > 0 ? 'bg-orange-50 border-orange-200' : 'bg-white border-surface-border'}`}
+        >
+          <p
+            className={`text-2xl font-bold tabular-nums ${overdueCount > 0 ? 'text-orange-700' : 'text-ink'}`}
+          >
+            {overdueCount}
+          </p>
           <p className="text-xs text-ink-muted mt-0.5">Überfällig</p>
         </div>
-        <div className={`rounded-xl border p-4 ${todayCount > 0 ? 'bg-teal-50 border-teal-200' : 'bg-white border-surface-border'}`}>
-          <p className={`text-2xl font-bold tabular-nums ${todayCount > 0 ? 'text-teal-700' : 'text-ink'}`}>{todayCount}</p>
+        <div
+          className={`rounded-xl border p-4 ${todayCount > 0 ? 'bg-teal-50 border-teal-200' : 'bg-white border-surface-border'}`}
+        >
+          <p
+            className={`text-2xl font-bold tabular-nums ${todayCount > 0 ? 'text-teal-700' : 'text-ink'}`}
+          >
+            {todayCount}
+          </p>
           <p className="text-xs text-ink-muted mt-0.5">Heute geplant</p>
         </div>
         <div className="rounded-xl border border-surface-border bg-white p-4">
@@ -217,7 +261,9 @@ export default function PublishQueue() {
       <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
         <span className="text-amber-600 text-sm shrink-0">!</span>
         <p className="text-xs text-amber-800">
-          <strong>Freigabe erforderlich:</strong> Posts müssen zuerst in der Freigabe-Ansicht genehmigt werden (status: freigegeben) bevor sie als veröffentlicht markiert werden können.
+          <strong>Freigabe erforderlich:</strong> Posts müssen zuerst in der Freigabe-Ansicht
+          genehmigt werden (status: freigegeben) bevor sie als veröffentlicht markiert werden
+          können.
         </p>
       </div>
 
@@ -232,8 +278,12 @@ export default function PublishQueue() {
               <li>LinkedIn öffnen → neuen Post erstellen → einfügen → veröffentlichen</li>
               <li>Zurückkommen → „Gepostet ✓" klicken → Status wird aktualisiert</li>
             </ol>
-            <a href="https://www.linkedin.com/feed/" target="_blank" rel="noreferrer"
-              className="inline-flex items-center gap-1 mt-2 text-xs font-semibold text-blue-700 hover:text-blue-900">
+            <a
+              href="https://www.linkedin.com/feed/"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 mt-2 text-xs font-semibold text-blue-700 hover:text-blue-900"
+            >
               LinkedIn öffnen <ArrowUpRight className="w-3 h-3" />
             </a>
           </div>
@@ -244,14 +294,16 @@ export default function PublishQueue() {
         <div className="text-center py-12 bg-white rounded-xl border border-surface-border">
           <CalendarDays className="w-10 h-10 text-gray-300 mx-auto mb-3" />
           <p className="text-sm text-ink-muted">Keine geplanten Posts in diesem Zeitraum.</p>
-          <p className="text-xs text-ink-muted mt-1">Gehe zu „Posts" → „Auto-Einplanen" um Posts einzuplanen.</p>
+          <p className="text-xs text-ink-muted mt-1">
+            Gehe zu „Posts" → „Auto-Einplanen" um Posts einzuplanen.
+          </p>
         </div>
       ) : (
         <div className="space-y-6">
           {Object.entries(grouped).map(([day, dayPosts]) => {
             const label = dayLabel(day + 'T00:00:00')
             const isToday = label === 'Heute'
-            const allDone = dayPosts.every(p => publishedIds.has(p.id))
+            const allDone = dayPosts.every((p) => publishedIds.has(p.id))
             return (
               <div key={day}>
                 <div className="flex items-center gap-2 mb-3">
@@ -259,12 +311,20 @@ export default function PublishQueue() {
                     {label}
                   </h2>
                   <span className="text-xs text-ink-muted">
-                    {new Date(day + 'T00:00:00').toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
+                    {new Date(day + 'T00:00:00').toLocaleDateString('de-DE', {
+                      weekday: 'long',
+                      day: '2-digit',
+                      month: 'long',
+                    })}
                   </span>
-                  {allDone && <span className="ml-auto text-[11px] font-semibold text-emerald-600">✓ Alle gepostet</span>}
+                  {allDone && (
+                    <span className="ml-auto text-[11px] font-semibold text-emerald-600">
+                      ✓ Alle gepostet
+                    </span>
+                  )}
                 </div>
                 <div className="space-y-3">
-                  {dayPosts.map(p => (
+                  {dayPosts.map((p) => (
                     <PostQueueCard key={p.id} post={p} onPublished={handlePublished} />
                   ))}
                 </div>

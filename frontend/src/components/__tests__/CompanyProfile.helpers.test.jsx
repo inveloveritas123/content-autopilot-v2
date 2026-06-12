@@ -55,7 +55,9 @@ describe('Source-Trust-Hierarchie (UI-Badges)', () => {
       wizard_inferred: 0.6,
       legacy_migration: 0.5,
     }
-    const sorted = Object.entries(TRUST).sort((a, b) => b[1] - a[1]).map(e => e[0])
+    const sorted = Object.entries(TRUST)
+      .sort((a, b) => b[1] - a[1])
+      .map((e) => e[0])
     expect(sorted[0]).toBe('manual_input')
     expect(sorted[6]).toBe('legacy_migration')
   })
@@ -102,26 +104,32 @@ describe('RtbF Mode-Validation', () => {
     if (opts.older_than_days != null) p.older_than_days = parseInt(opts.older_than_days, 10)
     if (opts.classification) p.classification = opts.classification
     if (mode === 'audit_selective' && opts.record_ids) {
-      p.record_ids = opts.record_ids.split(',').map(s => s.trim()).filter(Boolean)
+      p.record_ids = opts.record_ids
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
     }
     return p
   }
 
   test('memory_selective mit older_than_days', () => {
     expect(buildPayload('memory_selective', { older_than_days: '30' })).toEqual({
-      mode: 'memory_selective', older_than_days: 30,
+      mode: 'memory_selective',
+      older_than_days: 30,
     })
   })
 
   test('audit_selective parst record_ids', () => {
     expect(buildPayload('audit_selective', { record_ids: 'abc, def, ghi' })).toEqual({
-      mode: 'audit_selective', record_ids: ['abc', 'def', 'ghi'],
+      mode: 'audit_selective',
+      record_ids: ['abc', 'def', 'ghi'],
     })
   })
 
   test('audit_selective filter empty record_ids', () => {
     expect(buildPayload('audit_selective', { record_ids: 'abc,,ghi' })).toEqual({
-      mode: 'audit_selective', record_ids: ['abc', 'ghi'],
+      mode: 'audit_selective',
+      record_ids: ['abc', 'ghi'],
     })
   })
 })

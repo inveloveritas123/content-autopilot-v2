@@ -2,9 +2,11 @@ import { clsx } from 'clsx'
 
 const variants = {
   primary: 'bg-primary-600 text-white hover:bg-primary-700 border-transparent',
-  secondary: 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600',
+  secondary:
+    'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600',
   danger: 'bg-red-600 text-white hover:bg-red-700 border-transparent',
-  ghost: 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 border-transparent',
+  ghost:
+    'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 border-transparent',
   success: 'bg-green-600 text-white hover:bg-green-700 border-transparent',
 }
 

@@ -7,39 +7,36 @@
 //
 // CI: e2e-smoke.yml laeuft headless gegen den per docker-compose hochgezogenen Stack.
 
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig, devices } from '@playwright/test'
 
-const baseURL = process.env.E2E_BASE_URL || "http://localhost:8601";
+const baseURL = process.env.E2E_BASE_URL || 'http://localhost:8601'
 
 export default defineConfig({
-  testDir: "./e2e",
+  testDir: './e2e',
   fullyParallel: false, // Sequential — wir teilen einen Tenant + State
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: [
-    ["list"],
-    ["html", { open: "never", outputFolder: "playwright-report" }],
-  ],
+  reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   timeout: 30_000,
   expect: { timeout: 5_000 },
 
   use: {
     baseURL,
-    trace: "retain-on-failure",
-    screenshot: "only-on-failure",
-    video: "retain-on-failure",
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
     // Test-Tenant-API-Key wird vor jedem Test in localStorage gesetzt
     // (siehe e2e/fixtures.js)
     extraHTTPHeaders: {
-      "X-API-Key": process.env.E2E_API_KEY || "ci-test-tenant-key",
+      'X-API-Key': process.env.E2E_API_KEY || 'ci-test-tenant-key',
     },
   },
 
   projects: [
     {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
     },
   ],
-});
+})

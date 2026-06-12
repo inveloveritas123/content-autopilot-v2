@@ -62,17 +62,22 @@ export const getDashboard = () => request('/dashboard')
 // Sources
 export const getSources = () => request('/sources')
 export const getSourceStats = () => request('/sources/stats')
-export const searchChannels = (query) => request('/sources/search', { method: 'POST', body: { query } })
-export const searchVideos = (query) => request('/sources/youtube/search-videos', { method: 'POST', body: { query } })
+export const searchChannels = (query) =>
+  request('/sources/search', { method: 'POST', body: { query } })
+export const searchVideos = (query) =>
+  request('/sources/youtube/search-videos', { method: 'POST', body: { query } })
 export const discoverSources = (topics) => request('/sources/discover', { params: { topics } })
 export const createSource = (data) => request('/sources', { method: 'POST', body: data })
 export const updateSource = (id, data) => request(`/sources/${id}`, { method: 'PUT', body: data })
-export const updateSourceKeywords = (id, keywords) => request(`/sources/${id}`, { method: 'PUT', body: { keywords } })
+export const updateSourceKeywords = (id, keywords) =>
+  request(`/sources/${id}`, { method: 'PUT', body: { keywords } })
 export const deleteSource = (id) => request(`/sources/${id}`, { method: 'DELETE' })
 export const checkSource = (id) => request(`/sources/${id}/check`, { method: 'POST' })
 export const importAllVideos = (id) => request(`/sources/${id}/import-all`, { method: 'POST' })
-export const analyzeAllSourceItems = (id) => request(`/sources/${id}/analyze-all`, { method: 'POST' })
-export const archiveSourceItems = (id) => request(`/sources/${id}/archive-items`, { method: 'POST' })
+export const analyzeAllSourceItems = (id) =>
+  request(`/sources/${id}/analyze-all`, { method: 'POST' })
+export const archiveSourceItems = (id) =>
+  request(`/sources/${id}/archive-items`, { method: 'POST' })
 export const getSourceItems = (id, params) => request(`/sources/${id}/items`, { params })
 export const syncTranscripts = () => request('/sources/sync-transcripts', { method: 'POST' })
 
@@ -94,19 +99,30 @@ export const getIdeasFiltered = (params) => request('/ideas', { params })
 export const getIdea = (id) => request(`/ideas/${id}`)
 export const generateIdeas = (itemId) => request(`/ideas/generate/${itemId}`, { method: 'POST' })
 export const batchGenerateIdeas = () => request('/ideas/batch-generate', { method: 'POST' })
-export const refreshIdeasWithProfile = (limit = 20) => request(`/ideas/refresh-with-profile?limit=${limit}`, { method: 'POST' })
-export const submitAnswer = (ideaId, data) => request(`/ideas/${ideaId}/answer`, { method: 'POST', body: data })
-export const generatePost = (ideaId, data) => request(`/ideas/${ideaId}/generate-post`, { method: 'POST', body: data || {} })
-export const updateIdea = (ideaId, data) => request(`/ideas/${ideaId}`, { method: 'PATCH', body: data })
-export const bulkArchiveIdeas = (params) => request('/ideas/bulk-archive', { method: 'POST', params })
-export const quickGeneratePost = (ideaId) => request(`/ideas/${ideaId}/quick-generate`, { method: 'POST' })
-export const bulkQuickGeneratePosts = (ideaIds) => request('/ideas/bulk-quick-generate', { method: 'POST', body: { idea_ids: ideaIds } })
-export const createManualIdea = (data) => request('/ideas/create-manual', { method: 'POST', body: data })
+export const refreshIdeasWithProfile = (limit = 20) =>
+  request(`/ideas/refresh-with-profile?limit=${limit}`, { method: 'POST' })
+export const submitAnswer = (ideaId, data) =>
+  request(`/ideas/${ideaId}/answer`, { method: 'POST', body: data })
+export const generatePost = (ideaId, data) =>
+  request(`/ideas/${ideaId}/generate-post`, { method: 'POST', body: data || {} })
+export const updateIdea = (ideaId, data) =>
+  request(`/ideas/${ideaId}`, { method: 'PATCH', body: data })
+export const bulkArchiveIdeas = (params) =>
+  request('/ideas/bulk-archive', { method: 'POST', params })
+export const quickGeneratePost = (ideaId) =>
+  request(`/ideas/${ideaId}/quick-generate`, { method: 'POST' })
+export const bulkQuickGeneratePosts = (ideaIds) =>
+  request('/ideas/bulk-quick-generate', { method: 'POST', body: { idea_ids: ideaIds } })
+export const createManualIdea = (data) =>
+  request('/ideas/create-manual', { method: 'POST', body: data })
 
 // Feedback
-export const submitEditDiff = (data) => request('/feedback/edit-diff', { method: 'POST', body: data })
-export const submitPerformance = (data) => request('/feedback/performance', { method: 'POST', body: data })
-export const submitIdeaSelection = (data) => request('/feedback/idea-selection', { method: 'POST', body: data })
+export const submitEditDiff = (data) =>
+  request('/feedback/edit-diff', { method: 'POST', body: data })
+export const submitPerformance = (data) =>
+  request('/feedback/performance', { method: 'POST', body: data })
+export const submitIdeaSelection = (data) =>
+  request('/feedback/idea-selection', { method: 'POST', body: data })
 export const getFeedbackStats = () => request('/feedback/stats')
 
 // Content
@@ -114,12 +130,20 @@ export const getContentList = (params) => request('/content', { params })
 export const getContentPiece = (id) => request(`/content/${id}`)
 export const updateContent = (id, data) => request(`/content/${id}`, { method: 'PUT', body: data })
 export const approveContent = (id) => request(`/content/${id}/approve`, { method: 'POST' })
-export const bulkApproveContent = (ids) => request('/content/bulk-approve', { method: 'POST', body: { ids: ids || null } })
-export const bulkRejectContent = (ids, sourceId) => request('/content/bulk-reject', { method: 'POST', body: { ids: ids || null }, params: sourceId ? { source_id: sourceId } : {} })
-export const bulkPublishContent = (ids) => request('/content/bulk-publish', { method: 'POST', body: { ids } })
+export const bulkApproveContent = (ids) =>
+  request('/content/bulk-approve', { method: 'POST', body: { ids: ids || null } })
+export const bulkRejectContent = (ids, sourceId) =>
+  request('/content/bulk-reject', {
+    method: 'POST',
+    body: { ids: ids || null },
+    params: sourceId ? { source_id: sourceId } : {},
+  })
+export const bulkPublishContent = (ids) =>
+  request('/content/bulk-publish', { method: 'POST', body: { ids } })
 export const suggestHashtags = (id) => request(`/content/${id}/hashtags`, { method: 'POST' })
 export const repurposeContent = (id) => request(`/content/${id}/repurpose`, { method: 'POST' })
-export const getHookLibrary = (angle) => request('/hook-library', { params: angle ? { angle } : {} })
+export const getHookLibrary = (angle) =>
+  request('/hook-library', { params: angle ? { angle } : {} })
 
 export async function downloadContentExport(status) {
   const params = new URLSearchParams()
@@ -131,7 +155,7 @@ export async function downloadContentExport(status) {
   const blob = await resp.blob()
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `content_export_${new Date().toISOString().slice(0,10)}.csv`
+  a.download = `content_export_${new Date().toISOString().slice(0, 10)}.csv`
   a.click()
   URL.revokeObjectURL(a.href)
   return { downloaded: true }
@@ -140,16 +164,27 @@ export const getBestPostingTimes = () => request('/posts/best-times')
 
 // Scheduling / Calendar
 export const schedulePost = (data) => request('/posts/schedule', { method: 'POST', body: data })
-export const autoSchedulePosts = (data) => request('/posts/auto-schedule', { method: 'POST', body: data || {} })
-export const getScheduledPosts = (status) => request('/posts/scheduled', { params: status ? { status } : {} })
+export const autoSchedulePosts = (data) =>
+  request('/posts/auto-schedule', { method: 'POST', body: data || {} })
+export const getScheduledPosts = (status) =>
+  request('/posts/scheduled', { params: status ? { status } : {} })
 export const getCalendar = (month) => request('/posts/calendar', { params: { month } })
-export const updateScheduledPost = (id, data) => request(`/posts/scheduled/${id}`, { method: 'PATCH', body: data })
+export const updateScheduledPost = (id, data) =>
+  request(`/posts/scheduled/${id}`, { method: 'PATCH', body: data })
 export const cancelScheduledPost = (id) => request(`/posts/scheduled/${id}`, { method: 'DELETE' })
 
 // Carousels
-export const previewCarousel = (contentPieceId, title) => request('/carousels/preview', { method: 'POST', body: { content_piece_id: contentPieceId, title: title || 'LinkedIn Carousel' } })
+export const previewCarousel = (contentPieceId, title) =>
+  request('/carousels/preview', {
+    method: 'POST',
+    body: { content_piece_id: contentPieceId, title: title || 'LinkedIn Carousel' },
+  })
 
-export async function generateCarousel(contentPieceId, title = 'LinkedIn Carousel', customSlides = null) {
+export async function generateCarousel(
+  contentPieceId,
+  title = 'LinkedIn Carousel',
+  customSlides = null
+) {
   const body = customSlides
     ? { slides: customSlides, title }
     : { content_piece_id: contentPieceId, title }
@@ -175,12 +210,16 @@ export const getCarouselTemplates = () => request('/carousels/templates')
 
 // Tenants / Voice
 export const getVoiceProfile = () => request('/tenants/me/voice-profile').catch(() => null)
-export const updateVoiceProfile = (dimensions) => request('/tenants/me/voice-profile', { method: 'PATCH', body: { dimensions } })
+export const updateVoiceProfile = (dimensions) =>
+  request('/tenants/me/voice-profile', { method: 'PATCH', body: { dimensions } })
 
 export async function downloadTenantDataExport(format = 'zip') {
-  const resp = await fetch(`${API_BASE}/tenants/me/data-export?format=${encodeURIComponent(format)}`, {
-    headers: { 'X-API-Key': getApiKey() },
-  })
+  const resp = await fetch(
+    `${API_BASE}/tenants/me/data-export?format=${encodeURIComponent(format)}`,
+    {
+      headers: { 'X-API-Key': getApiKey() },
+    }
+  )
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ detail: resp.statusText }))
     throw new Error(err.detail || 'Export fehlgeschlagen')
@@ -218,7 +257,11 @@ export const getCookieStatus = () => request('/pipeline/cookie-status')
 export const triggerAutoPipeline = () => request('/pipeline/auto-trigger', { method: 'POST' })
 export const getPipelineStatus = () => request('/pipeline/status')
 export const resetBudgetFlag = () => request('/pipeline/reset-budget-flag', { method: 'POST' })
-export const queueAllAnalysis = (sourceId) => request('/pipeline/queue-all-analysis', { method: 'POST', params: sourceId ? { source_id: sourceId } : {} })
+export const queueAllAnalysis = (sourceId) =>
+  request('/pipeline/queue-all-analysis', {
+    method: 'POST',
+    params: sourceId ? { source_id: sourceId } : {},
+  })
 export const getTranscribedBreakdown = () => request('/pipeline/transcribed-breakdown')
 export const resetStuckItems = () => request('/pipeline/reset-stuck', { method: 'POST' })
 export const getStuckCount = () => request('/pipeline/stuck-count')
@@ -243,25 +286,43 @@ export const updateSettings = (data) => request('/settings', { method: 'PUT', bo
 
 // LLM Providers
 export const getLLMProviders = () => request('/settings/llm-providers')
-export const createLLMProvider = (data) => request('/settings/llm-providers', { method: 'POST', body: data })
-export const updateLLMProvider = (id, data) => request(`/settings/llm-providers/${id}`, { method: 'PATCH', body: data })
-export const deleteLLMProvider = (id) => request(`/settings/llm-providers/${id}`, { method: 'DELETE' })
-export const testLLMProvider = (id) => request(`/settings/llm-providers/${id}/test`, { method: 'POST' })
-export const getLLMCostHistory = (days = 7) => request('/settings/llm-cost-history', { params: { days } })
-export const benchmarkLLM = (step, item_id) => request('/settings/benchmark', { method: 'POST', body: JSON.stringify({ step, item_id: item_id || undefined }) })
-export const resetLLMProviderCost = (id) => request(`/settings/llm-providers/${id}/reset-cost`, { method: 'POST' })
+export const createLLMProvider = (data) =>
+  request('/settings/llm-providers', { method: 'POST', body: data })
+export const updateLLMProvider = (id, data) =>
+  request(`/settings/llm-providers/${id}`, { method: 'PATCH', body: data })
+export const deleteLLMProvider = (id) =>
+  request(`/settings/llm-providers/${id}`, { method: 'DELETE' })
+export const testLLMProvider = (id) =>
+  request(`/settings/llm-providers/${id}/test`, { method: 'POST' })
+export const getLLMCostHistory = (days = 7) =>
+  request('/settings/llm-cost-history', { params: { days } })
+export const benchmarkLLM = (step, item_id) =>
+  request('/settings/benchmark', {
+    method: 'POST',
+    body: JSON.stringify({ step, item_id: item_id || undefined }),
+  })
+export const resetLLMProviderCost = (id) =>
+  request(`/settings/llm-providers/${id}/reset-cost`, { method: 'POST' })
 export const getVoiceProfilesList = () => request('/settings/voice-profiles-list')
-export const runVoiceCompare = (item_id) => request('/settings/voice-compare', { method: 'POST', body: JSON.stringify({ item_id: item_id || undefined }) })
+export const runVoiceCompare = (item_id) =>
+  request('/settings/voice-compare', {
+    method: 'POST',
+    body: JSON.stringify({ item_id: item_id || undefined }),
+  })
 
 export const listProviderModels = (api_key, base_url) =>
   request('/settings/llm-providers/list-models', { method: 'POST', body: { api_key, base_url } })
 export const probeTestProvider = (api_key, base_url, model) =>
-  request('/settings/llm-providers/probe-test', { method: 'POST', body: { api_key, base_url, model } })
+  request('/settings/llm-providers/probe-test', {
+    method: 'POST',
+    body: { api_key, base_url, model },
+  })
 
 // Projects
 export const getProjects = () => request('/projects')
 export const createProject = (data) => request('/projects', { method: 'POST', body: data })
-export const updateProject = (id, data) => request(`/projects/${id}`, { method: 'PATCH', body: data })
+export const updateProject = (id, data) =>
+  request(`/projects/${id}`, { method: 'PATCH', body: data })
 export const deleteProject = (id) => request(`/projects/${id}`, { method: 'DELETE' })
 
 // Nextcloud
@@ -273,41 +334,50 @@ export const getActivity = (params) => request('/pipeline/log', { params })
 export const getActivityLog = (params) => request('/pipeline/log', { params })
 
 // Content Pillars
-export const updateContentPillar = (id, pillar) => request(`/content/${id}/pillar`, { method: 'PATCH', body: { pillar } })
+export const updateContentPillar = (id, pillar) =>
+  request(`/content/${id}/pillar`, { method: 'PATCH', body: { pillar } })
 
 // Quick-Create AI Post
-export const quickCreatePost = (data) => request('/content/quick-create', { method: 'POST', body: data })
+export const quickCreatePost = (data) =>
+  request('/content/quick-create', { method: 'POST', body: data })
 
 // Save Direct Post (written by Claude, no backend LLM)
-export const saveDirectPost = (data) => request('/content/save-direct', { method: 'POST', body: data })
+export const saveDirectPost = (data) =>
+  request('/content/save-direct', { method: 'POST', body: data })
 
 // Mark as published
 export const markPublished = (id) => request(`/content/${id}/mark-published`, { method: 'POST' })
-export const updateContentTags = (id, tags) => request(`/content/${id}/tags`, { method: 'PATCH', body: { tags } })
+export const updateContentTags = (id, tags) =>
+  request(`/content/${id}/tags`, { method: 'PATCH', body: { tags } })
 
 // Source funnel analytics
 export const getSourceFunnel = () => request('/sources/funnel')
 
 // Content Series Builder
-export const createContentSeries = (data) => request('/content/create-series', { method: 'POST', body: data })
+export const createContentSeries = (data) =>
+  request('/content/create-series', { method: 'POST', body: data })
 
 // URL → Post
-export const postFromUrl = (data) => request('/content/post-from-url', { method: 'POST', body: data })
+export const postFromUrl = (data) =>
+  request('/content/post-from-url', { method: 'POST', body: data })
 
 // AI Post Rewriter
-export const rewriteContent = (id, mode) => request(`/content/${id}/rewrite`, { method: 'POST', body: { mode } })
+export const rewriteContent = (id, mode) =>
+  request(`/content/${id}/rewrite`, { method: 'POST', body: { mode } })
 
 // A/B Variant Generator
 export const generateVariants = (id) => request(`/content/${id}/variants`, { method: 'POST' })
 
 // Multi-Format Repurposer
-export const repurposeFormats = (id) => request(`/content/${id}/repurpose-formats`, { method: 'POST' })
+export const repurposeFormats = (id) =>
+  request(`/content/${id}/repurpose-formats`, { method: 'POST' })
 
 // AI Daily Content Brief
 export const getTodayBrief = () => request('/content/today-brief')
 
 // Performance Predictor
-export const predictPerformance = (id) => request(`/content/${id}/predict-performance`, { method: 'POST' })
+export const predictPerformance = (id) =>
+  request(`/content/${id}/predict-performance`, { method: 'POST' })
 
 // Ideas Analytics
 export const getIdeasStats = () => request('/ideas/stats')
@@ -315,11 +385,14 @@ export const getIdeasSourceBreakdown = () => request('/ideas/source-breakdown')
 
 // Quality Analytics
 export const getQualitySummary = (days = 30) => request('/quality/summary', { params: { days } })
-export const getQualityByModel = (days = 30, step) => request('/quality/by-model', { params: { days, ...(step ? {step} : {}) } })
-export const getQualityRecent = (limit = 20, step) => request('/quality/recent', { params: { limit, ...(step ? {step} : {}) } })
-export const rateItemQuality = (itemId, step, rating) => request(`/quality/items/${itemId}/rate`, { method: 'POST', params: { step }, body: { rating } })
-export const getProductionHeatmap = (days = 90) => request('/quality/production-heatmap', { params: { days } })
-
+export const getQualityByModel = (days = 30, step) =>
+  request('/quality/by-model', { params: { days, ...(step ? { step } : {}) } })
+export const getQualityRecent = (limit = 20, step) =>
+  request('/quality/recent', { params: { limit, ...(step ? { step } : {}) } })
+export const rateItemQuality = (itemId, step, rating) =>
+  request(`/quality/items/${itemId}/rate`, { method: 'POST', params: { step }, body: { rating } })
+export const getProductionHeatmap = (days = 90) =>
+  request('/quality/production-heatmap', { params: { days } })
 
 // LLM Routing
 export const getLlmRouting = () => request('/settings/llm-routing')
@@ -331,10 +404,14 @@ export const getDialogueContext = (itemId) => request(`/dialogue/items/${itemId}
 export const submitDialogueAnswers = (itemId, answers) =>
   request(`/dialogue/items/${itemId}/answers`, { method: 'POST', body: { answers } })
 export const generateDialoguePostPrompt = (itemId, format = 'story') =>
-  request(`/dialogue/items/${itemId}/generate-post`, { method: 'POST', params: { format, use_claude_direct: true } })
+  request(`/dialogue/items/${itemId}/generate-post`, {
+    method: 'POST',
+    params: { format, use_claude_direct: true },
+  })
 
 // Brand Voice API (#59)
-export const getBrandVoiceStatus = (tenantId, projectId) => request(`/brand-voice/${tenantId}`, { params: projectId ? { project_id: projectId } : undefined })
+export const getBrandVoiceStatus = (tenantId, projectId) =>
+  request(`/brand-voice/${tenantId}`, { params: projectId ? { project_id: projectId } : undefined })
 export async function uploadBrandVoiceFile(formData) {
   const resp = await fetch(`${API_BASE}/brand-voice/upload`, {
     method: 'POST',
@@ -348,7 +425,10 @@ export async function uploadBrandVoiceFile(formData) {
   return resp.json()
 }
 export const importBrandVoiceFromNC = (tenantId, path, sourceType) =>
-  request('/brand-voice/import-source', { method: 'POST', body: { tenant_id: tenantId, source_path: path, source_type: sourceType } })
+  request('/brand-voice/import-source', {
+    method: 'POST',
+    body: { tenant_id: tenantId, source_path: path, source_type: sourceType },
+  })
 export const getBrandVoicePipelineStatus = (runId) => request(`/brand-voice/pipeline/${runId}`)
 
 // Brand Voice Wizard (#70)
@@ -365,14 +445,20 @@ export const startWizardSession = (forceNew = false, projectId = null) => {
 }
 export const getWizardSession = (sessionId) => request(`/brand-voice/wizard/${sessionId}`)
 export const answerWizardQuestion = (sessionId, phase, questionId, answer) =>
-  request(`/brand-voice/wizard/${sessionId}/answer`, { method: 'POST', body: { phase, question_id: questionId, answer } })
+  request(`/brand-voice/wizard/${sessionId}/answer`, {
+    method: 'POST',
+    body: { phase, question_id: questionId, answer },
+  })
 export const synthesizeWizardPhase = (sessionId, phase) =>
   request(`/brand-voice/wizard/${sessionId}/synthesize-phase`, { method: 'POST', body: { phase } })
 export const finalizeWizardSession = (sessionId) =>
   request(`/brand-voice/wizard/${sessionId}/finalize`, { method: 'POST' })
 
 export const patchBrandVoiceField = (tenantId, profileType, fieldPath, newValue) =>
-  request(`/brand-voice/${tenantId}/${profileType}/field`, { method: 'PATCH', body: { field_path: fieldPath, new_value: newValue } })
+  request(`/brand-voice/${tenantId}/${profileType}/field`, {
+    method: 'PATCH',
+    body: { field_path: fieldPath, new_value: newValue },
+  })
 export const getBrandVoiceHistory = (tenantId) => getBrandVoiceStatus(tenantId)
 
 // Drift Review (#78)
@@ -441,22 +527,30 @@ export const getLLMAnalyticsByTask = (params) => request('/analytics/llm-by-task
 export const getLLMAnalyticsByModel = (params) => request('/analytics/llm-by-model', { params })
 export const getLLMAnalyticsByDay = (params) => request('/analytics/llm-by-day', { params })
 export const getLLMAnalyticsByHour = (params) => request('/analytics/llm-by-hour', { params })
-export const getContentByCategory = (params) => request('/analytics/content-by-category', { params })
+export const getContentByCategory = (params) =>
+  request('/analytics/content-by-category', { params })
 export const getTenantIndustry = () => request('/tenants/me/industry')
-export const setTenantIndustry = (industry) => request('/tenants/me/industry', { method: 'PUT', body: { industry } })
+export const setTenantIndustry = (industry) =>
+  request('/tenants/me/industry', { method: 'PUT', body: { industry } })
 export const refreshIndustry = () => request('/tenants/me/industry/refresh', { method: 'POST' })
 export const listHooks = (params) => request('/hooks/library', { params })
-export const importHooks = (limit = 20) => request(`/hooks/library/import?limit=${limit}`, { method: 'POST' })
-export const addManualHook = (hook_text, hook_type = 'manual') => request('/hooks/library', { method: 'POST', body: { hook_text, hook_type } })
+export const importHooks = (limit = 20) =>
+  request(`/hooks/library/import?limit=${limit}`, { method: 'POST' })
+export const addManualHook = (hook_text, hook_type = 'manual') =>
+  request('/hooks/library', { method: 'POST', body: { hook_text, hook_type } })
 export const deleteHook = (id) => request(`/hooks/library/${id}`, { method: 'DELETE' })
 
 export const listResearchFindings = (params) => request('/research/findings', { params })
-export const dismissResearchFinding = (id) => request(`/research/findings/${id}/dismiss`, { method: 'POST' })
-export const useFindingAsIdea = (id, hookIdx) => request(`/research/findings/${id}/use-as-idea?hook_index=${hookIdx}`, { method: 'POST' })
+export const dismissResearchFinding = (id) =>
+  request(`/research/findings/${id}/dismiss`, { method: 'POST' })
+export const useFindingAsIdea = (id, hookIdx) =>
+  request(`/research/findings/${id}/use-as-idea?hook_index=${hookIdx}`, { method: 'POST' })
 
 export const listIdeaVariants = (ideaId) => request(`/ideas/${ideaId}/variants`)
-export const regenerateIdeaVariants = (ideaId) => request(`/ideas/${ideaId}/variants/regenerate`, { method: 'POST' })
-export const chooseIdeaVariant = (ideaId, variantId) => request(`/ideas/${ideaId}/variants/${variantId}/choose`, { method: 'POST' })
+export const regenerateIdeaVariants = (ideaId) =>
+  request(`/ideas/${ideaId}/variants/regenerate`, { method: 'POST' })
+export const chooseIdeaVariant = (ideaId, variantId) =>
+  request(`/ideas/${ideaId}/variants/${variantId}/choose`, { method: 'POST' })
 export const searchMemory = (params) => request('/memory/search', { params })
 export const getMemoryRecent = (params) => request('/memory/recent', { params })
 export const getMemoryPicker = (params) => request('/memory/picker', { params })
@@ -464,15 +558,20 @@ export const getMemoryStats = () => request('/memory/stats')
 export const addMemoryNote = (data) => request('/memory/note', { method: 'POST', body: data })
 
 export const getCompanyProfile = () => request('/me/company-profile')
-export const updateCompanyProfile = (fields) => request('/me/company-profile', { method: 'PUT', body: fields })
+export const updateCompanyProfile = (fields) =>
+  request('/me/company-profile', { method: 'PUT', body: fields })
 export const getCompanyProvenance = () => request('/me/company-profile/provenance')
 export const getCompanyProfilePending = () => request('/me/company-profile/pending')
-export const reviewCompanyProfileSuggestion = (id, action) => request(`/me/company-profile/review/${id}`, { method: 'POST', body: { action } })
-export const importCompanyProfileMd = (content, auto_apply = true) => request('/me/company-profile/import-md', { method: 'POST', body: { content, auto_apply } })
+export const reviewCompanyProfileSuggestion = (id, action) =>
+  request(`/me/company-profile/review/${id}`, { method: 'POST', body: { action } })
+export const importCompanyProfileMd = (content, auto_apply = true) =>
+  request('/me/company-profile/import-md', { method: 'POST', body: { content, auto_apply } })
 
-export const requestDataDeletion = (payload) => request('/me/data-deletion', { method: 'POST', body: payload })
+export const requestDataDeletion = (payload) =>
+  request('/me/data-deletion', { method: 'POST', body: payload })
 export const listDataDeletions = () => request('/me/data-deletion')
-export const recoverDataDeletion = (id) => request(`/me/data-deletion/${id}/recover`, { method: 'POST' })
+export const recoverDataDeletion = (id) =>
+  request(`/me/data-deletion/${id}/recover`, { method: 'POST' })
 export const getDataDeletion = (id) => request(`/me/data-deletion/${id}`)
 export const getMemoryVizData = (params) => request('/memory/viz-data', { params })
 // Critical #3: Volltext nach explizitem Confirm (POST, schreibt Audit-Log)
@@ -486,7 +585,10 @@ export const getPromptFile = (path) => request(`/prompt-studio/files/${path}`)
 export const validatePromptFile = (path, content) =>
   request(`/prompt-studio/files/${path}/validate`, { method: 'POST', body: { content } })
 export const savePromptFile = (path, content, baseSha) =>
-  request(`/prompt-studio/files/${path}`, { method: 'PUT', body: { content, base_sha256: baseSha } })
+  request(`/prompt-studio/files/${path}`, {
+    method: 'PUT',
+    body: { content, base_sha256: baseSha },
+  })
 export const revertPromptFile = (path) =>
   request(`/prompt-studio/files/${path}/overlay`, { method: 'DELETE' })
 
@@ -497,12 +599,15 @@ export const getRunawayDetection = (params) => request('/analytics/runaway-detec
 
 export const getLLMAnalyticsCSVUrl = (params) => {
   const base = window.location.origin
-  const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))).toString()
+  const qs = new URLSearchParams(
+    Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))
+  ).toString()
   return `${base}/api/analytics/llm-calls.csv${qs ? '?' + qs : ''}`
 }
 
 // Quality-Gate Eval History (#152)
-export const getQualityGateEvalHistory = (params) => request('/eval/quality-gate/history', { params })
+export const getQualityGateEvalHistory = (params) =>
+  request('/eval/quality-gate/history', { params })
 export const getQualityGateEvalLatest = () => request('/eval/quality-gate/latest')
 
 // Throttle Status (#156)

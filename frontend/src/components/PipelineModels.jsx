@@ -27,7 +27,9 @@ export default function PipelineModels() {
       setPhases(data.phases || [])
       setCatalog(data.tier_catalog || [])
       const d = {}
-      ;(data.phases || []).forEach((p) => { d[p.phase] = p.override || '' })
+      ;(data.phases || []).forEach((p) => {
+        d[p.phase] = p.override || ''
+      })
       setDrafts(d)
     } catch (e) {
       setError(e.message || 'Laden fehlgeschlagen')
@@ -36,7 +38,9 @@ export default function PipelineModels() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+  }, [])
 
   async function save(phase, modelId) {
     setSavingPhase(phase)
@@ -46,9 +50,15 @@ export default function PipelineModels() {
       const data = await setPipelineModelOverride(phase, modelId)
       setPhases(data.phases || [])
       const d = {}
-      ;(data.phases || []).forEach((p) => { d[p.phase] = p.override || '' })
+      ;(data.phases || []).forEach((p) => {
+        d[p.phase] = p.override || ''
+      })
       setDrafts(d)
-      setNotice(modelId ? `${phase}: Test-Override gesetzt → ${modelId}` : `${phase}: Override entfernt (zurück auf Default)`)
+      setNotice(
+        modelId
+          ? `${phase}: Test-Override gesetzt → ${modelId}`
+          : `${phase}: Override entfernt (zurück auf Default)`
+      )
     } catch (e) {
       setError(e.message || 'Speichern fehlgeschlagen')
     } finally {
@@ -59,25 +69,34 @@ export default function PipelineModels() {
   return (
     <div className="max-w-5xl mx-auto p-6">
       <div className="mb-4">
-        <Link to="/settings" className="text-sm text-primary-700 hover:underline">← Einstellungen</Link>
+        <Link to="/settings" className="text-sm text-primary-700 hover:underline">
+          ← Einstellungen
+        </Link>
       </div>
       <h1 className="text-2xl font-semibold text-gray-900">Modell-Hoheit · Pipeline-Phasen</h1>
       <p className="mt-2 text-sm text-gray-600">
-        Pro Phase ist das <strong>offizielle</strong> Modell im Code verankert (Tier-Default, ADR-0008).
-        Für Experimente kannst du einen <strong>globalen Test-Override</strong> mit einer beliebigen
-        Requesty-Modell-ID setzen — der Default bleibt erhalten und ist jederzeit rücksetzbar.
+        Pro Phase ist das <strong>offizielle</strong> Modell im Code verankert (Tier-Default,
+        ADR-0008). Für Experimente kannst du einen <strong>globalen Test-Override</strong> mit einer
+        beliebigen Requesty-Modell-ID setzen — der Default bleibt erhalten und ist jederzeit
+        rücksetzbar.
       </p>
 
       {error && (
-        <div className="mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
       )}
       {notice && (
-        <div className="mt-4 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700">{notice}</div>
+        <div className="mt-4 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700">
+          {notice}
+        </div>
       )}
 
       <datalist id="model-catalog">
         {catalog.map((c) => (
-          <option key={c.tier} value={c.model_id}>{c.tier} · {c.model_id}</option>
+          <option key={c.tier} value={c.model_id}>
+            {c.tier} · {c.model_id}
+          </option>
         ))}
       </datalist>
 
@@ -103,18 +122,26 @@ export default function PipelineModels() {
                     <td className="py-3 pr-4 font-medium text-gray-900">{p.phase}</td>
                     <td className="py-3 pr-4 text-gray-600">
                       <span className="inline-flex items-center gap-1">
-                        <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-xs font-mono">{p.default_tier}</span>
+                        <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-xs font-mono">
+                          {p.default_tier}
+                        </span>
                         <span className="font-mono text-xs">{p.default_model}</span>
                       </span>
                     </td>
                     <td className="py-3 pr-4">
                       {overridden ? (
                         <span className="inline-flex items-center gap-1">
-                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-xs font-medium">TEST</span>
-                          <span className="font-mono text-xs text-amber-900">{p.effective_model}</span>
+                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-xs font-medium">
+                            TEST
+                          </span>
+                          <span className="font-mono text-xs text-amber-900">
+                            {p.effective_model}
+                          </span>
                         </span>
                       ) : (
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">offiziell</span>
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">
+                          offiziell
+                        </span>
                       )}
                     </td>
                     <td className="py-3 pr-4">

@@ -1,6 +1,17 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  DollarSign, BarChart3, Zap, Download, RefreshCw, TrendingUp, Cpu, Activity, AlertTriangle, Clock, Shield, CheckCircle2
+  DollarSign,
+  BarChart3,
+  Zap,
+  Download,
+  RefreshCw,
+  TrendingUp,
+  Cpu,
+  Activity,
+  AlertTriangle,
+  Clock,
+  Shield,
+  CheckCircle2,
 } from 'lucide-react'
 import {
   getLLMAnalyticsSummary,
@@ -17,7 +28,14 @@ import {
   getQualityGateEvalHistory,
 } from '../api'
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, Legend, ReferenceLine, ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ReferenceLine,
+  ResponsiveContainer,
 } from 'recharts'
 
 function fmtTokens(n) {
@@ -52,7 +70,9 @@ function HBar({ label, value, max, sub, color = 'bg-primary-500' }) {
   const pct = max > 0 ? Math.max(2, (value / max) * 100) : 0
   return (
     <div className="flex items-center gap-3 py-1">
-      <span className="w-36 text-xs text-ink-muted text-right shrink-0 truncate" title={label}>{label}</span>
+      <span className="w-36 text-xs text-ink-muted text-right shrink-0 truncate" title={label}>
+        {label}
+      </span>
       <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
@@ -71,12 +91,19 @@ function HeatmapCell({ count, alert: isAlert, dayOfWeek, hour, onCellClick }) {
   const intensity = Math.min(1, (count || 0) / 500)
   const bg = isAlert
     ? 'bg-red-500'
-    : intensity > 0.7 ? 'bg-orange-400' : intensity > 0.3 ? 'bg-amber-300' : intensity > 0 ? 'bg-emerald-200' : 'bg-gray-100'
+    : intensity > 0.7
+      ? 'bg-orange-400'
+      : intensity > 0.3
+        ? 'bg-amber-300'
+        : intensity > 0
+          ? 'bg-emerald-200'
+          : 'bg-gray-100'
 
   const DAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
-  const label = dayOfWeek != null && hour != null
-    ? `${DAYS[dayOfWeek]} ${String(hour).padStart(2, '0')}:00 — ${count} Calls${isAlert ? ' (ALERT >500)' : ''}`
-    : `${count} Calls${isAlert ? ' — ALERT >500' : ''}`
+  const label =
+    dayOfWeek != null && hour != null
+      ? `${DAYS[dayOfWeek]} ${String(hour).padStart(2, '0')}:00 — ${count} Calls${isAlert ? ' (ALERT >500)' : ''}`
+      : `${count} Calls${isAlert ? ' — ALERT >500' : ''}`
 
   return (
     <button
@@ -92,9 +119,7 @@ function HeatmapCell({ count, alert: isAlert, dayOfWeek, hour, onCellClick }) {
 
 function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onReload }) {
   if (loading) {
-    return (
-      <div className="py-12 text-center text-ink-muted text-sm">Lade Trend-Daten...</div>
-    )
+    return <div className="py-12 text-center text-ink-muted text-sm">Lade Trend-Daten...</div>
   }
   if (error) {
     return (
@@ -119,7 +144,7 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
   const deployMarkers = costTrend?.deploy_markers || []
 
   // Flatten to recharts format: [{date, total_cost_cents, total_input_tokens, total_output_tokens}]
-  const chartData = trendDays.map(d => ({
+  const chartData = trendDays.map((d) => ({
     date: d.date,
     cost: d.total?.total_cost_cents ?? 0,
     input: d.total?.total_input_tokens ?? 0,
@@ -162,7 +187,9 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
   return (
     <div className="space-y-6 pt-2">
       {/* 1. Cache-Hit-Rate KPI */}
-      <div className={`rounded-xl border p-4 ${cacheAlert ? 'bg-amber-50 border-amber-300' : 'bg-white border-surface-border'}`}>
+      <div
+        className={`rounded-xl border p-4 ${cacheAlert ? 'bg-amber-50 border-amber-300' : 'bg-white border-surface-border'}`}
+      >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
           <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
             <Zap className="w-4 h-4" /> Cache-Hit-Rate (7-Tage-Avg)
@@ -178,7 +205,9 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
           <p className="text-sm text-ink-muted">Noch keine Daten (mindestens 7 Tage nötig).</p>
         ) : (
           <div className="flex items-baseline gap-3">
-            <span className={`text-4xl font-bold ${cacheAlert ? 'text-amber-700' : 'text-emerald-600'}`}>
+            <span
+              className={`text-4xl font-bold ${cacheAlert ? 'text-amber-700' : 'text-emerald-600'}`}
+            >
               {(avg7d * 100).toFixed(1)}%
             </span>
             <span className="text-xs text-ink-muted">7-Tage-Durchschnitt</span>
@@ -208,15 +237,17 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
           </button>
         </div>
         {!hasTrendData ? (
-          <p className="text-sm text-ink-muted text-center py-6">Keine Daten in den letzten 30 Tagen.</p>
+          <p className="text-sm text-ink-muted text-center py-6">
+            Keine Daten in den letzten 30 Tagen.
+          </p>
         ) : (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={v => v.slice(5)} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v) => v.slice(5)} />
               <YAxis tick={{ fontSize: 10 }} width={40} />
               <Tooltip formatter={(v) => [`${v}¢`, 'Cost']} />
               <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
-              {deployMarkers.map(m => (
+              {deployMarkers.map((m) => (
                 <ReferenceLine
                   key={m.label}
                   x={m.date.slice(0, 10)}
@@ -225,7 +256,14 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
                   label={{ value: m.label, position: 'top', fontSize: 9, fill: '#6366f1' }}
                 />
               ))}
-              <Line type="monotone" dataKey="cost" stroke="#f59e0b" strokeWidth={2} dot={false} name="Cost (¢)" />
+              <Line
+                type="monotone"
+                dataKey="cost"
+                stroke="#f59e0b"
+                strokeWidth={2}
+                dot={false}
+                name="Cost (¢)"
+              />
             </LineChart>
           </ResponsiveContainer>
         )}
@@ -241,11 +279,11 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
         ) : (
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={v => v.slice(5)} />
-              <YAxis tick={{ fontSize: 10 }} width={48} tickFormatter={v => fmtTokens(v)} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v) => v.slice(5)} />
+              <YAxis tick={{ fontSize: 10 }} width={48} tickFormatter={(v) => fmtTokens(v)} />
               <Tooltip formatter={(v) => [fmtTokens(v), '']} />
               <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
-              {deployMarkers.map(m => (
+              {deployMarkers.map((m) => (
                 <ReferenceLine
                   key={m.label}
                   x={m.date.slice(0, 10)}
@@ -253,8 +291,22 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
                   strokeDasharray="4 2"
                 />
               ))}
-              <Line type="monotone" dataKey="input" stroke="#3b82f6" strokeWidth={2} dot={false} name="Input Tokens" />
-              <Line type="monotone" dataKey="output" stroke="#10b981" strokeWidth={2} dot={false} name="Output Tokens" />
+              <Line
+                type="monotone"
+                dataKey="input"
+                stroke="#3b82f6"
+                strokeWidth={2}
+                dot={false}
+                name="Input Tokens"
+              />
+              <Line
+                type="monotone"
+                dataKey="output"
+                stroke="#10b981"
+                strokeWidth={2}
+                dot={false}
+                name="Output Tokens"
+              />
             </LineChart>
           </ResponsiveContainer>
         )}
@@ -291,7 +343,9 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
                   <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
                     <td className="py-1.5 pr-3 font-medium text-ink">{k.task_name}</td>
                     <td className="py-1.5 pr-3 text-ink-muted font-mono">{k.model}</td>
-                    <td className="py-1.5 pr-3 text-right font-mono">{k.total_cost_cents.toFixed(2)}</td>
+                    <td className="py-1.5 pr-3 text-right font-mono">
+                      {k.total_cost_cents.toFixed(2)}
+                    </td>
                     <td className="py-1.5 text-right text-ink-muted">{k.total_calls}</td>
                   </tr>
                 ))}
@@ -314,8 +368,13 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
             <div className="flex gap-1 min-w-[560px]">
               {/* Y-Achse: Wochentage */}
               <div className="flex flex-col gap-1 pt-8 sm:pt-10">
-                {HEATMAP_DAYS.map(d => (
-                  <div key={d} className="h-8 sm:h-10 text-[10px] text-ink-muted flex items-center w-7 justify-end pr-1">{d}</div>
+                {HEATMAP_DAYS.map((d) => (
+                  <div
+                    key={d}
+                    className="h-8 sm:h-10 text-[10px] text-ink-muted flex items-center w-7 justify-end pr-1"
+                  >
+                    {d}
+                  </div>
                 ))}
               </div>
               {/* Grid: 24 Spalten (Stunden) x 7 Zeilen (Tage) */}
@@ -323,7 +382,9 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
                 {/* Header: Stunden */}
                 <div className="flex gap-1 mb-1">
                   {Array.from({ length: 24 }, (_, h) => (
-                    <div key={h} className="w-8 sm:w-10 text-[8px] text-ink-muted text-center">{h}</div>
+                    <div key={h} className="w-8 sm:w-10 text-[8px] text-ink-muted text-center">
+                      {h}
+                    </div>
                   ))}
                 </div>
                 {HEATMAP_DAYS.map((_, dow) => (
@@ -340,7 +401,12 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
                           hour={hour}
                           onCellClick={({ dayOfWeek, hour: h, count, isAlert }) => {
                             // TODO: Drill-Down "Top Queries in Stunde XY" — Issue #drilldown
-                            console.debug('[Heatmap] Klick:', { dayOfWeek, hour: h, count, isAlert })
+                            console.debug('[Heatmap] Klick:', {
+                              dayOfWeek,
+                              hour: h,
+                              count,
+                              isAlert,
+                            })
                           }}
                         />
                       )
@@ -370,26 +436,31 @@ const BRANCHEN_LABELS = {
 function f1Color(f1) {
   if (f1 >= 0.85) return 'bg-emerald-500'
   if (f1 >= 0.75) return 'bg-amber-400'
-  if (f1 >= 0.60) return 'bg-orange-400'
+  if (f1 >= 0.6) return 'bg-orange-400'
   return 'bg-red-500'
 }
 
 function f1TextColor(f1) {
   if (f1 >= 0.85) return 'text-emerald-700'
   if (f1 >= 0.75) return 'text-amber-700'
-  if (f1 >= 0.60) return 'text-orange-700'
+  if (f1 >= 0.6) return 'text-orange-700'
   return 'text-red-700'
 }
 
 function QualityGateTab({ loading, error, evalHistory, onReload }) {
   if (loading) {
-    return <div className="py-12 text-center text-ink-muted text-sm">Lade Quality-Gate-Metriken...</div>
+    return (
+      <div className="py-12 text-center text-ink-muted text-sm">Lade Quality-Gate-Metriken...</div>
+    )
   }
   if (error) {
     return (
       <div className="py-8 flex flex-col items-center gap-3">
         <p className="text-red-600 text-sm">{error}</p>
-        <button onClick={onReload} className="min-h-[44px] px-4 py-2 text-xs bg-surface-100 border border-surface-border rounded-lg hover:bg-gray-50">
+        <button
+          onClick={onReload}
+          className="min-h-[44px] px-4 py-2 text-xs bg-surface-100 border border-surface-border rounded-lg hover:bg-gray-50"
+        >
           Erneut laden
         </button>
       </div>
@@ -403,7 +474,12 @@ function QualityGateTab({ loading, error, evalHistory, onReload }) {
     return (
       <div className="py-12 text-center text-ink-muted text-sm">
         <p>Noch kein Eval-Run vorhanden.</p>
-        <p className="mt-2 text-xs">Starte: <code className="bg-gray-100 px-1 rounded">python backend/eval/run_quality_gate_eval.py</code></p>
+        <p className="mt-2 text-xs">
+          Starte:{' '}
+          <code className="bg-gray-100 px-1 rounded">
+            python backend/eval/run_quality_gate_eval.py
+          </code>
+        </p>
       </div>
     )
   }
@@ -418,7 +494,7 @@ function QualityGateTab({ loading, error, evalHistory, onReload }) {
   for (const b of branchen) {
     trendByBranche[b] = runs
       .slice(0, 30)
-      .map(r => ({
+      .map((r) => ({
         ts: r.timestamp ? r.timestamp.slice(0, 10) : '?',
         f1: r.per_branche?.[b]?.f1 ?? 0,
       }))
@@ -459,7 +535,7 @@ function QualityGateTab({ loading, error, evalHistory, onReload }) {
           <CheckCircle2 className="w-4 h-4" /> F1 per Branche (neuester Run)
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {branchen.map(b => {
+          {branchen.map((b) => {
             const bdata = perBranche[b]
             const f1 = bdata?.f1 ?? 0
             const optThr = bdata?.optimal_threshold
@@ -471,7 +547,10 @@ function QualityGateTab({ loading, error, evalHistory, onReload }) {
                   <span className={`text-xs font-bold ${f1TextColor(f1)}`}>{f1.toFixed(3)}</span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
-                  <div className={`h-full rounded-full ${f1Color(f1)}`} style={{ width: `${Math.round(f1 * 100)}%` }} />
+                  <div
+                    className={`h-full rounded-full ${f1Color(f1)}`}
+                    style={{ width: `${Math.round(f1 * 100)}%` }}
+                  />
                 </div>
                 <div className="mt-2 text-[10px] text-ink-muted space-y-0.5">
                   <div>AUC: {bdata?.auc?.toFixed(3) ?? '—'}</div>
@@ -501,7 +580,7 @@ function QualityGateTab({ loading, error, evalHistory, onReload }) {
                 type="category"
                 allowDuplicatedCategory={false}
                 tick={{ fontSize: 9 }}
-                tickFormatter={v => v.slice(5)}
+                tickFormatter={(v) => v.slice(5)}
               />
               <YAxis domain={[0, 1]} tick={{ fontSize: 10 }} width={35} />
               <Tooltip formatter={(v) => [v.toFixed(3), 'F1']} />
@@ -535,8 +614,10 @@ function QualityGateTab({ loading, error, evalHistory, onReload }) {
               <tr className="border-b border-surface-border">
                 <th className="pr-3 py-1 font-medium text-ink-muted">Timestamp</th>
                 <th className="pr-3 py-1 font-medium text-ink-muted">Weighted F1</th>
-                {branchen.map(b => (
-                  <th key={b} className="pr-3 py-1 font-medium text-ink-muted">{BRANCHEN_LABELS[b] || b} F1</th>
+                {branchen.map((b) => (
+                  <th key={b} className="pr-3 py-1 font-medium text-ink-muted">
+                    {BRANCHEN_LABELS[b] || b} F1
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -545,12 +626,18 @@ function QualityGateTab({ loading, error, evalHistory, onReload }) {
                 const wf1 = run.aggregate?.weighted_f1 ?? 0
                 return (
                   <tr key={idx} className="border-b border-surface-border/50 hover:bg-gray-50">
-                    <td className="pr-3 py-1.5 text-ink-muted font-mono">{(run.timestamp || '—').replace('T', ' ').replace('Z', '')}</td>
-                    <td className={`pr-3 py-1.5 font-semibold ${f1TextColor(wf1)}`}>{wf1.toFixed(3)}</td>
-                    {branchen.map(b => {
+                    <td className="pr-3 py-1.5 text-ink-muted font-mono">
+                      {(run.timestamp || '—').replace('T', ' ').replace('Z', '')}
+                    </td>
+                    <td className={`pr-3 py-1.5 font-semibold ${f1TextColor(wf1)}`}>
+                      {wf1.toFixed(3)}
+                    </td>
+                    {branchen.map((b) => {
                       const bf1 = run.per_branche?.[b]?.f1 ?? 0
                       return (
-                        <td key={b} className={`pr-3 py-1.5 ${f1TextColor(bf1)}`}>{bf1.toFixed(3)}</td>
+                        <td key={b} className={`pr-3 py-1.5 ${f1TextColor(bf1)}`}>
+                          {bf1.toFixed(3)}
+                        </td>
                       )
                     })}
                   </tr>
@@ -577,9 +664,15 @@ export default function LLMAnalytics() {
   const [byCategory, setByCategory] = useState([])
   const [anomaly, setAnomaly] = useState(null)
   // #128 B-5: Provider-Reconciliation (manuelle Requesty-Side-Werte)
-  const [manualRequestyCost, setManualRequestyCost] = useState(() => localStorage.getItem('reconcile_requesty_usd') || '')
-  const [manualRequestyTokens, setManualRequestyTokens] = useState(() => localStorage.getItem('reconcile_requesty_tokens') || '')
-  const [manualReconcileDate, setManualReconcileDate] = useState(() => localStorage.getItem('reconcile_date') || toYYYYMMDD(new Date()))
+  const [manualRequestyCost, setManualRequestyCost] = useState(
+    () => localStorage.getItem('reconcile_requesty_usd') || ''
+  )
+  const [manualRequestyTokens, setManualRequestyTokens] = useState(
+    () => localStorage.getItem('reconcile_requesty_tokens') || ''
+  )
+  const [manualReconcileDate, setManualReconcileDate] = useState(
+    () => localStorage.getItem('reconcile_date') || toYYYYMMDD(new Date())
+  )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [dateRange, setDateRange] = useState(() => {
@@ -600,10 +693,13 @@ export default function LLMAnalytics() {
   const [evalLoading, setEvalLoading] = useState(false)
   const [evalError, setEvalError] = useState(null)
 
-  const apiParams = useMemo(() => ({
-    from_date: dateRange.from || undefined,
-    to_date: dateRange.to || undefined,
-  }), [dateRange.from, dateRange.to])
+  const apiParams = useMemo(
+    () => ({
+      from_date: dateRange.from || undefined,
+      to_date: dateRange.to || undefined,
+    }),
+    [dateRange.from, dateRange.to]
+  )
 
   async function loadData() {
     setLoading(true)
@@ -685,7 +781,8 @@ export default function LLMAnalytics() {
 
   useEffect(() => {
     if (manualRequestyCost) localStorage.setItem('reconcile_requesty_usd', manualRequestyCost)
-    if (manualRequestyTokens) localStorage.setItem('reconcile_requesty_tokens', manualRequestyTokens)
+    if (manualRequestyTokens)
+      localStorage.setItem('reconcile_requesty_tokens', manualRequestyTokens)
     if (manualReconcileDate) localStorage.setItem('reconcile_date', manualReconcileDate)
   }, [manualRequestyCost, manualRequestyTokens, manualReconcileDate])
 
@@ -706,10 +803,22 @@ export default function LLMAnalytics() {
     }
   }
 
-  const maxTaskCost = useMemo(() => Math.max(1, ...byTask.map(r => r.total_cost_cents || 0)), [byTask])
-  const maxModelCost = useMemo(() => Math.max(1, ...byModel.map(r => r.total_cost_cents || 0)), [byModel])
-  const maxDayCost = useMemo(() => Math.max(1, ...byDay.map(r => r.total_cost_cents || 0)), [byDay])
-  const maxHourCost = useMemo(() => Math.max(1, ...byHour.map(r => r.total_cost_cents || 0)), [byHour])
+  const maxTaskCost = useMemo(
+    () => Math.max(1, ...byTask.map((r) => r.total_cost_cents || 0)),
+    [byTask]
+  )
+  const maxModelCost = useMemo(
+    () => Math.max(1, ...byModel.map((r) => r.total_cost_cents || 0)),
+    [byModel]
+  )
+  const maxDayCost = useMemo(
+    () => Math.max(1, ...byDay.map((r) => r.total_cost_cents || 0)),
+    [byDay]
+  )
+  const maxHourCost = useMemo(
+    () => Math.max(1, ...byHour.map((r) => r.total_cost_cents || 0)),
+    [byHour]
+  )
 
   const tabs = [
     { id: 'task', label: 'Nach Task', icon: TrendingUp },
@@ -743,7 +852,7 @@ export default function LLMAnalytics() {
           <p className="text-sm text-ink-muted mt-0.5">Kosten und Token-Verbrauch nach Zeitraum</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {presets.map(p => (
+          {presets.map((p) => (
             <button
               key={p.label}
               onClick={() => applyPreset(p.days)}
@@ -755,14 +864,14 @@ export default function LLMAnalytics() {
           <input
             type="date"
             value={dateRange.from}
-            onChange={e => setDateRange(r => ({ ...r, from: e.target.value }))}
+            onChange={(e) => setDateRange((r) => ({ ...r, from: e.target.value }))}
             className="text-xs border border-surface-border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
           <span className="text-xs text-ink-muted">bis</span>
           <input
             type="date"
             value={dateRange.to}
-            onChange={e => setDateRange(r => ({ ...r, to: e.target.value }))}
+            onChange={(e) => setDateRange((r) => ({ ...r, to: e.target.value }))}
             className="text-xs border border-surface-border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
           <button
@@ -781,10 +890,13 @@ export default function LLMAnalytics() {
           <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-red-900">
-              Cost-Spike erkannt — aktuelle Stunde {(anomaly.factor || 0).toFixed(1)}× höher als Median
+              Cost-Spike erkannt — aktuelle Stunde {(anomaly.factor || 0).toFixed(1)}× höher als
+              Median
             </p>
             <p className="text-xs text-red-700 mt-0.5">
-              Aktuell: ${(anomaly.current_hour_cost_cents / 100).toFixed(4)} · Median 24h: ${(anomaly.median_24h_cost_cents / 100).toFixed(4)} · Schwelle: {anomaly.threshold_factor}×
+              Aktuell: ${(anomaly.current_hour_cost_cents / 100).toFixed(4)} · Median 24h: $
+              {(anomaly.median_24h_cost_cents / 100).toFixed(4)} · Schwelle:{' '}
+              {anomaly.threshold_factor}×
             </p>
             <p className="text-[11px] text-red-600 mt-1">
               Verdacht auf Burst (z.B. Cron-Job-Schleife) — bitte Logs / by-task prüfen.
@@ -801,15 +913,13 @@ export default function LLMAnalytics() {
           value={`${((summary?.total_cost_cents || 0) / 100).toFixed(4)} €`}
           sub={`${((summary?.total_cost_cents || 0) / 100).toFixed(6)} USD-Cent-Basis`}
         />
-        <StatCard
-          icon={Activity}
-          label="API-Calls"
-          value={summary?.total_calls ?? 0}
-        />
+        <StatCard icon={Activity} label="API-Calls" value={summary?.total_calls ?? 0} />
         <StatCard
           icon={Zap}
           label="Tokens (In+Out)"
-          value={fmtTokens((summary?.total_input_tokens || 0) + (summary?.total_output_tokens || 0))}
+          value={fmtTokens(
+            (summary?.total_input_tokens || 0) + (summary?.total_output_tokens || 0)
+          )}
           sub={`${fmtTokens(summary?.total_input_tokens)} in / ${fmtTokens(summary?.total_output_tokens)} out`}
         />
         <StatCard
@@ -823,7 +933,7 @@ export default function LLMAnalytics() {
       {/* Tab Navigation + Content */}
       <div className="bg-white rounded-xl border border-surface-border overflow-hidden">
         <div className="flex border-b border-surface-border">
-          {tabs.map(tab => {
+          {tabs.map((tab) => {
             const Icon = tab.icon
             return (
               <button
@@ -843,10 +953,13 @@ export default function LLMAnalytics() {
         </div>
 
         <div className="p-5 space-y-1">
-          {activeTab === 'task' && (
-            byTask.length === 0
-              ? <p className="text-sm text-ink-muted py-4 text-center">Keine Daten im gewaehlten Zeitraum.</p>
-              : byTask.map(r => (
+          {activeTab === 'task' &&
+            (byTask.length === 0 ? (
+              <p className="text-sm text-ink-muted py-4 text-center">
+                Keine Daten im gewaehlten Zeitraum.
+              </p>
+            ) : (
+              byTask.map((r) => (
                 <HBar
                   key={r.task_type}
                   label={r.task_type}
@@ -855,12 +968,15 @@ export default function LLMAnalytics() {
                   sub={`${((r.total_cost_cents || 0) / 100).toFixed(4)}€`}
                 />
               ))
-          )}
+            ))}
 
-          {activeTab === 'model' && (
-            byModel.length === 0
-              ? <p className="text-sm text-ink-muted py-4 text-center">Keine Daten im gewaehlten Zeitraum.</p>
-              : byModel.map(r => (
+          {activeTab === 'model' &&
+            (byModel.length === 0 ? (
+              <p className="text-sm text-ink-muted py-4 text-center">
+                Keine Daten im gewaehlten Zeitraum.
+              </p>
+            ) : (
+              byModel.map((r) => (
                 <div key={r.model}>
                   <HBar
                     label={r.model}
@@ -880,12 +996,15 @@ export default function LLMAnalytics() {
                   )}
                 </div>
               ))
-          )}
+            ))}
 
-          {activeTab === 'day' && (
-            byDay.length === 0
-              ? <p className="text-sm text-ink-muted py-4 text-center">Keine Daten im gewaehlten Zeitraum.</p>
-              : byDay.map(r => (
+          {activeTab === 'day' &&
+            (byDay.length === 0 ? (
+              <p className="text-sm text-ink-muted py-4 text-center">
+                Keine Daten im gewaehlten Zeitraum.
+              </p>
+            ) : (
+              byDay.map((r) => (
                 <HBar
                   key={r.date}
                   label={r.date}
@@ -895,7 +1014,7 @@ export default function LLMAnalytics() {
                   color="bg-accent-500"
                 />
               ))
-          )}
+            ))}
 
           {activeTab === 'trends' && (
             <TrendsCacheTab
@@ -927,18 +1046,22 @@ export default function LLMAnalytics() {
           </h3>
           <div className="space-y-2">
             {(() => {
-              const max = Math.max(1, ...byCategory.map(r => r.count || 0))
+              const max = Math.max(1, ...byCategory.map((r) => r.count || 0))
               const colors = {
-                news: 'bg-blue-500', persoenlich: 'bg-amber-500',
-                trust: 'bg-emerald-500', praxis: 'bg-violet-500',
+                news: 'bg-blue-500',
+                persoenlich: 'bg-amber-500',
+                trust: 'bg-emerald-500',
+                praxis: 'bg-violet-500',
                 unkategorisiert: 'bg-gray-400',
               }
               const labels = {
-                news: 'News', persoenlich: 'Persönlich',
-                trust: 'Trust', praxis: 'Praxis',
+                news: 'News',
+                persoenlich: 'Persönlich',
+                trust: 'Trust',
+                praxis: 'Praxis',
                 unkategorisiert: 'Unkategorisiert',
               }
-              return byCategory.map(r => (
+              return byCategory.map((r) => (
                 <HBar
                   key={r.category}
                   label={labels[r.category] || r.category}
@@ -962,9 +1085,16 @@ export default function LLMAnalytics() {
           <p className="text-xs text-ink-muted">Keine Daten in den letzten 24h</p>
         ) : (
           <div className="space-y-1">
-            {byHour.map(r => {
+            {byHour.map((r) => {
               const t = r.hour ? new Date(r.hour) : null
-              const label = t ? t.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''
+              const label = t
+                ? t.toLocaleString('de-DE', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    day: '2-digit',
+                    month: '2-digit',
+                  })
+                : ''
               return (
                 <HBar
                   key={r.hour}
@@ -984,7 +1114,9 @@ export default function LLMAnalytics() {
       <div className="bg-white rounded-xl border border-surface-border p-4">
         <h3 className="text-sm font-semibold text-ink mb-3 flex items-center gap-2">
           <Activity className="w-4 h-4" /> Provider-Vergleich
-          <span className="text-[11px] font-normal text-ink-muted">— Intern vs Requesty.ai-Dashboard</span>
+          <span className="text-[11px] font-normal text-ink-muted">
+            — Intern vs Requesty.ai-Dashboard
+          </span>
         </h3>
         <p className="text-[11px] text-ink-muted mb-3">
           Trage hier die Werte aus deinem Requesty.ai-Dashboard ein, um Abweichungen zu erkennen.
@@ -997,18 +1129,20 @@ export default function LLMAnalytics() {
             <input
               type="date"
               value={manualReconcileDate}
-              onChange={e => setManualReconcileDate(e.target.value)}
+              onChange={(e) => setManualReconcileDate(e.target.value)}
               className="w-full text-xs border border-surface-border rounded-lg px-2 py-1.5"
             />
           </div>
           <div>
-            <label className="block text-[11px] text-ink-muted mb-1">Cost laut Requesty (USD)</label>
+            <label className="block text-[11px] text-ink-muted mb-1">
+              Cost laut Requesty (USD)
+            </label>
             <input
               type="number"
               step="0.001"
               min="0"
               value={manualRequestyCost}
-              onChange={e => setManualRequestyCost(e.target.value)}
+              onChange={(e) => setManualRequestyCost(e.target.value)}
               placeholder="z.B. 7.42"
               className="w-full text-xs border border-surface-border rounded-lg px-2 py-1.5"
             />
@@ -1020,7 +1154,7 @@ export default function LLMAnalytics() {
               step="1"
               min="0"
               value={manualRequestyTokens}
-              onChange={e => setManualRequestyTokens(e.target.value)}
+              onChange={(e) => setManualRequestyTokens(e.target.value)}
               placeholder="z.B. 1234567"
               className="w-full text-xs border border-surface-border rounded-lg px-2 py-1.5"
             />
@@ -1029,9 +1163,12 @@ export default function LLMAnalytics() {
 
         {/* Diff-Tabelle */}
         {(() => {
-          const dayRow = byDay.find(d => d.day === manualReconcileDate || (d.day || '').slice(0, 10) === manualReconcileDate)
-          const internCostUsd = dayRow ? (dayRow.total_cost_cents / 100) : 0
-          const internTokens = dayRow ? (dayRow.total_tokens || 0) : 0
+          const dayRow = byDay.find(
+            (d) =>
+              d.day === manualReconcileDate || (d.day || '').slice(0, 10) === manualReconcileDate
+          )
+          const internCostUsd = dayRow ? dayRow.total_cost_cents / 100 : 0
+          const internTokens = dayRow ? dayRow.total_tokens || 0 : 0
           const reqCostUsd = parseFloat(manualRequestyCost || '0') || 0
           const reqTokens = parseFloat(manualRequestyTokens || '0') || 0
           const costDiff = reqCostUsd - internCostUsd
@@ -1040,7 +1177,9 @@ export default function LLMAnalytics() {
           const significant = costDiffPct !== null && Math.abs(costDiffPct) > 10
           if (!manualRequestyCost && !manualRequestyTokens && !dayRow) return null
           return (
-            <div className={`rounded-lg p-3 text-xs ${significant ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50 border border-gray-200'}`}>
+            <div
+              className={`rounded-lg p-3 text-xs ${significant ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50 border border-gray-200'}`}
+            >
               <table className="w-full text-left">
                 <thead className="text-[10px] text-ink-muted uppercase tracking-wide">
                   <tr>
@@ -1055,9 +1194,14 @@ export default function LLMAnalytics() {
                     <td className="py-1">Cost (USD)</td>
                     <td className="py-1 text-right">${internCostUsd.toFixed(4)}</td>
                     <td className="py-1 text-right">${reqCostUsd.toFixed(4)}</td>
-                    <td className={`py-1 text-right ${significant ? 'text-amber-700 font-semibold' : 'text-ink-muted'}`}>
-                      {costDiff >= 0 ? '+' : ''}{costDiff.toFixed(4)}
-                      {costDiffPct !== null ? ` (${costDiffPct >= 0 ? '+' : ''}${costDiffPct.toFixed(1)}%)` : ''}
+                    <td
+                      className={`py-1 text-right ${significant ? 'text-amber-700 font-semibold' : 'text-ink-muted'}`}
+                    >
+                      {costDiff >= 0 ? '+' : ''}
+                      {costDiff.toFixed(4)}
+                      {costDiffPct !== null
+                        ? ` (${costDiffPct >= 0 ? '+' : ''}${costDiffPct.toFixed(1)}%)`
+                        : ''}
                     </td>
                   </tr>
                   <tr>
@@ -1065,14 +1209,16 @@ export default function LLMAnalytics() {
                     <td className="py-1 text-right">{fmtTokens(internTokens)}</td>
                     <td className="py-1 text-right">{fmtTokens(reqTokens)}</td>
                     <td className="py-1 text-right text-ink-muted">
-                      {tokenDiff >= 0 ? '+' : ''}{fmtTokens(Math.abs(tokenDiff))}
+                      {tokenDiff >= 0 ? '+' : ''}
+                      {fmtTokens(Math.abs(tokenDiff))}
                     </td>
                   </tr>
                 </tbody>
               </table>
               {significant && (
                 <p className="mt-2 text-[11px] text-amber-700">
-                  ⚠ Abweichung &gt; 10% — bitte Requesty.ai-Dashboard prüfen ggf. Cache-Tracking-Drift.
+                  ⚠ Abweichung &gt; 10% — bitte Requesty.ai-Dashboard prüfen ggf.
+                  Cache-Tracking-Drift.
                 </p>
               )}
             </div>

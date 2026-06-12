@@ -4,7 +4,7 @@ export function Tabs({ tabs, active, onChange }) {
   return (
     <div className="border-b border-gray-200 dark:border-gray-700">
       <nav className="flex gap-4">
-        {tabs.map(tab => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => onChange(tab.id)}

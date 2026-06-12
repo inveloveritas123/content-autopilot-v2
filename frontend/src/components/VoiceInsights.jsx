@@ -35,11 +35,16 @@ class InsightsErrorBoundary extends Component {
           <p className="text-sm font-semibold text-red-700">Unerwarteter Fehler</p>
           <p className="text-xs text-ink-muted max-w-sm">{this.state.message}</p>
           <div className="flex gap-3">
-            <button onClick={() => this.setState({ hasError: false })}
-              className="px-3 py-1.5 text-xs bg-gray-100 rounded-lg hover:bg-gray-200 text-ink">
+            <button
+              onClick={() => this.setState({ hasError: false })}
+              className="px-3 py-1.5 text-xs bg-gray-100 rounded-lg hover:bg-gray-200 text-ink"
+            >
               Erneut versuchen
             </button>
-            <Link to="/brand-voice" className="px-3 py-1.5 text-xs bg-primary-700 text-white rounded-lg hover:bg-primary-800">
+            <Link
+              to="/brand-voice"
+              className="px-3 py-1.5 text-xs bg-primary-700 text-white rounded-lg hover:bg-primary-800"
+            >
               Zur Brand Voice
             </Link>
           </div>
@@ -129,10 +134,7 @@ function isArrayField(value) {
 
 function fieldChanged(currentPayload, comparePayload, fieldPath) {
   if (!comparePayload) return false
-  return (
-    JSON.stringify(currentPayload?.[fieldPath]) !==
-    JSON.stringify(comparePayload?.[fieldPath])
-  )
+  return JSON.stringify(currentPayload?.[fieldPath]) !== JSON.stringify(comparePayload?.[fieldPath])
 }
 
 // ─── Render-Komponenten ───────────────────────────────────────────────────────
@@ -159,9 +161,7 @@ function TagCloud({ tags, isVerboten }) {
 
 function DescriptionCard({ value }) {
   if (!value) return <span className="text-xs text-ink-muted italic">—</span>
-  return (
-    <p className="text-sm text-ink leading-relaxed mt-1 whitespace-pre-wrap">{value}</p>
-  )
+  return <p className="text-sm text-ink leading-relaxed mt-1 whitespace-pre-wrap">{value}</p>
 }
 
 function QuoteBlock({ quotes }) {
@@ -170,7 +170,10 @@ function QuoteBlock({ quotes }) {
   return (
     <div className="mt-2 space-y-2">
       {quotes.map((q, i) => (
-        <div key={i} className="flex items-start gap-2 bg-gray-50 rounded-lg p-3 border border-gray-100">
+        <div
+          key={i}
+          className="flex items-start gap-2 bg-gray-50 rounded-lg p-3 border border-gray-100"
+        >
           <Quote className="w-4 h-4 text-primary-400 shrink-0 mt-0.5" />
           <p className="text-sm text-ink leading-relaxed">{q}</p>
         </div>
@@ -203,9 +206,7 @@ function FieldValue({ fieldPath, value }) {
 
 function EditFieldModal({ open, onClose, profileType, fieldPath, currentValue, onSaved }) {
   const isArray = Array.isArray(currentValue)
-  const initialText = isArray
-    ? JSON.stringify(currentValue, null, 2)
-    : (currentValue ?? '')
+  const initialText = isArray ? JSON.stringify(currentValue, null, 2) : (currentValue ?? '')
 
   const [text, setText] = useState(initialText)
   const [saving, setSaving] = useState(false)
@@ -217,7 +218,7 @@ function EditFieldModal({ open, onClose, profileType, fieldPath, currentValue, o
       setText(isArray ? JSON.stringify(currentValue, null, 2) : (currentValue ?? ''))
       setError(null)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   async function handleSave() {
@@ -249,9 +250,7 @@ function EditFieldModal({ open, onClose, profileType, fieldPath, currentValue, o
     }
   }
 
-  const readonlyText = isArray
-    ? JSON.stringify(currentValue, null, 2)
-    : (currentValue ?? '')
+  const readonlyText = isArray ? JSON.stringify(currentValue, null, 2) : (currentValue ?? '')
 
   return (
     <Dialog open={open} onClose={onClose} title={`Feld bearbeiten: ${fieldPath}`}>
@@ -308,15 +307,11 @@ function FieldBlock({ profileType, fieldPath, value, editable, highlighted, onEd
   return (
     <div
       className={`rounded-xl border p-4 transition-colors ${
-        highlighted
-          ? 'bg-amber-50 border-amber-200'
-          : 'bg-white border-surface-border'
+        highlighted ? 'bg-amber-50 border-amber-200' : 'bg-white border-surface-border'
       }`}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-semibold text-ink-muted uppercase tracking-wide">
-          {fieldPath}
-        </p>
+        <p className="text-xs font-semibold text-ink-muted uppercase tracking-wide">{fieldPath}</p>
         {editable && (
           <button
             onClick={() => onEdit(fieldPath, value)}
@@ -389,16 +384,10 @@ function ProfilePanel({ profileType, payload, comparePayload, editablePaths, onF
 
 function VersionsSidebar({ history, compareVersion, onCompare, onReset, collapsed, onToggle }) {
   return (
-    <div
-      className={`shrink-0 transition-all duration-200 ${
-        collapsed ? 'w-10' : 'w-48'
-      }`}
-    >
+    <div className={`shrink-0 transition-all duration-200 ${collapsed ? 'w-10' : 'w-48'}`}>
       <div className="sticky top-0 bg-white border border-surface-border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-3 py-2.5 border-b border-surface-border">
-          {!collapsed && (
-            <span className="text-xs font-semibold text-ink">Versionen</span>
-          )}
+          {!collapsed && <span className="text-xs font-semibold text-ink">Versionen</span>}
           <button
             onClick={onToggle}
             className="p-1 text-ink-muted hover:text-primary-600 rounded-md ml-auto"
@@ -425,7 +414,7 @@ function VersionsSidebar({ history, compareVersion, onCompare, onReset, collapse
                 </button>
               </div>
             )}
-            {(!history || history.length === 0) ? (
+            {!history || history.length === 0 ? (
               <p className="text-xs text-ink-muted px-3 py-3 italic">Keine Versionen</p>
             ) : (
               history.map((entry) => (
@@ -436,12 +425,8 @@ function VersionsSidebar({ history, compareVersion, onCompare, onReset, collapse
                     compareVersion === entry.version ? 'bg-amber-50' : ''
                   }`}
                 >
-                  <p className="text-xs font-medium text-ink">
-                    v{entry.version}
-                  </p>
-                  <p className="text-[11px] text-ink-muted">
-                    {formatDateShort(entry.created_at)}
-                  </p>
+                  <p className="text-xs font-medium text-ink">v{entry.version}</p>
+                  <p className="text-[11px] text-ink-muted">{formatDateShort(entry.created_at)}</p>
                   <span
                     className={`inline-block mt-1 px-1.5 py-0.5 rounded border text-[10px] font-medium ${sourceBadgeClass(
                       entry.source
@@ -533,9 +518,8 @@ function VoiceInsights() {
   const history = historyByPillar[activeTab] || []
 
   // Vergleichs-Payload aus History ermitteln
-  const compareEntry = compareVersion !== null
-    ? history.find((h) => h.version === compareVersion)
-    : null
+  const compareEntry =
+    compareVersion !== null ? history.find((h) => h.version === compareVersion) : null
   const comparePayload = compareEntry?.payload ?? null
 
   const currentTab = TABS.find((t) => t.key === activeTab)
@@ -543,9 +527,8 @@ function VoiceInsights() {
   const currentPayload = currentProfile?.payload ?? null
 
   // Wenn compareVersion gesetzt: historischen Payload verwenden
-  const displayPayload = compareVersion !== null
-    ? (compareEntry?.payload ?? currentPayload)
-    : currentPayload
+  const displayPayload =
+    compareVersion !== null ? (compareEntry?.payload ?? currentPayload) : currentPayload
 
   // Diff: Vergleich zwischen aktuellem und Vergleichs-Payload
   const diffPayload = compareVersion !== null ? currentPayload : null
@@ -568,8 +551,8 @@ function VoiceInsights() {
       {/* Source-Hinweis bei md_upload */}
       {activeProfiles.voice_profile?.source === 'md_upload' && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-sm text-blue-700">
-          Diese Stimme entwickelt sich automatisch durch deine Posts und Antworten weiter.
-          Letzte Aktualisierung: {formatDate(activeProfiles.voice_profile?.updated_at)}
+          Diese Stimme entwickelt sich automatisch durch deine Posts und Antworten weiter. Letzte
+          Aktualisierung: {formatDate(activeProfiles.voice_profile?.updated_at)}
         </div>
       )}
 
@@ -577,7 +560,8 @@ function VoiceInsights() {
       {compareVersion !== null && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-center justify-between text-sm text-amber-700">
           <span>
-            Vergleichsansicht: Version {compareVersion} — Gelb markierte Felder weichen von der aktuellen Version ab.
+            Vergleichsansicht: Version {compareVersion} — Gelb markierte Felder weichen von der
+            aktuellen Version ab.
           </span>
           <button
             onClick={() => setCompareVersion(null)}
@@ -610,10 +594,13 @@ function VoiceInsights() {
           <Brain className="w-10 h-10 text-primary-200" />
           <h2 className="text-base font-semibold text-ink">Noch kein Brand Voice eingerichtet</h2>
           <p className="text-sm text-ink-muted max-w-sm">
-            Durchlaufe den Brand Voice Wizard, damit die KI deinen Stil, deine Zielgruppe und deine Positionierung versteht.
+            Durchlaufe den Brand Voice Wizard, damit die KI deinen Stil, deine Zielgruppe und deine
+            Positionierung versteht.
           </p>
-          <Link to="/brand-voice/wizard"
-            className="mt-2 px-4 py-2 text-sm font-semibold bg-primary-700 text-white rounded-xl hover:bg-primary-800 flex items-center gap-2">
+          <Link
+            to="/brand-voice/wizard"
+            className="mt-2 px-4 py-2 text-sm font-semibold bg-primary-700 text-white rounded-xl hover:bg-primary-800 flex items-center gap-2"
+          >
             <ChevronRight className="w-4 h-4" />
             Wizard starten
           </Link>
@@ -629,7 +616,10 @@ function VoiceInsights() {
               {TABS.map((tab) => (
                 <button
                   key={tab.key}
-                  onClick={() => { setActiveTab(tab.key); setCompareVersion(null) }}
+                  onClick={() => {
+                    setActiveTab(tab.key)
+                    setCompareVersion(null)
+                  }}
                   className={`px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
                     activeTab === tab.key
                       ? 'text-primary-700 border-primary-700 bg-primary-50'
@@ -647,7 +637,9 @@ function VoiceInsights() {
                 profileType={currentTab.profileKey}
                 payload={displayPayload}
                 comparePayload={diffPayload}
-                editablePaths={compareVersion !== null ? [] : (EDITABLE_PATHS[currentTab.profileKey] || [])}
+                editablePaths={
+                  compareVersion !== null ? [] : EDITABLE_PATHS[currentTab.profileKey] || []
+                }
                 onFieldSaved={handleFieldSaved}
               />
             )}

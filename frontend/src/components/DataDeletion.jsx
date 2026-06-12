@@ -8,9 +8,7 @@
 import { useState, useEffect } from 'react'
 import { Trash2, AlertTriangle, RotateCcw, Loader2, ShieldOff } from 'lucide-react'
 import { Button } from './ui/Button'
-import {
-  requestDataDeletion, listDataDeletions, recoverDataDeletion,
-} from '../api'
+import { requestDataDeletion, listDataDeletions, recoverDataDeletion } from '../api'
 
 const MODE_LABELS = {
   full: 'Vollständige Konto-Löschung',
@@ -48,7 +46,9 @@ export default function DataDeletion() {
       setError(e.message)
     }
   }
-  useEffect(() => { loadHistory() }, [])
+  useEffect(() => {
+    loadHistory()
+  }, [])
 
   async function handleSubmit() {
     setSubmitting(true)
@@ -58,7 +58,10 @@ export default function DataDeletion() {
       if (olderThanDays) payload.older_than_days = parseInt(olderThanDays, 10)
       if (classification) payload.classification = classification
       if (mode === 'audit_selective' && recordIds) {
-        payload.record_ids = recordIds.split(',').map(s => s.trim()).filter(Boolean)
+        payload.record_ids = recordIds
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
       }
       if (notes) payload.notes = notes
       const r = await requestDataDeletion(payload)
@@ -73,7 +76,12 @@ export default function DataDeletion() {
   }
 
   async function handleRecover(id) {
-    if (!confirm('Wirklich wiederherstellen? Alle soft-gelöschten Daten dieser Anfrage werden zurückgeholt.')) return
+    if (
+      !confirm(
+        'Wirklich wiederherstellen? Alle soft-gelöschten Daten dieser Anfrage werden zurückgeholt.'
+      )
+    )
+      return
     try {
       await recoverDataDeletion(id)
       await loadHistory()
@@ -93,42 +101,98 @@ export default function DataDeletion() {
         danach unwiderruflich. Audit-Logs (Lösch-Anfragen) bleiben gemäß §147 AO erhalten.
       </p>
 
-      {error && <div style={{ padding: 12, background: '#fee2e2', color: '#991b1b', borderRadius: 6, marginBottom: 12 }}>{error}</div>}
+      {error && (
+        <div
+          style={{
+            padding: 12,
+            background: '#fee2e2',
+            color: '#991b1b',
+            borderRadius: 6,
+            marginBottom: 12,
+          }}
+        >
+          {error}
+        </div>
+      )}
       {result && (
-        <div style={{ padding: 12, background: '#fef3c7', color: '#78350f', borderRadius: 6, marginBottom: 12 }}>
-          ✓ Lösch-Anfrage angelegt: {Object.entries(result.affected || {}).map(([k, v]) => `${k}: ${v}`).join(', ')}
-          <br />Recovery möglich bis: {new Date(result.recovery_until).toLocaleDateString('de-DE')}
+        <div
+          style={{
+            padding: 12,
+            background: '#fef3c7',
+            color: '#78350f',
+            borderRadius: 6,
+            marginBottom: 12,
+          }}
+        >
+          ✓ Lösch-Anfrage angelegt:{' '}
+          {Object.entries(result.affected || {})
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(', ')}
+          <br />
+          Recovery möglich bis: {new Date(result.recovery_until).toLocaleDateString('de-DE')}
         </div>
       )}
 
-      <div style={{ marginBottom: 24, padding: 16, border: '1px solid #fca5a5', borderRadius: 6, background: '#fef2f2' }}>
+      <div
+        style={{
+          marginBottom: 24,
+          padding: 16,
+          border: '1px solid #fca5a5',
+          borderRadius: 6,
+          background: '#fef2f2',
+        }}
+      >
         <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>
-          <AlertTriangle size={16} style={{ display: 'inline', marginRight: 4, color: '#dc2626' }} />
+          <AlertTriangle
+            size={16}
+            style={{ display: 'inline', marginRight: 4, color: '#dc2626' }}
+          />
           Neue Lösch-Anfrage
         </h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Modus</label>
-            <select data-testid="deletion-mode" value={mode} onChange={(e) => setMode(e.target.value)}
-                    style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }}>
-              {Object.entries(MODE_LABELS).map(([v, label]) =>
-                <option key={v} value={v}>{label}</option>)}
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+              Modus
+            </label>
+            <select
+              data-testid="deletion-mode"
+              value={mode}
+              onChange={(e) => setMode(e.target.value)}
+              style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }}
+            >
+              {Object.entries(MODE_LABELS).map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
             </select>
           </div>
           {(mode === 'memory_selective' || mode === 'telegram_purge') && (
             <div>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Älter als (Tage, optional)</label>
-              <input type="number" min="0" max="3650" value={olderThanDays}
-                     onChange={(e) => setOlderThanDays(e.target.value)}
-                     data-testid="deletion-older-than"
-                     style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }} />
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                Älter als (Tage, optional)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="3650"
+                value={olderThanDays}
+                onChange={(e) => setOlderThanDays(e.target.value)}
+                data-testid="deletion-older-than"
+                style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }}
+              />
             </div>
           )}
           {mode === 'memory_selective' && (
             <div>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Klassifikation (optional)</label>
-              <select value={classification} onChange={(e) => setClassification(e.target.value)}
-                      style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }}>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                Klassifikation (optional)
+              </label>
+              <select
+                value={classification}
+                onChange={(e) => setClassification(e.target.value)}
+                style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }}
+              >
                 <option value="">— alle —</option>
                 <option value="werte">werte</option>
                 <option value="stories">stories</option>
@@ -138,22 +202,38 @@ export default function DataDeletion() {
           )}
           {mode === 'audit_selective' && (
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Record-IDs (komma-getrennt)</label>
-              <input type="text" value={recordIds} onChange={(e) => setRecordIds(e.target.value)}
-                     placeholder="uuid1, uuid2, ..."
-                     style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }} />
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                Record-IDs (komma-getrennt)
+              </label>
+              <input
+                type="text"
+                value={recordIds}
+                onChange={(e) => setRecordIds(e.target.value)}
+                placeholder="uuid1, uuid2, ..."
+                style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }}
+              />
             </div>
           )}
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Notiz (optional)</label>
-            <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)}
-                   maxLength={1000}
-                   style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }} />
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+              Notiz (optional)
+            </label>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              maxLength={1000}
+              style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }}
+            />
           </div>
         </div>
         <div style={{ marginTop: 12 }}>
           {!confirming ? (
-            <Button data-testid="btn-deletion-start" onClick={() => setConfirming(true)} variant="ghost">
+            <Button
+              data-testid="btn-deletion-start"
+              onClick={() => setConfirming(true)}
+              variant="ghost"
+            >
               <Trash2 size={14} /> Lösch-Anfrage prüfen
             </Button>
           ) : (
@@ -161,11 +241,19 @@ export default function DataDeletion() {
               <span style={{ marginRight: 12, color: '#991b1b', fontWeight: 600 }}>
                 Sicher? {mode === 'full' && '⚠️ Löscht alle Daten + deaktiviert Konto.'}
               </span>
-              <Button data-testid="btn-deletion-confirm" onClick={handleSubmit} disabled={submitting}>
+              <Button
+                data-testid="btn-deletion-confirm"
+                onClick={handleSubmit}
+                disabled={submitting}
+              >
                 {submitting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 {submitting ? ' Lösche…' : ' Endgültig anfordern'}
               </Button>
-              <Button onClick={() => setConfirming(false)} variant="ghost" style={{ marginLeft: 8 }}>
+              <Button
+                onClick={() => setConfirming(false)}
+                variant="ghost"
+                style={{ marginLeft: 8 }}
+              >
                 Abbrechen
               </Button>
             </>
@@ -189,27 +277,49 @@ export default function DataDeletion() {
             </tr>
           </thead>
           <tbody>
-            {history.map(h => {
+            {history.map((h) => {
               const badge = STATUS_BADGES[h.status] || { label: h.status, color: '#6b7280' }
-              const recoverable = h.status === 'soft_deleted' && h.recovery_until && new Date(h.recovery_until) > new Date()
+              const recoverable =
+                h.status === 'soft_deleted' &&
+                h.recovery_until &&
+                new Date(h.recovery_until) > new Date()
               return (
                 <tr key={h.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                  <td style={{ padding: 8 }}>{new Date(h.requested_at).toLocaleDateString('de-DE')}</td>
+                  <td style={{ padding: 8 }}>
+                    {new Date(h.requested_at).toLocaleDateString('de-DE')}
+                  </td>
                   <td style={{ padding: 8 }}>{MODE_LABELS[h.mode] || h.mode}</td>
                   <td style={{ padding: 8 }}>
-                    <span style={{ background: badge.color, color: 'white', padding: '2px 8px', borderRadius: 12, fontSize: 11 }}>
+                    <span
+                      style={{
+                        background: badge.color,
+                        color: 'white',
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                        fontSize: 11,
+                      }}
+                    >
                       {badge.label}
                     </span>
                   </td>
                   <td style={{ padding: 8 }}>
-                    {Object.entries(h.affected || {}).filter(([, v]) => v > 0).map(([k, v]) => `${k}: ${v}`).join(', ') || '—'}
+                    {Object.entries(h.affected || {})
+                      .filter(([, v]) => v > 0)
+                      .map(([k, v]) => `${k}: ${v}`)
+                      .join(', ') || '—'}
                   </td>
                   <td style={{ padding: 8 }}>
-                    {h.recovery_until ? new Date(h.recovery_until).toLocaleDateString('de-DE') : '—'}
+                    {h.recovery_until
+                      ? new Date(h.recovery_until).toLocaleDateString('de-DE')
+                      : '—'}
                   </td>
                   <td style={{ padding: 8 }}>
                     {recoverable && (
-                      <Button data-testid={`btn-recover-${h.id}`} onClick={() => handleRecover(h.id)} variant="ghost">
+                      <Button
+                        data-testid={`btn-recover-${h.id}`}
+                        onClick={() => handleRecover(h.id)}
+                        variant="ghost"
+                      >
                         <RotateCcw size={12} /> Wiederherstellen
                       </Button>
                     )}

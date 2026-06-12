@@ -15,8 +15,8 @@ import PostPreview from '../PostPreview'
 
 describe('PostPreview', () => {
   const shortText = 'Kurzer Post ohne Hashtag.'
-  const longTextMobile = 'A'.repeat(300)   // > 150 (mobile cutoff)
-  const mediumText = 'X'.repeat(180)        // > 150 (mobile) but < 210 (desktop)
+  const longTextMobile = 'A'.repeat(300) // > 150 (mobile cutoff)
+  const mediumText = 'X'.repeat(180) // > 150 (mobile) but < 210 (desktop)
 
   test('renders three device tabs', () => {
     render(<PostPreview text={shortText} />)
@@ -125,10 +125,13 @@ describe('PostPreview', () => {
   test('mobile tap targets are >= 44px (minHeight/minWidth on buttons)', () => {
     const { container } = render(<PostPreview text={shortText} defaultDevice="mobile" />)
     const actionBtns = container.querySelectorAll('button[style]')
-    actionBtns.forEach(btn => {
+    actionBtns.forEach((btn) => {
       const style = btn.getAttribute('style') || ''
       // Buttons must declare minHeight: 44 or minWidth: 44
-      const hasTarget = style.includes('44px') || style.includes('min-height: 44') || style.includes('min-width: 44')
+      const hasTarget =
+        style.includes('44px') ||
+        style.includes('min-height: 44') ||
+        style.includes('min-width: 44')
       expect(hasTarget).toBe(true)
     })
   })

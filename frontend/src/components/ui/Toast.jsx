@@ -86,22 +86,25 @@ export function ToastProvider({ children }) {
   const dismiss = useCallback((id) => {
     clearTimeout(timers.current[id])
     delete timers.current[id]
-    setToasts(prev => prev.filter(t => t.id !== id))
+    setToasts((prev) => prev.filter((t) => t.id !== id))
   }, [])
 
-  const toast = useCallback((message, variant = 'info') => {
-    const id = nextId()
-    const delay = DISMISS_DELAY[variant] ?? 4000
+  const toast = useCallback(
+    (message, variant = 'info') => {
+      const id = nextId()
+      const delay = DISMISS_DELAY[variant] ?? 4000
 
-    setToasts(prev => {
-      const next = [...prev, { id, message, variant }]
-      // Max 3: älteste entfernen
-      return next.slice(-MAX_TOASTS)
-    })
+      setToasts((prev) => {
+        const next = [...prev, { id, message, variant }]
+        // Max 3: älteste entfernen
+        return next.slice(-MAX_TOASTS)
+      })
 
-    timers.current[id] = setTimeout(() => dismiss(id), delay)
-    return id
-  }, [dismiss])
+      timers.current[id] = setTimeout(() => dismiss(id), delay)
+      return id
+    },
+    [dismiss]
+  )
 
   // Timer-Cleanup bei Unmount
   useEffect(() => {
@@ -119,14 +122,9 @@ export function ToastProvider({ children }) {
           sm:left-auto sm:translate-x-0 sm:right-4 sm:bottom-4
           w-full sm:w-auto pointer-events-none"
       >
-        {toasts.map(t => (
+        {toasts.map((t) => (
           <div key={t.id} className="pointer-events-auto w-full sm:w-80">
-            <ToastItem
-              id={t.id}
-              message={t.message}
-              variant={t.variant}
-              onDismiss={dismiss}
-            />
+            <ToastItem id={t.id} message={t.message} variant={t.variant} onDismiss={dismiss} />
           </div>
         ))}
       </div>

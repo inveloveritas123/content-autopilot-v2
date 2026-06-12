@@ -19,33 +19,60 @@ function SlideCard({ slide, index, total, onMove, onChange, onDelete }) {
     <div className="bg-white border border-gray-200 rounded-xl p-4 flex gap-3">
       <div className="flex flex-col items-center gap-1 shrink-0">
         <span className="text-xs font-bold text-ink-muted w-6 text-center">{index + 1}</span>
-        <button onClick={() => onMove(index, -1)} disabled={index === 0}
-          className="text-gray-400 hover:text-gray-700 disabled:opacity-20 text-xs">&#8593;</button>
-        <button onClick={() => onMove(index, 1)} disabled={index === total - 1}
-          className="text-gray-400 hover:text-gray-700 disabled:opacity-20 text-xs">&#8595;</button>
+        <button
+          onClick={() => onMove(index, -1)}
+          disabled={index === 0}
+          className="text-gray-400 hover:text-gray-700 disabled:opacity-20 text-xs"
+        >
+          &#8593;
+        </button>
+        <button
+          onClick={() => onMove(index, 1)}
+          disabled={index === total - 1}
+          className="text-gray-400 hover:text-gray-700 disabled:opacity-20 text-xs"
+        >
+          &#8595;
+        </button>
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-semibold text-ink-muted">{TYPE_LABELS[slide.type] || slide.type}</span>
+          <span className="text-xs font-semibold text-ink-muted">
+            {TYPE_LABELS[slide.type] || slide.type}
+          </span>
           {!editing && (
-            <button onClick={() => setEditing(true)} className="text-xs text-blue-600 hover:text-blue-800 ml-auto">Bearbeiten</button>
+            <button
+              onClick={() => setEditing(true)}
+              className="text-xs text-blue-600 hover:text-blue-800 ml-auto"
+            >
+              Bearbeiten
+            </button>
           )}
           {editing && (
-            <button onClick={() => setEditing(false)} className="text-xs text-emerald-600 hover:text-emerald-800 ml-auto">Fertig</button>
+            <button
+              onClick={() => setEditing(false)}
+              className="text-xs text-emerald-600 hover:text-emerald-800 ml-auto"
+            >
+              Fertig
+            </button>
           )}
-          <button onClick={() => onDelete(index)} className="text-xs text-red-400 hover:text-red-600">x</button>
+          <button
+            onClick={() => onDelete(index)}
+            className="text-xs text-red-400 hover:text-red-600"
+          >
+            x
+          </button>
         </div>
         {editing ? (
           <div className="space-y-2">
             <input
               value={slide.title || ''}
-              onChange={e => onChange(index, 'title', e.target.value)}
+              onChange={(e) => onChange(index, 'title', e.target.value)}
               placeholder="Titel / Ueberschrift"
               className="w-full border border-gray-200 rounded px-2 py-1 text-sm"
             />
             <textarea
               value={slide.body || ''}
-              onChange={e => onChange(index, 'body', e.target.value)}
+              onChange={(e) => onChange(index, 'body', e.target.value)}
               placeholder="Inhalt"
               rows={3}
               className="w-full border border-gray-200 rounded px-2 py-1 text-sm resize-none"
@@ -53,7 +80,9 @@ function SlideCard({ slide, index, total, onMove, onChange, onDelete }) {
           </div>
         ) : (
           <div>
-            {slide.title && <p className="text-sm font-semibold text-ink truncate">{slide.title}</p>}
+            {slide.title && (
+              <p className="text-sm font-semibold text-ink truncate">{slide.title}</p>
+            )}
             <p className="text-xs text-ink-muted line-clamp-2">{slide.body}</p>
           </div>
         )}
@@ -62,7 +91,12 @@ function SlideCard({ slide, index, total, onMove, onChange, onDelete }) {
   )
 }
 
-export default function CarouselEditor({ initialSlides = [], contentPieceId, tenantId, onPdfReady }) {
+export default function CarouselEditor({
+  initialSlides = [],
+  contentPieceId,
+  tenantId,
+  onPdfReady,
+}) {
   const { toast } = useToast()
   const [slides, setSlides] = useState(initialSlides)
   const [generating, setGenerating] = useState(false)
@@ -78,7 +112,7 @@ export default function CarouselEditor({ initialSlides = [], contentPieceId, ten
   }
 
   function handleChange(idx, field, value) {
-    const newSlides = slides.map((s, i) => i === idx ? { ...s, [field]: value } : s)
+    const newSlides = slides.map((s, i) => (i === idx ? { ...s, [field]: value } : s))
     setSlides(newSlides)
     setPdfUrl(null)
   }
@@ -115,7 +149,11 @@ export default function CarouselEditor({ initialSlides = [], contentPieceId, ten
   }
 
   if (slides.length === 0) {
-    return <div className="text-sm text-ink-muted py-4 text-center">Keine Slides. Carousel zuerst generieren.</div>
+    return (
+      <div className="text-sm text-ink-muted py-4 text-center">
+        Keine Slides. Carousel zuerst generieren.
+      </div>
+    )
   }
 
   return (
@@ -149,7 +187,13 @@ export default function CarouselEditor({ initialSlides = [], contentPieceId, ten
         <div className="border border-gray-200 rounded-xl overflow-hidden">
           <div className="bg-gray-50 px-4 py-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-ink-muted">PDF-Vorschau</span>
-            <a href={pdfUrl} download="carousel.pdf" className="text-xs text-blue-600 hover:text-blue-800">Download</a>
+            <a
+              href={pdfUrl}
+              download="carousel.pdf"
+              className="text-xs text-blue-600 hover:text-blue-800"
+            >
+              Download
+            </a>
           </div>
           <iframe src={pdfUrl} className="w-full h-96" title="Carousel PDF Vorschau" />
         </div>

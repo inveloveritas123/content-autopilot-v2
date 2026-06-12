@@ -90,14 +90,16 @@ export default function Memory() {
         getMemoryStats().catch(() => null),
       ])
       setRecent(Array.isArray(r) ? r : [])
-      setPicker((p && Array.isArray(p.items)) ? p.items : [])
+      setPicker(p && Array.isArray(p.items) ? p.items : [])
       setStats(s)
     } catch (e) {
       setError(e.message)
     }
   }
 
-  useEffect(() => { loadAll() }, [])
+  useEffect(() => {
+    loadAll()
+  }, [])
 
   async function handleSearch(e) {
     if (e) e.preventDefault()
@@ -139,7 +141,8 @@ export default function Memory() {
           Unternehmensgedächtnis
         </h1>
         <p className="text-sm text-ink-muted mt-1">
-          Sprachnotizen aus Telegram/WhatsApp, Fotos mit OCR, manuelle Notizen — semantisch durchsuchbar.
+          Sprachnotizen aus Telegram/WhatsApp, Fotos mit OCR, manuelle Notizen — semantisch
+          durchsuchbar.
         </p>
       </div>
 
@@ -153,13 +156,18 @@ export default function Memory() {
           <div className="bg-white rounded-xl border border-surface-border p-3">
             <p className="text-xs text-ink-muted">Embedded</p>
             <p className="text-2xl font-bold text-ink">{stats.embedded}</p>
-            <p className="text-[10px] text-ink-muted">{Math.round((stats.embedding_coverage || 0) * 100)}% Coverage</p>
+            <p className="text-[10px] text-ink-muted">
+              {Math.round((stats.embedding_coverage || 0) * 100)}% Coverage
+            </p>
           </div>
           <div className="bg-white rounded-xl border border-surface-border p-3 col-span-2">
             <p className="text-xs text-ink-muted mb-1">Klassifikation</p>
             <div className="flex flex-wrap gap-1.5">
-              {(stats.by_classification || []).map(c => (
-                <span key={c.classification} className={`text-[11px] px-2 py-0.5 rounded-full ${CLASS_COLORS[c.classification] || 'bg-gray-100 text-gray-600'}`}>
+              {(stats.by_classification || []).map((c) => (
+                <span
+                  key={c.classification}
+                  className={`text-[11px] px-2 py-0.5 rounded-full ${CLASS_COLORS[c.classification] || 'bg-gray-100 text-gray-600'}`}
+                >
                   {c.classification}: {c.count}
                 </span>
               ))}
@@ -175,7 +183,7 @@ export default function Memory() {
           <input
             type="text"
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={(e) => setQuery(e.target.value)}
             placeholder="Was hast du letztens über deine Werte erzählt?"
             className="w-full pl-10 pr-3 py-2.5 min-h-[44px] text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
@@ -198,14 +206,15 @@ export default function Memory() {
           { id: 'search', label: 'Suche', disabled: !searchResults },
           { id: 'recent', label: 'Neueste' },
           { id: 'note', label: '+ Notiz' },
-        ].map(t => (
+        ].map((t) => (
           <button
             key={t.id}
             disabled={t.disabled}
             onClick={() => setActiveTab(t.id)}
             className={`px-4 py-2 text-sm border-b-2 transition-colors ${
-              activeTab === t.id ? 'border-primary-600 text-primary-700 font-medium'
-                                 : 'border-transparent text-ink-muted hover:text-ink disabled:opacity-40'
+              activeTab === t.id
+                ? 'border-primary-600 text-primary-700 font-medium'
+                : 'border-transparent text-ink-muted hover:text-ink disabled:opacity-40'
             }`}
           >
             {t.label}
@@ -220,15 +229,23 @@ export default function Memory() {
             <Clock className="w-3 h-3" /> Vorschläge aus deinem Gedächtnis (vor 7-60 Tagen)
           </p>
           {picker.length === 0 ? (
-            <p className="text-sm text-ink-muted">Noch keine alten Erinnerungen — kommt mit der Zeit.</p>
+            <p className="text-sm text-ink-muted">
+              Noch keine alten Erinnerungen — kommt mit der Zeit.
+            </p>
           ) : (
             <div className="grid gap-3">
-              {picker.map(item => (
-                <div key={item.id} className="bg-amber-50/50 border border-amber-200 rounded-xl p-3">
+              {picker.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-amber-50/50 border border-amber-200 rounded-xl p-3"
+                >
                   <p className="text-sm font-medium text-amber-900 mb-1">{item.suggestion}</p>
-                  <p className="text-xs text-ink whitespace-pre-wrap break-words line-clamp-3">{item.preview}</p>
+                  <p className="text-xs text-ink whitespace-pre-wrap break-words line-clamp-3">
+                    {item.preview}
+                  </p>
                   <p className="text-[11px] text-ink-muted mt-1.5">
-                    {item.source_type} · vor {item.days_ago} Tagen{item.classification ? ` · ${item.classification}` : ''}
+                    {item.source_type} · vor {item.days_ago} Tagen
+                    {item.classification ? ` · ${item.classification}` : ''}
                   </p>
                 </div>
               ))}
@@ -244,10 +261,14 @@ export default function Memory() {
             {searchResults.count} Treffer für „{searchResults.query}"
           </p>
           {searchResults.results.length === 0 ? (
-            <p className="text-sm text-ink-muted">Keine Treffer — vielleicht eine andere Formulierung versuchen.</p>
+            <p className="text-sm text-ink-muted">
+              Keine Treffer — vielleicht eine andere Formulierung versuchen.
+            </p>
           ) : (
             <div className="grid gap-3">
-              {searchResults.results.map(c => <ChunkCard key={c.id} chunk={c} />)}
+              {searchResults.results.map((c) => (
+                <ChunkCard key={c.id} chunk={c} />
+              ))}
             </div>
           )}
         </div>
@@ -257,10 +278,15 @@ export default function Memory() {
       {activeTab === 'recent' && (
         <div className="space-y-3">
           {recent.length === 0 ? (
-            <p className="text-sm text-ink-muted">Noch keine Inhalte. Sprachnachrichten oder Fotos via Telegram/WhatsApp einsenden, oder hier eine Notiz hinzufügen.</p>
+            <p className="text-sm text-ink-muted">
+              Noch keine Inhalte. Sprachnachrichten oder Fotos via Telegram/WhatsApp einsenden, oder
+              hier eine Notiz hinzufügen.
+            </p>
           ) : (
             <div className="grid gap-3">
-              {recent.map(c => <ChunkCard key={c.id} chunk={c} />)}
+              {recent.map((c) => (
+                <ChunkCard key={c.id} chunk={c} />
+              ))}
             </div>
           )}
         </div>
@@ -271,7 +297,7 @@ export default function Memory() {
         <form onSubmit={handleAddNote} className="space-y-3">
           <textarea
             value={noteText}
-            onChange={e => setNoteText(e.target.value)}
+            onChange={(e) => setNoteText(e.target.value)}
             placeholder="Eine spontane Notiz, ein Gedanke, eine Begebenheit — alles was du sonst vergessen würdest."
             rows={6}
             className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"

@@ -1,16 +1,63 @@
 import { useState, useEffect, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import { useToast } from './ui/Toast'
-import { Lightbulb, MessageCircleQuestion, ChevronDown, ChevronUp, Send, Sparkles, Tag, Star, Clock, CheckCircle2, AlertCircle, Plus, Loader2, Trash2, LayoutList, Rows3, SkipForward, Zap } from 'lucide-react'
-import { getIdeas, getIdea, submitAnswer, generatePost, updateIdea, getItems, generateIdeas, batchGenerateIdeas, refreshIdeasWithProfile, getSources, bulkArchiveIdeas, quickGeneratePost, bulkQuickGeneratePosts, getIdeasSourceBreakdown, createManualIdea } from '../api'
+import {
+  Lightbulb,
+  MessageCircleQuestion,
+  ChevronDown,
+  ChevronUp,
+  Send,
+  Sparkles,
+  Tag,
+  Star,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  Plus,
+  Loader2,
+  Trash2,
+  LayoutList,
+  Rows3,
+  SkipForward,
+  Zap,
+} from 'lucide-react'
+import {
+  getIdeas,
+  getIdea,
+  submitAnswer,
+  generatePost,
+  updateIdea,
+  getItems,
+  generateIdeas,
+  batchGenerateIdeas,
+  refreshIdeasWithProfile,
+  getSources,
+  bulkArchiveIdeas,
+  quickGeneratePost,
+  bulkQuickGeneratePosts,
+  getIdeasSourceBreakdown,
+  createManualIdea,
+} from '../api'
 import TimeFilter from './TimeFilter'
 import IdeaVariants from './IdeaVariants'
 
 const STATUS_MAP = {
   new: { label: 'Neu', color: 'bg-blue-100 text-blue-700', icon: Lightbulb },
-  questions_sent: { label: 'Fragen offen', color: 'bg-amber-100 text-amber-700', icon: MessageCircleQuestion },
-  answers_received: { label: 'Beantwortet', color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle2 },
-  content_generated: { label: 'Post erstellt', color: 'bg-primary-100 text-primary-700', icon: Sparkles },
+  questions_sent: {
+    label: 'Fragen offen',
+    color: 'bg-amber-100 text-amber-700',
+    icon: MessageCircleQuestion,
+  },
+  answers_received: {
+    label: 'Beantwortet',
+    color: 'bg-emerald-100 text-emerald-700',
+    icon: CheckCircle2,
+  },
+  content_generated: {
+    label: 'Post erstellt',
+    color: 'bg-primary-100 text-primary-700',
+    icon: Sparkles,
+  },
   dismissed: { label: 'Verworfen', color: 'bg-gray-100 text-gray-500', icon: AlertCircle },
   skipped: { label: 'Übersprungen', color: 'bg-gray-100 text-gray-400', icon: SkipForward },
   rejected: { label: 'Archiviert', color: 'bg-gray-100 text-gray-400', icon: Trash2 },
@@ -19,7 +66,9 @@ const STATUS_MAP = {
 function StatusBadge({ status }) {
   const s = STATUS_MAP[status] || { label: status, color: 'bg-gray-100 text-gray-600' }
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${s.color}`}>
+    <span
+      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${s.color}`}
+    >
       {s.icon && <s.icon className="w-3 h-3" />}
       {s.label}
     </span>
@@ -40,21 +89,36 @@ function RelevanceBar({ score }) {
   )
 }
 
-function InlineQA({ idea, answers, onChange, onSubmit, onGeneratePost, onQuickGenerate, submitting, generating, quickGenerating, message }) {
-  if (!idea) return (
-    <div className="py-3 flex items-center justify-center gap-2 text-xs text-ink-muted">
-      <Loader2 className="animate-spin w-4 h-4" aria-hidden="true" />
-      Lade Fragen…
-    </div>
-  )
+function InlineQA({
+  idea,
+  answers,
+  onChange,
+  onSubmit,
+  onGeneratePost,
+  onQuickGenerate,
+  submitting,
+  generating,
+  quickGenerating,
+  message,
+}) {
+  if (!idea)
+    return (
+      <div className="py-3 flex items-center justify-center gap-2 text-xs text-ink-muted">
+        <Loader2 className="animate-spin w-4 h-4" aria-hidden="true" />
+        Lade Fragen…
+      </div>
+    )
   const questions = idea.entrepreneur_questions || []
-  const existingAnswerIndices = new Set((idea.answers || []).map(a => a.question_index))
-  const allAnswered = questions.length > 0 && questions.every((_, i) => existingAnswerIndices.has(i))
+  const existingAnswerIndices = new Set((idea.answers || []).map((a) => a.question_index))
+  const allAnswered =
+    questions.length > 0 && questions.every((_, i) => existingAnswerIndices.has(i))
 
   return (
     <div className="border-t border-gray-100 mt-3 pt-4 space-y-3">
       {message && (
-        <div className={`p-2 rounded-lg text-xs ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+        <div
+          className={`p-2 rounded-lg text-xs ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}
+        >
           {message.text}
         </div>
       )}
@@ -69,12 +133,16 @@ function InlineQA({ idea, answers, onChange, onSubmit, onGeneratePost, onQuickGe
       )}
       {questions.map((q, idx) => {
         const answered = existingAnswerIndices.has(idx)
-        const existingText = idea.answers?.find(a => a.question_index === idx)?.answer_text
+        const existingText = idea.answers?.find((a) => a.question_index === idx)?.answer_text
         const qText = typeof q === 'string' ? q : q.question || q.text || JSON.stringify(q)
         return (
-          <div key={idx} className={`p-3 rounded-lg border ${answered ? 'border-emerald-200 bg-emerald-50/40' : 'border-gray-200 bg-gray-50'}`}>
+          <div
+            key={idx}
+            className={`p-3 rounded-lg border ${answered ? 'border-emerald-200 bg-emerald-50/40' : 'border-gray-200 bg-gray-50'}`}
+          >
             <p className="text-xs font-medium text-ink mb-1.5">
-              <span className="text-primary-600 mr-1">{idx + 1}.</span>{qText}
+              <span className="text-primary-600 mr-1">{idx + 1}.</span>
+              {qText}
             </p>
             {answered ? (
               <div className="flex items-start gap-1.5">
@@ -88,7 +156,7 @@ function InlineQA({ idea, answers, onChange, onSubmit, onGeneratePost, onQuickGe
                   rows={2}
                   placeholder="Deine Antwort (min. 10 Zeichen)..."
                   value={answers[idx] || ''}
-                  onChange={e => onChange(idx, e.target.value)}
+                  onChange={(e) => onChange(idx, e.target.value)}
                 />
                 <button
                   onClick={() => onSubmit(idx, qText)}
@@ -104,16 +172,22 @@ function InlineQA({ idea, answers, onChange, onSubmit, onGeneratePost, onQuickGe
         )
       })}
       {allAnswered && idea.status !== 'content_generated' && (
-        <button onClick={onGeneratePost} disabled={generating}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-accent-500 text-white rounded-xl font-medium text-sm hover:bg-accent-600 disabled:opacity-50 transition-colors">
+        <button
+          onClick={onGeneratePost}
+          disabled={generating}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-accent-500 text-white rounded-xl font-medium text-sm hover:bg-accent-600 disabled:opacity-50 transition-colors"
+        >
           <Sparkles className="w-4 h-4" />
           {generating ? 'Posts werden erstellt...' : 'LinkedIn-Posts generieren'}
         </button>
       )}
       {!allAnswered && idea.status !== 'content_generated' && onQuickGenerate && (
-        <button onClick={onQuickGenerate} disabled={quickGenerating || generating}
+        <button
+          onClick={onQuickGenerate}
+          disabled={quickGenerating || generating}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-sm hover:bg-gray-200 disabled:opacity-50 transition-colors"
-          title="Post direkt aus Ideen-Metadaten generieren — ohne Fragen beantworten">
+          title="Post direkt aus Ideen-Metadaten generieren — ohne Fragen beantworten"
+        >
           <Zap className="w-4 h-4 text-amber-500" />
           {quickGenerating ? 'Quick-Post wird erstellt...' : '⚡ Quick Post (ohne Q&A)'}
         </button>
@@ -121,7 +195,9 @@ function InlineQA({ idea, answers, onChange, onSubmit, onGeneratePost, onQuickGe
       {idea.status === 'content_generated' && (
         <div className="p-3 bg-primary-50 rounded-lg border border-primary-100 text-center">
           <Sparkles className="w-4 h-4 text-primary-600 mx-auto mb-1" />
-          <p className="text-xs font-medium text-primary-700">Posts erstellt — schau unter "Posts"</p>
+          <p className="text-xs font-medium text-primary-700">
+            Posts erstellt — schau unter "Posts"
+          </p>
         </div>
       )}
     </div>
@@ -130,17 +206,25 @@ function InlineQA({ idea, answers, onChange, onSubmit, onGeneratePost, onQuickGe
 
 function IdeaCard({ idea, onToggle, isExpanded, inlineContent, isSelected, onSelect }) {
   const hasQuestions = (idea.questions_count || 0) > 0
-  const actionLabel = isExpanded ? 'Einklappen'
-    : (hasQuestions && idea.status !== 'content_generated') ? 'Fragen beantworten'
-    : 'Details'
+  const actionLabel = isExpanded
+    ? 'Einklappen'
+    : hasQuestions && idea.status !== 'content_generated'
+      ? 'Fragen beantworten'
+      : 'Details'
 
   return (
-    <div className={`bg-white rounded-xl border transition-colors ${isSelected ? 'border-red-300 bg-red-50/30' : isExpanded ? 'border-primary-300 shadow-sm' : 'border-surface-border hover:border-primary-300'}`}>
+    <div
+      className={`bg-white rounded-xl border transition-colors ${isSelected ? 'border-red-300 bg-red-50/30' : isExpanded ? 'border-primary-300 shadow-sm' : 'border-surface-border hover:border-primary-300'}`}
+    >
       <div className="p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-2 shrink-0 mt-0.5">
-            <input type="checkbox" checked={isSelected} onChange={e => onSelect(idea.id, e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-gray-300 text-red-500 cursor-pointer mt-0.5" />
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={(e) => onSelect(idea.id, e.target.checked)}
+              className="w-3.5 h-3.5 rounded border-gray-300 text-red-500 cursor-pointer mt-0.5"
+            />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
@@ -177,7 +261,11 @@ function IdeaCard({ idea, onToggle, isExpanded, inlineContent, isSelected, onSel
             }`}
           >
             {actionLabel}
-            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {isExpanded ? (
+              <ChevronUp className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5" />
+            )}
           </button>
         </div>
 
@@ -207,7 +295,9 @@ function IdeaDetail({ ideaId, onClose }) {
       setIdea(data)
       // Pre-fill answered questions
       const existing = {}
-      ;(data.answers || []).forEach(a => { existing[a.question_index] = a.answer_text })
+      ;(data.answers || []).forEach((a) => {
+        existing[a.question_index] = a.answer_text
+      })
       setAnswers(existing)
     } catch (e) {
       setMessage({ type: 'error', text: e.message })
@@ -252,8 +342,9 @@ function IdeaDetail({ ideaId, onClose }) {
   if (!idea) return null
 
   const questions = idea.entrepreneur_questions || []
-  const existingAnswerIndices = new Set((idea.answers || []).map(a => a.question_index))
-  const allAnswered = questions.length > 0 && questions.every((_, i) => existingAnswerIndices.has(i))
+  const existingAnswerIndices = new Set((idea.answers || []).map((a) => a.question_index))
+  const allAnswered =
+    questions.length > 0 && questions.every((_, i) => existingAnswerIndices.has(i))
 
   return (
     <div className="bg-white rounded-xl border border-surface-border shadow-sm">
@@ -262,12 +353,16 @@ function IdeaDetail({ ideaId, onClose }) {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <StatusBadge status={idea.status} />
-              <span className="px-2 py-0.5 rounded-md bg-gray-100 text-xs text-ink-light">{idea.angle}</span>
+              <span className="px-2 py-0.5 rounded-md bg-gray-100 text-xs text-ink-light">
+                {idea.angle}
+              </span>
             </div>
             <h2 className="text-lg font-semibold text-ink">{idea.title}</h2>
             <p className="text-sm text-ink-light mt-1">{idea.description}</p>
           </div>
-          <button onClick={onClose} className="text-ink-muted hover:text-ink text-sm">Schliessen</button>
+          <button onClick={onClose} className="text-ink-muted hover:text-ink text-sm">
+            Schliessen
+          </button>
         </div>
         {idea.hook_suggestion && (
           <div className="mt-3 p-3 bg-accent-50 rounded-lg border border-accent-200">
@@ -285,7 +380,9 @@ function IdeaDetail({ ideaId, onClose }) {
         </h3>
 
         {message && (
-          <div className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+          <div
+            className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}
+          >
             {message.text}
           </div>
         )}
@@ -295,7 +392,10 @@ function IdeaDetail({ ideaId, onClose }) {
             const answered = existingAnswerIndices.has(idx)
             const qText = typeof q === 'string' ? q : q.question || q.text || JSON.stringify(q)
             return (
-              <div key={idx} className={`p-4 rounded-lg border ${answered ? 'border-emerald-200 bg-emerald-50/50' : 'border-gray-200 bg-gray-50'}`}>
+              <div
+                key={idx}
+                className={`p-4 rounded-lg border ${answered ? 'border-emerald-200 bg-emerald-50/50' : 'border-gray-200 bg-gray-50'}`}
+              >
                 <p className="text-sm font-medium text-ink mb-2">
                   <span className="text-primary-600 mr-1">{idx + 1}.</span>
                   {qText}
@@ -312,7 +412,7 @@ function IdeaDetail({ ideaId, onClose }) {
                       rows={2}
                       placeholder="Deine Antwort..."
                       value={answers[idx] || ''}
-                      onChange={e => setAnswers(prev => ({ ...prev, [idx]: e.target.value }))}
+                      onChange={(e) => setAnswers((prev) => ({ ...prev, [idx]: e.target.value }))}
                     />
                     <button
                       onClick={() => handleSubmitAnswer(idx, qText)}
@@ -346,7 +446,9 @@ function IdeaDetail({ ideaId, onClose }) {
           <div className="mt-6 p-4 bg-primary-50 rounded-lg border border-primary-200 text-center">
             <Sparkles className="w-6 h-6 text-primary-600 mx-auto mb-2" />
             <p className="text-sm font-medium text-primary-700">Posts wurden erstellt!</p>
-            <p className="text-xs text-primary-600 mt-1">Schau unter "Posts" nach deinen Varianten.</p>
+            <p className="text-xs text-primary-600 mt-1">
+              Schau unter "Posts" nach deinen Varianten.
+            </p>
           </div>
         )}
       </div>
@@ -357,7 +459,10 @@ function IdeaDetail({ ideaId, onClose }) {
           <h4 className="text-xs font-medium text-ink-muted mb-2">Zitate aus der Quelle:</h4>
           <div className="space-y-2">
             {idea.source_quotes.map((q, i) => (
-              <blockquote key={i} className="pl-3 border-l-2 border-primary-300 text-xs text-ink-light italic">
+              <blockquote
+                key={i}
+                className="pl-3 border-l-2 border-primary-300 text-xs text-ink-light italic"
+              >
                 {typeof q === 'string' ? q : q.text || JSON.stringify(q)}
               </blockquote>
             ))}
@@ -371,7 +476,8 @@ function IdeaDetail({ ideaId, onClose }) {
 function TriageCard({ idea, onSkip, onGenerate, skipping, generating }) {
   const score = idea.relevance_score ?? 0
   const pct = Math.min(score * 10, 100)
-  const scoreColor = score >= 7 ? 'text-emerald-600' : score >= 4 ? 'text-amber-600' : 'text-red-500'
+  const scoreColor =
+    score >= 7 ? 'text-emerald-600' : score >= 4 ? 'text-amber-600' : 'text-red-500'
   const barColor = score >= 7 ? 'bg-emerald-500' : score >= 4 ? 'bg-amber-500' : 'bg-red-400'
 
   return (
@@ -414,7 +520,11 @@ function TriageCard({ idea, onSkip, onGenerate, skipping, generating }) {
           title="Quick-Generate Post (ohne Q&A)"
           className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-accent-700 bg-accent-50 border border-accent-200 rounded-md hover:bg-accent-100 disabled:opacity-40 transition-colors"
         >
-          {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+          {generating ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <Sparkles className="w-3 h-3" />
+          )}
           Generate
         </button>
         <button
@@ -423,7 +533,11 @@ function TriageCard({ idea, onSkip, onGenerate, skipping, generating }) {
           title="Idee überspringen"
           className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 disabled:opacity-40 transition-colors"
         >
-          {skipping ? <Loader2 className="w-3 h-3 animate-spin" /> : <SkipForward className="w-3 h-3" />}
+          {skipping ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <SkipForward className="w-3 h-3" />
+          )}
           Skip
         </button>
       </div>
@@ -484,12 +598,18 @@ export default function Ideas() {
   useEffect(() => {
     loadIdeas()
     autoRefreshRef.current = setInterval(() => loadIdeas(true), 15000)
-    return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current) }
+    return () => {
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current)
+    }
   }, [filter, timeFilter, sourceFilter, searchQuery])
 
   useEffect(() => {
-    getSources().then(s => setSources(Array.isArray(s) ? s.filter(x => x.is_active) : [])).catch(() => {})
-    getIdeasSourceBreakdown().then(d => setSourceBreakdown(d)).catch(() => {})
+    getSources()
+      .then((s) => setSources(Array.isArray(s) ? s.filter((x) => x.is_active) : []))
+      .catch(() => {})
+    getIdeasSourceBreakdown()
+      .then((d) => setSourceBreakdown(d))
+      .catch(() => {})
   }, [])
 
   async function loadIdeas(silent = false) {
@@ -507,7 +627,10 @@ export default function Ideas() {
       const items = data?.items ?? (Array.isArray(data) ? data : [])
       const total = data?.total ?? items.length
       // flushSync ensures React commits the DOM update synchronously before scroll restore
-      flushSync(() => { setIdeas(items); setIdeasTotal(total) })
+      flushSync(() => {
+        setIdeas(items)
+        setIdeasTotal(total)
+      })
       if (silent && savedScrollY > 0) {
         window.scrollTo({ top: savedScrollY, behavior: 'instant' })
       }
@@ -530,7 +653,7 @@ export default function Ideas() {
       if (timeFilter.date_to) params.date_to = timeFilter.date_to
       const data = await getIdeas(params)
       const newItems = data?.items ?? (Array.isArray(data) ? data : [])
-      setIdeas(prev => [...prev, ...newItems])
+      setIdeas((prev) => [...prev, ...newItems])
       setIdeasTotal(data?.total ?? ideasTotal)
     } catch (e) {
       console.error('loadMore failed:', e)
@@ -613,7 +736,10 @@ export default function Ideas() {
     setInlineMessage(null)
     try {
       const result = await generatePost(expandedId)
-      setInlineMessage({ type: 'success', text: `${result.posts?.length || 0} Post-Varianten erstellt! Schau unter "Posts".` })
+      setInlineMessage({
+        type: 'success',
+        text: `${result.posts?.length || 0} Post-Varianten erstellt! Schau unter "Posts".`,
+      })
       const detail = await getIdea(expandedId)
       setExpandedDetail(detail)
       await loadIdeas()
@@ -629,8 +755,13 @@ export default function Ideas() {
     setInlineMessage(null)
     try {
       await quickGeneratePost(expandedId)
-      setInlineMessage({ type: 'success', text: 'Quick-Post erstellt — schau unter "Posts" → Entwürfe' })
-      setIdeas(prev => prev.map(i => i.id === expandedId ? { ...i, status: 'content_generated' } : i))
+      setInlineMessage({
+        type: 'success',
+        text: 'Quick-Post erstellt — schau unter "Posts" → Entwürfe',
+      })
+      setIdeas((prev) =>
+        prev.map((i) => (i.id === expandedId ? { ...i, status: 'content_generated' } : i))
+      )
     } catch (e) {
       setInlineMessage({ type: 'error', text: 'Quick-Generate fehlgeschlagen: ' + e.message })
     }
@@ -638,17 +769,16 @@ export default function Ideas() {
   }
 
   function handleSelect(id, checked) {
-    setSelectedIds(prev => {
+    setSelectedIds((prev) => {
       const next = new Set(prev)
-      if (checked) next.add(id); else next.delete(id)
+      if (checked) next.add(id)
+      else next.delete(id)
       return next
     })
   }
 
   function handleSelectLowScore() {
-    const lowIds = ideas
-      .filter(i => (i.relevance_score ?? 10) < 4)
-      .map(i => i.id)
+    const lowIds = ideas.filter((i) => (i.relevance_score ?? 10) < 4).map((i) => i.id)
     setSelectedIds(new Set(lowIds))
   }
 
@@ -656,10 +786,16 @@ export default function Ideas() {
     if (!selectedIds.size) return
     const MAX_BATCH = 20
     const ids = [...selectedIds].slice(0, MAX_BATCH)
-    if (!window.confirm(`${ids.length} Posts direkt generieren (ohne Q&A-Workflow)?\n\nDie KI generiert Posts direkt aus Ideen-Metadaten. Ergebnis erscheint unter "Posts" → Entwürfe.${ids.length < selectedIds.size ? `\n\n(${selectedIds.size - MAX_BATCH} übersprungen, max ${MAX_BATCH}/Batch)` : ''}`)) return
+    if (
+      !window.confirm(
+        `${ids.length} Posts direkt generieren (ohne Q&A-Workflow)?\n\nDie KI generiert Posts direkt aus Ideen-Metadaten. Ergebnis erscheint unter "Posts" → Entwürfe.${ids.length < selectedIds.size ? `\n\n(${selectedIds.size - MAX_BATCH} übersprungen, max ${MAX_BATCH}/Batch)` : ''}`
+      )
+    )
+      return
     setQuickGenerating(true)
     setQuickGenProgress({ done: 0, total: ids.length, errors: 0 })
-    let done = 0, errors = 0
+    let done = 0,
+      errors = 0
     for (const id of ids) {
       try {
         await quickGeneratePost(id)
@@ -673,7 +809,10 @@ export default function Ideas() {
     }
     setSelectedIds(new Set())
     setQuickGenerating(false)
-    setTimeout(() => { setQuickGenProgress(null); loadIdeas() }, 4000)
+    setTimeout(() => {
+      setQuickGenProgress(null)
+      loadIdeas()
+    }, 4000)
   }
 
   async function handleBulkArchive() {
@@ -690,7 +829,10 @@ export default function Ideas() {
     }
     setSelectedIds(new Set())
     setArchiveMsg(`🗑 ${done} Ideen archiviert`)
-    setTimeout(() => { setArchiveMsg(null); loadIdeas() }, 3000)
+    setTimeout(() => {
+      setArchiveMsg(null)
+      loadIdeas()
+    }, 3000)
     setArchiving(false)
   }
 
@@ -698,7 +840,7 @@ export default function Ideas() {
     setTriageSkipping(id)
     try {
       await updateIdea(id, { status: 'skipped' })
-      setIdeas(prev => prev.filter(i => i.id !== id))
+      setIdeas((prev) => prev.filter((i) => i.id !== id))
     } catch (e) {
       setTriageMsg({ type: 'error', text: 'Skip fehlgeschlagen: ' + e.message })
       setTimeout(() => setTriageMsg(null), 3000)
@@ -711,7 +853,7 @@ export default function Ideas() {
     try {
       const result = await quickGeneratePost(id)
       setTriageMsg({ type: 'success', text: `Post erstellt — schau unter "Posts" → Entwürfe` })
-      setIdeas(prev => prev.map(i => i.id === id ? { ...i, status: 'content_generated' } : i))
+      setIdeas((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'content_generated' } : i)))
       setTimeout(() => setTriageMsg(null), 5000)
     } catch (e) {
       setTriageMsg({ type: 'error', text: 'Quick-Generate fehlgeschlagen: ' + e.message })
@@ -765,7 +907,13 @@ export default function Ideas() {
         <div>
           <h1 className="text-xl font-bold text-ink">Content-Ideen</h1>
           <p className="text-sm text-ink-light mt-0.5">
-            {ideasTotal > 0 ? <><strong>{ideasTotal.toLocaleString('de')}</strong> Ideen gesamt · </> : ''}
+            {ideasTotal > 0 ? (
+              <>
+                <strong>{ideasTotal.toLocaleString('de')}</strong> Ideen gesamt ·{' '}
+              </>
+            ) : (
+              ''
+            )}
             Beantworte die Fragen und lass daraus Posts erstellen.
           </p>
         </div>
@@ -783,8 +931,11 @@ export default function Ideas() {
                   ? `${quickGenProgress?.done || 0}/${quickGenProgress?.total || 0} generiert...`
                   : `⚡ ${Math.min(selectedIds.size, 20)} Quick-Generate`}
               </button>
-              <button onClick={handleBulkArchive} disabled={archiving}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors">
+              <button
+                onClick={handleBulkArchive}
+                disabled={archiving}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors"
+              >
                 <Trash2 className="w-3.5 h-3.5" />
                 {archiving ? 'Archiviere...' : `${selectedIds.size} archivieren`}
               </button>
@@ -797,8 +948,13 @@ export default function Ideas() {
               try {
                 const r = await batchGenerateIdeas()
                 setBatchMsg(`🚀 ${r.triggered} Items gestartet`)
-                setTimeout(() => { setBatchMsg(null); loadIdeas() }, 4000)
-              } catch(e) { setBatchMsg('❌ ' + e.message) }
+                setTimeout(() => {
+                  setBatchMsg(null)
+                  loadIdeas()
+                }, 4000)
+              } catch (e) {
+                setBatchMsg('❌ ' + e.message)
+              }
               setBatchGenerating(false)
             }}
             disabled={batchGenerating}
@@ -809,14 +965,24 @@ export default function Ideas() {
           </button>
           <button
             onClick={async () => {
-              if (!confirm('Bestehende "neue" Ideen löschen und mit Unternehmer-Profil (Branche, Tonalität) neu generieren?\n\nDas behebt generische Themen (z.B. "CIO-Transformation") und ersetzt sie durch branchenspezifische Ideen.')) return
+              if (
+                !confirm(
+                  'Bestehende "neue" Ideen löschen und mit Unternehmer-Profil (Branche, Tonalität) neu generieren?\n\nDas behebt generische Themen (z.B. "CIO-Transformation") und ersetzt sie durch branchenspezifische Ideen.'
+                )
+              )
+                return
               setBatchGenerating(true)
               setBatchMsg(null)
               try {
                 const r = await refreshIdeasWithProfile(20)
                 setBatchMsg(`✅ ${r.message || 'Ideen werden neu generiert'}`)
-                setTimeout(() => { setBatchMsg(null); loadIdeas() }, 5000)
-              } catch(e) { setBatchMsg('❌ ' + e.message) }
+                setTimeout(() => {
+                  setBatchMsg(null)
+                  loadIdeas()
+                }, 5000)
+              } catch (e) {
+                setBatchMsg('❌ ' + e.message)
+              }
               setBatchGenerating(false)
             }}
             disabled={batchGenerating}
@@ -826,7 +992,10 @@ export default function Ideas() {
             🎯 Mit Profil neu
           </button>
           <button
-            onClick={() => { setShowManualIdea(true); setManualMsg(null) }}
+            onClick={() => {
+              setShowManualIdea(true)
+              setManualMsg(null)
+            }}
             className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
             title="Eigene Idee ohne LLM eintragen"
           >
@@ -839,12 +1008,14 @@ export default function Ideas() {
             <Plus className="w-4 h-4" /> Neue Ideen
           </button>
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-            {filters.map(f => (
+            {filters.map((f) => (
               <button
                 key={f.value}
                 onClick={() => setFilter(f.value)}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  filter === f.value ? 'bg-white text-ink shadow-sm' : 'text-ink-light hover:text-ink'
+                  filter === f.value
+                    ? 'bg-white text-ink shadow-sm'
+                    : 'text-ink-light hover:text-ink'
                 }`}
               >
                 {f.label}
@@ -852,50 +1023,79 @@ export default function Ideas() {
             ))}
           </div>
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-            {[{ v: 0, l: 'Alle' }, { v: 5, l: '5+' }, { v: 7, l: '7+' }, { v: 9, l: '9+' }].map(s => (
-              <button key={s.v} onClick={() => setMinScore(s.v)}
+            {[
+              { v: 0, l: 'Alle' },
+              { v: 5, l: '5+' },
+              { v: 7, l: '7+' },
+              { v: 9, l: '9+' },
+            ].map((s) => (
+              <button
+                key={s.v}
+                onClick={() => setMinScore(s.v)}
                 className={`px-2 py-1 text-xs font-medium rounded-md transition-colors ${
                   minScore === s.v ? 'bg-white text-ink shadow-sm' : 'text-ink-light hover:text-ink'
                 }`}
-              >{s.l}</button>
+              >
+                {s.l}
+              </button>
             ))}
           </div>
           {/* Angle filter + select-all-by-angle */}
-          <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}
-            className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary-500">
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary-500"
+          >
             <option value="">Alle Quellen</option>
-            {sources.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+            {sources.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
             ))}
           </select>
           {sourceFilter && (
             <button
               onClick={async () => {
-                const sourceName = sources.find(s => s.id === sourceFilter)?.name || 'dieser Quelle'
+                const sourceName =
+                  sources.find((s) => s.id === sourceFilter)?.name || 'dieser Quelle'
                 if (!window.confirm(`Alle neuen Ideen von "${sourceName}" archivieren?`)) return
                 try {
                   const r = await bulkArchiveIdeas({ source_id: sourceFilter, status: 'new' })
                   setArchiveMsg(`🗑 ${r.archived} Ideen von "${sourceName}" archiviert`)
-                  setTimeout(() => { setArchiveMsg(null); loadIdeas() }, 3000)
-                } catch(e) { toast.error('Fehler: ' + e.message) }
+                  setTimeout(() => {
+                    setArchiveMsg(null)
+                    loadIdeas()
+                  }, 3000)
+                } catch (e) {
+                  toast.error('Fehler: ' + e.message)
+                }
               }}
               className="px-2 py-1 text-[10px] font-medium text-red-600 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 transition-colors"
               title="Alle neuen Ideen dieser Quelle archivieren"
             >
-              <Trash2 className="w-3 h-3 inline mr-0.5" />Alle archivieren
+              <Trash2 className="w-3 h-3 inline mr-0.5" />
+              Alle archivieren
             </button>
           )}
-          <select value={angleFilter} onChange={e => setAngleFilter(e.target.value)}
-            className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary-500">
+          <select
+            value={angleFilter}
+            onChange={(e) => setAngleFilter(e.target.value)}
+            className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary-500"
+          >
             <option value="">Alle Angles</option>
-            {['meinung','howto','story','kontroverse','statistik','trend'].map(a => (
-              <option key={a} value={a}>{a}</option>
+            {['meinung', 'howto', 'story', 'kontroverse', 'statistik', 'trend'].map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
             ))}
           </select>
           {angleFilter && (
             <button
               onClick={() => {
-                const ids = ideas.filter(i => i.angle === angleFilter && i.status === 'new').slice(0, 20).map(i => i.id)
+                const ids = ideas
+                  .filter((i) => i.angle === angleFilter && i.status === 'new')
+                  .slice(0, 20)
+                  .map((i) => i.id)
                 setSelectedIds(new Set(ids))
               }}
               className="px-2.5 py-1.5 text-xs font-medium text-accent-700 bg-accent-50 border border-accent-200 rounded-lg hover:bg-accent-100 transition-colors"
@@ -904,13 +1104,18 @@ export default function Ideas() {
               Top 20 wählen
             </button>
           )}
-          <button onClick={() => setSortBy(s => s === 'relevance' ? 'date' : 'relevance')}
+          <button
+            onClick={() => setSortBy((s) => (s === 'relevance' ? 'date' : 'relevance'))}
             title={sortBy === 'relevance' ? 'Sortiert nach Relevanz' : 'Sortiert nach Datum'}
             className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50 transition-colors"
-          >{sortBy === 'relevance' ? '★ Relevanz' : '📅 Datum'}</button>
-          <button onClick={handleSelectLowScore}
+          >
+            {sortBy === 'relevance' ? '★ Relevanz' : '📅 Datum'}
+          </button>
+          <button
+            onClick={handleSelectLowScore}
             title="Wählt alle Ideen mit Score < 4 aus"
-            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg bg-white hover:bg-red-50 transition-colors">
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg bg-white hover:bg-red-50 transition-colors"
+          >
             <Trash2 className="w-3 h-3" /> Score&lt;4 wählen
           </button>
           {/* View mode toggle */}
@@ -919,46 +1124,60 @@ export default function Ideas() {
               onClick={() => setViewMode('list')}
               title="Kartenansicht"
               className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-ink' : 'text-ink-light hover:text-ink'}`}
-            ><LayoutList className="w-3.5 h-3.5" /></button>
+            >
+              <LayoutList className="w-3.5 h-3.5" />
+            </button>
             <button
               onClick={() => setViewMode('triage')}
               title="Triage-Queue (schnelles Durcharbeiten)"
               className={`p-1.5 rounded-md transition-colors ${viewMode === 'triage' ? 'bg-white shadow-sm text-primary-700' : 'text-ink-light hover:text-ink'}`}
-            ><Rows3 className="w-3.5 h-3.5" /></button>
+            >
+              <Rows3 className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       </div>
       <div className="mt-2">
-        <TimeFilter value={timeFilter} onChange={setTimeFilter} count={ideasTotal} label="Zeitraum" />
+        <TimeFilter
+          value={timeFilter}
+          onChange={setTimeFilter}
+          count={ideasTotal}
+          label="Zeitraum"
+        />
       </div>
       <div className="mt-2 flex items-center gap-2">
         <div className="relative flex-1">
           <input
             type="text"
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Ideen durchsuchen (Titel, Beschreibung)…"
             className="w-full pl-8 pr-8 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 placeholder-gray-400"
           />
-          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
+            🔍
+          </span>
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
-            >✕</button>
+            >
+              ✕
+            </button>
           )}
         </div>
         {ideas.length > 0 && (
           <button
             onClick={() => {
               const visibleIds = ideas
-                .filter(i => {
-                  if (minScore > 0 && (i.relevance_score == null || i.relevance_score < minScore)) return false
+                .filter((i) => {
+                  if (minScore > 0 && (i.relevance_score == null || i.relevance_score < minScore))
+                    return false
                   if (angleFilter && i.angle !== angleFilter) return false
                   return true
                 })
-                .map(i => i.id)
-              const allSelected = visibleIds.every(id => selectedIds.has(id))
+                .map((i) => i.id)
+              const allSelected = visibleIds.every((id) => selectedIds.has(id))
               if (allSelected) {
                 setSelectedIds(new Set())
               } else {
@@ -967,18 +1186,23 @@ export default function Ideas() {
             }}
             className="whitespace-nowrap px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50 transition-colors"
           >
-            {ideas.filter(i => {
-              if (minScore > 0 && (i.relevance_score == null || i.relevance_score < minScore)) return false
-              if (angleFilter && i.angle !== angleFilter) return false
-              return true
-            }).every(i => selectedIds.has(i.id)) && selectedIds.size > 0
+            {ideas
+              .filter((i) => {
+                if (minScore > 0 && (i.relevance_score == null || i.relevance_score < minScore))
+                  return false
+                if (angleFilter && i.angle !== angleFilter) return false
+                return true
+              })
+              .every((i) => selectedIds.has(i.id)) && selectedIds.size > 0
               ? '☑ Alle abwählen'
-              : `☐ Alle wählen (${ideas.filter(i => {
-                  if (minScore > 0 && (i.relevance_score == null || i.relevance_score < minScore)) return false
-                  if (angleFilter && i.angle !== angleFilter) return false
-                  return true
-                }).length})`
-            }
+              : `☐ Alle wählen (${
+                  ideas.filter((i) => {
+                    if (minScore > 0 && (i.relevance_score == null || i.relevance_score < minScore))
+                      return false
+                    if (angleFilter && i.angle !== angleFilter) return false
+                    return true
+                  }).length
+                })`}
           </button>
         )}
       </div>
@@ -994,7 +1218,9 @@ export default function Ideas() {
         </div>
       )}
       {quickGenProgress && (
-        <div className={`mb-4 p-3 rounded-xl border text-sm ${quickGenerating ? 'bg-accent-50 border-accent-200 text-accent-800' : quickGenProgress.errors === 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+        <div
+          className={`mb-4 p-3 rounded-xl border text-sm ${quickGenerating ? 'bg-accent-50 border-accent-200 text-accent-800' : quickGenProgress.errors === 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}
+        >
           <div className="flex items-center gap-3">
             <span className="font-semibold">
               {quickGenerating
@@ -1003,11 +1229,17 @@ export default function Ideas() {
             </span>
             {quickGenerating && (
               <div className="flex-1 h-1.5 bg-white/60 rounded-full overflow-hidden">
-                <div className="h-full bg-accent-500 rounded-full transition-all"
-                  style={{ width: `${quickGenProgress.total > 0 ? (quickGenProgress.done / quickGenProgress.total * 100) : 0}%` }} />
+                <div
+                  className="h-full bg-accent-500 rounded-full transition-all"
+                  style={{
+                    width: `${quickGenProgress.total > 0 ? (quickGenProgress.done / quickGenProgress.total) * 100 : 0}%`,
+                  }}
+                />
               </div>
             )}
-            {!quickGenerating && <span className="text-xs opacity-70">→ Unter "Posts" sichtbar</span>}
+            {!quickGenerating && (
+              <span className="text-xs opacity-70">→ Unter "Posts" sichtbar</span>
+            )}
           </div>
         </div>
       )}
@@ -1017,13 +1249,18 @@ export default function Ideas() {
         <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 overflow-hidden">
           <button
             className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-100 transition-colors"
-            onClick={() => setShowSourceBreakdown(v => !v)}
+            onClick={() => setShowSourceBreakdown((v) => !v)}
           >
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-ink">Ideen nach Quelle</span>
-              <span className="text-xs text-ink-muted bg-white border border-gray-200 px-1.5 py-0.5 rounded">{sourceBreakdown.total.toLocaleString('de')} gesamt · {sourceBreakdown.sources.length} Quellen</span>
+              <span className="text-xs text-ink-muted bg-white border border-gray-200 px-1.5 py-0.5 rounded">
+                {sourceBreakdown.total.toLocaleString('de')} gesamt ·{' '}
+                {sourceBreakdown.sources.length} Quellen
+              </span>
             </div>
-            <span className="text-xs text-ink-muted">{showSourceBreakdown ? '▲ Einklappen' : '▼ Anzeigen'}</span>
+            <span className="text-xs text-ink-muted">
+              {showSourceBreakdown ? '▲ Einklappen' : '▼ Anzeigen'}
+            </span>
           </button>
           {showSourceBreakdown && (
             <div className="border-t border-gray-200">
@@ -1037,29 +1274,58 @@ export default function Ideas() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sourceBreakdown.sources.map(src => (
-                    <tr key={src.source_id} className="border-b border-gray-100 last:border-0 hover:bg-white/60">
-                      <td className="px-4 py-2 font-medium text-ink truncate max-w-[220px]">{src.source_name}</td>
-                      <td className="px-3 py-2 text-right font-mono text-ink-muted">{src.idea_count.toLocaleString('de')}</td>
-                      <td className="px-3 py-2 text-right font-mono text-amber-700">{src.new_count.toLocaleString('de')}</td>
+                  {sourceBreakdown.sources.map((src) => (
+                    <tr
+                      key={src.source_id}
+                      className="border-b border-gray-100 last:border-0 hover:bg-white/60"
+                    >
+                      <td className="px-4 py-2 font-medium text-ink truncate max-w-[220px]">
+                        {src.source_name}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-ink-muted">
+                        {src.idea_count.toLocaleString('de')}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-amber-700">
+                        {src.new_count.toLocaleString('de')}
+                      </td>
                       <td className="px-3 py-2 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => setSourceFilter(src.source_id)}
                             className="px-2 py-0.5 text-[10px] text-primary-700 bg-primary-50 border border-primary-200 rounded hover:bg-primary-100 transition-colors"
-                          >Filtern</button>
+                          >
+                            Filtern
+                          </button>
                           {src.new_count > 0 && (
                             <button
                               onClick={async () => {
-                                if (!window.confirm(`${src.new_count} neue Ideen von "${src.source_name}" archivieren?`)) return
+                                if (
+                                  !window.confirm(
+                                    `${src.new_count} neue Ideen von "${src.source_name}" archivieren?`
+                                  )
+                                )
+                                  return
                                 try {
-                                  const r = await bulkArchiveIdeas({ source_id: src.source_id, status: 'new' })
+                                  const r = await bulkArchiveIdeas({
+                                    source_id: src.source_id,
+                                    status: 'new',
+                                  })
                                   setArchiveMsg(`🗑 ${r.archived} Ideen archiviert`)
-                                  setTimeout(() => { setArchiveMsg(null); loadIdeas(); getIdeasSourceBreakdown().then(d => setSourceBreakdown(d)).catch(() => {}) }, 3000)
-                                } catch(e) { toast.error('Fehler: ' + e.message) }
+                                  setTimeout(() => {
+                                    setArchiveMsg(null)
+                                    loadIdeas()
+                                    getIdeasSourceBreakdown()
+                                      .then((d) => setSourceBreakdown(d))
+                                      .catch(() => {})
+                                  }, 3000)
+                                } catch (e) {
+                                  toast.error('Fehler: ' + e.message)
+                                }
                               }}
                               className="px-2 py-0.5 text-[10px] text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors"
-                            >Archivieren</button>
+                            >
+                              Archivieren
+                            </button>
                           )}
                         </div>
                       </td>
@@ -1079,22 +1345,31 @@ export default function Ideas() {
               <Sparkles className="w-4 h-4 text-primary-600" />
               Ideen aus analysiertem Video generieren
             </h3>
-            <button onClick={() => setShowGenerate(false)} className="text-xs text-ink-muted hover:text-ink">Abbrechen</button>
+            <button
+              onClick={() => setShowGenerate(false)}
+              className="text-xs text-ink-muted hover:text-ink"
+            >
+              Abbrechen
+            </button>
           </div>
           {analyzedItems.length === 0 ? (
-            <p className="text-sm text-ink-light">Keine analysierten Videos gefunden. Analysiere zuerst ein Video unter "Quellen".</p>
+            <p className="text-sm text-ink-light">
+              Keine analysierten Videos gefunden. Analysiere zuerst ein Video unter "Quellen".
+            </p>
           ) : (
             <div className="flex items-end gap-3">
               <div className="flex-1">
                 <label className="block text-xs text-ink-muted mb-1">Video auswaehlen</label>
                 <select
                   value={selectedItemId}
-                  onChange={e => setSelectedItemId(e.target.value)}
+                  onChange={(e) => setSelectedItemId(e.target.value)}
                   className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 >
                   <option value="">— Video waehlen —</option>
-                  {analyzedItems.map(item => (
-                    <option key={item.id} value={item.id}>{item.title}</option>
+                  {analyzedItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.title}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -1103,7 +1378,11 @@ export default function Ideas() {
                 disabled={!selectedItemId || generating}
                 className="flex items-center gap-2 px-4 py-2 bg-accent-500 text-white rounded-lg font-medium hover:bg-accent-600 disabled:opacity-50 transition-colors"
               >
-                {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                {generating ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4" />
+                )}
                 {generating ? 'Generiere...' : 'Ideen generieren'}
               </button>
             </div>
@@ -1111,12 +1390,12 @@ export default function Ideas() {
         </div>
       )}
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
-      )}
+      {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
 
       {triageMsg && (
-        <div className={`mb-4 p-3 rounded-lg text-sm font-medium ${triageMsg.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+        <div
+          className={`mb-4 p-3 rounded-lg text-sm font-medium ${triageMsg.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}
+        >
           {triageMsg.text}
         </div>
       )}
@@ -1129,7 +1408,10 @@ export default function Ideas() {
           <p className="text-sm text-ink-light">Keine Ideen in diesem Zeitraum.</p>
           <p className="text-xs text-ink-muted mt-1">Probier einen größeren Zeitraum.</p>
           {timeFilter.period !== 'all' && (
-            <button onClick={() => setTimeFilter({ period: 'all' })} className="mt-3 px-4 py-1.5 text-xs font-medium text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-50">
+            <button
+              onClick={() => setTimeFilter({ period: 'all' })}
+              className="mt-3 px-4 py-1.5 text-xs font-medium text-primary-700 border border-primary-200 rounded-lg hover:bg-primary-50"
+            >
               Alle anzeigen
             </button>
           )}
@@ -1139,72 +1421,101 @@ export default function Ideas() {
           <div className="mb-3 flex items-center gap-2 p-3 bg-primary-50 border border-primary-100 rounded-xl">
             <Rows3 className="w-4 h-4 text-primary-600 shrink-0" />
             <p className="text-xs text-primary-700 font-medium">
-              Triage-Queue — klicke <strong>Generate</strong> für sofortigen Post (ohne Q&A) oder <strong>Skip</strong> zum Überspringen.
-              {' '}<span className="opacity-70">{ideas.filter(i => { if (minScore > 0 && (i.relevance_score == null || i.relevance_score < minScore)) return false; if (angleFilter && i.angle !== angleFilter) return false; return true }).length} Ideen</span>
+              Triage-Queue — klicke <strong>Generate</strong> für sofortigen Post (ohne Q&A) oder{' '}
+              <strong>Skip</strong> zum Überspringen.{' '}
+              <span className="opacity-70">
+                {
+                  ideas.filter((i) => {
+                    if (minScore > 0 && (i.relevance_score == null || i.relevance_score < minScore))
+                      return false
+                    if (angleFilter && i.angle !== angleFilter) return false
+                    return true
+                  }).length
+                }{' '}
+                Ideen
+              </span>
             </p>
           </div>
           <div className="flex flex-col gap-1.5">
-            {ideas.filter(idea => {
-              if (minScore > 0 && (idea.relevance_score == null || idea.relevance_score < minScore)) return false
-              if (angleFilter && idea.angle !== angleFilter) return false
-              return true
-            }).sort((a, b) => {
-              if (sortBy === 'relevance') return (b.relevance_score || 0) - (a.relevance_score || 0)
-              return new Date(b.created_at || 0) - new Date(a.created_at || 0)
-            }).map(idea => (
-              <TriageCard
-                key={idea.id}
-                idea={idea}
-                onSkip={handleTriageSkip}
-                onGenerate={handleTriageGenerate}
-                skipping={triageSkipping === idea.id}
-                generating={triageGenerating === idea.id}
-              />
-            ))}
+            {ideas
+              .filter((idea) => {
+                if (
+                  minScore > 0 &&
+                  (idea.relevance_score == null || idea.relevance_score < minScore)
+                )
+                  return false
+                if (angleFilter && idea.angle !== angleFilter) return false
+                return true
+              })
+              .sort((a, b) => {
+                if (sortBy === 'relevance')
+                  return (b.relevance_score || 0) - (a.relevance_score || 0)
+                return new Date(b.created_at || 0) - new Date(a.created_at || 0)
+              })
+              .map((idea) => (
+                <TriageCard
+                  key={idea.id}
+                  idea={idea}
+                  onSkip={handleTriageSkip}
+                  onGenerate={handleTriageGenerate}
+                  skipping={triageSkipping === idea.id}
+                  generating={triageGenerating === idea.id}
+                />
+              ))}
           </div>
         </div>
       ) : (
         <div className="grid gap-3">
-          {ideas.filter(idea => {
-            if (minScore > 0 && (idea.relevance_score == null || idea.relevance_score < minScore)) return false
-            if (angleFilter && idea.angle !== angleFilter) return false
-            return true
-          }).sort((a, b) => {
-            if (sortBy === 'relevance') return (b.relevance_score || 0) - (a.relevance_score || 0)
-            return new Date(b.created_at || 0) - new Date(a.created_at || 0)
-          }).map(idea => (
-            <IdeaCard
-              key={idea.id}
-              idea={idea}
-              isExpanded={expandedId === idea.id}
-              onToggle={toggleExpand}
-              isSelected={selectedIds.has(idea.id)}
-              onSelect={handleSelect}
-              inlineContent={expandedId === idea.id ? (
-                <InlineQA
-                  idea={expandedDetail}
-                  answers={inlineAnswers}
-                  onChange={(idx, val) => setInlineAnswers(prev => ({ ...prev, [idx]: val }))}
-                  onSubmit={handleInlineSubmit}
-                  onGeneratePost={handleInlineGenerate}
-                  onQuickGenerate={handleInlineQuickGenerate}
-                  submitting={inlineSubmitting}
-                  generating={inlineGenerating}
-                  quickGenerating={inlineQuickGenerating}
-                  message={inlineMessage}
-                />
-              ) : null}
-            />
-          ))}
+          {ideas
+            .filter((idea) => {
+              if (minScore > 0 && (idea.relevance_score == null || idea.relevance_score < minScore))
+                return false
+              if (angleFilter && idea.angle !== angleFilter) return false
+              return true
+            })
+            .sort((a, b) => {
+              if (sortBy === 'relevance') return (b.relevance_score || 0) - (a.relevance_score || 0)
+              return new Date(b.created_at || 0) - new Date(a.created_at || 0)
+            })
+            .map((idea) => (
+              <IdeaCard
+                key={idea.id}
+                idea={idea}
+                isExpanded={expandedId === idea.id}
+                onToggle={toggleExpand}
+                isSelected={selectedIds.has(idea.id)}
+                onSelect={handleSelect}
+                inlineContent={
+                  expandedId === idea.id ? (
+                    <InlineQA
+                      idea={expandedDetail}
+                      answers={inlineAnswers}
+                      onChange={(idx, val) => setInlineAnswers((prev) => ({ ...prev, [idx]: val }))}
+                      onSubmit={handleInlineSubmit}
+                      onGeneratePost={handleInlineGenerate}
+                      onQuickGenerate={handleInlineQuickGenerate}
+                      submitting={inlineSubmitting}
+                      generating={inlineGenerating}
+                      quickGenerating={inlineQuickGenerating}
+                      message={inlineMessage}
+                    />
+                  ) : null
+                }
+              />
+            ))}
           {ideas.length < ideasTotal && (
             <div className="flex items-center justify-center gap-3 py-4 border-t border-gray-100">
-              <span className="text-xs text-ink-muted">{ideas.length} von {ideasTotal.toLocaleString('de')} geladen</span>
+              <span className="text-xs text-ink-muted">
+                {ideas.length} von {ideasTotal.toLocaleString('de')} geladen
+              </span>
               <button
                 onClick={loadMore}
                 disabled={loadingMore}
                 className="px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100 transition-colors disabled:opacity-50"
               >
-                {loadingMore ? 'Lade...' : `Weitere ${Math.min(PAGE_SIZE, ideasTotal - ideas.length)} laden`}
+                {loadingMore
+                  ? 'Lade...'
+                  : `Weitere ${Math.min(PAGE_SIZE, ideasTotal - ideas.length)} laden`}
               </button>
             </div>
           )}
@@ -1213,24 +1524,41 @@ export default function Ideas() {
 
       {/* Manual Idea Modal */}
       {showManualIdea && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setShowManualIdea(false) }}>
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowManualIdea(false)
+          }}
+        >
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-ink">Manuelle Idee erstellen</h2>
-              <button onClick={() => setShowManualIdea(false)} className="text-gray-400 hover:text-gray-600 text-lg font-bold">✕</button>
+              <button
+                onClick={() => setShowManualIdea(false)}
+                className="text-gray-400 hover:text-gray-600 text-lg font-bold"
+              >
+                ✕
+              </button>
             </div>
-            <p className="text-xs text-ink-muted">Trage eine eigene Idee ein — ohne LLM-Budget. Sobald Budget verfügbar, kannst du Quick-Generate nutzen.</p>
+            <p className="text-xs text-ink-muted">
+              Trage eine eigene Idee ein — ohne LLM-Budget. Sobald Budget verfügbar, kannst du
+              Quick-Generate nutzen.
+            </p>
             {manualMsg && (
-              <div className={`p-3 rounded-lg text-xs font-medium ${manualMsg.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+              <div
+                className={`p-3 rounded-lg text-xs font-medium ${manualMsg.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}
+              >
                 {manualMsg.text}
               </div>
             )}
             <div>
-              <label className="block text-xs font-medium text-ink mb-1">Titel <span className="text-red-500">*</span></label>
+              <label className="block text-xs font-medium text-ink mb-1">
+                Titel <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
                 value={manualTitle}
-                onChange={e => setManualTitle(e.target.value)}
+                onChange={(e) => setManualTitle(e.target.value)}
                 placeholder="z.B. Heizungsoptimierung im Winter: 5 Tipps für SHK-Kunden"
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 maxLength={200}
@@ -1238,10 +1566,12 @@ export default function Ideas() {
               <p className="text-[10px] text-gray-400 mt-0.5">{manualTitle.length}/200</p>
             </div>
             <div>
-              <label className="block text-xs font-medium text-ink mb-1">Beschreibung (optional)</label>
+              <label className="block text-xs font-medium text-ink mb-1">
+                Beschreibung (optional)
+              </label>
               <textarea
                 value={manualDesc}
-                onChange={e => setManualDesc(e.target.value)}
+                onChange={(e) => setManualDesc(e.target.value)}
                 placeholder="Kurze Beschreibung des Themas..."
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
                 rows={3}
@@ -1251,28 +1581,39 @@ export default function Ideas() {
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="block text-xs font-medium text-ink mb-1">Content-Angle</label>
-                <select value={manualAngle} onChange={e => setManualAngle(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500">
-                  {['manual','howto','meinung','story','kontroverse','statistik','trend'].map(a => (
-                    <option key={a} value={a}>{a}</option>
-                  ))}
+                <select
+                  value={manualAngle}
+                  onChange={(e) => setManualAngle(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {['manual', 'howto', 'meinung', 'story', 'kontroverse', 'statistik', 'trend'].map(
+                    (a) => (
+                      <option key={a} value={a}>
+                        {a}
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-ink mb-1">Hook-Vorschlag (optional)</label>
+              <label className="block text-xs font-medium text-ink mb-1">
+                Hook-Vorschlag (optional)
+              </label>
               <input
                 type="text"
                 value={manualHook}
-                onChange={e => setManualHook(e.target.value)}
+                onChange={(e) => setManualHook(e.target.value)}
                 placeholder="z.B. 'Die meisten Hausbesitzer wissen nicht, dass...'"
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 maxLength={300}
               />
             </div>
             <div className="flex gap-3 pt-2">
-              <button onClick={() => setShowManualIdea(false)}
-                className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+              <button
+                onClick={() => setShowManualIdea(false)}
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+              >
                 Abbrechen
               </button>
               <button

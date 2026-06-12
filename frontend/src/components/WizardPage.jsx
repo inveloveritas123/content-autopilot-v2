@@ -42,9 +42,7 @@ const WIZARD_PHASES = [
       {
         id: 'q1_3',
         text: 'Welche Fehler hast du gemacht, über die du heute froh bist?',
-        nachhaken: [
-          "Nicht 'Ich habe gelernt dass...' sondern konkret: 'Was genau ist passiert?'",
-        ],
+        nachhaken: ["Nicht 'Ich habe gelernt dass...' sondern konkret: 'Was genau ist passiert?'"],
       },
     ],
   },
@@ -218,7 +216,9 @@ const WIZARD_PHASES = [
       {
         id: 'q5_4',
         text: 'Zeig mir 2–3 Posts oder Texte — von dir oder anderen — die du richtig gut findest. Was genau gefällt dir daran?',
-        nachhaken: ['Falls nicht sofort zur Hand: Links oder Screenshots nach dem Wizard zusenden.'],
+        nachhaken: [
+          'Falls nicht sofort zur Hand: Links oder Screenshots nach dem Wizard zusenden.',
+        ],
         required: false,
       },
       {
@@ -288,7 +288,8 @@ function getInlineHints(currentInput) {
 // ---------------------------------------------------------------------------
 function PhaseIcon({ status }) {
   if (status === 'done') return <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-  if (status === 'active') return <Circle className="w-5 h-5 text-primary-600 fill-primary-100 shrink-0" />
+  if (status === 'active')
+    return <Circle className="w-5 h-5 text-primary-600 fill-primary-100 shrink-0" />
   return <Circle className="w-5 h-5 text-gray-300 shrink-0" />
 }
 
@@ -344,9 +345,7 @@ function HorizontalStepper({ phases, currentPhase, progress }) {
               <span className="hidden sm:inline">{phase.name}</span>
               <span className="sm:hidden">{idx + 1}</span>
             </div>
-            {idx < phases.length - 1 && (
-              <div className="w-4 h-px bg-gray-200 shrink-0" />
-            )}
+            {idx < phases.length - 1 && <div className="w-4 h-px bg-gray-200 shrink-0" />}
           </div>
         )
       })}
@@ -405,8 +404,8 @@ function PipelineStatusBanner({ pipelineRunId, onDone }) {
         {isDone
           ? 'Brand Voice Pipeline abgeschlossen.'
           : isError
-          ? 'Pipeline-Fehler: ' + (status.error || 'Unbekannt')
-          : `Pipeline läuft — Stage: ${status.stage || '...'} (${status.status || '...'})`}
+            ? 'Pipeline-Fehler: ' + (status.error || 'Unbekannt')
+            : `Pipeline läuft — Stage: ${status.stage || '...'} (${status.status || '...'})`}
       </span>
     </div>
   )
@@ -438,7 +437,12 @@ function DoneView({ onGoToBrandVoice }) {
       <p className="text-sm text-ink-muted mb-6 max-w-sm">
         Alle Phasen wurden abgeschlossen. Dein Brand Voice Profil wird jetzt aufgebaut.
       </p>
-      <Button variant="primary" size="lg" onClick={onGoToBrandVoice} className="flex items-center gap-2">
+      <Button
+        variant="primary"
+        size="lg"
+        onClick={onGoToBrandVoice}
+        className="flex items-center gap-2"
+      >
         Zum Brand Voice Dashboard
         <ArrowRight className="w-4 h-4" />
       </Button>
@@ -477,7 +481,7 @@ export default function WizardPage() {
   useEffect(() => {
     getWizardQuestions()
       .then(setWizardPhases)
-      .catch(() => setWizardPhases(WIZARD_PHASES))  // fallback to hardcoded
+      .catch(() => setWizardPhases(WIZARD_PHASES)) // fallback to hardcoded
       .finally(() => setPhasesLoading(false))
   }, [])
 
@@ -546,7 +550,9 @@ export default function WizardPage() {
 
   // Cleanup Toast-Timer
   useEffect(() => {
-    return () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current) }
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    }
   }, [])
 
   // Fragen für die aktuelle Phase aufbauen
@@ -643,7 +649,10 @@ export default function WizardPage() {
           if (taskId) setPipelineRunId(taskId)
         })
         .catch(() => {})
-        .finally(() => { setFinalizing(false); setDone(true) })
+        .finally(() => {
+          setFinalizing(false)
+          setDone(true)
+        })
     } else {
       setCurrentPhase(nextPhase)
     }
@@ -652,19 +661,20 @@ export default function WizardPage() {
   // phaseSynthesis-Prop für QuestionEngine
   // QuestionEngine ruft onAccept/onReject und schließt das Modal intern.
   // Nach Modal-Close wechselt die Phase über advancePhase.
-  const phaseSynthesisProp = phaseSynthesisData !== null
-    ? {
-        proposals: phaseSynthesisData,
-        onAccept: (idx) => {
-          handleAcceptProposal(idx)
-          advancePhase()
-        },
-        onReject: (idx) => {
-          handleRejectProposal(idx)
-          advancePhase() // Ablehnen schließt Phase — kein Hängen im Modal
-        },
-      }
-    : undefined
+  const phaseSynthesisProp =
+    phaseSynthesisData !== null
+      ? {
+          proposals: phaseSynthesisData,
+          onAccept: (idx) => {
+            handleAcceptProposal(idx)
+            advancePhase()
+          },
+          onReject: (idx) => {
+            handleRejectProposal(idx)
+            advancePhase() // Ablehnen schließt Phase — kein Hängen im Modal
+          },
+        }
+      : undefined
 
   // Save & Continue Later
   const handleSaveAndContinue = useCallback(() => {
@@ -695,7 +705,8 @@ export default function WizardPage() {
       <Mic2 className="w-10 h-10 text-primary-400 mb-4" />
       <h2 className="text-base font-bold text-ink mb-2">Bitte am Tablet oder Desktop fortfahren</h2>
       <p className="text-sm text-ink-muted">
-        Der Brand Voice Wizard ist für größere Bildschirme optimiert. Öffne diese Seite auf einem Tablet oder PC.
+        Der Brand Voice Wizard ist für größere Bildschirme optimiert. Öffne diese Seite auf einem
+        Tablet oder PC.
       </p>
     </div>
   )
@@ -745,7 +756,11 @@ export default function WizardPage() {
   // Resume-Modal: offene Session gefunden
   if (resumeModal) {
     const lastDate = resumeModal.lastUpdated
-      ? new Date(resumeModal.lastUpdated).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      ? new Date(resumeModal.lastUpdated).toLocaleDateString('de-DE', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        })
       : null
     return (
       <>
@@ -757,7 +772,8 @@ export default function WizardPage() {
             <h2 className="text-lg font-semibold text-ink mb-2">Offene Session gefunden</h2>
             {resumeModal.stale && (
               <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3">
-                ⚠️ Diese Session ist älter als 7 Tage — die Wizard-Fragen könnten sich geändert haben. Neu starten empfohlen.
+                ⚠️ Diese Session ist älter als 7 Tage — die Wizard-Fragen könnten sich geändert
+                haben. Neu starten empfohlen.
               </p>
             )}
             <p className="text-sm text-ink-muted mb-1">
@@ -791,10 +807,7 @@ export default function WizardPage() {
         <div className="hidden md:block min-h-screen bg-gray-50">
           <div className="max-w-2xl mx-auto py-16 px-6">
             {pipelineRunId && (
-              <PipelineStatusBanner
-                pipelineRunId={pipelineRunId}
-                onDone={() => {}}
-              />
+              <PipelineStatusBanner pipelineRunId={pipelineRunId} onDone={() => {}} />
             )}
             <DoneView onGoToBrandVoice={() => navigate('/brand-voice')} />
           </div>
