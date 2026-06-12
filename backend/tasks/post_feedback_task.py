@@ -281,9 +281,7 @@ def regenerate_post_from_feedback(
     # 9. Post in den Chat senden
     chat_id = _resolve_chat_id(tenant_id)
     if chat_id is None:
-        logger.info(
-            "post_feedback_task: no active chat link for tenant — post stored, not sent"
-        )
+        logger.info("post_feedback_task: no active chat link for tenant — post stored, not sent")
         return {
             "status": "ok",
             "sent": False,
@@ -364,9 +362,7 @@ def _send_limit_notice(tenant_id: str) -> None:
             "Wenn du einen ganz neuen Post möchtest, starte einfach eine neue Session.",
         )
     except Exception as exc:
-        logger.warning(
-            "post_feedback_task: limit notice send failed: %s", type(exc).__name__
-        )
+        logger.warning("post_feedback_task: limit notice send failed: %s", type(exc).__name__)
 
 
 def _send_cost_notice(tenant_id: str) -> None:
@@ -382,6 +378,4 @@ def _send_cost_notice(tenant_id: str) -> None:
             "Das Tageslimit ist leider erreicht — morgen geht's weiter!",
         )
     except Exception as exc:
-        logger.warning(
-            "post_feedback_task: cost notice send failed: %s", type(exc).__name__
-        )
+        logger.warning("post_feedback_task: cost notice send failed: %s", type(exc).__name__)

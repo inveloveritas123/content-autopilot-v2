@@ -230,9 +230,7 @@ def _route_inbound_message(
                     )
                     return {"routed_to": "voice_feedback_api", "regen_enqueued": True}
                 except Exception as exc:
-                    logger.warning(
-                        "feedback regen enqueue failed: %s", type(exc).__name__
-                    )
+                    logger.warning("feedback regen enqueue failed: %s", type(exc).__name__)
                     return {"routed_to": "voice_feedback_api", "regen_enqueued": False}
             # Andere Targets: Routing-Marker setzen, kein Chat-Spam
             return {"routed_to": decision.target}

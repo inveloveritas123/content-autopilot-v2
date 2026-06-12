@@ -528,18 +528,16 @@ class TestLayer1Extraction:
         # Mindestens eine Query muss ausgefuehrt worden sein
         assert len(captured_queries) >= 1, "Keine DB-Query ausgefuehrt — Cost-Cap-Pfad inert?"
         sql_text, params = captured_queries[0]
-        assert "daily_cost_tenant" in sql_text, (
-            f"Erwarte 'daily_cost_tenant' in Query, bekam: {sql_text!r}"
-        )
-        assert "cost_tracking" not in sql_text, (
-            f"Query darf nicht 'cost_tracking' enthalten (nicht migriert): {sql_text!r}"
-        )
-        assert "cost_usd" in sql_text, (
-            f"Erwarte Spalte 'cost_usd' in Query, bekam: {sql_text!r}"
-        )
-        assert "total_usd" not in sql_text, (
-            f"Spalte 'total_usd' existiert nicht in daily_cost_tenant: {sql_text!r}"
-        )
+        assert (
+            "daily_cost_tenant" in sql_text
+        ), f"Erwarte 'daily_cost_tenant' in Query, bekam: {sql_text!r}"
+        assert (
+            "cost_tracking" not in sql_text
+        ), f"Query darf nicht 'cost_tracking' enthalten (nicht migriert): {sql_text!r}"
+        assert "cost_usd" in sql_text, f"Erwarte Spalte 'cost_usd' in Query, bekam: {sql_text!r}"
+        assert (
+            "total_usd" not in sql_text
+        ), f"Spalte 'total_usd' existiert nicht in daily_cost_tenant: {sql_text!r}"
         # Tenant-Scope (E3): tenant_id muss als Bind-Parameter uebergeben werden
         assert params is not None, "Bind-Params fehlen — Tenant-Scope verletzt (E3)"
         assert "tenant_id" in params, f"'tenant_id' nicht in Bind-Params: {params!r}"
