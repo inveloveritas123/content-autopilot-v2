@@ -48,6 +48,9 @@ regexes = [
     '''changeme''',
     # Migration docs and comments
     '''admin_backtest_2026''',
+    # False-Positive: linkedin-client-id-Regel matcht das deutsche Prosa-Wort
+    # "Besonderheiten" nach "linkedin_specific:" im Brand-Voice-Prompt (kein Secret).
+    '''linkedin_specific: Besonderheiten''',
 ]
 paths = [
     # Alembic migrations may reference old values in comments
