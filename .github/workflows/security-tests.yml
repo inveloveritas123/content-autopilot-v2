@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - "backend/**"
+      - ".github/workflows/security-tests.yml"
   workflow_dispatch:
 
 permissions:
