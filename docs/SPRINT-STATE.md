@@ -73,7 +73,9 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 - ✅ **#43 Schritt 2 fertig**: `tasks/values_backfill_task.py` — idempotenter, tenant-gescopter Backfill aus memory_chunks 'werte' (+ Setup-Werte), source='memory_promotion', fail-open (Tabelle fehlt → no_op).
 - ✅ **#43 Schritt 4 fertig**: P17-Vorbau — `brand_voice.py` decide_drift_observation entitäts-generisch (`entity_type` → Zieltabelle via `brand_voice_drift_helpers._ENTITY_TABLE`), neue `op:"append"`-Operation für Listen-Felder (werte[]); voice-Pfad 100% rückwärtskompatibel (COALESCE entity_type='voice'). Schreibziel für #41 steht.
 - ✅ **#43 KOMPLETT** — Board-Trias Voice/WERTE/Avatar hergestellt (Schema+Resolver+P12-Injektion+Backfill+P17-Ziel). Volle Wirkung nach Migration 053 (Robert) + Backfill-Lauf (Knecht). Test-Infra durabel saniert: **307 Stub-Tests reihenfolge-unabhängig grün** über 14 Suiten.
-- **Nächste Aktion:** Sprint 2 Rest (#29/#25/#26 Schema — besser nach #33-Merge) ODER Sprint 3 (#35 P07-Push, #37 Feedback-Loop, #38 Quality-Gate — opus). Robert-Merges + Migration entblocken die Sprint-2-Abnahme.
+### Sprint 3 (begonnen)
+- ✅ **#35 P07-Research-Push fertig**: `p07_research_task` sendet neue Findings + Hooks pro Tenant in den Chat (`_resolve_chat_id`+`_send_telegram_message`), idempotent (natürlich über bestehenden source_item_id-SELECT, keine Migration), E3-gescopet, fail-open. 21 Tests, 301 Anti-Pollution grün. Bahn 4 Pfad A geschlossen.
+- **Nächste Aktion:** #37 Feedback-Loop „nochmal anders" (opus, dep #19✅) ODER #38 Quality-Gate (opus) ODER #40 Voice-Fallback (sonnet). Sprint-2-Rest (#29/#25/#26) besser nach #33-Merge (Knecht).
 
 ---
 
