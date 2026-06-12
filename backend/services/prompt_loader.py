@@ -47,7 +47,8 @@ PROMPT_PATHS: dict[str, str] = {
     "P13": "prompts/P13-hook-varianten.md",
     "P15": "prompts/P15-eigene-idee.md",
     "P16": "prompts/P16-post-ueberarbeitung.md",
-    "P17": "prompts/P17-kundenkontext-update.md",
+    # P17 ausgelassen: nutzt Block-1/2/3-Struktur statt ## System-Prompt / ## User-Prompt
+    # → prompt_health meldet WEIRD/leer. Kein aktiver P17-Runner. Re-add nach Heading-Fix.
     "fragenkatalog": "rules/fragenkatalog.md",
     "hookmaster": "rules/hookmaster.md",
 }
