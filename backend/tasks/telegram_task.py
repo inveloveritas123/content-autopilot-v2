@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import types
 
 import httpx
 from sqlalchemy import text
@@ -74,6 +75,77 @@ def _update_log_transcript(log_id: str, transcript: str, model: str, confidence:
             {"id": log_id, "t": transcript, "m": model, "c": round(min(max(confidence, 0), 1), 2)},
         )
         db.commit()
+
+
+def _load_active_session(tenant_id: str) -> object | None:
+    """Lädt die aktive random_smart bot_session des Tenants.
+
+    Gibt ein leichtgewichtiges SimpleNamespace(id, status) zurück (KEIN
+    ORM-Model — route_telegram_intent greift nur per getattr/str darauf zu)
+    oder None, wenn keine aktive Session existiert.
+    """
+    with sync_session_factory() as db:
+        row = db.execute(
+            text(
+                # NB: mode='random_smart' deckt heute alle live geschalteten
+                # Sessions ab; sobald 'targeted' produktiv geht → Filter erweitern
+                # (sonst umgehen targeted-Antworten still das p08-Routing → Issue).
+                "SELECT id, status FROM bot_session "
+                "WHERE tenant_id = :tid AND status = 'active' "
+                "      AND mode = 'random_smart' "
+                "ORDER BY created_at DESC LIMIT 1"
+            ),
+            {"tid": tenant_id},
+        ).fetchone()
+    if row is None:
+        return None
+    return types.SimpleNamespace(id=row.id, status=row.status)
+
+
+def _route_inbound_message(tenant_id: str, text_content: str) -> dict | None:
+    """Verdrahtet eingehende Antworten mit der Intent-Routing-Pipeline (Issue #16).
+
+    Schritt 1: aktive Session laden (PRIMÄRES Gate). Keine Session → None.
+    Schritt 2: extract_intent_features → route_telegram_intent.
+    Schritt 3: bei target == 'p08_response' → p08_response aufrufen.
+
+    Fail-open: jede Exception wird nur geloggt, Rückgabe None — der bestehende
+    Chunk-Return des Callers darf NIEMALS kaputtgehen.
+
+    Returns ein Dict mit Routing-Metadaten (z.B. routed_to, p08_next_action,
+    bot_session_id) oder None, wenn nicht geroutet wurde.
+    """
+    try:
+        session = _load_active_session(tenant_id)
+        if session is None:
+            return None
+
+        from services.layer1_extraction import extract_intent_features
+        from services.layer2_routing import route_telegram_intent
+
+        extraction = extract_intent_features(
+            transcript=text_content,
+            tenant_id=tenant_id,
+            session_state="active",
+        )
+        decision = route_telegram_intent(extraction, tenant_id, current_session=session)
+
+        routing_info: dict = {"routed_to": decision.target, "bot_session_id": str(session.id)}
+
+        if decision.target == "p08_response":
+            from services.p08_service import p08_response
+
+            result = p08_response(
+                decision.payload["session_id"],
+                decision.payload["features"],
+            )
+            routing_info["p08_next_action"] = result.next_action
+
+        return routing_info
+    except Exception as exc:
+        # E2: nur Exception-Typ loggen, nie str(exc) — könnte Prompt-/PII-Fragmente tragen.
+        logger.warning("inbound routing failed: %s", type(exc).__name__)
+        return None
 
 
 def _telegram_get_file(file_id: str) -> bytes | None:
@@ -245,13 +317,17 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         logger.warning("store_voice_chunk failed: %s", exc)
         return {"status": "transcribed_no_chunk", "reason": str(exc)[:120]}
 
-    return {
+    result_dict = {
         "status": "ok",
         "transcript_chars": len(transcript),
         "memory_chunk_id": chunk_id,
         "source_type": source_type,
         "channel": channel,
     }
+    routing_info = _route_inbound_message(tenant_id, transcript)
+    if routing_info:
+        result_dict.update(routing_info)
+    return result_dict
 
 
 def _process_photo(log_id: str, tenant_id: str, payload: dict) -> dict:
@@ -354,9 +430,13 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
         logger.warning("store_text_chunk failed: %s", exc)
         return {"status": "error", "reason": str(exc)[:120]}
 
-    return {
+    result_dict = {
         "status": "ok",
         "memory_chunk_id": chunk_id,
         "source_type": "manual_note",
         "channel": channel,
     }
+    routing_info = _route_inbound_message(tenant_id, text_content)
+    if routing_info:
+        result_dict.update(routing_info)
+    return result_dict
