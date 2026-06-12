@@ -1,14 +1,13 @@
-import logging
 import asyncio
-import time
+import logging
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
-from models.source_item import SourceItem
 from models.source import Source
+from models.source_item import SourceItem
 from services.transcription import transcribe_content
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +49,19 @@ def transcribe_item(item_id: str):
 
             # Auto-score transcription quality
             try:
-                from services.quality_scorer import score_transcription
                 from models.quality_metric import QualityMetric
+                from services.quality_scorer import score_transcription
+
                 scores = score_transcription(transcript_text)
                 # Transcription uses yt-dlp/VoiceScriptor (no LLM), mark source
                 transcript_src = item.transcript_source or "yt_auto"
-                model_label = "voicescriptor" if "voicescriptor" in transcript_src else "yt_manual" if "manual" in transcript_src else "yt_auto"
+                model_label = (
+                    "voicescriptor"
+                    if "voicescriptor" in transcript_src
+                    else "yt_manual"
+                    if "manual" in transcript_src
+                    else "yt_auto"
+                )
                 qm = QualityMetric(
                     source_item_id=item.id,
                     tenant_id=item.tenant_id,
@@ -72,6 +78,7 @@ def transcribe_item(item_id: str):
 
             # Auto-chain: analyze
             from tasks.generate_task import analyze_item
+
             analyze_item.delay(item_id)
             return {"item_id": item_id, "status": "transcribed", "source": f"{source_type}_api"}
         else:
@@ -81,10 +88,12 @@ def transcribe_item(item_id: str):
 
 
 @celery_app.task(name="tasks.transcribe_task.batch_transcribe")
-def batch_transcribe(tenant_id: str = None):
+def batch_transcribe(tenant_id: str | None = None):
     """Batch transcribe 'new' items via unified transcribe_content() — full 4-step fallback chain."""
     with sync_session_factory() as session:
-        query = select(SourceItem).where(SourceItem.status.in_(["new", "transcription_failed", "needs_voicescriptor"]))
+        query = select(SourceItem).where(
+            SourceItem.status.in_(["new", "transcription_failed", "needs_voicescriptor"])
+        )
         if tenant_id:
             query = query.where(SourceItem.tenant_id == tenant_id)
         query = query.order_by(SourceItem.created_at.asc())
@@ -121,6 +130,7 @@ def batch_transcribe(tenant_id: str = None):
                 success += 1
                 logger.info(f"[{success}/{total}] OK: {item.title[:60]}")
                 from tasks.generate_task import analyze_item
+
                 analyze_item.delay(item.id)
             else:
                 item.status = "transcription_failed"
@@ -129,9 +139,12 @@ def batch_transcribe(tenant_id: str = None):
 
             session.commit()
 
-        remaining = session.execute(
-            select(func.count(SourceItem.id)).where(SourceItem.status == "new")
-        ).scalar() or 0
+        remaining = (
+            session.execute(
+                select(func.count(SourceItem.id)).where(SourceItem.status == "new")
+            ).scalar()
+            or 0
+        )
 
         result = {"total": total, "success": success, "failed": failed, "remaining_new": remaining}
         logger.info(f"=== BATCH DONE: {result} ===")

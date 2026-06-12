@@ -1,7 +1,6 @@
 import logging
-from typing import Optional
 
-from services.llm import llm_service, BudgetExceededError
+from services.llm import BudgetExceededError, llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +31,8 @@ async def analyze_transcript(
     transcript_text: str,
     source_type: str = "youtube",
     title: str = "",
-    routing_override: Optional[dict] = None,
-) -> Optional[dict]:
+    routing_override: dict | None = None,
+) -> dict | None:
     """Analyze content using Gemini Flash and return structured analysis.
 
     HINWEIS: Keine Truncation mehr — Gemini Flash 2.0 hat 1M Token Kontext.

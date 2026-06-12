@@ -1,8 +1,8 @@
 """Sync transcripts/analyses/content to Nextcloud and manage local cleanup."""
+
 import json
 import logging
 import re
-from typing import Optional
 
 from services.nextcloud import nextcloud_client
 
@@ -65,7 +65,7 @@ async def upload_content(
 async def check_nc_transcript_exists(
     video_id: str,
     read_paths: list[str],
-) -> Optional[str]:
+) -> str | None:
     """Check if a transcript for this video already exists in any NC read folder."""
     for folder in read_paths:
         try:

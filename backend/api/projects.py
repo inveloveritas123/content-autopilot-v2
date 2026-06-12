@@ -1,37 +1,37 @@
 """Projects API — Multi-project management."""
+
 import json
-import uuid
 import re
-from typing import Optional
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, func, update, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
-from models.tenant import Tenant
 from models.project import Project
 from models.source import Source
+from models.tenant import Tenant
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 class ProjectCreate(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class ProjectUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    description: str | None = None
+    is_active: bool | None = None
 
 
 def _slugify(text: str) -> str:
     slug = text.lower().strip()
-    slug = re.sub(r'[^a-z0-9\s-]', '', slug)
-    slug = re.sub(r'[\s-]+', '-', slug)
+    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+    slug = re.sub(r"[\s-]+", "-", slug)
     return slug[:100]
 
 
@@ -211,7 +211,9 @@ async def duplicate_project(
                     "version": row.version,
                     "is_active": row.is_active,
                     "source": row.source,
-                    "payload": json.dumps(row.payload) if not isinstance(row.payload, str) else row.payload,
+                    "payload": json.dumps(row.payload)
+                    if not isinstance(row.payload, str)
+                    else row.payload,
                     "phash": row.prompt_version_hash,
                     "model_id": row.model_id,
                     "project_id": new_id_str,

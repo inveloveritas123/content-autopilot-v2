@@ -8,15 +8,16 @@ Deckt ab:
 Kein pytest-asyncio — nutzt asyncio.run() direkt (wie bestehende Tests).
 Kein echter DB/API-Zugang — alles gemockt.
 """
+
 from __future__ import annotations
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # A) embed() gibt model_id korrekt zurück
 # ---------------------------------------------------------------------------
+
 
 def test_embed_returns_model_id_success():
     """embed() gibt (vector, model_id) zurück wenn API-Call erfolgreich."""
@@ -27,21 +28,22 @@ def test_embed_returns_model_id_success():
 
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.json.return_value = {
-        "data": [{"embedding": fake_vector}]
-    }
+    mock_response.json.return_value = {"data": [{"embedding": fake_vector}]}
 
     mock_client = AsyncMock()
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client.post = AsyncMock(return_value=mock_response)
 
-    with patch("services.embedding_service.settings") as mock_settings, \
-         patch("httpx.AsyncClient", return_value=mock_client):
+    with (
+        patch("services.embedding_service.settings") as mock_settings,
+        patch("httpx.AsyncClient", return_value=mock_client),
+    ):
         mock_settings.litellm_base_url = "http://fake-requesty"
         mock_settings.litellm_api_key = "fake-key"
 
         from services.embedding_service import embed
+
         result_vector, result_model_id = asyncio.run(embed("Test-Text"))
 
     assert result_vector is not None
@@ -56,12 +58,15 @@ def test_embed_returns_model_id_on_failure():
     mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client.post = AsyncMock(side_effect=Exception("Netzwerkfehler"))
 
-    with patch("services.embedding_service.settings") as mock_settings, \
-         patch("httpx.AsyncClient", return_value=mock_client):
+    with (
+        patch("services.embedding_service.settings") as mock_settings,
+        patch("httpx.AsyncClient", return_value=mock_client),
+    ):
         mock_settings.litellm_base_url = "http://fake-requesty"
         mock_settings.litellm_api_key = "fake-key"
 
-        from services.embedding_service import embed, ACTIVE_EMBEDDING_MODEL
+        from services.embedding_service import ACTIVE_EMBEDDING_MODEL, embed
+
         result_vector, result_model_id = asyncio.run(embed("Test-Text"))
 
     assert result_vector is None
@@ -74,7 +79,8 @@ def test_embed_returns_correct_explicit_model_id():
         mock_settings.litellm_base_url = ""  # kein URL → sofortiger Return
         mock_settings.litellm_api_key = ""
 
-        from services.embedding_service import embed, ACTIVE_EMBEDDING_MODEL
+        from services.embedding_service import ACTIVE_EMBEDDING_MODEL, embed
+
         # Explizit selbes Modell übergeben
         _, returned_model_id = asyncio.run(embed("x", ACTIVE_EMBEDDING_MODEL))
 
@@ -83,7 +89,8 @@ def test_embed_returns_correct_explicit_model_id():
 
 def test_embed_empty_text_returns_none_with_model_id():
     """embed() mit leerem Text gibt (None, model_id) ohne API-Call zurück."""
-    from services.embedding_service import embed, ACTIVE_EMBEDDING_MODEL
+    from services.embedding_service import ACTIVE_EMBEDDING_MODEL, embed
+
     vector, model_id = asyncio.run(embed(""))
     assert vector is None
     assert model_id == ACTIVE_EMBEDDING_MODEL
@@ -93,20 +100,13 @@ def test_embed_empty_text_returns_none_with_model_id():
 # B) Canary-Task stoppt bei Recall-Drop
 # ---------------------------------------------------------------------------
 
+
 def test_canary_rollback_on_recall_drop():
     """Wenn recall_new < recall_old → kein Roll, Status 'stopped_recall_drop'."""
     # Mock: 1 Tenant mit 2 Canary-Chunks
     fake_tenant_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-    fake_chunk_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 
     async def _fake_reembed(new_model_id, percent):
-        from tasks.reembed_task import (
-            _get_all_tenant_ids,
-            _get_canary_chunk_ids,
-            _embed_canary_chunk,
-            _compute_recall_at_k,
-            _roll_canary_to_production,
-        )
         # Simuliere den Kern-Ablauf ohne echte DB
         recall_old = 0.85
         recall_new = 0.70  # Drop!
@@ -128,8 +128,6 @@ def test_canary_rollback_on_recall_drop():
         return {"status": "done"}
 
     with patch("tasks.reembed_task._reembed_async", side_effect=_fake_reembed):
-        from tasks.reembed_task import reembed_chunks_with_canary
-
         # Task direkt als Funktion aufrufen (kein Celery Worker nötig)
         result = asyncio.run(_fake_reembed("gemini-embedding-001-1536d", 10))
 
@@ -156,6 +154,7 @@ def test_canary_task_unknown_model_id_returns_error():
 # ---------------------------------------------------------------------------
 # C) drift_monitor schreibt in throttle_events scope='embedding_drift'
 # ---------------------------------------------------------------------------
+
 
 def test_drift_monitor_writes_to_throttle_events():
     """_insert_drift_event fügt Zeile mit scope='embedding_drift' ein."""
@@ -184,8 +183,8 @@ def test_drift_monitor_writes_to_throttle_events():
     assert len(inserted_rows) == 1
     row = inserted_rows[0]
     assert row["scope"] == "embedding_drift"
-    assert row["cnt"] == int(0.82 * 1000)   # 820
-    assert row["lim"] == 45                  # int(45.5)
+    assert row["cnt"] == int(0.82 * 1000)  # 820
+    assert row["lim"] == 45  # int(45.5)
     assert row["task"] == "drift_monitor_task.run_embedding_drift_monitor"
     assert row["tid"] == "tenant-uuid-123"
 
@@ -212,5 +211,6 @@ def test_load_4week_avg_recall_returns_none_when_empty():
     mock_db.execute = _fake_execute
 
     from tasks.drift_monitor_task import _load_4week_avg_recall
+
     result = asyncio.run(_load_4week_avg_recall(mock_db, "some-tenant-id"))
     assert result is None

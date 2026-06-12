@@ -8,24 +8,23 @@ Auth: X-API-Key header (existing tenant auth) OR
 
 All endpoints reuse the existing tenant auth system.
 """
+
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select, func, text as _text
+from sqlalchemy import func, select
+from sqlalchemy import text as _text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db
-from models.base import async_session_factory
-from models.tenant import Tenant
-from models.source_item import SourceItem
-from models.source import Source
 from models.content_piece import ContentPiece
-from models.content_idea import ContentIdea
 from models.dialogue_question import DialogueQuestion
+from models.source import Source
+from models.source_item import SourceItem
+from models.tenant import Tenant
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/cowork", tags=["Cowork"])
@@ -50,11 +49,13 @@ async def _get_tenant_from_request(
         if auth.startswith("Bearer "):
             api_key = auth[7:]
     if not api_key:
-        raise HTTPException(status_code=401, detail="API key required (X-API-Key or Authorization: Bearer)")
+        raise HTTPException(
+            status_code=401, detail="API key required (X-API-Key or Authorization: Bearer)"
+        )
 
-    tenant = (await db.execute(
-        select(Tenant).where(Tenant.api_key == api_key)
-    )).scalar_one_or_none()
+    tenant = (
+        await db.execute(select(Tenant).where(Tenant.api_key == api_key))
+    ).scalar_one_or_none()
 
     if not tenant:
         raise HTTPException(status_code=401, detail="Invalid API key")
@@ -63,10 +64,11 @@ async def _get_tenant_from_request(
 
 # ── 1. GET /api/v1/cowork/items ───────────────────────────────────────
 
+
 @router.get("/items")
 async def cowork_list_items(
     request: Request,
-    status: Optional[str] = None,
+    status: str | None = None,
     limit: int = 20,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
@@ -94,9 +96,9 @@ async def cowork_list_items(
         # Default: show analyzed + content_ready
         query = query.where(SourceItem.status.in_(["transcribed", "analyzed", "content_ready"]))
 
-    total_count = (await db.execute(
-        select(func.count()).select_from(query.subquery())
-    )).scalar() or 0
+    total_count = (
+        await db.execute(select(func.count()).select_from(query.subquery()))
+    ).scalar() or 0
 
     query = query.order_by(SourceItem.created_at.desc()).offset(offset).limit(limit)
     items = (await db.execute(query)).scalars().all()
@@ -107,12 +109,18 @@ async def cowork_list_items(
 
         # Check what's available
         has_analysis = item.analysis is not None
-        has_questions = (await db.execute(
-            select(func.count(DialogueQuestion.id)).where(DialogueQuestion.source_item_id == item.id)
-        )).scalar() > 0
-        has_post_draft = (await db.execute(
-            select(func.count(ContentPiece.id)).where(ContentPiece.source_item_id == item.id)
-        )).scalar() > 0
+        has_questions = (
+            await db.execute(
+                select(func.count(DialogueQuestion.id)).where(
+                    DialogueQuestion.source_item_id == item.id
+                )
+            )
+        ).scalar() > 0
+        has_post_draft = (
+            await db.execute(
+                select(func.count(ContentPiece.id)).where(ContentPiece.source_item_id == item.id)
+            )
+        ).scalar() > 0
 
         # Summary from analysis
         analysis = item.analysis or {}
@@ -125,26 +133,28 @@ async def cowork_list_items(
 
         source_type = source.type if source else "unknown"
 
-        result_items.append({
-            "id": str(item.id),
-            "title": item.title,
-            "source": {
-                "name": source.name if source else "Unbekannte Quelle",
-                "type": source_type,
-                "icon": SOURCE_ICONS.get(source_type, "📄"),
-                "url": source.url if source else None,
-            },
-            "published_at": item.published_at.isoformat() if item.published_at else None,
-            "created_at": item.created_at.isoformat() if item.created_at else None,
-            "status": item.status,
-            "summary_1sentence": summary[:300] if summary else None,
-            "word_count": word_count,
-            "tags": (item.keywords or [])[:8],
-            "has_analysis": has_analysis,
-            "has_questions": has_questions,
-            "has_post_draft": has_post_draft,
-            "url": item.url,
-        })
+        result_items.append(
+            {
+                "id": str(item.id),
+                "title": item.title,
+                "source": {
+                    "name": source.name if source else "Unbekannte Quelle",
+                    "type": source_type,
+                    "icon": SOURCE_ICONS.get(source_type, "📄"),
+                    "url": source.url if source else None,
+                },
+                "published_at": item.published_at.isoformat() if item.published_at else None,
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+                "status": item.status,
+                "summary_1sentence": summary[:300] if summary else None,
+                "word_count": word_count,
+                "tags": (item.keywords or [])[:8],
+                "has_analysis": has_analysis,
+                "has_questions": has_questions,
+                "has_post_draft": has_post_draft,
+                "url": item.url,
+            }
+        )
 
     return {
         "items": result_items,
@@ -155,6 +165,7 @@ async def cowork_list_items(
 
 
 # ── 2. GET /api/v1/cowork/items/{id}/context ─────────────────────────
+
 
 @router.get("/items/{item_id}/context")
 async def cowork_get_context(
@@ -179,9 +190,25 @@ async def cowork_get_context(
     # Key quotes
     key_quotes = []
     if transcript:
-        sentences = [s.strip() for s in transcript.replace("!", ".").replace("?", ".").split(".") if len(s.strip()) > 60]
+        sentences = [
+            s.strip()
+            for s in transcript.replace("!", ".").replace("?", ".").split(".")
+            if len(s.strip()) > 60
+        ]
         for s in sentences:
-            if any(m in s.lower() for m in ["prozent", "€", "kunden", "problem", "lösung", "erfahrung", "wichtig", "entscheidend"]):
+            if any(
+                m in s.lower()
+                for m in [
+                    "prozent",
+                    "€",
+                    "kunden",
+                    "problem",
+                    "lösung",
+                    "erfahrung",
+                    "wichtig",
+                    "entscheidend",
+                ]
+            ):
                 key_quotes.append(s[:250])
                 if len(key_quotes) >= 5:
                     break
@@ -190,11 +217,17 @@ async def cowork_get_context(
     analysis = item.analysis or {}
 
     # Smart questions with answers
-    questions_result = (await db.execute(
-        select(DialogueQuestion)
-        .where(DialogueQuestion.source_item_id == item.id)
-        .order_by(DialogueQuestion.order_index)
-    )).scalars().all()
+    questions_result = (
+        (
+            await db.execute(
+                select(DialogueQuestion)
+                .where(DialogueQuestion.source_item_id == item.id)
+                .order_by(DialogueQuestion.order_index)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     smart_questions = [
         {
@@ -215,10 +248,15 @@ async def cowork_get_context(
     forbidden_phrases = tenant_settings.get("forbidden_phrases", [])
     try:
         import json as _json
-        vp_row = (await db.execute(
-            _text("SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"),
-            {"t": str(tenant.id)},
-        )).fetchone()
+
+        vp_row = (
+            await db.execute(
+                _text(
+                    "SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"
+                ),
+                {"t": str(tenant.id)},
+            )
+        ).fetchone()
         if vp_row and vp_row[0]:
             wizard_profile = vp_row[0] if isinstance(vp_row[0], dict) else _json.loads(vp_row[0])
             if wizard_profile:
@@ -227,11 +265,17 @@ async def cowork_get_context(
         logger.warning(f"Could not load tenant_voice_profile in cowork: {_vp_err}")
 
     # Post drafts by channel/format
-    posts_result = (await db.execute(
-        select(ContentPiece)
-        .where(ContentPiece.source_item_id == item.id)
-        .order_by(ContentPiece.created_at.desc())
-    )).scalars().all()
+    posts_result = (
+        (
+            await db.execute(
+                select(ContentPiece)
+                .where(ContentPiece.source_item_id == item.id)
+                .order_by(ContentPiece.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     post_drafts = {}
     for p in posts_result:
@@ -240,16 +284,22 @@ async def cowork_get_context(
             post_drafts[channel] = p.content_text
 
     # Previous posts for style reference
-    prev_posts_result = (await db.execute(
-        select(ContentPiece)
-        .where(
-            ContentPiece.tenant_id == tenant.id,
-            ContentPiece.status == "approved",
-            ContentPiece.source_item_id != item.id,
+    prev_posts_result = (
+        (
+            await db.execute(
+                select(ContentPiece)
+                .where(
+                    ContentPiece.tenant_id == tenant.id,
+                    ContentPiece.status == "approved",
+                    ContentPiece.source_item_id != item.id,
+                )
+                .order_by(ContentPiece.created_at.desc())
+                .limit(5)
+            )
         )
-        .order_by(ContentPiece.created_at.desc())
-        .limit(5)
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     previous_posts = [
         {
@@ -294,6 +344,7 @@ async def cowork_get_context(
 
 # ── 3. PATCH /api/v1/cowork/items/{id}/status ────────────────────────
 
+
 class StatusUpdateRequest(BaseModel):
     status: str
 
@@ -313,8 +364,15 @@ async def cowork_update_status(
         raise HTTPException(status_code=404, detail="Item not found")
 
     allowed_statuses = {
-        "transcribed", "analyzing", "analyzed", "generating",
-        "content_ready", "approved", "rejected", "queued", "uploaded",
+        "transcribed",
+        "analyzing",
+        "analyzed",
+        "generating",
+        "content_ready",
+        "approved",
+        "rejected",
+        "queued",
+        "uploaded",
     }
     if body.status not in allowed_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {allowed_statuses}")
@@ -330,6 +388,7 @@ async def cowork_update_status(
 
 
 # ── 4. POST /api/v1/cowork/items/{id}/answers ────────────────────────
+
 
 class CoworkAnswerItem(BaseModel):
     question_id: str
@@ -369,16 +428,22 @@ async def cowork_submit_answers(
 
     await db.commit()
 
-    total_questions = (await db.execute(
-        select(func.count(DialogueQuestion.id)).where(DialogueQuestion.source_item_id == item.id)
-    )).scalar() or 0
-
-    answered = (await db.execute(
-        select(func.count(DialogueQuestion.id)).where(
-            DialogueQuestion.source_item_id == item.id,
-            DialogueQuestion.answer_text.isnot(None),
+    total_questions = (
+        await db.execute(
+            select(func.count(DialogueQuestion.id)).where(
+                DialogueQuestion.source_item_id == item.id
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
+
+    answered = (
+        await db.execute(
+            select(func.count(DialogueQuestion.id)).where(
+                DialogueQuestion.source_item_id == item.id,
+                DialogueQuestion.answer_text.isnot(None),
+            )
+        )
+    ).scalar() or 0
 
     return {
         "item_id": item_id,
@@ -389,6 +454,7 @@ async def cowork_submit_answers(
 
 
 # ── 5. POST /api/v1/cowork/items/{id}/post ───────────────────────────
+
 
 class CoworkPostRequest(BaseModel):
     format: str = "story"
@@ -412,12 +478,16 @@ async def cowork_save_post(
         raise HTTPException(status_code=404, detail="Item not found")
 
     # Check if a post for this format already exists
-    existing = (await db.execute(
-        select(ContentPiece).where(
-            ContentPiece.source_item_id == item.id,
-            ContentPiece.channel == body.format,
-        ).limit(1)
-    )).scalar_one_or_none()
+    existing = (
+        await db.execute(
+            select(ContentPiece)
+            .where(
+                ContentPiece.source_item_id == item.id,
+                ContentPiece.channel == body.format,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
 
     status = "approved" if body.approved else "draft"
     char_count = len(body.content)

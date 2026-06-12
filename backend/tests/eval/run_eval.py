@@ -11,13 +11,13 @@ Flags:
   --cases     Comma-separated list of case dirs to run (default: all)
   --min-pass  Minimum % PASS to exit 0 (default: 80)
 """
+
 import argparse
 import json
 import os
 import sys
 import uuid
 from pathlib import Path
-from typing import Optional
 
 # Ensure backend root is on sys.path so task/api imports work
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -32,8 +32,10 @@ _CASES_ROOT = _EVAL_ROOT / "cases"
 # Assertion runner
 # ---------------------------------------------------------------------------
 
+
 def load_assertions(case_dir: Path) -> dict:
     import yaml
+
     with open(case_dir / "quality_assertions.yaml", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     return data.get("post", {})
@@ -41,9 +43,7 @@ def load_assertions(case_dir: Path) -> dict:
 
 def normalize(text: str) -> str:
     """Normalize umlauts for matching: ä→ae, ö→oe, ü→ue, ß→ss"""
-    return (text.lower()
-        .replace('ä', 'ae').replace('ö', 'oe').replace('ü', 'ue')
-        .replace('ß', 'ss'))
+    return text.lower().replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
 
 
 def run_assertions(post: str, assertions: dict) -> list:
@@ -83,6 +83,7 @@ def run_assertions(post: str, assertions: dict) -> list:
 # ---------------------------------------------------------------------------
 # Mock post builder (for --mock mode)
 # ---------------------------------------------------------------------------
+
 
 def build_mock_post(case_dir: Path, assertions: dict) -> str:
     """Build a synthetic German post that passes all assertions for this case."""
@@ -135,7 +136,7 @@ def build_mock_post(case_dir: Path, assertions: dict) -> str:
     # Hard-cap at max_length
     max_len = assertions.get("max_length", 3000)
     if len(post) > max_len:
-        post = post[:max_len - 3] + "..."
+        post = post[: max_len - 3] + "..."
 
     return post
 
@@ -143,6 +144,7 @@ def build_mock_post(case_dir: Path, assertions: dict) -> str:
 # ---------------------------------------------------------------------------
 # Real pipeline runner
 # ---------------------------------------------------------------------------
+
 
 def run_real_pipeline(case_dir: Path, tenant_id: str, idea_id: str) -> dict:
     """Call the actual _run_p12_p12b_pipeline. Requires running DB + Celery."""
@@ -173,6 +175,7 @@ def run_real_pipeline(case_dir: Path, tenant_id: str, idea_id: str) -> dict:
 # ---------------------------------------------------------------------------
 # Case runner
 # ---------------------------------------------------------------------------
+
 
 def run_case(case_dir: Path, mode: str, tenant_id: str) -> dict:
     """Run a single eval case. Returns dict with keys: case, passed, failures, post_len."""
@@ -217,6 +220,7 @@ def run_case(case_dir: Path, mode: str, tenant_id: str) -> dict:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main():
     parser = argparse.ArgumentParser(description="Eval-Suite Runner")

@@ -10,6 +10,7 @@ Diese sind im leichten Test-venv nicht installiert. Wir laden die
 benoetigten Module deshalb direkt per importlib, ohne das __init__.py
 des packages zu triggern.
 """
+
 import importlib
 import importlib.util
 import os
@@ -17,13 +18,12 @@ import sys
 import tempfile
 import types
 import unittest
-from datetime import timezone
-from unittest.mock import MagicMock
-
+from datetime import UTC
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktion: Modul direkt aus Dateipfad laden (umgeht __init__.py)
 # ---------------------------------------------------------------------------
+
 
 def _load_module_from_file(module_name: str, file_path: str) -> types.ModuleType:
     """Laedt ein Python-Modul direkt aus einem Dateipfad in sys.modules."""
@@ -39,6 +39,7 @@ _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 # Minimale Stubs damit pydantic-settings / config.py ohne .env-Datei laeuft
 import types as _types
+
 for _pkg in ("google", "google.generativeai", "anthropic"):
     if _pkg not in sys.modules:
         _m = _types.ModuleType(_pkg)
@@ -76,10 +77,12 @@ class TestLocalFsStorageAdapter(unittest.TestCase):
         # Frisches temp-Verzeichnis fuer jeden Test
         self._tmpdir = tempfile.mkdtemp()
         from services.local_fs_storage import LocalFsStorageAdapter
+
         self.adapter = LocalFsStorageAdapter(base_dir=self._tmpdir)
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     # ------------------------------------------------------------------
@@ -98,7 +101,7 @@ class TestLocalFsStorageAdapter(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_write_and_read_roundtrip(self):
-        data = "Hallo Welt — UTF-8 öäü".encode("utf-8")
+        data = "Hallo Welt — UTF-8 öäü".encode()
         self.adapter.write("test/datei.md", data)
         result = self.adapter.read("test/datei.md")
         self.assertEqual(result, data)
@@ -115,6 +118,7 @@ class TestLocalFsStorageAdapter(unittest.TestCase):
 
     def test_read_raises_storage_error_for_missing(self):
         from services.brand_voice_storage import StorageError
+
         with self.assertRaises(StorageError):
             self.adapter.read("gibts-nicht.txt")
 
@@ -132,7 +136,7 @@ class TestLocalFsStorageAdapter(unittest.TestCase):
         self.adapter.write("ts.txt", b"x")
         stat = self.adapter.stat("ts.txt")
         self.assertIsNotNone(stat.mtime.tzinfo)
-        self.assertEqual(stat.mtime.tzinfo, timezone.utc)
+        self.assertEqual(stat.mtime.tzinfo, UTC)
 
     def test_stat_etag_format(self):
         self.adapter.write("etag.txt", b"hallo")
@@ -145,6 +149,7 @@ class TestLocalFsStorageAdapter(unittest.TestCase):
 
     def test_stat_raises_storage_error_for_missing(self):
         from services.brand_voice_storage import StorageError
+
         with self.assertRaises(StorageError):
             self.adapter.stat("nicht-da.txt")
 
@@ -178,6 +183,7 @@ class TestLocalFsStorageAdapter(unittest.TestCase):
 
     def test_list_raises_storage_error_for_missing_dir(self):
         from services.brand_voice_storage import StorageError
+
         with self.assertRaises(StorageError):
             self.adapter.list("nicht-vorhanden/")
 
@@ -187,21 +193,25 @@ class TestLocalFsStorageAdapter(unittest.TestCase):
 
     def test_path_traversal_blocked(self):
         from services.brand_voice_storage import StorageError
+
         with self.assertRaises(StorageError):
             self.adapter.read("../../etc/passwd")
 
     def test_path_traversal_blocked_encoded(self):
         from services.brand_voice_storage import StorageError
+
         with self.assertRaises(StorageError):
             self.adapter.read("../secret")
 
     def test_path_traversal_blocked_on_write(self):
         from services.brand_voice_storage import StorageError
+
         with self.assertRaises(StorageError):
             self.adapter.write("../evil.txt", b"hack")
 
     def test_path_traversal_blocked_on_stat(self):
         from services.brand_voice_storage import StorageError
+
         with self.assertRaises(StorageError):
             self.adapter.stat("../../etc/hosts")
 

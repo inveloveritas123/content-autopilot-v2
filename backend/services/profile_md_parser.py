@@ -27,39 +27,63 @@ Heuristik:
 - Sektionen via H2-Header, Felder via "- Label: Wert"-Bullet-Listen
 - Multi-Line-Blöcke (USP/Zielgruppe/Werte) werden als ganze Absätze übernommen
 """
+
 from __future__ import annotations
 
 import re
-from typing import Optional
-
 
 SECTION_FIELD_MAP = {
     "firma": {
-        "name": "company_name", "firma": "company_name", "firmenname": "company_name",
-        "branche": "industry", "industry": "industry",
-        "gegründet": "founded_year", "gegruendet": "founded_year", "founded": "founded_year",
-        "mitarbeitende": "headcount", "mitarbeiter": "headcount", "headcount": "headcount",
-        "region": "region", "standort": "region",
-        "website": "website", "webseite": "website",
-        "größe": "company_size", "groesse": "company_size", "size": "company_size",
-        "rechtsform": "legal_form", "legal form": "legal_form",
+        "name": "company_name",
+        "firma": "company_name",
+        "firmenname": "company_name",
+        "branche": "industry",
+        "industry": "industry",
+        "gegründet": "founded_year",
+        "gegruendet": "founded_year",
+        "founded": "founded_year",
+        "mitarbeitende": "headcount",
+        "mitarbeiter": "headcount",
+        "headcount": "headcount",
+        "region": "region",
+        "standort": "region",
+        "website": "website",
+        "webseite": "website",
+        "größe": "company_size",
+        "groesse": "company_size",
+        "size": "company_size",
+        "rechtsform": "legal_form",
+        "legal form": "legal_form",
     },
     "ansprechpartner": {
-        "name": "contact_person_name", "ansprechpartner": "contact_person_name",
-        "rolle": "contact_role", "position": "contact_role", "role": "contact_role",
-        "email": "contact_email", "e-mail": "contact_email", "mail": "contact_email",
+        "name": "contact_person_name",
+        "ansprechpartner": "contact_person_name",
+        "rolle": "contact_role",
+        "position": "contact_role",
+        "role": "contact_role",
+        "email": "contact_email",
+        "e-mail": "contact_email",
+        "mail": "contact_email",
     },
     "kontakt": {
         "name": "contact_person_name",
-        "rolle": "contact_role", "position": "contact_role",
-        "email": "contact_email", "e-mail": "contact_email",
+        "rolle": "contact_role",
+        "position": "contact_role",
+        "email": "contact_email",
+        "e-mail": "contact_email",
     },
 }
 
 BLOCK_FIELDS = {
-    "usp": "usp", "alleinstellung": "usp", "unique selling": "usp",
-    "zielgruppe": "target_audience", "target audience": "target_audience", "kunden": "target_audience",
-    "werte": "values_short", "values": "values_short", "werteversprechen": "values_short",
+    "usp": "usp",
+    "alleinstellung": "usp",
+    "unique selling": "usp",
+    "zielgruppe": "target_audience",
+    "target audience": "target_audience",
+    "kunden": "target_audience",
+    "werte": "values_short",
+    "values": "values_short",
+    "werteversprechen": "values_short",
 }
 
 
@@ -77,8 +101,8 @@ def parse_onboarding_md(md: str) -> list[dict]:
 
     suggestions: list[dict] = []
     lines = md.splitlines()
-    current_section: Optional[str] = None
-    current_block_field: Optional[str] = None
+    current_section: str | None = None
+    current_block_field: str | None = None
     block_buffer: list[str] = []
 
     def flush_block():
@@ -86,11 +110,13 @@ def parse_onboarding_md(md: str) -> list[dict]:
         if current_block_field and block_buffer:
             text_val = "\n".join(block_buffer).strip()
             if text_val and len(text_val) >= 5:
-                suggestions.append({
-                    "field_name": current_block_field,
-                    "value": text_val[:2000],
-                    "confidence": 0.9,
-                })
+                suggestions.append(
+                    {
+                        "field_name": current_block_field,
+                        "value": text_val[:2000],
+                        "confidence": 0.9,
+                    }
+                )
         block_buffer = []
         current_block_field = None
 
@@ -100,7 +126,7 @@ def parse_onboarding_md(md: str) -> list[dict]:
             flush_block()
             section_label = _norm(h2.group(1))
             current_section = None
-            for sec_key in SECTION_FIELD_MAP.keys():
+            for sec_key in SECTION_FIELD_MAP:
                 if sec_key in section_label:
                     current_section = sec_key
                     break
@@ -140,11 +166,13 @@ def parse_onboarding_md(md: str) -> list[dict]:
                     continue
                 cast_value = m.group(0)
 
-            suggestions.append({
-                "field_name": field_name,
-                "value": cast_value,
-                "confidence": 0.9,
-            })
+            suggestions.append(
+                {
+                    "field_name": field_name,
+                    "value": cast_value,
+                    "confidence": 0.9,
+                }
+            )
 
     flush_block()
 

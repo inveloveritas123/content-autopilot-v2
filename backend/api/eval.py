@@ -6,12 +6,12 @@ File-System-Persistenz (DB-Migration als Followup geplant).
 
 Issue #152: Confusion-Matrix / Eval-Infrastruktur.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -49,7 +49,7 @@ def _list_result_files(limit: int = 50) -> list[Path]:
 @router.get("/quality-gate/history")
 async def quality_gate_history(
     limit: int = Query(default=30, ge=1, le=100, description="Max. Anzahl Eval-Runs"),
-    branche: Optional[str] = Query(
+    branche: str | None = Query(
         default=None, description="Filter auf eine Branche (z.B. handwerk)"
     ),
 ):
@@ -87,18 +87,18 @@ async def quality_gate_history(
                 "accuracy": bdata.get("metrics", {}).get("accuracy", 0.0),
                 "auc": bdata.get("auc", 0.0),
                 "post_count": bdata.get("post_count", 0),
-                "optimal_threshold": (
-                    (bdata.get("optimal_threshold") or {}).get("threshold")
-                ),
+                "optimal_threshold": ((bdata.get("optimal_threshold") or {}).get("threshold")),
                 "confusion_matrix": bdata.get("confusion_matrix", {}),
             }
 
-        runs.append({
-            "timestamp": data.get("timestamp"),
-            "aggregate": data.get("aggregate", {}),
-            "per_branche": per_branche_summary,
-            "stub_warning": data.get("stub_warning"),
-        })
+        runs.append(
+            {
+                "timestamp": data.get("timestamp"),
+                "aggregate": data.get("aggregate", {}),
+                "per_branche": per_branche_summary,
+                "stub_warning": data.get("stub_warning"),
+            }
+        )
 
     latest_ts = runs[0]["timestamp"] if runs else None
 

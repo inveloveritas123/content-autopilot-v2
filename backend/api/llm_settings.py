@@ -1,8 +1,8 @@
 """LLM Provider Settings — CRUD + Test."""
+
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -13,16 +13,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
-from models.tenant import Tenant
 from models.llm_provider import LLMProvider
+from models.tenant import Tenant
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 # Derive stable encryption key from tenant key (survives restarts)
 import base64
 import hashlib
+
 from config import settings as _app_settings
-_key_material = hashlib.sha256((_app_settings.default_tenant_key + "-llm-encrypt").encode()).digest()
+
+_key_material = hashlib.sha256(
+    (_app_settings.default_tenant_key + "-llm-encrypt").encode()
+).digest()
 _FERNET_KEY = base64.urlsafe_b64encode(_key_material)
 _fernet = Fernet(_FERNET_KEY)
 
@@ -38,7 +42,7 @@ def _decrypt_key(encrypted: str) -> str:
         return "***"
 
 
-def _mask_key(key: Optional[str]) -> Optional[str]:
+def _mask_key(key: str | None) -> str | None:
     if not key:
         return None
     decrypted = _decrypt_key(key)
@@ -49,33 +53,35 @@ def _mask_key(key: Optional[str]) -> Optional[str]:
 
 # Schemas
 
+
 class ProviderCreate(BaseModel):
     name: str
     provider_type: str
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    model_name: Optional[str] = None
+    api_key: str | None = None
+    base_url: str | None = None
+    model_name: str | None = None
     task_assignment: str = "all"
     is_default: bool = False
-    cost_limit_daily_cents: Optional[int] = None
-    config: Optional[dict] = None
-    auto_cache: Optional[bool] = None
+    cost_limit_daily_cents: int | None = None
+    config: dict | None = None
+    auto_cache: bool | None = None
 
 
 class ProviderUpdate(BaseModel):
-    name: Optional[str] = None
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    model_name: Optional[str] = None
-    task_assignment: Optional[str] = None
-    is_active: Optional[bool] = None
-    is_default: Optional[bool] = None
-    cost_limit_daily_cents: Optional[int] = None
-    config: Optional[dict] = None
-    auto_cache: Optional[bool] = None
+    name: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+    model_name: str | None = None
+    task_assignment: str | None = None
+    is_active: bool | None = None
+    is_default: bool | None = None
+    cost_limit_daily_cents: int | None = None
+    config: dict | None = None
+    auto_cache: bool | None = None
 
 
 # Endpoints
+
 
 @router.get("/llm-providers")
 async def list_providers(
@@ -83,7 +89,9 @@ async def list_providers(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(LLMProvider).where(LLMProvider.tenant_id == tenant.id).order_by(LLMProvider.created_at)
+        select(LLMProvider)
+        .where(LLMProvider.tenant_id == tenant.id)
+        .order_by(LLMProvider.created_at)
     )
     providers = result.scalars().all()
     return [
@@ -125,7 +133,9 @@ async def create_provider(
         model_name=data.model_name,
         task_assignment=data.task_assignment,
         is_default=data.is_default,
-        cost_limit_daily_cents=data.cost_limit_daily_cents if data.cost_limit_daily_cents is not None else 500,
+        cost_limit_daily_cents=data.cost_limit_daily_cents
+        if data.cost_limit_daily_cents is not None
+        else 500,
         auto_cache=data.auto_cache if data.auto_cache is not None else True,
         config=data.config or {},
     )
@@ -181,8 +191,10 @@ async def cost_history(
 ):
     """Get LLM cost history for the last N days."""
     from datetime import timedelta
-    from models.llm_call_log import LLMCallLog
+
     from sqlalchemy import func as sqlfunc
+
+    from models.llm_call_log import LLMCallLog
 
     since = datetime.utcnow() - timedelta(days=days)
     result = await db.execute(
@@ -192,10 +204,13 @@ async def cost_history(
             sqlfunc.count(LLMCallLog.id).label("calls"),
             sqlfunc.sum(LLMCallLog.prompt_tokens).label("input_tokens"),
             sqlfunc.sum(LLMCallLog.completion_tokens).label("output_tokens"),
-        ).where(
+        )
+        .where(
             LLMCallLog.tenant_id == tenant.id,
             LLMCallLog.created_at >= since,
-        ).group_by(sqlfunc.date(LLMCallLog.created_at)).order_by(sqlfunc.date(LLMCallLog.created_at))
+        )
+        .group_by(sqlfunc.date(LLMCallLog.created_at))
+        .order_by(sqlfunc.date(LLMCallLog.created_at))
     )
     rows = result.all()
     return [
@@ -293,10 +308,19 @@ async def test_provider(
         provider.last_test_status = "error"
         try:
             body = e.response.json()
-            body_msg = body.get("error", {}).get("message") or body.get("message") or body.get("detail") or ""
+            body_msg = (
+                body.get("error", {}).get("message")
+                or body.get("message")
+                or body.get("detail")
+                or ""
+            )
         except Exception:
             body_msg = e.response.text[:200] if e.response.text else ""
-        if e.response.status_code in (403, 412) and ("spend" in body_msg.lower() or "budget" in body_msg.lower() or "limit" in body_msg.lower()):
+        if e.response.status_code in (403, 412) and (
+            "spend" in body_msg.lower()
+            or "budget" in body_msg.lower()
+            or "limit" in body_msg.lower()
+        ):
             msg = f"🔴 Budget/Spend-Limit erreicht ({e.response.status_code}) — Bitte Guthaben beim Provider aufladen. Details: {body_msg[:120]}"
         elif e.response.status_code == 412:
             msg = "🔴 Portal-Budget erschöpft (412) — Bitte Guthaben bei requesty.ai aufladen."
@@ -319,13 +343,13 @@ async def test_provider(
         return {"status": "error", "error": str(e)[:200]}
 
 
-
 # --- #136: list-models + probe-test (ohne saved provider, vor erstem Speichern) ---
+
 
 class ProbePayload(BaseModel):
     api_key: str
-    base_url: Optional[str] = None
-    model: Optional[str] = None
+    base_url: str | None = None
+    model: str | None = None
 
 
 @router.post("/llm-providers/list-models")
@@ -354,7 +378,11 @@ async def list_provider_models(
             # Provider ohne Models-Endpoint (z.B. Vertex direkt) — Free-Text-Fallback
             return {"models": [], "error": "endpoint_not_supported", "supports_listing": False}
         if resp.status_code in (401, 403):
-            return {"models": [], "error": f"auth_failed_{resp.status_code}", "supports_listing": False}
+            return {
+                "models": [],
+                "error": f"auth_failed_{resp.status_code}",
+                "supports_listing": False,
+            }
         resp.raise_for_status()
         data = resp.json()
         # OpenAI/Requesty-Format: {"data": [{"id": "..."}, ...]}
@@ -432,27 +460,37 @@ async def probe_test_provider(
         except Exception:
             err_msg = resp.text[:200]
         if resp.status_code == 412:
-            return {"ok": False, "http_status": 412,
-                    "error": f"🔴 Portal-Budget erschöpft — bitte Guthaben aufladen. {err_msg[:120]}"}
+            return {
+                "ok": False,
+                "http_status": 412,
+                "error": f"🔴 Portal-Budget erschöpft — bitte Guthaben aufladen. {err_msg[:120]}",
+            }
         if resp.status_code in (401, 403):
-            return {"ok": False, "http_status": resp.status_code,
-                    "error": f"🔴 Zugriff verweigert ({resp.status_code}) — API-Key prüfen. {err_msg[:120]}"}
+            return {
+                "ok": False,
+                "http_status": resp.status_code,
+                "error": f"🔴 Zugriff verweigert ({resp.status_code}) — API-Key prüfen. {err_msg[:120]}",
+            }
         if resp.status_code == 429:
-            return {"ok": False, "http_status": 429,
-                    "error": f"🟡 Rate-Limit erreicht — kurz warten. {err_msg[:120]}"}
-        return {"ok": False, "http_status": resp.status_code,
-                "error": f"HTTP {resp.status_code}: {err_msg[:160]}"}
+            return {
+                "ok": False,
+                "http_status": 429,
+                "error": f"🟡 Rate-Limit erreicht — kurz warten. {err_msg[:120]}",
+            }
+        return {
+            "ok": False,
+            "http_status": resp.status_code,
+            "error": f"HTTP {resp.status_code}: {err_msg[:160]}",
+        }
     except (httpx.TimeoutException, httpx.RequestError) as e:
         return {"ok": False, "error": f"network: {str(e)[:120]}"}
     except Exception as e:
         return {"ok": False, "error": str(e)[:200]}
 
 
-
-
 class BenchmarkRequest(BaseModel):
     step: str  # analysis | ideation | post_generation | smart_questions
-    item_id: Optional[str] = None  # specific item, or pick most recent
+    item_id: str | None = None  # specific item, or pick most recent
 
 
 @router.post("/benchmark")
@@ -467,7 +505,10 @@ async def run_benchmark(
     Budget will be consumed for the one LLM call.
     """
     import time
-    from sqlalchemy import select as sa_select, desc
+
+    from sqlalchemy import desc
+    from sqlalchemy import select as sa_select
+
     from models.source_item import SourceItem
 
     VALID_STEPS = {"analysis", "ideation", "post_generation", "smart_questions"}
@@ -484,19 +525,25 @@ async def run_benchmark(
         if data.step == "analysis":
             # Need transcript_text
             result = await db.execute(
-                sa_select(SourceItem).where(
+                sa_select(SourceItem)
+                .where(
                     SourceItem.tenant_id == tenant.id,
                     SourceItem.transcript_text.isnot(None),
-                ).order_by(desc(SourceItem.updated_at)).limit(1)
+                )
+                .order_by(desc(SourceItem.updated_at))
+                .limit(1)
             )
         else:
             # Need analysis (content_ready or analyzed)
             result = await db.execute(
-                sa_select(SourceItem).where(
+                sa_select(SourceItem)
+                .where(
                     SourceItem.tenant_id == tenant.id,
                     SourceItem.analysis.isnot(None),
                     SourceItem.transcript_text.isnot(None),
-                ).order_by(desc(SourceItem.updated_at)).limit(1)
+                )
+                .order_by(desc(SourceItem.updated_at))
+                .limit(1)
             )
         item = result.scalar_one_or_none()
         if not item:
@@ -506,7 +553,10 @@ async def run_benchmark(
 
     # Check circuit breaker before attempting LLM call
     try:
-        import redis as redis_lib, os
+        import os
+
+        import redis as redis_lib
+
         _r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://redis-v2:6379/1"))
         if _r.get("llm:budget_exceeded"):
             ttl = _r.ttl("llm:budget_exceeded")
@@ -533,15 +583,19 @@ async def run_benchmark(
     try:
         if data.step == "analysis":
             from services.analyzer import analyze_transcript
-            from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+            from services.llm import PURPOSE_MODEL_MAP, REQUESTY_MODELS
+
             analysis = await analyze_transcript(
                 item.transcript_text,
                 source_type="youtube",
                 title=item.title or "",
             )
-            model_used = REQUESTY_MODELS.get(PURPOSE_MODEL_MAP.get("analysis", "gemini-flash"), "gemini-flash")
+            model_used = REQUESTY_MODELS.get(
+                PURPOSE_MODEL_MAP.get("analysis", "gemini-flash"), "gemini-flash"
+            )
             if analysis:
                 from services.quality_scorer import score_analysis
+
                 scores = score_analysis(analysis)
                 quality_score = scores.get("overall_score")
                 # Preview: key fields summary
@@ -556,28 +610,34 @@ async def run_benchmark(
 
         elif data.step == "ideation":
             from services.content_ideation import run_ideation_pipeline
-            from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+            from services.llm import PURPOSE_MODEL_MAP, REQUESTY_MODELS
+
             ideas = await run_ideation_pipeline(
                 analysis=item.analysis,
                 title=item.title or "",
                 transcript_excerpt=(item.transcript_text or "")[:500],
             )
-            model_used = REQUESTY_MODELS.get(PURPOSE_MODEL_MAP.get("ideation", "claude-sonnet"), "claude-sonnet")
+            model_used = REQUESTY_MODELS.get(
+                PURPOSE_MODEL_MAP.get("ideation", "claude-sonnet"), "claude-sonnet"
+            )
             if ideas:
                 from services.quality_scorer import score_ideation
-                idea_list = [{"angle": i.get("angle", ""), "title": i.get("title", "")} for i in ideas]
+
+                idea_list = [
+                    {"angle": i.get("angle", ""), "title": i.get("title", "")} for i in ideas
+                ]
                 scores = score_ideation(idea_list)
                 quality_score = scores.get("overall_score")
-                result_preview = "\n".join([
-                    f"• {i.get('title', '—')} [{i.get('angle', '—')}]"
-                    for i in ideas[:5]
-                ])
+                result_preview = "\n".join(
+                    [f"• {i.get('title', '—')} [{i.get('angle', '—')}]" for i in ideas[:5]]
+                )
             else:
                 error = "Keine Ideen generiert"
 
         elif data.step == "smart_questions":
+            from services.llm import PURPOSE_MODEL_MAP, REQUESTY_MODELS
             from services.smart_questions import generate_smart_questions
-            from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+
             entrepreneur = (tenant.settings or {}).get("entrepreneur", {})
             questions = await generate_smart_questions(
                 item_id=str(item.id),
@@ -586,36 +646,49 @@ async def run_benchmark(
                 title=item.title or "",
                 entrepreneur=entrepreneur,
             )
-            model_used = REQUESTY_MODELS.get(PURPOSE_MODEL_MAP.get("questions", "claude-sonnet"), "claude-sonnet")
+            model_used = REQUESTY_MODELS.get(
+                PURPOSE_MODEL_MAP.get("questions", "claude-sonnet"), "claude-sonnet"
+            )
             if questions:
                 from services.quality_scorer import score_smart_questions
+
                 scores = score_smart_questions(questions)
                 quality_score = scores.get("overall_score")
-                result_preview = "\n".join([
-                    f"• {q.get('question_text', '—')[:100]}"
-                    for q in questions[:4]
-                ])
+                result_preview = "\n".join(
+                    [f"• {q.get('question_text', '—')[:100]}" for q in questions[:4]]
+                )
             else:
                 error = "Keine Fragen generiert"
 
         elif data.step == "post_generation":
             from services.content_generator import generate_all_content
-            from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+            from services.llm import PURPOSE_MODEL_MAP, REQUESTY_MODELS
+
             # Voice profile — prefer Wizard/P03 profile from tenant_voice_profile table
             voice_profile = (tenant.settings or {}).get("voice_profile")
             try:
                 import json as _json
+
                 from sqlalchemy import text as _text
-                vp_row = (await db.execute(
-                    _text("SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"),
-                    {"t": str(tenant.id)},
-                )).fetchone()
+
+                vp_row = (
+                    await db.execute(
+                        _text(
+                            "SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"
+                        ),
+                        {"t": str(tenant.id)},
+                    )
+                ).fetchone()
                 if vp_row and vp_row[0]:
-                    wizard_profile = vp_row[0] if isinstance(vp_row[0], dict) else _json.loads(vp_row[0])
+                    wizard_profile = (
+                        vp_row[0] if isinstance(vp_row[0], dict) else _json.loads(vp_row[0])
+                    )
                     if wizard_profile:
                         voice_profile = wizard_profile
             except Exception as _vp_err:
-                logger.warning(f"Could not load tenant_voice_profile in llm_settings test: {_vp_err}")
+                logger.warning(
+                    f"Could not load tenant_voice_profile in llm_settings test: {_vp_err}"
+                )
             if not voice_profile:
                 voice_profile = {
                     "name": tenant.name or "Unternehmer",
@@ -628,10 +701,13 @@ async def run_benchmark(
                 transcript_text=item.transcript_text or "",
                 voice_profile=voice_profile,
             )
-            model_used = REQUESTY_MODELS.get(PURPOSE_MODEL_MAP.get("post_generation", "claude-sonnet"), "claude-sonnet")
+            model_used = REQUESTY_MODELS.get(
+                PURPOSE_MODEL_MAP.get("post_generation", "claude-sonnet"), "claude-sonnet"
+            )
             linkedin_post = content_dict.get("linkedin") or ""
             if linkedin_post:
                 from services.quality_scorer import score_post_generation
+
                 scores = score_post_generation(linkedin_post)
                 quality_score = scores.get("overall_score")
                 result_preview = linkedin_post[:400] + ("..." if len(linkedin_post) > 400 else "")
@@ -657,7 +733,7 @@ async def run_benchmark(
 
 
 class VoiceCompareRequest(BaseModel):
-    item_id: Optional[str] = None  # specific item, or pick most recent content_ready
+    item_id: str | None = None  # specific item, or pick most recent content_ready
 
 
 @router.post("/voice-compare")
@@ -673,13 +749,19 @@ async def run_voice_compare(
     """
     import asyncio as _asyncio
     import time
-    from sqlalchemy import select as sa_select, desc
+
+    from sqlalchemy import desc
+    from sqlalchemy import select as sa_select
+
     from models.source_item import SourceItem
     from models.tenant import Tenant as TenantModel
 
     # Check budget
     try:
-        import redis as redis_lib, os
+        import os
+
+        import redis as redis_lib
+
         _r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://redis-v2:6379/1"))
         if _r.get("llm:budget_exceeded"):
             ttl = _r.ttl("llm:budget_exceeded")
@@ -696,8 +778,7 @@ async def run_voice_compare(
     all_tenants = all_tenants_result.scalars().all()
 
     configured_tenants = [
-        t for t in all_tenants
-        if (t.settings or {}).get("voice_profile", {}).get("tone")
+        t for t in all_tenants if (t.settings or {}).get("voice_profile", {}).get("tone")
     ]
 
     if not configured_tenants:
@@ -706,22 +787,29 @@ async def run_voice_compare(
     # Find source item (use current tenant's items, or specific item)
     source_item = None
     if data.item_id:
-        source_item = await db.get(SourceItem, __import__('uuid').UUID(data.item_id))
+        source_item = await db.get(SourceItem, __import__("uuid").UUID(data.item_id))
     else:
         item_result = await db.execute(
-            sa_select(SourceItem).where(
+            sa_select(SourceItem)
+            .where(
                 SourceItem.tenant_id == tenant.id,
                 SourceItem.analysis.isnot(None),
                 SourceItem.transcript_text.isnot(None),
-            ).order_by(desc(SourceItem.updated_at)).limit(1)
+            )
+            .order_by(desc(SourceItem.updated_at))
+            .limit(1)
         )
         source_item = item_result.scalar_one_or_none()
 
     if not source_item:
-        return {"status": "error", "error": "Kein geeignetes Item gefunden (kein analysiertes Item vorhanden)", "results": []}
+        return {
+            "status": "error",
+            "error": "Kein geeignetes Item gefunden (kein analysiertes Item vorhanden)",
+            "results": [],
+        }
 
     from services.content_generator import generate_all_content
-    from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+    from services.llm import PURPOSE_MODEL_MAP, REQUESTY_MODELS
     from services.quality_scorer import score_post_generation
 
     async def generate_for_profile(t):
@@ -737,13 +825,17 @@ async def run_voice_compare(
             )
             linkedin_post = content_dict.get("linkedin") or ""
             latency_ms = int((time.time() - t_start) * 1000)
-            quality_score = score_post_generation(linkedin_post).get("overall_score") if linkedin_post else None
+            quality_score = (
+                score_post_generation(linkedin_post).get("overall_score") if linkedin_post else None
+            )
             return {
                 "tenant_name": t.name,
                 "industry": entrepreneur.get("industry", "—"),
                 "entrepreneur_name": entrepreneur.get("name", "—"),
                 "tone": voice_profile.get("tone", "—"),
-                "model_used": REQUESTY_MODELS.get(PURPOSE_MODEL_MAP.get("post_generation", "claude-sonnet"), "—"),
+                "model_used": REQUESTY_MODELS.get(
+                    PURPOSE_MODEL_MAP.get("post_generation", "claude-sonnet"), "—"
+                ),
                 "latency_ms": latency_ms,
                 "quality_score": quality_score,
                 "post_text": linkedin_post,
@@ -775,9 +867,10 @@ async def run_voice_compare(
 # beliebige Requesty-Modell-ID). Kein DB-Schema → hot-reload.
 # ---------------------------------------------------------------------------
 
+
 class PipelineModelOverride(BaseModel):
     phase: str
-    model_id: Optional[str] = None  # None/"" entfernt den Override
+    model_id: str | None = None  # None/"" entfernt den Override
 
 
 @router.get("/pipeline-models")
@@ -787,12 +880,11 @@ async def get_pipeline_models(tenant: Tenant = Depends(get_tenant)):
     Zusätzlich der Tier-Katalog (bekannte Router-Modelle als Auswahl-Vorschläge);
     Overrides dürfen aber jede beliebige Requesty-Modell-ID sein.
     """
-    from services.pipeline_llm import describe_pipeline_models, TIER_MODELS
+    from services.pipeline_llm import TIER_MODELS, describe_pipeline_models
+
     return {
         "phases": describe_pipeline_models(),
-        "tier_catalog": [
-            {"tier": t, "model_id": m} for t, m in TIER_MODELS.items()
-        ],
+        "tier_catalog": [{"tier": t, "model_id": m} for t, m in TIER_MODELS.items()],
     }
 
 
@@ -806,8 +898,8 @@ async def patch_pipeline_models(
     Body: {"phase": "P01", "model_id": "google/gemini-2.5-flash-lite-preview-06-17"}
     model_id null/"" → Override entfernen (zurück auf offiziellen Default).
     """
-    from services.pipeline_llm import describe_pipeline_models, MODEL_PER_PROMPT
     from services.model_policy import set_override
+    from services.pipeline_llm import MODEL_PER_PROMPT, describe_pipeline_models
 
     phase = (body.phase or "").upper()
     if phase not in MODEL_PER_PROMPT:

@@ -3,6 +3,7 @@ P08 Conversation Service — Geführte Q&A via Telegram.
 Drei Modi: OPENER, RESPONSE, CLOSE.
 Schicht-3-Sicherheit: Response bekommt NUR features, NICHT Original-Transkript.
 """
+
 import hashlib
 import json
 import logging
@@ -10,7 +11,7 @@ import os
 import random
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import anthropic
 from sqlalchemy import text
@@ -25,10 +26,23 @@ MAX_QUESTIONS_RANDOM_SMART = 3
 
 # 17 question categories for random_smart mode
 QUESTION_CATEGORIES = [
-    "unternehmer_ursprung", "erster_fehler", "wendepunkt", "erfolgsprinzip",
-    "kundengeschichte", "mitarbeiter_lerning", "markt_insight", "produktentscheidung",
-    "fuehrungsstil", "persoenlicher_wert", "krisenbewaltigung", "zukunftsvision",
-    "branchentrend", "netzwerk_tipp", "zeitmanagement", "lernressource", "lebensweisheit",
+    "unternehmer_ursprung",
+    "erster_fehler",
+    "wendepunkt",
+    "erfolgsprinzip",
+    "kundengeschichte",
+    "mitarbeiter_lerning",
+    "markt_insight",
+    "produktentscheidung",
+    "fuehrungsstil",
+    "persoenlicher_wert",
+    "krisenbewaltigung",
+    "zukunftsvision",
+    "branchentrend",
+    "netzwerk_tipp",
+    "zeitmanagement",
+    "lernressource",
+    "lebensweisheit",
 ]
 
 _FALLBACK_SYSTEM = """Du bist ein einfühlsamer Interview-Assistent für Content-Erstellung auf LinkedIn.
@@ -67,6 +81,7 @@ def _load_p08_prompt():
     """Load P08 prompt from NC via PromptLoader, fallback to local file, then hardcoded."""
     try:
         from services.prompt_loader import get_default_prompt_loader
+
         loader = get_default_prompt_loader()
         return loader.load("P08")
     except Exception as e:
@@ -78,16 +93,17 @@ def _load_p08_prompt():
     )
     if os.path.exists(local_path):
         try:
-            with open(local_path, "r", encoding="utf-8") as f:
+            with open(local_path, encoding="utf-8") as f:
                 content = f.read()
             from services.prompt_loader import LoadedPrompt, _extract_section
+
             sha = hashlib.sha256(content.encode()).hexdigest()
             return LoadedPrompt(
                 content=content,
                 system_prompt=_extract_section(content, "System-Prompt"),
                 user_prompt_template=_extract_section(content, "User-Prompt"),
                 sha=sha,
-                loaded_at=datetime.now(timezone.utc),
+                loaded_at=datetime.now(UTC),
                 source_path=local_path,
             )
         except Exception as le:
@@ -95,13 +111,16 @@ def _load_p08_prompt():
 
     # Hardcoded fallback
     from services.prompt_loader import LoadedPrompt
-    fallback_content = f"## System-Prompt\n{_FALLBACK_SYSTEM}\n\n## User-Prompt\n{_FALLBACK_USER_TEMPLATE}"
+
+    fallback_content = (
+        f"## System-Prompt\n{_FALLBACK_SYSTEM}\n\n## User-Prompt\n{_FALLBACK_USER_TEMPLATE}"
+    )
     return LoadedPrompt(
         content=fallback_content,
         system_prompt=_FALLBACK_SYSTEM,
         user_prompt_template=_FALLBACK_USER_TEMPLATE,
         sha="fallback",
-        loaded_at=datetime.now(timezone.utc),
+        loaded_at=datetime.now(UTC),
         source_path="hardcoded",
     )
 
@@ -191,7 +210,7 @@ def _close_session_db(session_id: str, tenant_id: str) -> None:
         pass
 
 
-def p08_opener(tenant_id: str, mode: str, topic_idea_id: str = None) -> OpenerResult:
+def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> OpenerResult:
     """Start a new bot session and return the opening question.
 
     Modes:
@@ -255,11 +274,13 @@ def p08_opener(tenant_id: str, mode: str, topic_idea_id: str = None) -> OpenerRe
     response = client.messages.create(
         model=model_id,
         max_tokens=512,
-        system=[{
-            "type": "text",
-            "text": prompt.system_prompt,
-            "cache_control": {"type": "ephemeral"},
-        }],
+        system=[
+            {
+                "type": "text",
+                "text": prompt.system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
         messages=[{"role": "user", "content": user_content}],
     )
     raw_output = response.content[0].text.strip()
@@ -268,12 +289,14 @@ def p08_opener(tenant_id: str, mode: str, topic_idea_id: str = None) -> OpenerRe
 
     # 5. Create bot_session in DB
     session_id = str(uuid.uuid4())
-    messages = [{
-        "bot": question_text,
-        "user_features_summary": None,
-        "category": category,
-        "question_index": 1,
-    }]
+    messages = [
+        {
+            "bot": question_text,
+            "user_features_summary": None,
+            "category": category,
+            "question_index": 1,
+        }
+    ]
     with sync_session_factory() as s:
         s.execute(
             text(
@@ -338,7 +361,9 @@ def p08_response(session_id: str, features: dict) -> ResponseResult:
 
     # 3. Build LLM call — ONLY features, never original transcript
     features_json = json.dumps(features)
-    messages_list = json.loads(messages_raw) if isinstance(messages_raw, str) else (messages_raw or [])
+    messages_list = (
+        json.loads(messages_raw) if isinstance(messages_raw, str) else (messages_raw or [])
+    )
     recent_messages = _get_recent_messages(messages_list)
 
     voice_profile = ""
@@ -375,11 +400,13 @@ def p08_response(session_id: str, features: dict) -> ResponseResult:
     response = client.messages.create(
         model=model_id,
         max_tokens=512,
-        system=[{
-            "type": "text",
-            "text": prompt.system_prompt,
-            "cache_control": {"type": "ephemeral"},
-        }],
+        system=[
+            {
+                "type": "text",
+                "text": prompt.system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
         messages=[{"role": "user", "content": user_content}],
     )
     raw_output = response.content[0].text.strip()
@@ -393,14 +420,16 @@ def p08_response(session_id: str, features: dict) -> ResponseResult:
     # 5. Determine is_closed
     # Note: current_idx is 0-based index before this response. After this response it becomes
     # current_idx+1. We close when the next index would reach/exceed max_q.
-    is_closed = (next_action == "close" or quality == "leer" or current_idx + 1 >= max_q)
+    is_closed = next_action == "close" or quality == "leer" or current_idx + 1 >= max_q
 
     # 6. Update session in DB — single UPDATE for messages + status (no second close call)
-    messages_list.append({
-        "bot": response_message,
-        "user_features_summary": json.dumps(features)[:200],
-        "question_index": current_idx + 1,
-    })
+    messages_list.append(
+        {
+            "bot": response_message,
+            "user_features_summary": json.dumps(features)[:200],
+            "question_index": current_idx + 1,
+        }
+    )
     new_status = "closed" if is_closed else "active"
     with sync_session_factory() as s:
         s.execute(

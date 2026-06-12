@@ -6,10 +6,10 @@ Drei Feedback-Quellen:
 2. Performance: LinkedIn-Metriken (manuell oder API)
 3. Ideen-Selektion: Welche Ideen werden gewählt?
 """
+
 import difflib
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -17,30 +17,31 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant_id
-from models.content_piece import ContentPiece
-from models.content_performance import ContentPerformance, IdeaSelectionLog
 from models.content_idea import ContentIdea
+from models.content_performance import ContentPerformance, IdeaSelectionLog
+from models.content_piece import ContentPiece
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 
 # ═══ SCHEMAS ═══
 
+
 class EditDiffRequest(BaseModel):
     content_piece_id: str
     final_text: str  # Der finale Text nach Bearbeitung durch den Unternehmer
-    variant_index: Optional[int] = 0
+    variant_index: int | None = 0
 
 
 class PerformanceRequest(BaseModel):
     content_piece_id: str
-    impressions: Optional[int] = None
-    reactions: Optional[int] = None
-    comments: Optional[int] = None
-    shares: Optional[int] = None
-    clicks: Optional[int] = None
-    linkedin_post_id: Optional[str] = None
-    posted_at: Optional[datetime] = None
+    impressions: int | None = None
+    reactions: int | None = None
+    comments: int | None = None
+    shares: int | None = None
+    clicks: int | None = None
+    linkedin_post_id: str | None = None
+    posted_at: datetime | None = None
 
 
 class IdeaSelectionRequest(BaseModel):
@@ -57,6 +58,7 @@ class FeedbackStatsResponse(BaseModel):
 
 
 # ═══ ENDPOINTS ═══
+
 
 @router.post("/edit-diff")
 async def submit_edit_diff(
@@ -84,7 +86,9 @@ async def submit_edit_diff(
     diff = "".join(difflib.unified_diff(original_lines, final_lines, lineterm=""))
 
     # Levenshtein-ähnliche Distanz (einfache Char-Diff-Länge)
-    edit_distance = sum(1 for a, b in zip(piece.content_text, req.final_text) if a != b)
+    edit_distance = sum(
+        1 for a, b in zip(piece.content_text, req.final_text, strict=False) if a != b
+    )
     edit_distance += abs(len(piece.content_text) - len(req.final_text))
 
     # Performance-Eintrag erstellen
@@ -140,7 +144,9 @@ async def submit_performance(
     # Engagement-Rate berechnen
     engagement_rate = None
     if req.impressions and req.impressions > 0:
-        total_engagement = (req.reactions or 0) + (req.comments or 0) + (req.shares or 0) + (req.clicks or 0)
+        total_engagement = (
+            (req.reactions or 0) + (req.comments or 0) + (req.shares or 0) + (req.clicks or 0)
+        )
         engagement_rate = total_engagement / req.impressions
 
     # Posted-at Kontext
@@ -196,7 +202,7 @@ async def submit_idea_selection(
     selected_set = set(req.selected_idea_ids)
     logs = []
 
-    for idx, idea in enumerate(all_ideas):
+    for _idx, idea in enumerate(all_ideas):
         is_selected = str(idea.id) in selected_set
         log = IdeaSelectionLog(
             tenant_id=tenant_id,
@@ -259,7 +265,10 @@ async def get_feedback_stats(
             angle_stats[p.angle].append(p.engagement_rate)
 
     top_angles = sorted(
-        [{"angle": k, "avg_engagement": sum(v) / len(v), "count": len(v)} for k, v in angle_stats.items()],
+        [
+            {"angle": k, "avg_engagement": sum(v) / len(v), "count": len(v)}
+            for k, v in angle_stats.items()
+        ],
         key=lambda x: x["avg_engagement"],
         reverse=True,
     )
@@ -267,8 +276,10 @@ async def get_feedback_stats(
     # Trend: Werden die Edit-Diffs kürzer? (= System wird besser)
     trend = "no_data"
     if len(edit_distances) >= 6:
-        first_half = sum(edit_distances[:len(edit_distances) // 2]) / (len(edit_distances) // 2)
-        second_half = sum(edit_distances[len(edit_distances) // 2:]) / (len(edit_distances) - len(edit_distances) // 2)
+        first_half = sum(edit_distances[: len(edit_distances) // 2]) / (len(edit_distances) // 2)
+        second_half = sum(edit_distances[len(edit_distances) // 2 :]) / (
+            len(edit_distances) - len(edit_distances) // 2
+        )
         if second_half < first_half * 0.8:
             trend = "improving"
         elif second_half > first_half * 1.2:
@@ -278,14 +289,18 @@ async def get_feedback_stats(
 
     return {
         "total_posts": len(performances),
-        "avg_edit_distance": round(sum(edit_distances) / len(edit_distances), 1) if edit_distances else 0,
-        "avg_engagement_rate": round(sum(engagement_rates) / len(engagement_rates) * 100, 2) if engagement_rates else 0,
+        "avg_edit_distance": round(sum(edit_distances) / len(edit_distances), 1)
+        if edit_distances
+        else 0,
+        "avg_engagement_rate": round(sum(engagement_rates) / len(engagement_rates) * 100, 2)
+        if engagement_rates
+        else 0,
         "top_angles": top_angles[:5],
         "improvement_trend": trend,
     }
 
 
-def _rate_engagement(rate: Optional[float]) -> str:
+def _rate_engagement(rate: float | None) -> str:
     """Bewerte die Engagement-Rate nach LinkedIn-Standards."""
     if rate is None:
         return "unknown"

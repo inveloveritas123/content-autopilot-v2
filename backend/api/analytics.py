@@ -1,26 +1,26 @@
 """LLM Cost Analytics — Summary, by-task, by-model, by-day, CSV export."""
+
 import csv
 import io
-from datetime import datetime, timedelta
-from typing import Optional
-
 import uuid as _uuid
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, text, func as sqlfunc
+from sqlalchemy import func as sqlfunc
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
-from models.tenant import Tenant
 from models.llm_call_log import LLMCallLog
+from models.tenant import Tenant
 
 router = APIRouter()
 
 
 def _parse_date_range(
-    from_date: Optional[str],
-    to_date: Optional[str],
+    from_date: str | None,
+    to_date: str | None,
 ) -> tuple[datetime, datetime, str, str]:
     """Parse from/to date strings (YYYY-MM-DD), default last 7 days."""
     if to_date:
@@ -58,8 +58,8 @@ def _cache_hit_rate(cache_read, prompt_tokens) -> float:
 
 @router.get("/analytics/llm-summary")
 async def llm_summary(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
+    from_date: str | None = Query(None),
+    to_date: str | None = Query(None),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -71,9 +71,15 @@ async def llm_summary(
             sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
             sqlfunc.count(LLMCallLog.id).label("total_calls"),
             sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens), 0).label("total_input_tokens"),
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label("total_output_tokens"),
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_read_tokens), 0).label("total_cache_read_tokens"),
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_write_tokens), 0).label("total_cache_write_tokens"),
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label(
+                "total_output_tokens"
+            ),
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_read_tokens), 0).label(
+                "total_cache_read_tokens"
+            ),
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_write_tokens), 0).label(
+                "total_cache_write_tokens"
+            ),
             sqlfunc.coalesce(sqlfunc.avg(LLMCallLog.duration_ms), 0).label("avg_duration_ms"),
         ).where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
     )
@@ -95,8 +101,8 @@ async def llm_summary(
 
 @router.get("/analytics/llm-by-task")
 async def llm_by_task(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
+    from_date: str | None = Query(None),
+    to_date: str | None = Query(None),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -109,9 +115,14 @@ async def llm_by_task(
             sqlfunc.count(LLMCallLog.id).label("calls"),
             sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
             sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens), 0).label("prompt_tokens"),
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label("completion_tokens"),
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_read_tokens), 0).label("cache_read_tokens"),
-        ).where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label(
+                "completion_tokens"
+            ),
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_read_tokens), 0).label(
+                "cache_read_tokens"
+            ),
+        )
+        .where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
         .group_by(LLMCallLog.task_type)
         .order_by(sqlfunc.sum(LLMCallLog.cost_cents).desc())
     )
@@ -131,8 +142,8 @@ async def llm_by_task(
 
 @router.get("/analytics/llm-by-model")
 async def llm_by_model(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
+    from_date: str | None = Query(None),
+    to_date: str | None = Query(None),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -145,9 +156,14 @@ async def llm_by_model(
             sqlfunc.count(LLMCallLog.id).label("calls"),
             sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
             sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens), 0).label("total_input_tokens"),
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label("total_output_tokens"),
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_read_tokens), 0).label("cache_read_tokens"),
-        ).where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label(
+                "total_output_tokens"
+            ),
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_read_tokens), 0).label(
+                "cache_read_tokens"
+            ),
+        )
+        .where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
         .group_by(LLMCallLog.model)
         .order_by(sqlfunc.sum(LLMCallLog.cost_cents).desc())
     )
@@ -169,8 +185,8 @@ async def llm_by_model(
 
 @router.get("/analytics/llm-by-day")
 async def llm_by_day(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
+    from_date: str | None = Query(None),
+    to_date: str | None = Query(None),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -183,8 +199,11 @@ async def llm_by_day(
             sqlfunc.count(LLMCallLog.id).label("calls"),
             sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
             sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens), 0).label("prompt_tokens"),
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label("completion_tokens"),
-        ).where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
+            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label(
+                "completion_tokens"
+            ),
+        )
+        .where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
         .group_by(sqlfunc.date(LLMCallLog.created_at))
         .order_by(sqlfunc.date(LLMCallLog.created_at))
     )
@@ -203,9 +222,9 @@ async def llm_by_day(
 
 @router.get("/analytics/llm-calls.csv")
 async def llm_calls_csv(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    aggregate: Optional[str] = Query(None),
+    from_date: str | None = Query(None),
+    to_date: str | None = Query(None),
+    aggregate: str | None = Query(None),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -224,22 +243,31 @@ async def llm_calls_csv(
                 sqlfunc.count(LLMCallLog.id).label("calls"),
                 sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
                 sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens), 0).label("prompt_tokens"),
-                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label("completion_tokens"),
-                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_read_tokens), 0).label("cache_read_tokens"),
-            ).where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label(
+                    "completion_tokens"
+                ),
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_read_tokens), 0).label(
+                    "cache_read_tokens"
+                ),
+            )
+            .where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
             .group_by(LLMCallLog.task_type)
             .order_by(sqlfunc.sum(LLMCallLog.cost_cents).desc())
         )
         rows = result.all()
-        writer.writerow(["task_type", "calls", "total_cost_cents", "total_tokens", "cache_hit_rate"])
+        writer.writerow(
+            ["task_type", "calls", "total_cost_cents", "total_tokens", "cache_hit_rate"]
+        )
         for r in rows:
-            writer.writerow([
-                r.task_type,
-                r.calls,
-                round(float(r.total_cost_cents), 4),
-                int(r.prompt_tokens) + int(r.completion_tokens),
-                _cache_hit_rate(r.cache_read_tokens, r.prompt_tokens),
-            ])
+            writer.writerow(
+                [
+                    r.task_type,
+                    r.calls,
+                    round(float(r.total_cost_cents), 4),
+                    int(r.prompt_tokens) + int(r.completion_tokens),
+                    _cache_hit_rate(r.cache_read_tokens, r.prompt_tokens),
+                ]
+            )
 
     elif aggregate == "model":
         result = await db.execute(
@@ -247,25 +275,44 @@ async def llm_calls_csv(
                 LLMCallLog.model,
                 sqlfunc.count(LLMCallLog.id).label("calls"),
                 sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
-                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens), 0).label("total_input_tokens"),
-                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label("total_output_tokens"),
-                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_read_tokens), 0).label("cache_read_tokens"),
-            ).where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens), 0).label(
+                    "total_input_tokens"
+                ),
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label(
+                    "total_output_tokens"
+                ),
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_read_tokens), 0).label(
+                    "cache_read_tokens"
+                ),
+            )
+            .where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
             .group_by(LLMCallLog.model)
             .order_by(sqlfunc.sum(LLMCallLog.cost_cents).desc())
         )
         rows = result.all()
-        writer.writerow(["model", "calls", "total_cost_cents", "total_input_tokens", "total_output_tokens", "cache_read_tokens", "cache_hit_rate"])
+        writer.writerow(
+            [
+                "model",
+                "calls",
+                "total_cost_cents",
+                "total_input_tokens",
+                "total_output_tokens",
+                "cache_read_tokens",
+                "cache_hit_rate",
+            ]
+        )
         for r in rows:
-            writer.writerow([
-                r.model,
-                r.calls,
-                round(float(r.total_cost_cents), 4),
-                int(r.total_input_tokens),
-                int(r.total_output_tokens),
-                int(r.cache_read_tokens),
-                _cache_hit_rate(r.cache_read_tokens, r.total_input_tokens),
-            ])
+            writer.writerow(
+                [
+                    r.model,
+                    r.calls,
+                    round(float(r.total_cost_cents), 4),
+                    int(r.total_input_tokens),
+                    int(r.total_output_tokens),
+                    int(r.cache_read_tokens),
+                    _cache_hit_rate(r.cache_read_tokens, r.total_input_tokens),
+                ]
+            )
 
     elif aggregate == "day":
         result = await db.execute(
@@ -274,20 +321,25 @@ async def llm_calls_csv(
                 sqlfunc.count(LLMCallLog.id).label("calls"),
                 sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
                 sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens), 0).label("prompt_tokens"),
-                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label("completion_tokens"),
-            ).where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label(
+                    "completion_tokens"
+                ),
+            )
+            .where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
             .group_by(sqlfunc.date(LLMCallLog.created_at))
             .order_by(sqlfunc.date(LLMCallLog.created_at))
         )
         rows = result.all()
         writer.writerow(["date", "calls", "total_cost_cents", "total_tokens"])
         for r in rows:
-            writer.writerow([
-                str(r.day),
-                r.calls,
-                round(float(r.total_cost_cents), 4),
-                int(r.prompt_tokens) + int(r.completion_tokens),
-            ])
+            writer.writerow(
+                [
+                    str(r.day),
+                    r.calls,
+                    round(float(r.total_cost_cents), 4),
+                    int(r.prompt_tokens) + int(r.completion_tokens),
+                ]
+            )
 
     else:
         # Raw dump — all columns except error_message
@@ -305,30 +357,44 @@ async def llm_calls_csv(
                 LLMCallLog.cache_read_tokens,
                 LLMCallLog.cache_write_tokens,
                 LLMCallLog.created_at,
-            ).where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
+            )
+            .where(*_base_filter(tenant.id, date_from_dt, date_to_dt))
             .order_by(LLMCallLog.created_at)
         )
         rows = result.all()
-        writer.writerow([
-            "id", "provider_id", "task_type", "model",
-            "prompt_tokens", "completion_tokens", "cost_cents",
-            "duration_ms", "success", "cache_read_tokens", "cache_write_tokens", "created_at",
-        ])
+        writer.writerow(
+            [
+                "id",
+                "provider_id",
+                "task_type",
+                "model",
+                "prompt_tokens",
+                "completion_tokens",
+                "cost_cents",
+                "duration_ms",
+                "success",
+                "cache_read_tokens",
+                "cache_write_tokens",
+                "created_at",
+            ]
+        )
         for r in rows:
-            writer.writerow([
-                str(r.id),
-                str(r.provider_id) if r.provider_id else "",
-                r.task_type,
-                r.model,
-                r.prompt_tokens,
-                r.completion_tokens,
-                round(float(r.cost_cents), 6),
-                r.duration_ms,
-                r.success,
-                r.cache_read_tokens,
-                r.cache_write_tokens,
-                r.created_at.isoformat() if r.created_at else "",
-            ])
+            writer.writerow(
+                [
+                    str(r.id),
+                    str(r.provider_id) if r.provider_id else "",
+                    r.task_type,
+                    r.model,
+                    r.prompt_tokens,
+                    r.completion_tokens,
+                    round(float(r.cost_cents), 6),
+                    r.duration_ms,
+                    r.success,
+                    r.cache_read_tokens,
+                    r.cache_write_tokens,
+                    r.created_at.isoformat() if r.created_at else "",
+                ]
+            )
 
     buf.seek(0)
     return StreamingResponse(
@@ -353,17 +419,21 @@ async def llm_by_hour(
     """
     cutoff = datetime.utcnow() - timedelta(hours=hours)
     bucket = sqlfunc.date_trunc("hour", LLMCallLog.created_at).label("hour")
-    rows = (await db.execute(
-        select(
-            bucket,
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens + LLMCallLog.completion_tokens), 0).label("total_tokens"),
-            sqlfunc.count().label("calls"),
+    rows = (
+        await db.execute(
+            select(
+                bucket,
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
+                sqlfunc.coalesce(
+                    sqlfunc.sum(LLMCallLog.prompt_tokens + LLMCallLog.completion_tokens), 0
+                ).label("total_tokens"),
+                sqlfunc.count().label("calls"),
+            )
+            .where(LLMCallLog.tenant_id == tenant.id, LLMCallLog.created_at >= cutoff)
+            .group_by(bucket)
+            .order_by(bucket)
         )
-        .where(LLMCallLog.tenant_id == tenant.id, LLMCallLog.created_at >= cutoff)
-        .group_by(bucket)
-        .order_by(bucket)
-    )).all()
+    ).all()
     return [
         {
             "hour": r.hour.isoformat() if r.hour else None,
@@ -377,7 +447,9 @@ async def llm_by_hour(
 
 @router.get("/analytics/llm-anomaly")
 async def llm_anomaly(
-    threshold_factor: float = Query(2.0, ge=1.0, le=10.0, description="X-fache des Median = Anomalie"),
+    threshold_factor: float = Query(
+        2.0, ge=1.0, le=10.0, description="X-fache des Median = Anomalie"
+    ),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -399,19 +471,21 @@ async def llm_anomaly(
 
     # Stündliche Cost-Buckets der letzten 24h (excl. aktuelle Stunde)
     bucket = sqlfunc.date_trunc("hour", LLMCallLog.created_at).label("hour")
-    hist_rows = (await db.execute(
-        select(
-            bucket,
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("cost"),
+    hist_rows = (
+        await db.execute(
+            select(
+                bucket,
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("cost"),
+            )
+            .where(
+                LLMCallLog.tenant_id == tenant.id,
+                LLMCallLog.created_at >= cutoff_24h,
+                LLMCallLog.created_at < current_hour_start,
+            )
+            .group_by(bucket)
+            .order_by(bucket)
         )
-        .where(
-            LLMCallLog.tenant_id == tenant.id,
-            LLMCallLog.created_at >= cutoff_24h,
-            LLMCallLog.created_at < current_hour_start,
-        )
-        .group_by(bucket)
-        .order_by(bucket)
-    )).all()
+    ).all()
 
     history = sorted(float(r.cost or 0) for r in hist_rows)
     if not history:
@@ -421,22 +495,19 @@ async def llm_anomaly(
         median = history[n // 2] if n % 2 == 1 else (history[n // 2 - 1] + history[n // 2]) / 2.0
 
     # Aktuelle Stunde
-    current_row = (await db.execute(
-        select(sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0))
-        .where(
-            LLMCallLog.tenant_id == tenant.id,
-            LLMCallLog.created_at >= current_hour_start,
+    current_row = (
+        await db.execute(
+            select(sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0)).where(
+                LLMCallLog.tenant_id == tenant.id,
+                LLMCallLog.created_at >= current_hour_start,
+            )
         )
-    )).scalar() or 0.0
+    ).scalar() or 0.0
     current = float(current_row)
 
     factor = (current / median) if median > 0 else 0.0
     # Anomalie nur wenn historie aussagekräftig (median > 0.001 USD = 0.1 Cent) UND aktueller Wert relevant
-    is_anomaly = bool(
-        median > 0.001
-        and current > 0.001
-        and factor >= threshold_factor
-    )
+    is_anomaly = bool(median > 0.001 and current > 0.001 and factor >= threshold_factor)
 
     return {
         "anomaly": is_anomaly,
@@ -470,8 +541,8 @@ def _csv_streaming_response(buf: io.StringIO, filename: str) -> StreamingRespons
 @router.get("/analytics/cost-trend")
 async def cost_trend(
     days: int = Query(30, ge=1, le=365),
-    tenant_id: Optional[str] = Query(None),
-    format: Optional[str] = Query(None),
+    tenant_id: str | None = Query(None),
+    format: str | None = Query(None),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -489,26 +560,41 @@ async def cost_trend(
 
     cutoff = datetime.utcnow() - timedelta(days=days)
     day_col = sqlfunc.date(LLMCallLog.created_at).label("day")
-    rows = (await db.execute(
-        select(
-            day_col,
-            LLMCallLog.model,
-            sqlfunc.count(LLMCallLog.id).label("call_count"),
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens), 0).label("total_input_tokens"),
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label("total_output_tokens"),
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
+    rows = (
+        await db.execute(
+            select(
+                day_col,
+                LLMCallLog.model,
+                sqlfunc.count(LLMCallLog.id).label("call_count"),
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens), 0).label(
+                    "total_input_tokens"
+                ),
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label(
+                    "total_output_tokens"
+                ),
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
+            )
+            .where(LLMCallLog.tenant_id == effective_tid, LLMCallLog.created_at >= cutoff)
+            .group_by(day_col, LLMCallLog.model)
+            .order_by(day_col, LLMCallLog.model)
         )
-        .where(LLMCallLog.tenant_id == effective_tid, LLMCallLog.created_at >= cutoff)
-        .group_by(day_col, LLMCallLog.model)
-        .order_by(day_col, LLMCallLog.model)
-    )).all()
+    ).all()
 
     # Aggregate per day
     days_map: dict = {}
     for r in rows:
         d = str(r.day)
         if d not in days_map:
-            days_map[d] = {"date": d, "models": [], "total": {"total_input_tokens": 0, "total_output_tokens": 0, "total_cost_cents": 0.0, "call_count": 0}}
+            days_map[d] = {
+                "date": d,
+                "models": [],
+                "total": {
+                    "total_input_tokens": 0,
+                    "total_output_tokens": 0,
+                    "total_cost_cents": 0.0,
+                    "call_count": 0,
+                },
+            }
         model_entry = {
             "model": r.model,
             "total_input_tokens": int(r.total_input_tokens),
@@ -519,7 +605,9 @@ async def cost_trend(
         days_map[d]["models"].append(model_entry)
         days_map[d]["total"]["total_input_tokens"] += int(r.total_input_tokens)
         days_map[d]["total"]["total_output_tokens"] += int(r.total_output_tokens)
-        days_map[d]["total"]["total_cost_cents"] = round(days_map[d]["total"]["total_cost_cents"] + float(r.total_cost_cents), 4)
+        days_map[d]["total"]["total_cost_cents"] = round(
+            days_map[d]["total"]["total_cost_cents"] + float(r.total_cost_cents), 4
+        )
         days_map[d]["total"]["call_count"] += int(r.call_count)
 
     days_list = sorted(days_map.values(), key=lambda x: x["date"])
@@ -528,10 +616,28 @@ async def cost_trend(
         buf = io.StringIO()
         buf.write("﻿")
         writer = csv.writer(buf)
-        writer.writerow(["date", "model", "call_count", "total_input_tokens", "total_output_tokens", "total_cost_cents"])
+        writer.writerow(
+            [
+                "date",
+                "model",
+                "call_count",
+                "total_input_tokens",
+                "total_output_tokens",
+                "total_cost_cents",
+            ]
+        )
         for day_entry in days_list:
             for m in day_entry["models"]:
-                writer.writerow([day_entry["date"], m["model"], m["call_count"], m["total_input_tokens"], m["total_output_tokens"], m["total_cost_cents"]])
+                writer.writerow(
+                    [
+                        day_entry["date"],
+                        m["model"],
+                        m["call_count"],
+                        m["total_input_tokens"],
+                        m["total_output_tokens"],
+                        m["total_cost_cents"],
+                    ]
+                )
         return _csv_streaming_response(buf, "cost-trend.csv")
 
     return {"days": days_list, "deploy_markers": DEPLOY_MARKERS}
@@ -540,8 +646,8 @@ async def cost_trend(
 @router.get("/analytics/cache-hit-rate")
 async def cache_hit_rate_endpoint(
     days: int = Query(30, ge=1, le=365),
-    tenant_id: Optional[str] = Query(None),
-    format: Optional[str] = Query(None),
+    tenant_id: str | None = Query(None),
+    format: str | None = Query(None),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -562,45 +668,54 @@ async def cache_hit_rate_endpoint(
 
     cutoff = datetime.utcnow() - timedelta(days=days)
     day_col = sqlfunc.date(LLMCallLog.created_at).label("day")
-    rows = (await db.execute(
-        select(
-            day_col,
-            LLMCallLog.model,
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_read_tokens), 0).label("cache_read_tokens"),
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens), 0).label("total_input_tokens"),
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label("total_output_tokens"),
+    rows = (
+        await db.execute(
+            select(
+                day_col,
+                LLMCallLog.model,
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cache_read_tokens), 0).label(
+                    "cache_read_tokens"
+                ),
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.prompt_tokens), 0).label(
+                    "total_input_tokens"
+                ),
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.completion_tokens), 0).label(
+                    "total_output_tokens"
+                ),
+            )
+            .where(LLMCallLog.tenant_id == effective_tid, LLMCallLog.created_at >= cutoff)
+            .group_by(day_col, LLMCallLog.model)
+            .order_by(day_col, LLMCallLog.model)
         )
-        .where(LLMCallLog.tenant_id == effective_tid, LLMCallLog.created_at >= cutoff)
-        .group_by(day_col, LLMCallLog.model)
-        .order_by(day_col, LLMCallLog.model)
-    )).all()
+    ).all()
 
     daily = []
     for r in rows:
         cache_r = int(r.cache_read_tokens)
         total_input = cache_r + int(r.total_input_tokens)  # nur Input-Tokens; completion ist Output
         hit_rate = None if total_input == 0 else round(cache_r / total_input, 4)
-        daily.append({
-            "date": str(r.day),
-            "model": r.model,
-            "hit_rate": hit_rate,
-            "total_input_tokens": int(r.total_input_tokens),
-            "cache_read_tokens": cache_r,
-        })
+        daily.append(
+            {
+                "date": str(r.day),
+                "model": r.model,
+                "hit_rate": hit_rate,
+                "total_input_tokens": int(r.total_input_tokens),
+                "cache_read_tokens": cache_r,
+            }
+        )
 
     # 7-day weighted avg (last 7 days) — gewichtet nach Token-Volumen,
     # damit Tage mit wenig Traffic nicht überproportional zählen.
     seven_days_ago = (datetime.utcnow() - timedelta(days=7)).date()
-    recent = [
-        d for d in daily
-        if str(d["date"]) >= str(seven_days_ago)
-    ]
+    recent = [d for d in daily if str(d["date"]) >= str(seven_days_ago)]
     total_cache_r_7d = sum(d["cache_read_tokens"] for d in recent)
     total_input_7d = sum(d["cache_read_tokens"] + d["total_input_tokens"] for d in recent)
     avg_7d = round(total_cache_r_7d / total_input_7d, 4) if total_input_7d > 0 else None
 
     # Für Warmup-Check: Anzahl Tage mit Daten (distinct dates in den letzten 7d)
-    recent_dates_with_data = len({d["date"] for d in recent if (d["cache_read_tokens"] + d["total_input_tokens"]) > 0})
+    recent_dates_with_data = len(
+        {d["date"] for d in recent if (d["cache_read_tokens"] + d["total_input_tokens"]) > 0}
+    )
 
     # Alert: nur wenn 7 Tage Warmup (>=7 Datenpunkte) und avg < 30%
     alert = bool(avg_7d is not None and recent_dates_with_data >= 7 and avg_7d < 0.30)
@@ -611,7 +726,15 @@ async def cache_hit_rate_endpoint(
         writer = csv.writer(buf)
         writer.writerow(["date", "model", "hit_rate", "total_input_tokens", "cache_read_tokens"])
         for d in daily:
-            writer.writerow([d["date"], d["model"], d["hit_rate"], d["total_input_tokens"], d["cache_read_tokens"]])
+            writer.writerow(
+                [
+                    d["date"],
+                    d["model"],
+                    d["hit_rate"],
+                    d["total_input_tokens"],
+                    d["cache_read_tokens"],
+                ]
+            )
         return _csv_streaming_response(buf, "cache-hit-rate.csv")
 
     return {"daily": daily, "avg_7d": avg_7d, "alert": alert}
@@ -619,8 +742,8 @@ async def cache_hit_rate_endpoint(
 
 @router.get("/analytics/runaway-detection")
 async def runaway_detection(
-    tenant_id: Optional[str] = Query(None),
-    format: Optional[str] = Query(None),
+    tenant_id: str | None = Query(None),
+    format: str | None = Query(None),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -640,17 +763,19 @@ async def runaway_detection(
     # Heatmap: calls per tenant per hour-of-day per day-of-week
     hour_col = sqlfunc.extract("hour", LLMCallLog.created_at).label("hour_of_day")
     dow_col = sqlfunc.extract("dow", LLMCallLog.created_at).label("day_of_week")
-    heatmap_rows = (await db.execute(
-        select(
-            LLMCallLog.tenant_id,
-            hour_col,
-            dow_col,
-            sqlfunc.count(LLMCallLog.id).label("call_count"),
+    heatmap_rows = (
+        await db.execute(
+            select(
+                LLMCallLog.tenant_id,
+                hour_col,
+                dow_col,
+                sqlfunc.count(LLMCallLog.id).label("call_count"),
+            )
+            .where(LLMCallLog.tenant_id == effective_tid, LLMCallLog.created_at >= cutoff)
+            .group_by(LLMCallLog.tenant_id, hour_col, dow_col)
+            .order_by(dow_col, hour_col)
         )
-        .where(LLMCallLog.tenant_id == effective_tid, LLMCallLog.created_at >= cutoff)
-        .group_by(LLMCallLog.tenant_id, hour_col, dow_col)
-        .order_by(dow_col, hour_col)
-    )).all()
+    ).all()
 
     heatmap = [
         {
@@ -664,18 +789,20 @@ async def runaway_detection(
     ]
 
     # Top-20 Killers: GROUP BY (task_type, model)
-    killer_rows = (await db.execute(
-        select(
-            LLMCallLog.task_type.label("task_name"),
-            LLMCallLog.model,
-            sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
-            sqlfunc.count(LLMCallLog.id).label("total_calls"),
+    killer_rows = (
+        await db.execute(
+            select(
+                LLMCallLog.task_type.label("task_name"),
+                LLMCallLog.model,
+                sqlfunc.coalesce(sqlfunc.sum(LLMCallLog.cost_cents), 0).label("total_cost_cents"),
+                sqlfunc.count(LLMCallLog.id).label("total_calls"),
+            )
+            .where(LLMCallLog.tenant_id == effective_tid, LLMCallLog.created_at >= cutoff)
+            .group_by(LLMCallLog.task_type, LLMCallLog.model)
+            .order_by(sqlfunc.sum(LLMCallLog.cost_cents).desc())
+            .limit(20)
         )
-        .where(LLMCallLog.tenant_id == effective_tid, LLMCallLog.created_at >= cutoff)
-        .group_by(LLMCallLog.task_type, LLMCallLog.model)
-        .order_by(sqlfunc.sum(LLMCallLog.cost_cents).desc())
-        .limit(20)
-    )).all()
+    ).all()
 
     top_killers = [
         {
@@ -710,16 +837,17 @@ async def content_by_category(
 ):
     """Anzahl Posts pro Kategorie (Christophs 4-Modell) für die letzten N Tage."""
     cutoff = datetime.utcnow() - timedelta(days=days)
-    rows = (await db.execute(
-        text(
-            "SELECT COALESCE(category, 'unkategorisiert') AS cat, "
-            "       COUNT(*) AS cnt "
-            "FROM content_pieces "
-            "WHERE tenant_id = :tid AND created_at >= :cut "
-            "GROUP BY cat "
-            "ORDER BY cnt DESC"
-        ),
-        {"tid": tenant.id, "cut": cutoff},
-    )).all()
+    rows = (
+        await db.execute(
+            text(
+                "SELECT COALESCE(category, 'unkategorisiert') AS cat, "
+                "       COUNT(*) AS cnt "
+                "FROM content_pieces "
+                "WHERE tenant_id = :tid AND created_at >= :cut "
+                "GROUP BY cat "
+                "ORDER BY cnt DESC"
+            ),
+            {"tid": tenant.id, "cut": cutoff},
+        )
+    ).all()
     return [{"category": r.cat, "count": int(r.cnt)} for r in rows]
-

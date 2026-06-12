@@ -6,10 +6,8 @@ enthält, gibt es einen Boost auf den relevance_score.
 
 Pure-Function — kein DB / API / LLM. Trivial unit-testable.
 """
+
 from __future__ import annotations
-
-from typing import Optional
-
 
 # Boost-Tabelle: pro Anzahl Trigger-Treffer (1-5+) ein Bonus auf 10er-Skala
 HIT_BOOST = {0: 0.0, 1: 0.5, 2: 1.0, 3: 1.5, 4: 2.0, 5: 2.5}
@@ -33,7 +31,7 @@ def count_trigger_hits(text: str, trigger_words: list[str]) -> int:
 
 def compute_industry_boost(
     idea_text: str,
-    trigger_words: Optional[list[str]],
+    trigger_words: list[str] | None,
 ) -> float:
     """Returns boost-Wert (0.0–2.5) den man auf relevance_score addieren sollte."""
     hits = count_trigger_hits(idea_text or "", trigger_words or [])
@@ -45,7 +43,7 @@ def compute_industry_boost(
 def apply_industry_boost(
     base_score: float,
     idea_text: str,
-    industry_context: Optional[dict],
+    industry_context: dict | None,
     *,
     cap: float = 10.0,
 ) -> tuple[float, dict]:

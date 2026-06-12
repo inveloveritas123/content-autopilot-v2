@@ -3,15 +3,16 @@ Smart-Questions Celery Task — Läuft nach erfolgreicher Analyse.
 
 Auto-Chain: transcribe → analyse → [generate_smart_questions] → ready_for_dialogue
 """
+
 import asyncio
 import logging
-from services.llm import set_llm_tenant
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
-from models.source_item import SourceItem
 from models.dialogue_question import DialogueQuestion
+from models.source_item import SourceItem
 from models.tenant import Tenant
+from services.llm import set_llm_tenant
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +35,11 @@ def generate_smart_questions_task(item_id: str):
             return {"status": "skipped", "reason": "no_transcript"}
 
         # Check if questions already exist
-        existing_count = session.query(DialogueQuestion).filter(
-            DialogueQuestion.source_item_id == item.id
-        ).count()
+        existing_count = (
+            session.query(DialogueQuestion)
+            .filter(DialogueQuestion.source_item_id == item.id)
+            .count()
+        )
 
         if existing_count > 0:
             logger.info(f"Item {item_id} already has {existing_count} questions — skipping")
@@ -80,9 +83,10 @@ def generate_smart_questions_task(item_id: str):
 
             # Auto-score question quality (rule-based, no LLM cost)
             try:
-                from services.quality_scorer import score_smart_questions
                 from models.quality_metric import QualityMetric
-                from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+                from services.llm import PURPOSE_MODEL_MAP, REQUESTY_MODELS
+                from services.quality_scorer import score_smart_questions
+
                 scores = score_smart_questions(questions)
                 model_key = PURPOSE_MODEL_MAP.get("questions", "claude-sonnet")
                 qm = QualityMetric(

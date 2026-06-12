@@ -11,16 +11,17 @@ Verwendet von:
 Alle Traversal- und Symlink-Schutz-Massnahmen greifen automatisch, da
 Overlay und Base beides LocalFsStorageAdapter-Instanzen sind.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Literal, Optional
+from typing import Literal
 
 from services.brand_voice_storage import (
     BrandVoiceStorageAdapter,
     StorageEntry,
-    StorageStat,
     StorageError,
+    StorageStat,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ class LayeredStorageAdapter:
     def __init__(
         self,
         overlay: BrandVoiceStorageAdapter,  # LocalFsStorageAdapter(base_dir=overlay_path)
-        base: BrandVoiceStorageAdapter,     # LocalFsStorageAdapter(base_dir=content_truth_path)
+        base: BrandVoiceStorageAdapter,  # LocalFsStorageAdapter(base_dir=content_truth_path)
     ) -> None:
         self._overlay = overlay
         self._base = base
@@ -111,7 +112,7 @@ class LayeredStorageAdapter:
     # Zusatz-API — nur vom Prompt-Studio genutzt
     # ------------------------------------------------------------------
 
-    def source_of(self, path: str) -> Optional[Source]:
+    def source_of(self, path: str) -> Source | None:
         """Gibt 'overlay' wenn Overlay-Datei existiert, 'base' wenn nur Base,
         None wenn nirgends vorhanden."""
         if self._overlay_exists_safe(path):
@@ -120,9 +121,7 @@ class LayeredStorageAdapter:
             return "base"
         return None
 
-    def list_with_source(
-        self, path: str
-    ) -> list[tuple[StorageEntry, Source, StorageStat]]:
+    def list_with_source(self, path: str) -> list[tuple[StorageEntry, Source, StorageStat]]:
         """Gemergte Liste mit Quell-Layer und effektivem Stat.
 
         Source = 'overlay' wenn Datei im Overlay liegt (shadowed Base),
@@ -169,7 +168,7 @@ class LayeredStorageAdapter:
 
         return result
 
-    def stat_base(self, path: str) -> Optional[StorageStat]:
+    def stat_base(self, path: str) -> StorageStat | None:
         """Base-Metadaten, auch wenn ein Overlay existiert.
 
         Wird vom Prompt-Studio verwendet um 'Base neuer als Overlay'-Warnungen

@@ -1,8 +1,5 @@
 import logging
-import json
-import re
 from datetime import datetime
-from typing import Optional
 
 import feedparser
 import httpx
@@ -49,13 +46,15 @@ async def fetch_youtube_feed(channel_id: str) -> list[dict]:
 
         thumbnail = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None
 
-        videos.append({
-            "external_id": video_id,
-            "title": entry.get("title", ""),
-            "url": entry.get("link", ""),
-            "published_at": published,
-            "thumbnail_url": thumbnail,
-        })
+        videos.append(
+            {
+                "external_id": video_id,
+                "title": entry.get("title", ""),
+                "url": entry.get("link", ""),
+                "published_at": published,
+                "thumbnail_url": thumbnail,
+            }
+        )
 
     return videos
 
@@ -100,7 +99,7 @@ async def fetch_all_channel_videos(channel_id: str, max_videos: int = 200) -> li
     return videos[:max_videos]
 
 
-def _extract_playlist_videos(data: dict, is_first: bool) -> tuple[list[dict], Optional[str]]:
+def _extract_playlist_videos(data: dict, is_first: bool) -> tuple[list[dict], str | None]:
     """Extract video info and continuation token from innertube response."""
     videos = []
     continuation = None
@@ -135,7 +134,6 @@ def _extract_playlist_videos(data: dict, is_first: bool) -> tuple[list[dict], Op
             duration = _parse_duration(length_text)
 
             # Published date from video info
-            published = None
             video_info = renderer.get("videoInfo", {})
             runs = video_info.get("runs", [])
             for run in runs:
@@ -145,14 +143,16 @@ def _extract_playlist_videos(data: dict, is_first: bool) -> tuple[list[dict], Op
 
             thumbnail = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None
 
-            videos.append({
-                "external_id": video_id,
-                "title": title,
-                "url": f"https://www.youtube.com/watch?v={video_id}",
-                "published_at": None,  # Will be enriched later
-                "thumbnail_url": thumbnail,
-                "duration_seconds": duration,
-            })
+            videos.append(
+                {
+                    "external_id": video_id,
+                    "title": title,
+                    "url": f"https://www.youtube.com/watch?v={video_id}",
+                    "published_at": None,  # Will be enriched later
+                    "thumbnail_url": thumbnail,
+                    "duration_seconds": duration,
+                }
+            )
 
         # Check for continuation
         cont = item.get("continuationItemRenderer", {})
@@ -170,10 +170,12 @@ def _get_text(obj) -> str:
     runs = obj.get("runs", [])
     if runs:
         return "".join(r.get("text", "") for r in runs)
-    return obj.get("simpleText", obj.get("accessibility", {}).get("accessibilityData", {}).get("label", ""))
+    return obj.get(
+        "simpleText", obj.get("accessibility", {}).get("accessibilityData", {}).get("label", "")
+    )
 
 
-def _parse_duration(text: str) -> Optional[int]:
+def _parse_duration(text: str) -> int | None:
     """Parse duration text like '12:34' or '1:02:03' to seconds."""
     if not text:
         return None

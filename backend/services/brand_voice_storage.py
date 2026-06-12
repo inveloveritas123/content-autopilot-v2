@@ -4,7 +4,7 @@ import logging
 import os
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Protocol
 from urllib.parse import unquote
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Dataclasses
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class StorageEntry:
@@ -38,6 +39,7 @@ class StorageStat:
 # Exception
 # ---------------------------------------------------------------------------
 
+
 class StorageError(Exception):
     def __init__(self, message: str, path: str) -> None:
         super().__init__(message)
@@ -52,6 +54,7 @@ class StorageError(Exception):
 # Protocol
 # ---------------------------------------------------------------------------
 
+
 class BrandVoiceStorageAdapter(Protocol):
     def list(self, path: str) -> list[StorageEntry]: ...
     def read(self, path: str) -> bytes: ...
@@ -64,8 +67,10 @@ class BrandVoiceStorageAdapter(Protocol):
 # Path helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_brand_voice_base() -> str:
     from config import settings as _s
+
     return _s.brand_voice_nc_base_path
 
 
@@ -264,7 +269,7 @@ class NextcloudWebDAVAdapter:
         response_el = root.find(".//d:response", _NS)
         if response_el is None:
             return StorageStat(
-                mtime=datetime(1970, 1, 1, tzinfo=timezone.utc),
+                mtime=datetime(1970, 1, 1, tzinfo=UTC),
                 size=0,
                 etag="",
             )
@@ -275,9 +280,9 @@ class NextcloudWebDAVAdapter:
             try:
                 mtime = parsedate_to_datetime(mtime_el.text)
             except Exception:
-                mtime = datetime(1970, 1, 1, tzinfo=timezone.utc)
+                mtime = datetime(1970, 1, 1, tzinfo=UTC)
         else:
-            mtime = datetime(1970, 1, 1, tzinfo=timezone.utc)
+            mtime = datetime(1970, 1, 1, tzinfo=UTC)
 
         # size
         size_el = response_el.find(".//d:getcontentlength", _NS)
@@ -307,11 +312,12 @@ def get_adapter(adapter_name: str, config: dict) -> BrandVoiceStorageAdapter:
     # Lazy-Import fuer localfs, damit kein Zirkular-Import entsteht
     if adapter_name == "localfs":
         from services.local_fs_storage import LocalFsStorageAdapter
+
         return LocalFsStorageAdapter(**config)
     cls = _ADAPTER_REGISTRY.get(adapter_name)
     if cls is None:
         raise ValueError(
-            f"Unknown storage adapter: {adapter_name!r}. Available: {list(_ADAPTER_REGISTRY) + ['localfs']}"
+            f"Unknown storage adapter: {adapter_name!r}. Available: {[*list(_ADAPTER_REGISTRY), 'localfs']}"
         )
     return cls(**config)
 
@@ -319,6 +325,7 @@ def get_adapter(adapter_name: str, config: dict) -> BrandVoiceStorageAdapter:
 # ---------------------------------------------------------------------------
 # Default instance
 # ---------------------------------------------------------------------------
+
 
 def get_default_nc_adapter() -> NextcloudWebDAVAdapter:
     return NextcloudWebDAVAdapter(
@@ -339,8 +346,9 @@ def get_default_storage_adapter() -> BrandVoiceStorageAdapter:
     """
     backend = getattr(settings, "prompt_storage_backend", "localfs")
     if backend == "localfs":
-        from services.local_fs_storage import LocalFsStorageAdapter
         from services.layered_storage import LayeredStorageAdapter
+        from services.local_fs_storage import LocalFsStorageAdapter
+
         base_dir = getattr(settings, "content_truth_base_path", "/app/content-truth")
         overlay_dir = getattr(settings, "content_truth_overlay_path", "/app/data/prompts-custom")
         return LayeredStorageAdapter(
@@ -391,7 +399,9 @@ def sync_brand_voice_to_nc(
     Never raises — all errors are collected and returned.
     """
     import json as _json
+
     from sqlalchemy import text as _text
+
     from models.base import sync_session_factory
 
     synced: list[str] = []
@@ -421,7 +431,9 @@ def sync_brand_voice_to_nc(
                     _text("SELECT slug FROM projects WHERE id = :p"),
                     {"p": str(project_id)},
                 ).fetchone()
-                project_slug = proj_row[0] if proj_row and proj_row[0] else _slugify(str(project_id))
+                project_slug = (
+                    proj_row[0] if proj_row and proj_row[0] else _slugify(str(project_id))
+                )
             else:
                 project_slug = "default"
 

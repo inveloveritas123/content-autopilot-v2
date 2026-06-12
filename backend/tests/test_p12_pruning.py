@@ -6,6 +6,7 @@ Stellt sicher, dass beim Prunen kanonischer Louis-Profile der `wortschatz`-Block
 
 Dep-frei via importlib (umgeht services/__init__ + sqlalchemy/celery).
 """
+
 import importlib.util
 from pathlib import Path
 
@@ -53,8 +54,13 @@ class TestVocabularySurvivesPruning:
         assert "_meta" not in pruned
 
     def test_context_keeps_canonical_keys(self):
-        ctx = {"person": {"name": "x"}, "zielkunde": {"beschreibung": "y"},
-               "sprache": {"du_oder_sie": "du"}, "vertrauen": {}, "fremd": 1}
+        ctx = {
+            "person": {"name": "x"},
+            "zielkunde": {"beschreibung": "y"},
+            "sprache": {"du_oder_sie": "du"},
+            "vertrauen": {},
+            "fremd": 1,
+        }
         pruned = pp.prune(ctx, pp.CONTEXT_KEYS_FOR_P12)
         assert set(pruned) == {"person", "zielkunde", "sprache", "vertrauen"}
 

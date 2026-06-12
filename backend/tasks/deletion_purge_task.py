@@ -6,6 +6,7 @@ Critical #2: Hard-Delete per deletion_request_id FK (kein BETWEEN-Window mehr).
 Critical #4: Cascade auf llm_call_logs.
 Should-Fix: Per-Iteration-Transaction (async with db.begin() pro Request).
 """
+
 from __future__ import annotations
 
 import logging
@@ -21,27 +22,23 @@ logger = logging.getLogger(__name__)
 # Schlüssel = Tabellenname, Wert = Hard-Delete-Statement.
 _HARD_DELETE_TABLES: dict[str, str] = {
     "memory_chunks": (
-        "DELETE FROM memory_chunks "
-        "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
+        "DELETE FROM memory_chunks " "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
     ),
     "content_pieces": (
-        "DELETE FROM content_pieces "
-        "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
+        "DELETE FROM content_pieces " "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
     ),
     "content_ideas": (
-        "DELETE FROM content_ideas "
-        "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
+        "DELETE FROM content_ideas " "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
     ),
     "source_items": (
-        "DELETE FROM source_items "
-        "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
+        "DELETE FROM source_items " "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
     ),
     # Critical #4: llm_call_logs in Hard-Delete-Cascade einbeziehen.
     "llm_call_logs": (
-        "DELETE FROM llm_call_logs "
-        "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
+        "DELETE FROM llm_call_logs " "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
     ),
 }
+
 
 # NC-File-Löschung: Stub — wird in Issue #156-followup vollständig implementiert.
 # Die Funktion würde via brand_voice_storage die Tenant-Files nach
@@ -71,7 +68,8 @@ def purge_expired() -> dict:
     purged_total: dict[str, int] = {table: 0 for table in _HARD_DELETE_TABLES}
 
     with sync_session_factory() as db:
-        rows = db.execute(text("""
+        rows = db.execute(
+            text("""
             SELECT id, tenant_id, mode, affected_records
             FROM deletion_requests
             WHERE status = 'soft_deleted'
@@ -79,7 +77,8 @@ def purge_expired() -> dict:
               AND recovery_until < NOW()
             ORDER BY requested_at ASC
             LIMIT 50
-        """)).fetchall()
+        """)
+        ).fetchall()
 
     # Should-Fix: Per-Iteration-Transaction — jede Anfrage in eigenem Commit.
     # Verhindert dass ein Fehler in Request N alle vorherigen N-1 Commits rolled back.

@@ -1,9 +1,7 @@
 import json
 import logging
-import os
 import re
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +21,7 @@ def scan_existing_transcripts() -> dict[str, dict]:
 
     for json_file in transcript_dir.glob("*.json"):
         try:
-            with open(json_file, "r", encoding="utf-8") as f:
+            with open(json_file, encoding="utf-8") as f:
                 meta = json.load(f)
 
             # Extract video_id from URL or thumbnail
@@ -55,7 +53,7 @@ def scan_existing_transcripts() -> dict[str, dict]:
     return index
 
 
-def _extract_video_id(meta: dict) -> Optional[str]:
+def _extract_video_id(meta: dict) -> str | None:
     """Extract YouTube video_id from VoiceScriptor meta data."""
     # Check thumbnail URL
     thumb = meta.get("meta", {}).get("video", {}).get("thumbnail", "")
@@ -73,7 +71,7 @@ def _extract_video_id(meta: dict) -> Optional[str]:
     return None
 
 
-def get_transcript_for_video(video_id: str) -> Optional[tuple[str, str]]:
+def get_transcript_for_video(video_id: str) -> tuple[str, str] | None:
     """Get transcript text for a specific video_id.
     Returns (text, source) or None.
     """

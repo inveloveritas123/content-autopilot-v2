@@ -23,6 +23,7 @@ Defaults (wenn ENV nicht gesetzt):
     CONTENT_TRUTH_BASE_PATH = <repo-root>/content-truth
     (Repo-Root = zwei Ebenen ueber diesem Skript: backend/scripts/ → backend/ → repo-root)
 """
+
 import importlib.util
 import os
 import sys
@@ -62,6 +63,7 @@ def _load_module_from_file(module_name: str, file_path: str) -> types.ModuleType
 # Minimale Stubs fuer pydantic-settings / config.py
 try:
     import pydantic_settings  # noqa: F401
+
     _config = _load_module_from_file(
         "config",
         os.path.join(_BACKEND_DIR, "config.py"),
@@ -105,22 +107,21 @@ _phc = _load_module_from_file(
 # Imports aus den geladenen Modulen
 # ---------------------------------------------------------------------------
 from services.local_fs_storage import LocalFsStorageAdapter  # noqa: E402
-from services.prompt_loader import PROMPT_PATHS              # noqa: E402
 from services.prompt_health_core import check_prompt_content  # noqa: E402
+from services.prompt_loader import PROMPT_PATHS  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Konfiguration
 # ---------------------------------------------------------------------------
 
 _DEFAULT_CONTENT_TRUTH = os.path.join(_REPO_ROOT, "content-truth")
-CONTENT_TRUTH_BASE_PATH = os.environ.get(
-    "CONTENT_TRUTH_BASE_PATH", _DEFAULT_CONTENT_TRUTH
-)
+CONTENT_TRUTH_BASE_PATH = os.environ.get("CONTENT_TRUTH_BASE_PATH", _DEFAULT_CONTENT_TRUTH)
 
 
 # ---------------------------------------------------------------------------
 # Health-Check (nutzt prompt_health_core)
 # ---------------------------------------------------------------------------
+
 
 def run_health_check() -> list[dict]:
     """Fuehrt den Health-Check fuer alle PROMPT_PATHS durch."""
@@ -168,13 +169,16 @@ def run_health_check() -> list[dict]:
 # Ausgabe
 # ---------------------------------------------------------------------------
 
+
 def _fmt_bool(b: bool) -> str:
     return "yes" if b else "NO"
 
 
 def print_table(results: list[dict]) -> None:
     """Gibt die Ergebnisse als lesbare Tabelle aus."""
-    header = f"{'KEY':<14} {'sys_chars':>10} {'usr_chars':>10} {'fences_ok':>10}  {'STATUS':<7}  grund"
+    header = (
+        f"{'KEY':<14} {'sys_chars':>10} {'usr_chars':>10} {'fences_ok':>10}  {'STATUS':<7}  grund"
+    )
     sep = "-" * 80
     print(header)
     print(sep)

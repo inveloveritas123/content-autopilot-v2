@@ -9,12 +9,12 @@ Strategie:
 DSGVO: Audio-Bytes werden NIE persistiert — nur das Transkript.
 Max-Länge: 180 Sekunden (3 Min) — längere Audio wird abgelehnt.
 """
+
 import base64
 import logging
 import os
 import tempfile
 from dataclasses import dataclass
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +45,12 @@ def _get_ogg_duration(audio_bytes: bytes) -> float:
         data = audio_bytes
         length = len(data)
         while i < length - 27:
-            if data[i:i+4] != b"OggS":
+            if data[i : i + 4] != b"OggS":
                 i += 1
                 continue
             # header_type at offset 5: bit 2 set means last page
-            header_type = data[i + 5]
-            granule = int.from_bytes(data[i + 6:i + 14], "little", signed=False)
+            data[i + 5]
+            granule = int.from_bytes(data[i + 6 : i + 14], "little", signed=False)
             if granule != 0xFFFFFFFFFFFFFFFF:
                 last_granule = granule
             # segment table: byte at offset 26 gives number of segments
@@ -59,7 +59,7 @@ def _get_ogg_duration(audio_bytes: bytes) -> float:
             num_segments = data[i + 26]
             if i + 27 + num_segments > length:
                 break
-            page_size = 27 + num_segments + sum(data[i + 27:i + 27 + num_segments])
+            page_size = 27 + num_segments + sum(data[i + 27 : i + 27 + num_segments])
             i += page_size
         if last_granule > 0:
             return last_granule / 48000.0
@@ -74,10 +74,12 @@ def transcribe_with_gemini(
     language_hint: str = "de",
 ) -> TranscriptionResult:
     import google.generativeai as genai
+
     from config import settings
 
     try:
         from services.cost_cap import CostCapMiddleware
+
         CostCapMiddleware().check(None, "gemini-flash")
     except Exception as e:
         logger.debug("CostCap check skipped: %s", type(e).__name__)
@@ -165,7 +167,7 @@ def transcribe_voice(
     audio_bytes: bytes,
     mime_type: str = "audio/ogg",
     language_hint: str = "de",
-    tenant_id: Optional[str] = None,
+    tenant_id: str | None = None,
 ) -> TranscriptionResult:
     if not audio_bytes:
         raise TranscriptionError("Keine Audio-Daten")

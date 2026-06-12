@@ -9,6 +9,7 @@ Context vars (set by LoggingMiddleware or Celery signal):
     tenant_id_var   – str UUID of the current tenant, or ""
     correlation_id_var – str UUID for the current request/task
 """
+
 import logging
 import re
 from contextvars import ContextVar
@@ -42,7 +43,7 @@ def _redact(text: str) -> str:
 class SensitiveDataFilter(logging.Filter):
     """Redacts bearer tokens, api keys and passwords from log messages."""
 
-    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+    def filter(self, record: logging.LogRecord) -> bool:
         # Redact the formatted message string
         if isinstance(record.msg, str):
             record.msg = _redact(record.msg)
@@ -50,13 +51,10 @@ class SensitiveDataFilter(logging.Filter):
         if record.args:
             if isinstance(record.args, dict):
                 record.args = {
-                    k: _redact(v) if isinstance(v, str) else v
-                    for k, v in record.args.items()
+                    k: _redact(v) if isinstance(v, str) else v for k, v in record.args.items()
                 }
             elif isinstance(record.args, tuple):
-                record.args = tuple(
-                    _redact(a) if isinstance(a, str) else a for a in record.args
-                )
+                record.args = tuple(_redact(a) if isinstance(a, str) else a for a in record.args)
         return True
 
 
@@ -74,7 +72,9 @@ class ContextJsonFormatter(jsonlogger.JsonFormatter):
     ) -> None:
         super().add_fields(log_record, record, message_dict)
         # Rename standard fields to our schema
-        log_record["timestamp"] = log_record.pop("asctime", record.asctime if hasattr(record, "asctime") else "")
+        log_record["timestamp"] = log_record.pop(
+            "asctime", record.asctime if hasattr(record, "asctime") else ""
+        )
         log_record["level"] = log_record.pop("levelname", record.levelname)
         log_record.setdefault("message", log_record.pop("message", record.getMessage()))
         # Inject context

@@ -7,18 +7,21 @@ Tests (ohne echte DB — reine Logik-Tests):
   test_runaway_detection_top_killers
   test_csv_export
 """
+
 import csv
 import io
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Helper: Fake SQLAlchemy Row
 # ---------------------------------------------------------------------------
 
+
 class _Row:
     """Minimal NamedRow-Ersatz fuer Tests."""
+
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
@@ -43,22 +46,40 @@ def _async_exec_one(row):
 # 1. Cost-Trend Aggregation
 # ---------------------------------------------------------------------------
 
+
 class TestCostTrendAggregation:
     """cost-trend endpoint liefert korrekte Tages-Aggregate."""
 
     def _make_rows(self):
         return [
-            _Row(day="2026-04-28", model="gemini-flash", call_count=10,
-                 total_input_tokens=1000, total_output_tokens=500, total_cost_cents=5.0),
-            _Row(day="2026-04-28", model="claude-haiku", call_count=5,
-                 total_input_tokens=200, total_output_tokens=100, total_cost_cents=2.0),
-            _Row(day="2026-04-29", model="gemini-flash", call_count=20,
-                 total_input_tokens=2000, total_output_tokens=1000, total_cost_cents=10.0),
+            _Row(
+                day="2026-04-28",
+                model="gemini-flash",
+                call_count=10,
+                total_input_tokens=1000,
+                total_output_tokens=500,
+                total_cost_cents=5.0,
+            ),
+            _Row(
+                day="2026-04-28",
+                model="claude-haiku",
+                call_count=5,
+                total_input_tokens=200,
+                total_output_tokens=100,
+                total_cost_cents=2.0,
+            ),
+            _Row(
+                day="2026-04-29",
+                model="gemini-flash",
+                call_count=20,
+                total_input_tokens=2000,
+                total_output_tokens=1000,
+                total_cost_cents=10.0,
+            ),
         ]
 
     @pytest.mark.asyncio
     async def test_aggregates_two_models_same_day(self):
-        import asyncio
         from api.analytics import cost_trend
 
         rows = self._make_rows()
@@ -67,6 +88,7 @@ class TestCostTrendAggregation:
 
         mock_tenant = MagicMock()
         import uuid
+
         mock_tenant.id = uuid.uuid4()
 
         with patch("api.analytics.Depends", side_effect=lambda x: x):
@@ -99,10 +121,14 @@ class TestCostTrendAggregation:
         mock_db.execute = _async_exec([])
         mock_tenant = MagicMock()
         import uuid
+
         mock_tenant.id = uuid.uuid4()
 
         from api.analytics import cost_trend
-        result = await cost_trend(days=30, tenant_id=None, format=None, tenant=mock_tenant, db=mock_db)
+
+        result = await cost_trend(
+            days=30, tenant_id=None, format=None, tenant=mock_tenant, db=mock_db
+        )
 
         assert "deploy_markers" in result
         labels = [m["label"] for m in result["deploy_markers"]]
@@ -113,6 +139,7 @@ class TestCostTrendAggregation:
     @pytest.mark.asyncio
     async def test_tenant_id_mismatch_raises_403(self):
         import uuid
+
         from api.analytics import cost_trend
 
         mock_db = MagicMock()
@@ -122,6 +149,7 @@ class TestCostTrendAggregation:
         other_tenant_id = str(uuid.uuid4())
 
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException) as exc_info:
             await cost_trend(
                 days=30,
@@ -137,17 +165,24 @@ class TestCostTrendAggregation:
 # 2. Cache-Hit-Rate — Division-by-Zero-Safety
 # ---------------------------------------------------------------------------
 
+
 class TestCacheHitRateDivisionSafe:
     """Wenn alle Token-Werte 0 sind → hit_rate is None, kein DivisionByZero."""
 
     @pytest.mark.asyncio
     async def test_all_zeros_returns_none_hit_rate(self):
         import uuid
+
         from api.analytics import cache_hit_rate_endpoint
 
         rows = [
-            _Row(day="2026-04-28", model="gemini-flash",
-                 cache_read_tokens=0, total_input_tokens=0, total_output_tokens=0),
+            _Row(
+                day="2026-04-28",
+                model="gemini-flash",
+                cache_read_tokens=0,
+                total_input_tokens=0,
+                total_output_tokens=0,
+            ),
         ]
         mock_db = MagicMock()
         mock_db.execute = _async_exec(rows)
@@ -163,12 +198,18 @@ class TestCacheHitRateDivisionSafe:
     @pytest.mark.asyncio
     async def test_nonzero_values_correct_rate(self):
         import uuid
+
         from api.analytics import cache_hit_rate_endpoint
 
         # cache_read=100, input=200, output=100 (ignoriert) → total_input=300 → hit_rate = 100/300 = 0.333...
         rows = [
-            _Row(day="2026-04-28", model="gemini-flash",
-                 cache_read_tokens=100, total_input_tokens=200, total_output_tokens=100),
+            _Row(
+                day="2026-04-28",
+                model="gemini-flash",
+                cache_read_tokens=100,
+                total_input_tokens=200,
+                total_output_tokens=100,
+            ),
         ]
         mock_db = MagicMock()
         mock_db.execute = _async_exec(rows)
@@ -185,16 +226,25 @@ class TestCacheHitRateDivisionSafe:
     async def test_alert_false_when_insufficient_data(self):
         """Weniger als 7 Datenpunkte → kein Alert."""
         import uuid
-        from api.analytics import cache_hit_rate_endpoint
 
         # Nur 3 Tage Daten, alle mit 20% Hit-Rate — kein Alert wegen Warmup
         from datetime import datetime, timedelta
+
+        from api.analytics import cache_hit_rate_endpoint
+
         today = datetime.utcnow().date()
         rows = []
         for i in range(3):
             d = str(today - timedelta(days=i))
-            rows.append(_Row(day=d, model="gemini-flash",
-                             cache_read_tokens=20, total_input_tokens=80, total_output_tokens=0))
+            rows.append(
+                _Row(
+                    day=d,
+                    model="gemini-flash",
+                    cache_read_tokens=20,
+                    total_input_tokens=80,
+                    total_output_tokens=0,
+                )
+            )
 
         mock_db = MagicMock()
         mock_db.execute = _async_exec(rows)
@@ -212,20 +262,31 @@ class TestCacheHitRateDivisionSafe:
 # 3. Runaway-Detection — Top-Killers Sortierung
 # ---------------------------------------------------------------------------
 
+
 class TestRunawayDetectionTopKillers:
     """top_killers sortiert korrekt nach total_cost_cents DESC."""
 
     @pytest.mark.asyncio
     async def test_top_killers_sorted_by_cost(self):
         import uuid
+
         from api.analytics import runaway_detection
 
         heatmap_rows: list = []
         killer_rows = [
             # Absichtlich in falscher Reihenfolge — DB ORDER BY wird gemockt, Endpoint gibt so aus
-            _Row(task_name="ideation", model="gemini-flash", total_cost_cents=150.0, total_calls=200),
-            _Row(task_name="transcribe", model="claude-haiku", total_cost_cents=300.0, total_calls=100),
-            _Row(task_name="post_draft", model="gemini-flash", total_cost_cents=75.0, total_calls=500),
+            _Row(
+                task_name="ideation", model="gemini-flash", total_cost_cents=150.0, total_calls=200
+            ),
+            _Row(
+                task_name="transcribe",
+                model="claude-haiku",
+                total_cost_cents=300.0,
+                total_calls=100,
+            ),
+            _Row(
+                task_name="post_draft", model="gemini-flash", total_cost_cents=75.0, total_calls=500
+            ),
         ]
 
         call_count = [0]
@@ -257,6 +318,7 @@ class TestRunawayDetectionTopKillers:
     @pytest.mark.asyncio
     async def test_heatmap_alert_flag_set_when_over_500(self):
         import uuid
+
         from api.analytics import runaway_detection
 
         heatmap_rows = [
@@ -297,17 +359,25 @@ class TestRunawayDetectionTopKillers:
 # 4. CSV-Export
 # ---------------------------------------------------------------------------
 
+
 class TestCsvExport:
     """?format=csv liefert StreamingResponse mit Content-Type text/csv."""
 
     @pytest.mark.asyncio
     async def test_cost_trend_csv_content_type(self):
         import uuid
+
         from api.analytics import cost_trend
 
         rows = [
-            _Row(day="2026-04-28", model="gemini-flash", call_count=5,
-                 total_input_tokens=100, total_output_tokens=50, total_cost_cents=2.5),
+            _Row(
+                day="2026-04-28",
+                model="gemini-flash",
+                call_count=5,
+                total_input_tokens=100,
+                total_output_tokens=50,
+                total_cost_cents=2.5,
+            ),
         ]
         mock_db = MagicMock()
         mock_db.execute = _async_exec(rows)
@@ -324,12 +394,18 @@ class TestCsvExport:
     @pytest.mark.asyncio
     async def test_cost_trend_csv_has_correct_header(self):
         import uuid
+
         from api.analytics import cost_trend
-        from fastapi.responses import StreamingResponse
 
         rows = [
-            _Row(day="2026-04-28", model="gemini-flash", call_count=3,
-                 total_input_tokens=100, total_output_tokens=50, total_cost_cents=1.5),
+            _Row(
+                day="2026-04-28",
+                model="gemini-flash",
+                call_count=3,
+                total_input_tokens=100,
+                total_output_tokens=50,
+                total_cost_cents=1.5,
+            ),
         ]
         mock_db = MagicMock()
         mock_db.execute = _async_exec(rows)
@@ -358,11 +434,17 @@ class TestCsvExport:
     @pytest.mark.asyncio
     async def test_cache_hit_rate_csv(self):
         import uuid
+
         from api.analytics import cache_hit_rate_endpoint
 
         rows = [
-            _Row(day="2026-04-28", model="gemini-flash",
-                 cache_read_tokens=50, total_input_tokens=150, total_output_tokens=100),
+            _Row(
+                day="2026-04-28",
+                model="gemini-flash",
+                cache_read_tokens=50,
+                total_input_tokens=150,
+                total_output_tokens=100,
+            ),
         ]
         mock_db = MagicMock()
         mock_db.execute = _async_exec(rows)
@@ -378,10 +460,13 @@ class TestCsvExport:
     @pytest.mark.asyncio
     async def test_runaway_csv(self):
         import uuid
+
         from api.analytics import runaway_detection
 
         killer_rows = [
-            _Row(task_name="ideation", model="gemini-flash", total_cost_cents=100.0, total_calls=50),
+            _Row(
+                task_name="ideation", model="gemini-flash", total_cost_cents=100.0, total_calls=50
+            ),
         ]
 
         call_count = [0]
@@ -412,6 +497,7 @@ class TestCsvExport:
 # 5. #155 Iteration-2 Fixes
 # ---------------------------------------------------------------------------
 
+
 class TestCacheHitRateWeightedAvg:
     """M5: Gewichteter 7d-Avg — Tage mit wenig Traffic zählen nicht gleich."""
 
@@ -422,6 +508,7 @@ class TestCacheHitRateWeightedAvg:
         """
         import uuid
         from datetime import datetime, timedelta
+
         from api.analytics import cache_hit_rate_endpoint
 
         today = datetime.utcnow().date()
@@ -429,10 +516,20 @@ class TestCacheHitRateWeightedAvg:
         day_b = str(today - timedelta(days=2))  # 1001 Calls, cache_read=100, prompt=900
 
         rows = [
-            _Row(day=day_a, model="gemini-flash",
-                 cache_read_tokens=1, total_input_tokens=0, total_output_tokens=0),
-            _Row(day=day_b, model="gemini-flash",
-                 cache_read_tokens=100, total_input_tokens=900, total_output_tokens=500),
+            _Row(
+                day=day_a,
+                model="gemini-flash",
+                cache_read_tokens=1,
+                total_input_tokens=0,
+                total_output_tokens=0,
+            ),
+            _Row(
+                day=day_b,
+                model="gemini-flash",
+                cache_read_tokens=100,
+                total_input_tokens=900,
+                total_output_tokens=500,
+            ),
         ]
         mock_db = MagicMock()
         mock_db.execute = _async_exec(rows)
@@ -456,7 +553,8 @@ class TestPerTenantCacheAlertTask:
 
     def test_alert_only_for_low_rate_tenant(self):
         """Tenant A: 80% Hit-Rate (kein Alert). Tenant B: 10% Hit-Rate (Alert)."""
-        from unittest.mock import MagicMock, call, patch
+        from unittest.mock import MagicMock, patch
+
         from tasks.cost_alert_task import _check_cache_hit_rate
 
         tenant_a = "tid-aaaa"
@@ -494,8 +592,10 @@ class TestPerTenantCacheAlertTask:
         mock_session.execute.side_effect = fake_execute
         mock_session.commit = MagicMock()
 
-        with patch("tasks.cost_alert_task.logger") as mock_logger, \
-             patch("tasks.cost_alert_task._insert_throttle_event") as mock_audit:
+        with (
+            patch("tasks.cost_alert_task.logger") as mock_logger,
+            patch("tasks.cost_alert_task._insert_throttle_event") as mock_audit,
+        ):
             _check_cache_hit_rate(mock_session)
 
         # Nur 1 Warning (tenant_b)
@@ -510,6 +610,7 @@ class TestPerTenantCacheAlertTask:
     def test_no_alert_when_all_tenants_above_threshold(self):
         """Beide Tenants über 30% — kein Alert."""
         from unittest.mock import MagicMock, patch
+
         from tasks.cost_alert_task import _check_cache_hit_rate
 
         execute_results = []
@@ -536,8 +637,10 @@ class TestPerTenantCacheAlertTask:
         mock_session = MagicMock()
         mock_session.execute.side_effect = fake_execute
 
-        with patch("tasks.cost_alert_task.logger") as mock_logger, \
-             patch("tasks.cost_alert_task._insert_throttle_event") as mock_audit:
+        with (
+            patch("tasks.cost_alert_task.logger") as mock_logger,
+            patch("tasks.cost_alert_task._insert_throttle_event") as mock_audit,
+        ):
             _check_cache_hit_rate(mock_session)
 
         assert mock_logger.warning.call_count == 0
@@ -551,12 +654,19 @@ class TestCsvNoAuthInUrl:
     async def test_cache_hit_rate_csv_no_key_in_url(self):
         """Der CSV-Endpoint darf kein X-API-Key in der URL verarbeiten / zurückgeben."""
         import uuid
-        from api.analytics import cache_hit_rate_endpoint
+
         from fastapi.responses import StreamingResponse
 
+        from api.analytics import cache_hit_rate_endpoint
+
         rows = [
-            _Row(day="2026-04-28", model="gemini-flash",
-                 cache_read_tokens=50, total_input_tokens=150, total_output_tokens=0),
+            _Row(
+                day="2026-04-28",
+                model="gemini-flash",
+                cache_read_tokens=50,
+                total_input_tokens=150,
+                total_output_tokens=0,
+            ),
         ]
         mock_db = MagicMock()
         mock_db.execute = _async_exec(rows)

@@ -1,13 +1,14 @@
 """Tests fuer Schicht-2 deterministisches Routing (Issue #64)."""
+
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
+
 
 def _extraction(intent, flagged=False, flag_reasons=None, routed_to="ok"):
     return SimpleNamespace(
@@ -31,8 +32,8 @@ def _inactive_session(session_id="sess-456"):
 # Tests
 # ---------------------------------------------------------------------------
 
-class TestLayer2Routing:
 
+class TestLayer2Routing:
     def setup_method(self):
         """persist_routing_decision wird in allen Tests gepatcht."""
         self._patcher = patch("services.layer2_routing.persist_routing_decision")
@@ -192,6 +193,8 @@ class TestLayer2Routing:
 
         decision = RoutingDecision(target="reviewer_queue", reason="test")
 
-        with patch("services.layer2_routing.sync_session_factory", side_effect=Exception("DB down")):
+        with patch(
+            "services.layer2_routing.sync_session_factory", side_effect=Exception("DB down")
+        ):
             # Should not raise
             persist_routing_decision("some-log-id", decision)

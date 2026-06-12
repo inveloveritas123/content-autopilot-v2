@@ -1,13 +1,13 @@
 """Tests fuer Random-Smart-Modus Scheduler und Config-Service (Issue #66)."""
-import sys
-import pytest
-from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, patch
 
+import sys
+from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_db_ctx(fetchone_val=None, fetchall_val=None):
     """Build a reusable mock context manager for sync_session_factory."""
@@ -35,13 +35,13 @@ def _make_config_row(
 # _cron_fired_in_window tests
 # ---------------------------------------------------------------------------
 
-class TestCronFiredInWindow:
 
+class TestCronFiredInWindow:
     def test_cron_fired_in_window_true(self):
         """Cron '0 9 * * 1,4' should fire on Monday at 09:03 (local), fallback path."""
         # Monday 09:03 local — weekday() == 0, hour == 9, minute == 3 < 5
         monday_09_03_local = datetime(2026, 4, 27, 9, 3, 0)
-        monday_09_03_utc = datetime(2026, 4, 27, 9, 3, 0, tzinfo=timezone.utc)
+        monday_09_03_utc = datetime(2026, 4, 27, 9, 3, 0, tzinfo=UTC)
 
         with patch("tasks.random_smart_scheduler._CRONITER_AVAILABLE", False):
             with patch("tasks.random_smart_scheduler.datetime") as mock_dt:
@@ -53,7 +53,10 @@ class TestCronFiredInWindow:
                 mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
 
                 from tasks.random_smart_scheduler import _cron_fired_in_window
-                result = _cron_fired_in_window("0 9 * * 1,4", window_minutes=5, timezone_str="Europe/Berlin")
+
+                result = _cron_fired_in_window(
+                    "0 9 * * 1,4", window_minutes=5, timezone_str="Europe/Berlin"
+                )
 
         assert result is True
 
@@ -61,7 +64,7 @@ class TestCronFiredInWindow:
         """Cron '0 9 * * 1,4' should NOT fire on Wednesday at 14:00 (local)."""
         # Wednesday 14:00 local — weekday() == 2, not in (0, 3)
         wednesday_14_00_local = datetime(2026, 4, 29, 14, 0, 0)
-        wednesday_14_00_utc = datetime(2026, 4, 29, 14, 0, 0, tzinfo=timezone.utc)
+        wednesday_14_00_utc = datetime(2026, 4, 29, 14, 0, 0, tzinfo=UTC)
 
         with patch("tasks.random_smart_scheduler._CRONITER_AVAILABLE", False):
             with patch("tasks.random_smart_scheduler.datetime") as mock_dt:
@@ -71,7 +74,10 @@ class TestCronFiredInWindow:
                 mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
 
                 from tasks.random_smart_scheduler import _cron_fired_in_window
-                result = _cron_fired_in_window("0 9 * * 1,4", window_minutes=5, timezone_str="Europe/Berlin")
+
+                result = _cron_fired_in_window(
+                    "0 9 * * 1,4", window_minutes=5, timezone_str="Europe/Berlin"
+                )
 
         assert result is False
 
@@ -79,7 +85,7 @@ class TestCronFiredInWindow:
         """No trigger before 08:00 operating hours (07:30 local)."""
         # Monday 07:30 local — hour == 7, below operating hours
         monday_07_30_local = datetime(2026, 4, 27, 7, 30, 0)
-        monday_07_30_utc = datetime(2026, 4, 27, 7, 30, 0, tzinfo=timezone.utc)
+        monday_07_30_utc = datetime(2026, 4, 27, 7, 30, 0, tzinfo=UTC)
 
         with patch("tasks.random_smart_scheduler._CRONITER_AVAILABLE", False):
             with patch("tasks.random_smart_scheduler.datetime") as mock_dt:
@@ -89,7 +95,10 @@ class TestCronFiredInWindow:
                 mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
 
                 from tasks.random_smart_scheduler import _cron_fired_in_window
-                result = _cron_fired_in_window("0 9 * * 1,4", window_minutes=5, timezone_str="Europe/Berlin")
+
+                result = _cron_fired_in_window(
+                    "0 9 * * 1,4", window_minutes=5, timezone_str="Europe/Berlin"
+                )
 
         assert result is False
 
@@ -98,19 +107,20 @@ class TestCronFiredInWindow:
 # check_random_smart_triggers tests
 # ---------------------------------------------------------------------------
 
-class TestCheckRandomSmartTriggers:
 
+class TestCheckRandomSmartTriggers:
     @patch("tasks.random_smart_scheduler.sync_session_factory")
     @patch("tasks.random_smart_scheduler._cron_fired_in_window", return_value=False)
     def test_paused_tenant_not_triggered(self, mock_cron, mock_db_factory):
         """A tenant with paused_until in the future is skipped."""
-        future = datetime.now(timezone.utc) + timedelta(days=30)
+        future = datetime.now(UTC) + timedelta(days=30)
         config_row = _make_config_row(paused_until=future)
 
         ctx = _make_db_ctx(fetchall_val=[config_row])
         mock_db_factory.return_value = ctx
 
         from tasks.random_smart_scheduler import check_random_smart_triggers
+
         result = check_random_smart_triggers()
 
         assert result["triggered"] == 0
@@ -131,6 +141,7 @@ class TestCheckRandomSmartTriggers:
         mock_db_factory.side_effect = [list_ctx, active_ctx]
 
         from tasks.random_smart_scheduler import check_random_smart_triggers
+
         result = check_random_smart_triggers()
 
         assert result["triggered"] == 0
@@ -151,6 +162,7 @@ class TestCheckRandomSmartTriggers:
         p08_module_mock.p08_opener = MagicMock(return_value=opener_result)
 
         import tasks.random_smart_scheduler as rsmod
+
         with patch.dict(sys.modules, {"services.p08_service": p08_module_mock}):
             with patch.object(rsmod, "_send_opening_question"):
                 result = rsmod.check_random_smart_triggers()
@@ -167,6 +179,7 @@ class TestCheckRandomSmartTriggers:
         mock_db_factory.return_value = list_ctx
 
         from tasks.random_smart_scheduler import check_random_smart_triggers
+
         result = check_random_smart_triggers()
 
         assert result["triggered"] == 0
@@ -177,8 +190,8 @@ class TestCheckRandomSmartTriggers:
 # random_smart_config service tests
 # ---------------------------------------------------------------------------
 
-class TestRandomSmartConfig:
 
+class TestRandomSmartConfig:
     @patch("services.random_smart_config.sync_session_factory")
     def test_pause_sets_paused_until_90_days(self, mock_db_factory):
         """pause_random_smart inserts/updates paused_until ~90 days from now."""
@@ -186,6 +199,7 @@ class TestRandomSmartConfig:
         mock_db_factory.return_value = ctx
 
         from services.random_smart_config import pause_random_smart
+
         pause_random_smart("tenant-1", days=90)
 
         ctx.execute.assert_called_once()
@@ -194,7 +208,7 @@ class TestRandomSmartConfig:
         params = ctx.execute.call_args[0][1]
         assert "pu" in params
         pu = params["pu"]
-        expected_min = datetime.now(timezone.utc) + timedelta(days=89)
+        expected_min = datetime.now(UTC) + timedelta(days=89)
         assert pu > expected_min
 
     @patch("services.random_smart_config.sync_session_factory")
@@ -204,6 +218,7 @@ class TestRandomSmartConfig:
         mock_db_factory.return_value = ctx
 
         from services.random_smart_config import resume_random_smart
+
         resume_random_smart("tenant-1")
 
         ctx.execute.assert_called_once()
@@ -219,6 +234,7 @@ class TestRandomSmartConfig:
         mock_db_factory.return_value = ctx
 
         from services.random_smart_config import set_schedule_2_weeks
+
         set_schedule_2_weeks("tenant-1")
 
         ctx.execute.assert_called_once()
@@ -234,6 +250,7 @@ class TestRandomSmartConfig:
         mock_db_factory.return_value = ctx
 
         from services.random_smart_config import get_bot_config
+
         config = get_bot_config("tenant-unknown")
 
         assert config["random_smart_enabled"] is True
@@ -244,7 +261,7 @@ class TestRandomSmartConfig:
     @patch("services.random_smart_config.sync_session_factory")
     def test_get_bot_config_returns_db_values(self, mock_db_factory):
         """get_bot_config returns actual DB values when row exists."""
-        future = datetime(2026, 9, 1, 9, 0, 0, tzinfo=timezone.utc)
+        future = datetime(2026, 9, 1, 9, 0, 0, tzinfo=UTC)
         row = MagicMock()
         row.__getitem__ = lambda self, i: (False, "0 9 1,15 * *", future, "America/New_York")[i]
 
@@ -252,6 +269,7 @@ class TestRandomSmartConfig:
         mock_db_factory.return_value = ctx
 
         from services.random_smart_config import get_bot_config
+
         config = get_bot_config("tenant-1")
 
         assert config["random_smart_enabled"] is False

@@ -16,6 +16,7 @@ Workflow:
 12. Audit-Update: setup_pipeline_run → 'done'
 13. Return dict
 """
+
 """
 Umgestellt: 2026-06-11 (P5-anthropic-provider.md)
   - anthropic-SDK-Bypass entfernt (ANTHROPIC_MODEL_ID / ANTHROPIC_PRICING_KEY entfernt)
@@ -34,10 +35,14 @@ import uuid
 import jsonschema
 from sqlalchemy import text
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
+from services.pipeline_llm import (
+    call_pipeline_llm,
+    estimate_tier_cost,
+    resolve_tier,
+)
 from services.prompt_loader import get_default_prompt_loader
-from services.pipeline_llm import call_pipeline_llm, resolve_tier, estimate_tier_cost, BudgetExceededError
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +53,9 @@ _SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "..", "schemas", "p12_out
 # Schema
 # ---------------------------------------------------------------------------
 
+
 def _load_schema() -> dict:
-    with open(os.path.normpath(_SCHEMA_PATH), "r", encoding="utf-8") as f:
+    with open(os.path.normpath(_SCHEMA_PATH), encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -60,17 +66,19 @@ _P12_SCHEMA = _load_schema()
 # Pruning-Konstanten — zentral + kanonisch-korrekt (Wortschatz-Bugfix 2026-06-12)
 # ---------------------------------------------------------------------------
 
-from tasks.p12_pruning import (  # noqa: E402
-    VOICE_KEYS_FOR_P12,
-    CONTEXT_KEYS_FOR_P12,
+from tasks.p12_pruning import (
     AVATAR_KEYS_FOR_P12,
+    CONTEXT_KEYS_FOR_P12,
+    VOICE_KEYS_FOR_P12,
+)
+from tasks.p12_pruning import (
     prune as _prune_keys,
 )
-
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
+
 
 def _load_active_profiles(tenant_id: str) -> tuple[dict, dict, dict]:
     """Lädt die aktiven Profile aus den 3 Setup-Tabellen über die Lese-Fassade.
@@ -91,7 +99,8 @@ def _load_active_profiles(tenant_id: str) -> tuple[dict, dict, dict]:
             logger.warning(
                 "p12 tenant=%s: aktives %s ist NICHT kanonisch (Alt-v2-Row) "
                 "→ Re-Run von P0x empfohlen, Voice-Qualität eingeschränkt",
-                tenant_id, ptype,
+                tenant_id,
+                ptype,
             )
 
     logger.debug(
@@ -146,6 +155,7 @@ async def _run_cost_check(tenant_id: str, estimated_cost: float) -> None:
     """Async Cost-Cap-Check — via asyncio.run() aus Celery aufgerufen."""
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker as async_sm
+
     from config import settings
     from services.cost_cap import CostCapMiddleware
 
@@ -163,6 +173,7 @@ async def _record_actual_cost(tenant_id: str, actual_cost: float) -> None:
     """Schreibt die tatsächlichen Kosten nach erfolgreichem Anthropic-Call."""
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker as async_sm
+
     from config import settings
     from services.cost_cap import CostCapMiddleware
 
@@ -179,6 +190,7 @@ async def _record_actual_cost(tenant_id: str, actual_cost: float) -> None:
 # ---------------------------------------------------------------------------
 # Celery Task
 # ---------------------------------------------------------------------------
+
 
 @celery_app.task(name="tasks.p12_task.run_p12", bind=True, max_retries=2)
 def run_p12(
@@ -198,7 +210,8 @@ def run_p12(
         {"run_id": str, "status": "done"|"paused_for_cost"|"failed",
          "p12_run_id": str, "output": dict}
     """
-    from services.kill_switch import check_kill_switch, KillSwitchTriggered
+    from services.kill_switch import KillSwitchTriggered, check_kill_switch
+
     try:
         check_kill_switch(tenant_id)
     except KillSwitchTriggered:
@@ -225,7 +238,9 @@ def run_p12(
             logger.error("p12 run_id=%s: failed to create setup_pipeline_run: %s", run_id, exc)
             raise
 
-    logger.info("p12 run_id=%s tenant=%s idea_id=%s: pipeline run created", run_id, tenant_id, idea_id)
+    logger.info(
+        "p12 run_id=%s tenant=%s idea_id=%s: pipeline run created", run_id, tenant_id, idea_id
+    )
 
     t_start = time.monotonic()
 
@@ -304,12 +319,14 @@ def run_p12(
                     {"tid": tenant_id},
                 ).fetchall()
                 for hr in _hook_rows:
-                    hook_inspirations.append({
-                        "id": str(hr.id),
-                        "hook_text": hr.hook_text,
-                        "type": hr.hook_type,
-                        "performance": float(hr.performance_score or 0),
-                    })
+                    hook_inspirations.append(
+                        {
+                            "id": str(hr.id),
+                            "hook_text": hr.hook_text,
+                            "type": hr.hook_type,
+                            "performance": float(hr.performance_score or 0),
+                        }
+                    )
         except Exception:
             pass  # Fail-safe: ohne Hook-Library generieren
 
@@ -323,9 +340,7 @@ def run_p12(
         if hook_inspirations:
             context_payload["hook_inspirations"] = hook_inspirations
         context_json_str = json.dumps(context_payload, ensure_ascii=False)
-        user_prompt = loaded.user_prompt_template.replace(
-            "{context_json}", context_json_str
-        )
+        user_prompt = loaded.user_prompt_template.replace("{context_json}", context_json_str)
 
         # ------------------------------------------------------------------
         # 7. LLM-Call über den Seam (kein direkter SDK-Aufruf)
@@ -402,16 +417,16 @@ def run_p12(
         # Migration nötig: ALTER TABLE content_pieces ALTER COLUMN
         # source_item_id DROP NOT NULL;
         # idea_id ist bereits als nullable FK auf content_ideas definiert.
-        output_hash = hashlib.sha256(
-            json.dumps(output_json, sort_keys=True).encode()
-        ).hexdigest()
+        output_hash = hashlib.sha256(json.dumps(output_json, sort_keys=True).encode()).hexdigest()
 
         # #145 Phase 4.1: Kategorie aus LLM-Output validieren (NULL bei Drift)
         _ALLOWED_CATEGORIES = {"news", "persoenlich", "trust", "praxis"}
         _raw_cat = (output_json.get("kategorie") or "").strip().lower()
         category = _raw_cat if _raw_cat in _ALLOWED_CATEGORIES else None
         if _raw_cat and category is None:
-            logger.warning("p12 run_id=%s: ungültige LLM-Kategorie '%s' — auf NULL gesetzt", run_id, _raw_cat)
+            logger.warning(
+                "p12 run_id=%s: ungültige LLM-Kategorie '%s' — auf NULL gesetzt", run_id, _raw_cat
+            )
 
         content_piece_id = str(uuid.uuid4())
         with sync_session_factory() as session:
@@ -435,7 +450,9 @@ def run_p12(
                                 "alternative_opener": output_json.get("alternative_opener", []),
                                 "design_notizen": output_json.get("design_notizen", ""),
                                 "ki_signal_check": output_json.get("ki_signal_check", {}),
-                                "potenzielle_schwaechen": output_json.get("potenzielle_schwaechen", []),
+                                "potenzielle_schwaechen": output_json.get(
+                                    "potenzielle_schwaechen", []
+                                ),
                                 "kategorie_raw": _raw_cat,
                                 "inspired_by_hook_id": output_json.get("inspired_by_hook_id"),
                                 "output_hash": output_hash,
@@ -476,7 +493,9 @@ def run_p12(
         try:
             asyncio.run(_record_actual_cost(tenant_id, actual_cost))
         except Exception as cost_err:
-            logger.warning("p12 run_id=%s: actual-cost recording fehlgeschlagen: %s", run_id, cost_err)
+            logger.warning(
+                "p12 run_id=%s: actual-cost recording fehlgeschlagen: %s", run_id, cost_err
+            )
 
         # ------------------------------------------------------------------
         # 12. Audit-Update: setup_pipeline_run → 'done'
@@ -532,10 +551,12 @@ def run_p12(
             "output": output_json,
         }
 
-    except BudgetExceededError as exc:
+    except BudgetExceededError:
         # BUG-1-Fix: Router-Budget überschritten (HTTP 412) → paused_for_cost, kein Retry
         duration_ms = int((time.monotonic() - t_start) * 1000)
-        logger.warning("p12 run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id)
+        logger.warning(
+            "p12 run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id
+        )
         try:
             with sync_session_factory() as session:
                 session.execute(
@@ -549,7 +570,11 @@ def run_p12(
                 )
                 session.commit()
         except Exception as audit_exc:
-            logger.error("p12 run_id=%s: audit update (paused_for_cost) fehlgeschlagen: %s", run_id, audit_exc)
+            logger.error(
+                "p12 run_id=%s: audit update (paused_for_cost) fehlgeschlagen: %s",
+                run_id,
+                audit_exc,
+            )
         return {"run_id": run_id, "status": "paused_for_cost"}
 
     except Exception as exc:
@@ -577,6 +602,8 @@ def run_p12(
                 )
                 session.commit()
         except Exception as audit_exc:
-            logger.error("p12 run_id=%s: Fehler beim Audit-Update auf 'failed': %s", run_id, audit_exc)
+            logger.error(
+                "p12 run_id=%s: Fehler beim Audit-Update auf 'failed': %s", run_id, audit_exc
+            )
 
         raise self.retry(exc=exc, countdown=30)

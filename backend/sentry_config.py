@@ -5,8 +5,9 @@ Disabled when SENTRY_DSN is empty (default for dev/local).
 Tags: tenant_id, stage, environment.
 before_send: strips bearer tokens, api keys, passwords from event data.
 """
-import re
+
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -57,16 +58,16 @@ def init_sentry() -> None:
 
     try:
         import sentry_sdk
-        from sentry_sdk.integrations.fastapi import FastApiIntegration
-        from sentry_sdk.integrations.starlette import StarletteIntegration
         from sentry_sdk.integrations.celery import CeleryIntegration
-        from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
         from sentry_sdk.integrations.logging import LoggingIntegration
+        from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
 
         sentry_sdk.init(
             dsn=settings.sentry_dsn,
             environment=settings.app_env,
-            traces_sample_rate=0.1,   # 10% performance traces
+            traces_sample_rate=0.1,  # 10% performance traces
             profiles_sample_rate=0.0,
             before_send=_redact_event,
             integrations=[
@@ -75,7 +76,7 @@ def init_sentry() -> None:
                 CeleryIntegration(monitor_beat_tasks=False),
                 SqlalchemyIntegration(),
                 LoggingIntegration(
-                    level=logging.ERROR,      # capture ERROR+ as breadcrumbs
+                    level=logging.ERROR,  # capture ERROR+ as breadcrumbs
                     event_level=logging.ERROR,  # send ERROR+ as Sentry events
                 ),
             ],

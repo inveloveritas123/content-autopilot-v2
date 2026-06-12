@@ -1,15 +1,16 @@
-import logging
 import asyncio
+import contextlib
+import logging
 from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from models.source_item import SourceItem
-from services.youtube_views import scrape_view_count, scrape_video_metadata
 from services.keyword_extractor import extract_keywords
+from services.youtube_views import scrape_video_metadata
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -18,19 +19,21 @@ logger = logging.getLogger(__name__)
 def update_all_views():
     """Update view counts for recent items (last 100 by created_at)."""
     with sync_session_factory() as session:
-        items = session.execute(
-            select(SourceItem)
-            .where(SourceItem.status != "published")
-            .order_by(SourceItem.created_at.desc())
-            .limit(100)
-        ).scalars().all()
+        items = (
+            session.execute(
+                select(SourceItem)
+                .where(SourceItem.status != "published")
+                .order_by(SourceItem.created_at.desc())
+                .limit(100)
+            )
+            .scalars()
+            .all()
+        )
 
         updated = 0
         for item in items:
             try:
-                meta = asyncio.run(
-                    scrape_video_metadata(item.external_id)
-                )
+                meta = asyncio.run(scrape_video_metadata(item.external_id))
                 if not meta:
                     continue
 
@@ -59,10 +62,8 @@ def update_all_views():
 
                 # Fill in published_at if missing
                 if not item.published_at and meta.get("publish_date"):
-                    try:
+                    with contextlib.suppress(ValueError):
                         item.published_at = datetime.strptime(meta["publish_date"], "%Y-%m-%d")
-                    except ValueError:
-                        pass
 
                 # Extract keywords if missing
                 if not item.keywords:
@@ -93,9 +94,7 @@ def update_single_item_views(item_id: str):
         if not item:
             return
 
-        meta = asyncio.run(
-            scrape_video_metadata(item.external_id)
-        )
+        meta = asyncio.run(scrape_video_metadata(item.external_id))
         if not meta:
             return
 
@@ -112,10 +111,8 @@ def update_single_item_views(item_id: str):
         if not item.channel_name and meta.get("channel_name"):
             item.channel_name = meta["channel_name"]
         if not item.published_at and meta.get("publish_date"):
-            try:
+            with contextlib.suppress(ValueError):
                 item.published_at = datetime.strptime(meta["publish_date"], "%Y-%m-%d")
-            except ValueError:
-                pass
         if not item.keywords:
             item.keywords = extract_keywords(item.title or "", item.description or "")
             flag_modified(item, "keywords")

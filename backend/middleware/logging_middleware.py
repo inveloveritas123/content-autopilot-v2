@@ -2,6 +2,7 @@
 FastAPI middleware that sets correlation_id and tenant_id context vars
 for every incoming request, so all log lines within that request carry them.
 """
+
 import logging
 import uuid
 

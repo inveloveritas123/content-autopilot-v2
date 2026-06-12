@@ -11,13 +11,13 @@ Workflow:
 2. POST /api/me/data-deletion/{id}/recover (innerhalb 30 Tagen) → restore
 3. Nightly cron `tasks.deletion_purge_task.purge_expired` → hard-delete
 """
+
 from __future__ import annotations
 
 import datetime
 import json
 import logging
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -120,10 +120,10 @@ _RECOVER_TABLES: dict[str, str] = {
 
 class DeletionRequest(BaseModel):
     mode: str = Field(..., description="full | memory_selective | telegram_purge | audit_selective")
-    older_than_days: Optional[int] = Field(None, ge=0, le=3650)
-    classification: Optional[str] = Field(None, description="für memory_selective")
-    record_ids: Optional[list[str]] = Field(None, description="für audit_selective")
-    notes: Optional[str] = Field(None, max_length=1000)
+    older_than_days: int | None = Field(None, ge=0, le=3650)
+    classification: str | None = Field(None, description="für memory_selective")
+    record_ids: list[str] | None = Field(None, description="für audit_selective")
+    notes: str | None = Field(None, max_length=1000)
 
 
 async def _soft_delete_memory(
@@ -150,9 +150,7 @@ async def _soft_delete_memory(
     return result.rowcount or 0
 
 
-async def _soft_delete_telegram(
-    db: AsyncSession, tenant_id, older_than_days, req_id
-) -> dict:
+async def _soft_delete_telegram(db: AsyncSession, tenant_id, older_than_days, req_id) -> dict:
     counts: dict = {}
     where = [
         "tenant_id = :tid",
@@ -188,9 +186,7 @@ async def _soft_delete_telegram(
     return counts
 
 
-async def _soft_delete_audit(
-    db: AsyncSession, tenant_id, record_ids, req_id
-) -> dict:
+async def _soft_delete_audit(db: AsyncSession, tenant_id, record_ids, req_id) -> dict:
     counts: dict = {"content_pieces": 0, "content_ideas": 0, "source_items": 0}
     if not record_ids:
         return counts
@@ -205,9 +201,7 @@ async def _soft_delete_audit(
     return counts
 
 
-async def _soft_delete_full(
-    db: AsyncSession, tenant_id, tenant_name, req_id
-) -> dict:
+async def _soft_delete_full(db: AsyncSession, tenant_id, tenant_name, req_id) -> dict:
     """Critical #2 + #4: Schreibt deletion_request_id in alle Soft-Delete-Tabellen."""
     counts: dict = {}
     for table, stmt in _SOFT_DELETE_TABLES.items():
@@ -252,13 +246,9 @@ async def request_deletion(
         )
         affected = {"memory_chunks": n}
     elif payload.mode == "telegram_purge":
-        affected = await _soft_delete_telegram(
-            db, tenant.id, payload.older_than_days, req_id
-        )
+        affected = await _soft_delete_telegram(db, tenant.id, payload.older_than_days, req_id)
     elif payload.mode == "audit_selective":
-        affected = await _soft_delete_audit(
-            db, tenant.id, payload.record_ids or [], req_id
-        )
+        affected = await _soft_delete_audit(db, tenant.id, payload.record_ids or [], req_id)
 
     await db.execute(
         text("""
@@ -276,11 +266,13 @@ async def request_deletion(
             "tid": tenant.id,
             "tname": tenant.name,
             "mode": payload.mode,
-            "pf": json.dumps({
-                "older_than_days": payload.older_than_days,
-                "classification": payload.classification,
-                "record_ids": payload.record_ids,
-            }),
+            "pf": json.dumps(
+                {
+                    "older_than_days": payload.older_than_days,
+                    "classification": payload.classification,
+                    "record_ids": payload.record_ids,
+                }
+            ),
             "aff": json.dumps(affected),
             "now": now,
             "ru": recovery_until,
@@ -305,29 +297,34 @@ async def list_deletions(
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    rows = (await db.execute(
-        text("""
+    rows = (
+        await db.execute(
+            text("""
             SELECT id, mode, status, affected_records, requested_at,
                    recovery_until, soft_deleted_at, hard_deleted_at, recovered_at, notes
             FROM deletion_requests
             WHERE tenant_id = :tid
             ORDER BY requested_at DESC LIMIT 50
         """),
-        {"tid": tenant.id},
-    )).fetchall()
+            {"tid": tenant.id},
+        )
+    ).fetchall()
     return {
-        "history": [{
-            "id": str(r.id),
-            "mode": r.mode,
-            "status": r.status,
-            "affected": r.affected_records,
-            "requested_at": r.requested_at.isoformat() if r.requested_at else None,
-            "recovery_until": r.recovery_until.isoformat() if r.recovery_until else None,
-            "soft_deleted_at": r.soft_deleted_at.isoformat() if r.soft_deleted_at else None,
-            "hard_deleted_at": r.hard_deleted_at.isoformat() if r.hard_deleted_at else None,
-            "recovered_at": r.recovered_at.isoformat() if r.recovered_at else None,
-            "notes": r.notes,
-        } for r in rows]
+        "history": [
+            {
+                "id": str(r.id),
+                "mode": r.mode,
+                "status": r.status,
+                "affected": r.affected_records,
+                "requested_at": r.requested_at.isoformat() if r.requested_at else None,
+                "recovery_until": r.recovery_until.isoformat() if r.recovery_until else None,
+                "soft_deleted_at": r.soft_deleted_at.isoformat() if r.soft_deleted_at else None,
+                "hard_deleted_at": r.hard_deleted_at.isoformat() if r.hard_deleted_at else None,
+                "recovered_at": r.recovered_at.isoformat() if r.recovered_at else None,
+                "notes": r.notes,
+            }
+            for r in rows
+        ]
     }
 
 
@@ -337,19 +334,21 @@ async def recover_deletion(
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    row = (await db.execute(
-        text("""
+    row = (
+        await db.execute(
+            text("""
             SELECT id, mode, status, recovery_until, affected_records
             FROM deletion_requests
             WHERE id = :id AND tenant_id = :tid
         """),
-        {"id": req_id, "tid": tenant.id},
-    )).fetchone()
+            {"id": req_id, "tid": tenant.id},
+        )
+    ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="deletion request not found")
     if row.status != "soft_deleted":
         raise HTTPException(status_code=409, detail=f"cannot recover: status={row.status}")
-    if row.recovery_until and row.recovery_until < datetime.datetime.now(datetime.timezone.utc):
+    if row.recovery_until and row.recovery_until < datetime.datetime.now(datetime.UTC):
         raise HTTPException(status_code=410, detail="recovery period expired")
 
     affected: dict = row.affected_records or {}
@@ -392,15 +391,17 @@ async def get_deletion(
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    row = (await db.execute(
-        text("""
+    row = (
+        await db.execute(
+            text("""
             SELECT id, mode, status, affected_records, requested_at,
                    recovery_until, soft_deleted_at, hard_deleted_at, recovered_at, notes
             FROM deletion_requests
             WHERE id = :id AND tenant_id = :tid
         """),
-        {"id": req_id, "tid": tenant.id},
-    )).fetchone()
+            {"id": req_id, "tid": tenant.id},
+        )
+    ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="deletion request not found")
     return {

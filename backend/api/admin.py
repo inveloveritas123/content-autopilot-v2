@@ -1,14 +1,14 @@
 """Admin API — Model management + Backtest"""
+
 import hashlib
 import json
 import os
 import secrets
 import uuid
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header
-from sqlalchemy import text
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import text
 
 from dependencies import get_db
 from models.content_piece import ContentPiece
@@ -20,6 +20,7 @@ _ADMIN_TOKEN_FILE = "/app/data/.admin_token_hash"
 
 if _ADMIN_TOKEN_ENV == "admin_backtest_2026":
     import logging as _logging
+
     _logging.getLogger(__name__).warning(
         "[Admin] ADMIN_TOKEN ist auf Standardwert gesetzt — "
         "bitte ADMIN_TOKEN in .env setzen oder /api/admin/admin-token/rotate aufrufen!"
@@ -30,7 +31,7 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def _get_file_token_hash() -> Optional[str]:
+def _get_file_token_hash() -> str | None:
     """Return stored token hash from file, or None if not set."""
     try:
         with open(_ADMIN_TOKEN_FILE) as f:
@@ -55,19 +56,21 @@ def require_admin(x_admin_token: str = Header(None)):
 class BacktestStartRequest(BaseModel):
     tenant_id: str
     candidate_model_id: str  # e.g. "anthropic/claude-opus-4-6-20251022"
-    post_count: int = 10     # How many recent approved posts to test
+    post_count: int = 10  # How many recent approved posts to test
 
 
 class TenantNotifyRequest(BaseModel):
     tenant_id: str
     backtest_run_id: str
-    message: Optional[str] = None
+    message: str | None = None
 
 
 @router.get("/models", dependencies=[Depends(require_admin)])
 async def list_models(db=Depends(get_db)):
     rows = await db.execute(
-        text("SELECT id, provider, model_id, display_name, first_seen_at, deprecated_at FROM models_available ORDER BY first_seen_at DESC")
+        text(
+            "SELECT id, provider, model_id, display_name, first_seen_at, deprecated_at FROM models_available ORDER BY first_seen_at DESC"
+        )
     )
     return {"models": [dict(r._mapping) for r in rows.fetchall()]}
 
@@ -80,7 +83,7 @@ async def start_backtest(req: BacktestStartRequest, db=Depends(get_db)):
                 WHERE tenant_id = :tid AND status = 'approved'
                 ORDER BY approved_at DESC NULLS LAST, created_at DESC
                 LIMIT :n"""),
-        {"tid": req.tenant_id, "n": req.post_count}
+        {"tid": req.tenant_id, "n": req.post_count},
     )
     post_ids = [str(r[0]) for r in rows.fetchall()]
     if not post_ids:
@@ -90,16 +93,20 @@ async def start_backtest(req: BacktestStartRequest, db=Depends(get_db)):
     await db.execute(
         text("""INSERT INTO backtest_runs (id, tenant_id, candidate_model_id, post_ids, status)
                 VALUES (:id, :tid, :cand, :posts, 'pending')"""),
-        {"id": run_id, "tid": req.tenant_id, "cand": req.candidate_model_id,
-         "posts": json.dumps(post_ids)}
+        {
+            "id": run_id,
+            "tid": req.tenant_id,
+            "cand": req.candidate_model_id,
+            "posts": json.dumps(post_ids),
+        },
     )
     await db.commit()
 
     # Trigger async backtest
     from tasks.backtest_task import run_backtest
+
     run_backtest.apply_async(
-        args=[run_id, req.tenant_id, "current", req.candidate_model_id, post_ids],
-        queue="default"
+        args=[run_id, req.tenant_id, "current", req.candidate_model_id, post_ids], queue="default"
     )
 
     return {"backtest_run_id": run_id, "post_count": len(post_ids)}
@@ -108,8 +115,10 @@ async def start_backtest(req: BacktestStartRequest, db=Depends(get_db)):
 @router.get("/models/backtest/{run_id}", dependencies=[Depends(require_admin)])
 async def get_backtest(run_id: str, db=Depends(get_db)):
     row = await db.execute(
-        text("SELECT id, tenant_id, candidate_model_id, status, results, summary, created_at, finished_at FROM backtest_runs WHERE id = :id"),
-        {"id": run_id}
+        text(
+            "SELECT id, tenant_id, candidate_model_id, status, results, summary, created_at, finished_at FROM backtest_runs WHERE id = :id"
+        ),
+        {"id": run_id},
     )
     r = row.fetchone()
     if not r:
@@ -126,7 +135,7 @@ async def notify_tenant_model(req: TenantNotifyRequest, db=Depends(get_db)):
     # Load backtest summary for message
     row = await db.execute(
         text("SELECT summary, candidate_model_id FROM backtest_runs WHERE id = :id"),
-        {"id": req.backtest_run_id}
+        {"id": req.backtest_run_id},
     )
     bt = row.fetchone()
     if not bt:
@@ -146,6 +155,7 @@ async def notify_tenant_model(req: TenantNotifyRequest, db=Depends(get_db)):
 
     # Telegram-Stub: log + mark in DB
     import logging
+
     logging.getLogger(__name__).info(f"[TenantNotify] tenant={req.tenant_id} msg={message}")
 
     # Mark notification as pending in tenant settings
@@ -157,8 +167,12 @@ async def notify_tenant_model(req: TenantNotifyRequest, db=Depends(get_db)):
                     CAST(:val AS jsonb)
                 )
                 WHERE id = :tid"""),
-        {"val": json.dumps({"backtest_run_id": req.backtest_run_id, "model": model, "message": message}),
-         "tid": req.tenant_id}
+        {
+            "val": json.dumps(
+                {"backtest_run_id": req.backtest_run_id, "model": model, "message": message}
+            ),
+            "tid": req.tenant_id,
+        },
     )
     await db.commit()
 
@@ -173,7 +187,9 @@ class ForcePublishRequest(BaseModel):
 @router.post("/content/force-publish", dependencies=[Depends(require_admin)])
 async def force_publish_content(req: ForcePublishRequest, db=Depends(get_db)):
     """Admin override: publish post without normal approval flow. Logged as admin_override."""
-    import datetime, uuid as _uuid
+    import datetime
+    import uuid as _uuid
+
     piece = await db.get(ContentPiece, _uuid.UUID(req.content_piece_id))
     if not piece:
         raise HTTPException(404, "Content piece not found")
@@ -187,13 +203,25 @@ async def force_publish_content(req: ForcePublishRequest, db=Depends(get_db)):
     await db.execute(
         text("""INSERT INTO setup_pipeline_run (id, tenant_id, stage, status, error_meta, created_at)
                 VALUES (:id, :tid, 'admin_override_publish', 'published', :meta, NOW())"""),
-        {"id": str(_uuid.uuid4()), "tid": str(piece.tenant_id),
-         "meta": json.dumps({"content_piece_id": req.content_piece_id, "reason": req.reason, "by": "admin"})}
+        {
+            "id": str(_uuid.uuid4()),
+            "tid": str(piece.tenant_id),
+            "meta": json.dumps(
+                {"content_piece_id": req.content_piece_id, "reason": req.reason, "by": "admin"}
+            ),
+        },
     )
     await db.commit()
     import logging as _log
-    _log.getLogger(__name__).info(f"[AdminOverride] force-publish content_piece={req.content_piece_id} reason={req.reason!r}")
-    return {"status": "published", "content_piece_id": req.content_piece_id, "approval_method": "admin_override"}
+
+    _log.getLogger(__name__).info(
+        f"[AdminOverride] force-publish content_piece={req.content_piece_id} reason={req.reason!r}"
+    )
+    return {
+        "status": "published",
+        "content_piece_id": req.content_piece_id,
+        "approval_method": "admin_override",
+    }
 
 
 class TenantDisableRequest(BaseModel):
@@ -203,7 +231,10 @@ class TenantDisableRequest(BaseModel):
 @router.post("/tenants/{tenant_id}/disable", dependencies=[Depends(require_admin)])
 async def disable_tenant(tenant_id: str, req: TenantDisableRequest, db=Depends(get_db)):
     import datetime
-    row = await db.execute(text("SELECT id FROM tenants WHERE id = :id OR api_key = :id"), {"id": tenant_id})
+
+    row = await db.execute(
+        text("SELECT id FROM tenants WHERE id = :id OR api_key = :id"), {"id": tenant_id}
+    )
     t = row.fetchone()
     if not t:
         raise HTTPException(404, "Tenant not found")
@@ -213,13 +244,16 @@ async def disable_tenant(tenant_id: str, req: TenantDisableRequest, db=Depends(g
     await db.execute(
         text("""UPDATE tenants SET enabled=false, disabled_at=:at,
                 disabled_by='admin', disabled_reason=:reason WHERE id=:id"""),
-        {"at": now, "reason": req.reason, "id": actual_id}
+        {"at": now, "reason": req.reason, "id": actual_id},
     )
     await db.execute(
         text("""INSERT INTO setup_pipeline_run (id, tenant_id, stage, status, error_meta, created_at)
                 VALUES (:id, :tid, 'kill_switch', 'disabled', :meta, NOW())"""),
-        {"id": str(uuid.uuid4()), "tid": actual_id,
-         "meta": json.dumps({"action": "disable", "reason": req.reason, "by": "admin"})}
+        {
+            "id": str(uuid.uuid4()),
+            "tid": actual_id,
+            "meta": json.dumps({"action": "disable", "reason": req.reason, "by": "admin"}),
+        },
     )
     await db.commit()
     return {"status": "disabled", "tenant_id": actual_id, "reason": req.reason}
@@ -227,7 +261,9 @@ async def disable_tenant(tenant_id: str, req: TenantDisableRequest, db=Depends(g
 
 @router.post("/tenants/{tenant_id}/enable", dependencies=[Depends(require_admin)])
 async def enable_tenant(tenant_id: str, db=Depends(get_db)):
-    row = await db.execute(text("SELECT id FROM tenants WHERE id = :id OR api_key = :id"), {"id": tenant_id})
+    row = await db.execute(
+        text("SELECT id FROM tenants WHERE id = :id OR api_key = :id"), {"id": tenant_id}
+    )
     t = row.fetchone()
     if not t:
         raise HTTPException(404, "Tenant not found")
@@ -236,13 +272,16 @@ async def enable_tenant(tenant_id: str, db=Depends(get_db)):
     await db.execute(
         text("""UPDATE tenants SET enabled=true, disabled_at=null,
                 disabled_by=null, disabled_reason=null WHERE id=:id"""),
-        {"id": actual_id}
+        {"id": actual_id},
     )
     await db.execute(
         text("""INSERT INTO setup_pipeline_run (id, tenant_id, stage, status, error_meta, created_at)
                 VALUES (:id, :tid, 'kill_switch', 'enabled', :meta, NOW())"""),
-        {"id": str(uuid.uuid4()), "tid": actual_id,
-         "meta": json.dumps({"action": "enable", "by": "admin"})}
+        {
+            "id": str(uuid.uuid4()),
+            "tid": actual_id,
+            "meta": json.dumps({"action": "enable", "by": "admin"}),
+        },
     )
     await db.commit()
     return {"status": "enabled", "tenant_id": actual_id}
@@ -259,14 +298,14 @@ async def apply_tenant_model(tenant_id: str, model_id: str, db=Depends(get_db)):
                     CAST(:model AS jsonb)
                 )
                 WHERE id = :tid"""),
-        {"model": json.dumps(model_id), "tid": tenant_id}
+        {"model": json.dumps(model_id), "tid": tenant_id},
     )
     await db.commit()
     return {"status": "ok", "tenant_id": tenant_id, "model_id": model_id}
 
 
 @router.get("/throttle-status", dependencies=[Depends(require_admin)])
-async def get_throttle_status(tenant_id: Optional[str] = None, db=Depends(get_db)):
+async def get_throttle_status(tenant_id: str | None = None, db=Depends(get_db)):
     """
     Throttle-Status Endpoint — Issue #156.
 
@@ -316,9 +355,8 @@ async def get_throttle_status(tenant_id: Optional[str] = None, db=Depends(get_db
     tenant_limit = _cfg.max_calls_per_tenant_per_hour
     global_limit = _cfg.max_calls_global_per_hour
     currently_throttled = (
-        (tenant_id is not None and tenant_count_1h >= tenant_limit)
-        or global_count_1h >= global_limit
-    )
+        tenant_id is not None and tenant_count_1h >= tenant_limit
+    ) or global_count_1h >= global_limit
 
     return {
         "tenant_count_1h": tenant_count_1h,
@@ -348,6 +386,7 @@ async def rotate_admin_token():
         raise HTTPException(500, f"Token-Rotation fehlgeschlagen: {e}")
 
     import logging
+
     logging.getLogger(__name__).info("[Admin] Admin-Token wurde rotiert")
     return {
         "token": new_token,

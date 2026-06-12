@@ -11,13 +11,11 @@ Defensiv:
 - Embedding-Fehler blockieren NICHT (chunk-without-embedding,
   HNSW-Index PARTIAL)
 """
+
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import uuid
-from typing import Any, Optional
 
 import httpx
 from sqlalchemy import text
@@ -41,7 +39,7 @@ TELEGRAM_API_BASE = "https://api.telegram.org"
 # ── helpers ─────────────────────────────────────────────────────────────
 
 
-def _load_log_row(log_id: str) -> Optional[dict]:
+def _load_log_row(log_id: str) -> dict | None:
     """Lädt eine telegram_message_log-Zeile als Dict."""
     with sync_session_factory() as db:
         row = db.execute(
@@ -78,7 +76,7 @@ def _update_log_transcript(log_id: str, transcript: str, model: str, confidence:
         db.commit()
 
 
-def _telegram_get_file(file_id: str) -> Optional[bytes]:
+def _telegram_get_file(file_id: str) -> bytes | None:
     """Lädt Audio/Photo-Bytes vom Telegram-Server.
 
     Telegram-API: getFile(file_id) → file_path → GET file_path.
@@ -116,7 +114,7 @@ async def _store_chunk_async(
     content_text: str,
     log_id: str,
     metadata: dict,
-) -> Optional[str]:
+) -> str | None:
     """Async-Wrapper: chunkt Text via chunker, persistiert alle Chunks.
 
     Returns die ID des ersten Chunks (fuer Rueckwaertskompatibilitaet).
@@ -243,7 +241,7 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         chunk_id = asyncio.run(
             _store_chunk_async(tenant_id, source_type, transcript, log_id, chunk_metadata)
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("store_voice_chunk failed: %s", exc)
         return {"status": "transcribed_no_chunk", "reason": str(exc)[:120]}
 
@@ -271,7 +269,7 @@ def _process_photo(log_id: str, tenant_id: str, payload: dict) -> dict:
     if not image_bytes:
         return {"status": "error", "reason": "download_failed"}
 
-    from services.photo_pipeline import process_photo, PhotoProcessingError
+    from services.photo_pipeline import PhotoProcessingError, process_photo
 
     caption = (payload.get("caption") or "").strip() or None
     try:
@@ -279,7 +277,7 @@ def _process_photo(log_id: str, tenant_id: str, payload: dict) -> dict:
     except PhotoProcessingError as exc:
         logger.warning("photo pipeline fail: %s", exc)
         return {"status": "error", "reason": str(exc)[:120]}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("photo pipeline unexpected: %s", exc)
         return {"status": "error", "reason": "pipeline_exception"}
 
@@ -305,7 +303,7 @@ def _process_photo(log_id: str, tenant_id: str, payload: dict) -> dict:
         chunk_id = asyncio.run(
             _store_chunk_async(tenant_id, source_type, content_text, log_id, chunk_metadata)
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("store_photo_chunk failed: %s", exc)
         return {"status": "error", "reason": str(exc)[:120]}
 
@@ -352,8 +350,13 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
         chunk_id = asyncio.run(
             _store_chunk_async(tenant_id, "manual_note", text_content, log_id, chunk_metadata)
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("store_text_chunk failed: %s", exc)
         return {"status": "error", "reason": str(exc)[:120]}
 
-    return {"status": "ok", "memory_chunk_id": chunk_id, "source_type": "manual_note", "channel": channel}
+    return {
+        "status": "ok",
+        "memory_chunk_id": chunk_id,
+        "source_type": "manual_note",
+        "channel": channel,
+    }

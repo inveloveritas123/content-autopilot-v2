@@ -11,12 +11,14 @@ Strategie:
 - Primär: Gemini Flash via LiteLLM (~$0.001/Item)
 - Fallback: Template-basierte Fragen aus Analyse-Daten (kein LLM, $0)
 """
+
 import json
 import logging
 import re
-from typing import Optional
 
 import httpx
+
+from services.llm import BudgetExceededError
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,7 @@ async def generate_smart_questions(
     transcript_text: str,
     analysis: dict,
     title: str = "",
-    entrepreneur: dict = None,
+    entrepreneur: dict | None = None,
 ) -> list[dict]:
     """Generiere 4-6 smarte Interview-Fragen für ein Item.
 
@@ -76,7 +78,11 @@ async def _generate_with_llm(
 
         main_topic = analysis.get("main_topic", title)
         insights = analysis.get("key_insights", analysis.get("insights", []))
-        insights_str = "\n".join(f"- {i}" for i in insights[:5]) if insights else "- Keine spezifischen Insights"
+        insights_str = (
+            "\n".join(f"- {i}" for i in insights[:5])
+            if insights
+            else "- Keine spezifischen Insights"
+        )
 
         prompt = f"""Analysiere diesen Content-Beitrag für {name}, tätig in {industry}{f', spezialisiert auf {specialization}' if specialization else ''}.
 
@@ -128,7 +134,7 @@ Gib AUSSCHLIESSLICH valides JSON zurück, keine Erklärungen:
             content = resp.json()["choices"][0]["message"]["content"]
 
         # Parse JSON from response
-        json_match = re.search(r'\[.*\]', content, re.DOTALL)
+        json_match = re.search(r"\[.*\]", content, re.DOTALL)
         if not json_match:
             logger.warning("LLM response did not contain JSON array")
             return []
@@ -138,13 +144,15 @@ Gib AUSSCHLIESSLICH valides JSON zurück, keine Erklärungen:
         for i, q in enumerate(questions_raw[:6]):
             if not q.get("question_text"):
                 continue
-            questions.append({
-                "question_text": q.get("question_text", ""),
-                "transcript_reference": q.get("transcript_reference"),
-                "why_relevant": q.get("why_relevant"),
-                "target_angle": q.get("target_angle", "story"),
-                "order_index": i,
-            })
+            questions.append(
+                {
+                    "question_text": q.get("question_text", ""),
+                    "transcript_reference": q.get("transcript_reference"),
+                    "why_relevant": q.get("why_relevant"),
+                    "target_angle": q.get("target_angle", "story"),
+                    "order_index": i,
+                }
+            )
 
         return questions if len(questions) >= 2 else []
 
@@ -166,68 +174,80 @@ def _generate_from_analysis(analysis: dict, title: str, entrepreneur: dict) -> l
     industry = entrepreneur.get("industry", "Ihrer Branche")
 
     # Q1: Personal relevance to main topic
-    questions.append({
-        "question_text": f"Wie erleben Sie das Thema '{main_topic}' in Ihrem Alltag als Unternehmer? Haben Sie eine konkrete Situation, die dieses Thema anschaulich macht?",
-        "transcript_reference": None,
-        "why_relevant": "Persönliche Erfahrung ist die Basis für authentischen LinkedIn-Content",
-        "target_angle": "story",
-        "order_index": idx,
-    })
+    questions.append(
+        {
+            "question_text": f"Wie erleben Sie das Thema '{main_topic}' in Ihrem Alltag als Unternehmer? Haben Sie eine konkrete Situation, die dieses Thema anschaulich macht?",
+            "transcript_reference": None,
+            "why_relevant": "Persönliche Erfahrung ist die Basis für authentischen LinkedIn-Content",
+            "target_angle": "story",
+            "order_index": idx,
+        }
+    )
     idx += 1
 
     # Q2: Industry-specific angle
-    questions.append({
-        "question_text": f"Was bedeutet '{main_topic}' konkret für {industry}? Welche Auswirkung sehen Sie bei Ihren Kunden oder in Ihrem Team?",
-        "transcript_reference": None,
-        "why_relevant": "Branchenspezifischer Blickwinkel = Differenzierung vom generischen Content",
-        "target_angle": "opinion",
-        "order_index": idx,
-    })
+    questions.append(
+        {
+            "question_text": f"Was bedeutet '{main_topic}' konkret für {industry}? Welche Auswirkung sehen Sie bei Ihren Kunden oder in Ihrem Team?",
+            "transcript_reference": None,
+            "why_relevant": "Branchenspezifischer Blickwinkel = Differenzierung vom generischen Content",
+            "target_angle": "opinion",
+            "order_index": idx,
+        }
+    )
     idx += 1
 
     # Q3: From first insight (if available)
     if insights and len(insights) > 0:
         insight = str(insights[0])[:150]
-        questions.append({
-            "question_text": f"Im Beitrag wird erwähnt: '{insight[:100]}...'. Sehen Sie das in Ihrer Praxis auch so — oder erleben Sie das anders?",
-            "transcript_reference": insight[:100],
-            "why_relevant": "Direkte Reaktion auf konkrete Aussage erzeugt Meinungs-Content mit Substanz",
-            "target_angle": "opinion",
-            "order_index": idx,
-        })
+        questions.append(
+            {
+                "question_text": f"Im Beitrag wird erwähnt: '{insight[:100]}...'. Sehen Sie das in Ihrer Praxis auch so — oder erleben Sie das anders?",
+                "transcript_reference": insight[:100],
+                "why_relevant": "Direkte Reaktion auf konkrete Aussage erzeugt Meinungs-Content mit Substanz",
+                "target_angle": "opinion",
+                "order_index": idx,
+            }
+        )
         idx += 1
 
     # Q4: From second insight (if available)
     if insights and len(insights) > 1:
         insight2 = str(insights[1])[:150]
-        questions.append({
-            "question_text": f"Sie haben wahrscheinlich schon praktische Erfahrungen mit '{str(main_topic)[:60]}' gesammelt. Welchen einen Rat würden Sie anderen Unternehmern geben, die damit anfangen?",
-            "transcript_reference": insight2[:100] if insight2 else None,
-            "why_relevant": "Konkreter Rat = How-To-Content mit echtem Mehrwert",
-            "target_angle": "how_to",
-            "order_index": idx,
-        })
+        questions.append(
+            {
+                "question_text": f"Sie haben wahrscheinlich schon praktische Erfahrungen mit '{str(main_topic)[:60]}' gesammelt. Welchen einen Rat würden Sie anderen Unternehmern geben, die damit anfangen?",
+                "transcript_reference": insight2[:100] if insight2 else None,
+                "why_relevant": "Konkreter Rat = How-To-Content mit echtem Mehrwert",
+                "target_angle": "how_to",
+                "order_index": idx,
+            }
+        )
         idx += 1
 
     # Q5: Controversy / contrarian view
-    questions.append({
-        "question_text": f"Was ist die verbreitetste Fehlannahme über '{main_topic}' in {industry}? Worüber regen Sie sich manchmal auf, wenn Sie sehen wie andere damit umgehen?",
-        "transcript_reference": None,
-        "why_relevant": "Konträre Meinung erzeugt Engagement und positioniert als Thought Leader",
-        "target_angle": "controversy",
-        "order_index": idx,
-    })
+    questions.append(
+        {
+            "question_text": f"Was ist die verbreitetste Fehlannahme über '{main_topic}' in {industry}? Worüber regen Sie sich manchmal auf, wenn Sie sehen wie andere damit umgehen?",
+            "transcript_reference": None,
+            "why_relevant": "Konträre Meinung erzeugt Engagement und positioniert als Thought Leader",
+            "target_angle": "controversy",
+            "order_index": idx,
+        }
+    )
     idx += 1
 
     # Q6: From hook (if available)
     if hooks:
         hook = str(hooks[0])[:200]
-        questions.append({
-            "question_text": f"Wenn Sie einem Kunden erklären müssten warum '{main_topic}' für ihn relevant ist — wie würden Sie das in 2-3 Sätzen beschreiben?",
-            "transcript_reference": hook[:100] if hook else None,
-            "why_relevant": "Kundennahe Erklärung = Content der die Zielgruppe direkt anspricht",
-            "target_angle": "how_to",
-            "order_index": idx,
-        })
+        questions.append(
+            {
+                "question_text": f"Wenn Sie einem Kunden erklären müssten warum '{main_topic}' für ihn relevant ist — wie würden Sie das in 2-3 Sätzen beschreiben?",
+                "transcript_reference": hook[:100] if hook else None,
+                "why_relevant": "Kundennahe Erklärung = Content der die Zielgruppe direkt anspricht",
+                "target_angle": "how_to",
+                "order_index": idx,
+            }
+        )
 
     return questions

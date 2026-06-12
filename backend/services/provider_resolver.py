@@ -1,21 +1,22 @@
 """Resolve active LLM provider from database — replaces hardcoded LiteLLM config."""
-import logging
-import os
-from datetime import datetime
-from typing import Optional
-
-from sqlalchemy import select
 
 import base64
 import hashlib
+import logging
+import os
+from datetime import datetime
+
 from cryptography.fernet import Fernet
+from sqlalchemy import select
 
 from config import settings as _app_settings
 from models.base import sync_session_factory
 from models.llm_provider import LLMProvider
 
 # Local decrypt — mirrors api/llm_settings.py without importing the FastAPI module
-_key_material = hashlib.sha256((_app_settings.default_tenant_key + "-llm-encrypt").encode()).digest()
+_key_material = hashlib.sha256(
+    (_app_settings.default_tenant_key + "-llm-encrypt").encode()
+).digest()
 _FERNET_KEY = base64.urlsafe_b64encode(_key_material)
 _fernet = Fernet(_FERNET_KEY)
 
@@ -26,10 +27,11 @@ def _decrypt_key(encrypted: str) -> str:
     except Exception:
         return ""
 
+
 logger = logging.getLogger(__name__)
 
 
-def get_active_provider(tenant_id=None, task: str = "all") -> Optional[dict]:
+def get_active_provider(tenant_id=None, task: str = "all") -> dict | None:
     """Get the active LLM provider config for a given task.
 
     Returns dict with: base_url, api_key, model_name, provider_id
@@ -37,7 +39,7 @@ def get_active_provider(tenant_id=None, task: str = "all") -> Optional[dict]:
     with sync_session_factory() as session:
         # Try task-specific provider first
         query = select(LLMProvider).where(
-            LLMProvider.is_active == True,
+            LLMProvider.is_active is True,
         )
         if tenant_id:
             query = query.where(LLMProvider.tenant_id == tenant_id)
@@ -65,7 +67,9 @@ def get_active_provider(tenant_id=None, task: str = "all") -> Optional[dict]:
 
         # Check cost limit
         if provider.cost_spent_today_cents >= provider.cost_limit_daily_cents:
-            logger.error(f"Provider {provider.name} cost limit reached: {provider.cost_spent_today_cents}/{provider.cost_limit_daily_cents} cents")
+            logger.error(
+                f"Provider {provider.name} cost limit reached: {provider.cost_spent_today_cents}/{provider.cost_limit_daily_cents} cents"
+            )
             return None
 
         api_key = _decrypt_key(provider.api_key_encrypted) if provider.api_key_encrypted else ""
@@ -117,9 +121,11 @@ def _check_global_cap(session, today) -> None:
     """Raise CostCapGlobalExceeded if total platform spend today exceeds global cap."""
     try:
         from sqlalchemy import text as sa_text
-        row = session.execute(sa_text(
-            "SELECT COALESCE(SUM(cost_usd), 0) FROM daily_cost_tenant WHERE date = :today"
-        ), {"today": today}).fetchone()
+
+        row = session.execute(
+            sa_text("SELECT COALESCE(SUM(cost_usd), 0) FROM daily_cost_tenant WHERE date = :today"),
+            {"today": today},
+        ).fetchone()
         if row and float(row[0]) >= _GLOBAL_CAP_USD:
             raise RuntimeError(
                 f"GLOBAL daily cost cap exceeded: {float(row[0]):.2f} >= {_GLOBAL_CAP_USD:.2f} USD. "
@@ -131,7 +137,15 @@ def _check_global_cap(session, today) -> None:
         pass
 
 
-def track_cost(provider_id, usage: dict, model: str = "", task_type: str = "unknown", tenant_id=None, cache_read_tokens: int = 0, cache_write_tokens: int = 0):
+def track_cost(
+    provider_id,
+    usage: dict,
+    model: str = "",
+    task_type: str = "unknown",
+    tenant_id=None,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+):
     """Track LLM cost from response usage data + log the call.
 
     provider_id may be None (env-config fallback path) — still logs cost.
@@ -156,7 +170,9 @@ def track_cost(provider_id, usage: dict, model: str = "", task_type: str = "unkn
             try:
                 provider = session.get(LLMProvider, provider_id)
                 if provider:
-                    provider.cost_spent_today_cents += max(1, int(cost_cents)) if cost_cents >= 0.01 else 0
+                    provider.cost_spent_today_cents += (
+                        max(1, int(cost_cents)) if cost_cents >= 0.01 else 0
+                    )
                     if not tenant_id:
                         tenant_id = str(provider.tenant_id)
             except Exception:
@@ -165,8 +181,10 @@ def track_cost(provider_id, usage: dict, model: str = "", task_type: str = "unkn
         # Fallback: get default tenant for logging when no DB provider
         if not tenant_id:
             try:
-                from models.tenant import Tenant
                 from sqlalchemy import select
+
+                from models.tenant import Tenant
+
                 result = session.execute(select(Tenant).limit(1))
                 t = result.scalar_one_or_none()
                 if t:
@@ -177,8 +195,10 @@ def track_cost(provider_id, usage: dict, model: str = "", task_type: str = "unkn
         # Log the call
         if tenant_id:
             try:
-                from models.llm_call_log import LLMCallLog
                 import uuid
+
+                from models.llm_call_log import LLMCallLog
+
                 log = LLMCallLog(
                     tenant_id=uuid.UUID(str(tenant_id)),
                     provider_id=uuid.UUID(str(provider_id)) if provider_id else None,
@@ -198,28 +218,40 @@ def track_cost(provider_id, usage: dict, model: str = "", task_type: str = "unkn
         if tenant_id and cost_usd > 0:
             try:
                 from sqlalchemy import text as sa_text
-                import uuid as _uuid
+
                 tid = str(tenant_id)
-                session.execute(sa_text("""
+                session.execute(
+                    sa_text("""
                     INSERT INTO daily_cost_tenant (tenant_id, date, cost_usd, call_count, notified_at)
                     VALUES (:tid, :today, :cost, 1, NULL)
                     ON CONFLICT (tenant_id, date)
                     DO UPDATE SET cost_usd = daily_cost_tenant.cost_usd + :cost,
                                   call_count = daily_cost_tenant.call_count + 1
-                """), {"tid": tid, "today": today, "cost": cost_usd})
+                """),
+                    {"tid": tid, "today": today, "cost": cost_usd},
+                )
 
                 # Per-tenant cap check — log critical if exceeded
-                row = session.execute(sa_text(
-                    "SELECT cost_usd FROM daily_cost_tenant WHERE tenant_id = :tid AND date = :today"
-                ), {"tid": tid, "today": today}).fetchone()
+                row = session.execute(
+                    sa_text(
+                        "SELECT cost_usd FROM daily_cost_tenant WHERE tenant_id = :tid AND date = :today"
+                    ),
+                    {"tid": tid, "today": today},
+                ).fetchone()
                 if row and float(row[0]) >= _DAILY_CAP_USD:
                     logger.critical(
                         "COST_CAP_EXCEEDED tenant=%s today=%s total_usd=%.4f cap=%.2f model=%s",
-                        tid, today, float(row[0]), _DAILY_CAP_USD, model
+                        tid,
+                        today,
+                        float(row[0]),
+                        _DAILY_CAP_USD,
+                        model,
                     )
             except Exception as e:
                 logger.warning(f"daily_cost_tenant update failed: {e}")
 
         session.commit()
         if cost_cents >= 0.1:
-            logger.info(f"LLM cost: {cost_cents:.2f}c ({task_type}, {model}, {input_tokens}+{output_tokens} tokens)")
+            logger.info(
+                f"LLM cost: {cost_cents:.2f}c ({task_type}, {model}, {input_tokens}+{output_tokens} tokens)"
+            )

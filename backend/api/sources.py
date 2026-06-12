@@ -1,24 +1,21 @@
-import uuid
 import asyncio
 import logging
+import uuid
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
-from typing import Optional, List
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
-from models.tenant import Tenant
 from models.source import Source
-from tasks.monitor_task import check_single_source
-from services.youtube_search import search_youtube_channels, search_youtube_videos
+from models.source_item import SourceItem
+from models.tenant import Tenant
 from services.rss_monitor import fetch_all_channel_videos
 from services.transcript_sync import scan_existing_transcripts
-from models.source_item import SourceItem
-from models.content_piece import ContentPiece
-from models.content_idea import ContentIdea
+from services.youtube_search import search_youtube_channels, search_youtube_videos
+from tasks.monitor_task import check_single_source
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +25,12 @@ router = APIRouter()
 class SourceCreate(BaseModel):
     name: str
     type: str = "youtube"
-    url: Optional[str] = None
-    channel_id: Optional[str] = None
+    url: str | None = None
+    channel_id: str | None = None
     language: str = "de"
     polling_interval_minutes: int = 15
     auto_process: bool = False
-    keywords: Optional[str] = None
+    keywords: str | None = None
 
     @field_validator("url")
     @classmethod
@@ -45,14 +42,14 @@ class SourceCreate(BaseModel):
 
 
 class SourceUpdate(BaseModel):
-    name: Optional[str] = None
-    url: Optional[str] = None
-    channel_id: Optional[str] = None
-    language: Optional[str] = None
-    polling_interval_minutes: Optional[int] = None
-    auto_process: Optional[bool] = None
-    is_active: Optional[bool] = None
-    keywords: Optional[str] = None
+    name: str | None = None
+    url: str | None = None
+    channel_id: str | None = None
+    language: str | None = None
+    polling_interval_minutes: int | None = None
+    auto_process: bool | None = None
+    is_active: bool | None = None
+    keywords: str | None = None
 
 
 @router.get("/sources")
@@ -89,11 +86,13 @@ async def get_source_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Per-source item counts grouped by status — single SQL query."""
-    rows = (await db.execute(
-        select(SourceItem.source_id, SourceItem.status, func.count(SourceItem.id).label("cnt"))
-        .where(SourceItem.tenant_id == tenant.id)
-        .group_by(SourceItem.source_id, SourceItem.status)
-    )).all()
+    rows = (
+        await db.execute(
+            select(SourceItem.source_id, SourceItem.status, func.count(SourceItem.id).label("cnt"))
+            .where(SourceItem.tenant_id == tenant.id)
+            .group_by(SourceItem.source_id, SourceItem.status)
+        )
+    ).all()
 
     # Aggregate into {source_id: {status: count, ...}}
     stats: dict = {}
@@ -104,12 +103,15 @@ async def get_source_stats(
         stats[key][status] = cnt
 
     # Last item date per source (for staleness)
-    from datetime import datetime, timezone
-    last_rows = (await db.execute(
-        select(SourceItem.source_id, func.max(SourceItem.created_at).label("last_dt"))
-        .where(SourceItem.tenant_id == tenant.id)
-        .group_by(SourceItem.source_id)
-    )).all()
+    from datetime import datetime
+
+    last_rows = (
+        await db.execute(
+            select(SourceItem.source_id, func.max(SourceItem.created_at).label("last_dt"))
+            .where(SourceItem.tenant_id == tenant.id)
+            .group_by(SourceItem.source_id)
+        )
+    ).all()
     last_dates = {str(r.source_id): r.last_dt for r in last_rows}
 
     now = datetime.utcnow()
@@ -122,13 +124,17 @@ async def get_source_stats(
         failed = counts.get("transcription_failed", 0)
         # All statuses downstream of successful transcription
         successfully_transcribed = (
-            counts.get("transcribed", 0) +
-            counts.get("analyzed", 0) +
-            counts.get("generating", 0) +
-            counts.get("content_ready", 0)
+            counts.get("transcribed", 0)
+            + counts.get("analyzed", 0)
+            + counts.get("generating", 0)
+            + counts.get("content_ready", 0)
         )
         transcription_attempted = successfully_transcribed + failed
-        success_rate = round(successfully_transcribed / transcription_attempted * 100) if transcription_attempted else None
+        success_rate = (
+            round(successfully_transcribed / transcription_attempted * 100)
+            if transcription_attempted
+            else None
+        )
 
         last_dt = last_dates.get(source_id)
         staleness_days = None
@@ -186,18 +192,20 @@ async def get_source_funnel(
         posts = r["posts_count"] or 0
         approved = r["approved_count"] or 0
         published = r["published_count"] or 0
-        result.append({
-            "source_id": r["source_id"],
-            "source_name": r["source_name"],
-            "source_type": r["source_type"],
-            "items": items,
-            "ideas": ideas,
-            "posts": posts,
-            "approved": approved,
-            "published": published,
-            "approval_rate": round(approved / posts * 100) if posts else 0,
-            "idea_rate": round(ideas / items * 100) if items else 0,
-        })
+        result.append(
+            {
+                "source_id": r["source_id"],
+                "source_name": r["source_name"],
+                "source_type": r["source_type"],
+                "items": items,
+                "ideas": ideas,
+                "posts": posts,
+                "approved": approved,
+                "published": published,
+                "approval_rate": round(approved / posts * 100) if posts else 0,
+                "idea_rate": round(ideas / items * 100) if items else 0,
+            }
+        )
     return result
 
 
@@ -269,7 +277,9 @@ async def discover_sources_route(
     if not keywords:
         raise HTTPException(400, "topics parameter is required")
 
-    result = await db.execute(select(Source.channel_id, Source.url).where(Source.tenant_id == tenant.id))
+    result = await db.execute(
+        select(Source.channel_id, Source.url).where(Source.tenant_id == tenant.id)
+    )
     existing = result.all()
     existing_channel_ids = {r.channel_id for r in existing if r.channel_id}
     existing_urls = {r.url for r in existing if r.url}
@@ -351,9 +361,7 @@ async def delete_all_sources(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete all sources for this tenant (cascades to items, content, ideas)."""
-    result = await db.execute(
-        select(Source).where(Source.tenant_id == tenant.id)
-    )
+    result = await db.execute(select(Source).where(Source.tenant_id == tenant.id))
     sources = result.scalars().all()
     count = len(sources)
     for source in sources:
@@ -365,7 +373,9 @@ async def delete_all_sources(
 @router.get("/sources/{source_id}/items")
 async def list_source_items(
     source_id: str,
-    status: Optional[str] = Query(None, description="Filter by status (e.g. transcribed, analyzed, content_ready)"),
+    status: str | None = Query(
+        None, description="Filter by status (e.g. transcribed, analyzed, content_ready)"
+    ),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     tenant: Tenant = Depends(get_tenant),
@@ -379,7 +389,7 @@ async def list_source_items(
     q = select(SourceItem).where(
         SourceItem.source_id == source.id,
         SourceItem.tenant_id == tenant.id,
-        SourceItem.is_archived == False,
+        SourceItem.is_archived is False,
     )
     if status:
         q = q.where(SourceItem.status == status)
@@ -389,10 +399,14 @@ async def list_source_items(
     items = result.scalars().all()
 
     # Total count for pagination
-    count_q = select(func.count()).select_from(SourceItem).where(
-        SourceItem.source_id == source.id,
-        SourceItem.tenant_id == tenant.id,
-        SourceItem.is_archived == False,
+    count_q = (
+        select(func.count())
+        .select_from(SourceItem)
+        .where(
+            SourceItem.source_id == source.id,
+            SourceItem.tenant_id == tenant.id,
+            SourceItem.is_archived is False,
+        )
     )
     if status:
         count_q = count_q.where(SourceItem.status == status)
@@ -512,12 +526,13 @@ async def analyze_all_source_items(
         select(SourceItem).where(
             SourceItem.source_id == source.id,
             SourceItem.status == "transcribed",
-            SourceItem.is_archived == False,
+            SourceItem.is_archived is False,
         )
     )
     items = result.scalars().all()
 
     from tasks.generate_task import analyze_item
+
     queued = 0
     for item in items:
         analyze_item.delay(str(item.id))
@@ -547,7 +562,7 @@ async def archive_source_items(
         sa_update(SourceItem)
         .where(
             SourceItem.source_id == source.id,
-            SourceItem.is_archived == False,
+            SourceItem.is_archived is False,
         )
         .values(is_archived=True)
     )
@@ -599,7 +614,8 @@ async def sync_transcripts(
 
 # ── Source Discovery ──────────────────────────────────────────────────
 
-async def _search_podcasts(keywords: List[str], max_results: int = 8) -> list[dict]:
+
+async def _search_podcasts(keywords: list[str], max_results: int = 8) -> list[dict]:
     """Search Apple iTunes for podcasts matching keywords."""
     query = " ".join(keywords[:3])
     try:
@@ -613,25 +629,27 @@ async def _search_podcasts(keywords: List[str], max_results: int = 8) -> list[di
 
         results = []
         for item in data.get("results", []):
-            results.append({
-                "type": "podcast",
-                "name": item.get("collectionName", ""),
-                "description": item.get("artistName", ""),
-                "thumbnail": item.get("artworkUrl100", ""),
-                "url": item.get("collectionViewUrl", ""),
-                "feed_url": item.get("feedUrl", ""),
-                "episode_count": item.get("trackCount", 0),
-                "genre": item.get("primaryGenreName", ""),
-                "source_type": "podcast",
-                "channel_id": None,
-            })
+            results.append(
+                {
+                    "type": "podcast",
+                    "name": item.get("collectionName", ""),
+                    "description": item.get("artistName", ""),
+                    "thumbnail": item.get("artworkUrl100", ""),
+                    "url": item.get("collectionViewUrl", ""),
+                    "feed_url": item.get("feedUrl", ""),
+                    "episode_count": item.get("trackCount", 0),
+                    "genre": item.get("primaryGenreName", ""),
+                    "source_type": "podcast",
+                    "channel_id": None,
+                }
+            )
         return results
     except Exception as e:
         logger.warning(f"Podcast search failed: {e}")
         return []
 
 
-async def _suggest_websites_via_llm(keywords: List[str]) -> list[dict]:
+async def _suggest_websites_via_llm(keywords: list[str]) -> list[dict]:
     """Use LLM to suggest relevant websites/blogs for given topics."""
     from services.llm import llm_service
 
@@ -663,18 +681,20 @@ Gib nur das JSON-Array zurueck, nichts anderes."""
             url = s.get("url", "")
             if not url.startswith("http"):
                 continue
-            results.append({
-                "type": "website",
-                "name": s.get("name", ""),
-                "description": s.get("description", ""),
-                "thumbnail": "",
-                "url": url,
-                "feed_url": None,
-                "episode_count": None,
-                "genre": s.get("type", "blog"),
-                "source_type": "website",
-                "channel_id": None,
-            })
+            results.append(
+                {
+                    "type": "website",
+                    "name": s.get("name", ""),
+                    "description": s.get("description", ""),
+                    "thumbnail": "",
+                    "url": url,
+                    "feed_url": None,
+                    "episode_count": None,
+                    "genre": s.get("type", "blog"),
+                    "source_type": "website",
+                    "channel_id": None,
+                }
+            )
         return results
     except Exception as e:
         logger.warning(f"LLM website suggestions failed: {e}")

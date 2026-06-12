@@ -1,8 +1,7 @@
 """Tests für Quote-Extraktor und Validator (Issue #86)."""
-import pytest
-from services.quote_extractor import extract_quotes
-from services.quote_validator import validate_post_quotes, _fuzzy_match, _normalize
 
+from services.quote_extractor import extract_quotes
+from services.quote_validator import _fuzzy_match, _normalize, validate_post_quotes
 
 # ── Quote-Extraktor ──────────────────────────────────────────────────────────
 
@@ -31,9 +30,25 @@ def test_extract_quotes_has_verb():
     """Alle extrahierten Quotes sollen ein Verb enthalten (Heuristik)."""
     quotes = extract_quotes(MARCUS_TRANSCRIPT)
     # At least 80% of quotes should contain a verb indicator
-    with_verb = [q for q in quotes if any(
-        word in q.lower() for word in ['ist', 'sind', 'hat', 'haben', 'kann', 'werden', 'dauert', 'aufzubauen', 'gelernt', 'entschieden']
-    )]
+    with_verb = [
+        q
+        for q in quotes
+        if any(
+            word in q.lower()
+            for word in [
+                "ist",
+                "sind",
+                "hat",
+                "haben",
+                "kann",
+                "werden",
+                "dauert",
+                "aufzubauen",
+                "gelernt",
+                "entschieden",
+            ]
+        )
+    ]
     assert len(with_verb) >= len(quotes) * 0.6, "Zu wenige Quotes enthalten Verben"
 
 
@@ -48,23 +63,26 @@ def test_extract_too_short():
 
 # ── Quote-Validator ───────────────────────────────────────────────────────────
 
+
 def test_validate_real_quote_found():
     """Ein echtes Zitat aus dem Reservoir wird akzeptiert."""
     source = "Vertrauen ist die Basis jeder erfolgreichen Geschäftsbeziehung, das habe ich gelernt."
-    post = 'Wie Marcus Weber sagt: \u201eVertrauen ist die Basis jeder erfolgreichen Gesch\u00e4ftsbeziehung\u201c'
+    post = "Wie Marcus Weber sagt: \u201eVertrauen ist die Basis jeder erfolgreichen Gesch\u00e4ftsbeziehung\u201c"
 
     result = validate_post_quotes(
         post_text=post,
         reservoir_content_texts=[source],
         reservoir_extracted_quotes=[],
     )
-    assert result.is_valid, f"Echtes Zitat sollte akzeptiert werden, aber: {result.hallucinated_quotes}"
+    assert (
+        result.is_valid
+    ), f"Echtes Zitat sollte akzeptiert werden, aber: {result.hallucinated_quotes}"
 
 
 def test_validate_hallucinated_quote_rejected():
     """Ein erfundenes Zitat wird als Halluzination erkannt."""
     source = "Wir haben in 2020 angefangen, digital zu arbeiten."
-    post = 'Marcus Weber: \u201eK\u00fcnstliche Intelligenz wird die Welt in 10 Jahren komplett ver\u00e4ndern\u201c'
+    post = "Marcus Weber: \u201eK\u00fcnstliche Intelligenz wird die Welt in 10 Jahren komplett ver\u00e4ndern\u201c"
 
     result = validate_post_quotes(
         post_text=post,

@@ -1,6 +1,6 @@
 """Auto-cleanup of temporary media files after processing."""
+
 import logging
-import os
 import time
 from pathlib import Path
 

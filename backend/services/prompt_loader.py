@@ -15,12 +15,12 @@ Extraktion (Ansatz B — Loader tolerant, Dateien unangetastet):
                      unbalancierte Einzelfences an Blockanfang/-ende ebenfalls.
                      Interne, balancierte Fences bleiben unveraendert.
 """
+
 import hashlib
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from services.brand_voice_storage import BrandVoiceStorageAdapter, StorageError
 
@@ -34,22 +34,22 @@ logger = logging.getLogger(__name__)
 # Relative Pfade unter der content-truth-Wurzel (werden vom Storage-Adapter aufgeloest).
 # NC-Pfad-Logik ist deprecated — der LocalFsAdapter haengt base_dir vorne an.
 PROMPT_PATHS: dict[str, str] = {
-    "P01":           "prompts/P01-kundenkontext-extraktion.md",
-    "P03":           "prompts/P03-voice-analyse.md",
-    "P04":           "prompts/P04-kundenavatar-vertiefung.md",
-    "P07":           "prompts/P07-themen-research.md",
-    "P08":           "prompts/P08-fragen-konversation.md",
-    "P09":           "prompts/P09-content-ideen.md",
-    "P10":           "prompts/P10-content-kern-aufbau.md",
-    "P12":           "prompts/P12-post-generierung.md",
-    "P12b":          "prompts/P12b-post-optimierung.md",
-    "P12c":          "prompts/P12c-carousel-generator.md",
-    "P13":           "prompts/P13-hook-varianten.md",
-    "P15":           "prompts/P15-eigene-idee.md",
-    "P16":           "prompts/P16-post-ueberarbeitung.md",
-    "P17":           "prompts/P17-kundenkontext-update.md",
+    "P01": "prompts/P01-kundenkontext-extraktion.md",
+    "P03": "prompts/P03-voice-analyse.md",
+    "P04": "prompts/P04-kundenavatar-vertiefung.md",
+    "P07": "prompts/P07-themen-research.md",
+    "P08": "prompts/P08-fragen-konversation.md",
+    "P09": "prompts/P09-content-ideen.md",
+    "P10": "prompts/P10-content-kern-aufbau.md",
+    "P12": "prompts/P12-post-generierung.md",
+    "P12b": "prompts/P12b-post-optimierung.md",
+    "P12c": "prompts/P12c-carousel-generator.md",
+    "P13": "prompts/P13-hook-varianten.md",
+    "P15": "prompts/P15-eigene-idee.md",
+    "P16": "prompts/P16-post-ueberarbeitung.md",
+    "P17": "prompts/P17-kundenkontext-update.md",
     "fragenkatalog": "rules/fragenkatalog.md",
-    "hookmaster":    "rules/hookmaster.md",
+    "hookmaster": "rules/hookmaster.md",
 }
 
 
@@ -57,19 +57,21 @@ PROMPT_PATHS: dict[str, str] = {
 # Dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class LoadedPrompt:
-    content: str                  # vollstaendiger Markdown-Inhalt
-    system_prompt: str            # extrahiert aus ## System-Prompt Block
-    user_prompt_template: str     # extrahiert aus ## User-Prompt Block
-    sha: str                      # SHA-256 von content (hex)
-    loaded_at: datetime           # timezone-aware UTC
-    source_path: str              # Pfad in NC
+    content: str  # vollstaendiger Markdown-Inhalt
+    system_prompt: str  # extrahiert aus ## System-Prompt Block
+    user_prompt_template: str  # extrahiert aus ## User-Prompt Block
+    sha: str  # SHA-256 von content (hex)
+    loaded_at: datetime  # timezone-aware UTC
+    source_path: str  # Pfad in NC
 
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktion: Fence-Bereinigung
 # ---------------------------------------------------------------------------
+
 
 def _strip_outer_fence(block: str) -> str:
     """Entfernt den aeusseren Code-Fence eines Markdown-Blocks.
@@ -96,7 +98,7 @@ def _strip_outer_fence(block: str) -> str:
         # Nur ein ```, kein Inhalt
         return ""
 
-    after_open = stripped[first_nl + 1:]
+    after_open = stripped[first_nl + 1 :]
 
     # Suche nach abschliessendem ``` (allein auf einer Zeile).
     # Zwei Formen:
@@ -114,6 +116,7 @@ def _strip_outer_fence(block: str) -> str:
 # ---------------------------------------------------------------------------
 # Hilfsfunktion: Markdown-Sektion extrahieren (robuste Version)
 # ---------------------------------------------------------------------------
+
 
 def _extract_section(content: str, section: str) -> str:
     """Extrahiert den Inhalt einer Markdown-Sektion robust.
@@ -158,13 +161,13 @@ def _extract_system_prompt(content: str) -> str:
         return ""
 
     # Suche nach ^## User-Prompt (beliebiger Suffix erlaubt: "User-Prompt: MODE OPENER" etc.)
-    user_m = re.search(r"^## User-Prompt\b", content[sys_m.end():], re.MULTILINE)
+    user_m = re.search(r"^## User-Prompt\b", content[sys_m.end() :], re.MULTILINE)
 
     if user_m is not None:
         end_pos = sys_m.end() + user_m.start()
-        block = content[sys_m.end():end_pos].strip()
+        block = content[sys_m.end() : end_pos].strip()
     else:
-        block = content[sys_m.end():].strip()
+        block = content[sys_m.end() :].strip()
 
     return _strip_outer_fence(block)
 
@@ -184,7 +187,7 @@ def _extract_user_prompt(content: str) -> str:
     if user_m is None:
         return ""
 
-    rest = content[user_m.end():]
+    rest = content[user_m.end() :]
     next_h = re.search(r"^## ", rest, re.MULTILINE)
     if next_h:
         block = rest[: next_h.start()].strip()
@@ -197,6 +200,7 @@ def _extract_user_prompt(content: str) -> str:
 # ---------------------------------------------------------------------------
 # PromptLoader
 # ---------------------------------------------------------------------------
+
 
 class PromptLoader:
     def __init__(
@@ -222,7 +226,7 @@ class PromptLoader:
         Bei Storage-Fehler: direkte Exception, kein Stale-Fallback.
         """
         path = self._resolve_path(prompt_name)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         cached = self._cache.get(prompt_name)
         if cached is not None and (cached.loaded_at + self._ttl) > now:
@@ -270,8 +274,7 @@ class PromptLoader:
         path = PROMPT_PATHS.get(prompt_name)
         if path is None:
             raise KeyError(
-                f"Unbekannter Prompt: {prompt_name!r}. "
-                f"Bekannte Prompts: {list(PROMPT_PATHS)}"
+                f"Unbekannter Prompt: {prompt_name!r}. " f"Bekannte Prompts: {list(PROMPT_PATHS)}"
             )
         return path
 
@@ -285,7 +288,7 @@ class PromptLoader:
         system_prompt = _extract_section(content, "System-Prompt")
         user_prompt_template = _extract_section(content, "User-Prompt")
         sha = hashlib.sha256(raw).hexdigest()
-        loaded_at = datetime.now(timezone.utc)
+        loaded_at = datetime.now(UTC)
 
         # Warnung bei leeren oder strukturell auffaelligen Prompts
         if not system_prompt:
@@ -324,8 +327,10 @@ class PromptLoader:
 # Default-Instance Factory
 # ---------------------------------------------------------------------------
 
+
 def get_default_prompt_loader() -> PromptLoader:
     # Nutzt get_default_storage_adapter() — defaultmaessig LocalFsStorageAdapter.
     # get_default_nc_adapter bleibt importierbar fuer Rueckwaertskompatibilitaet (deprecated).
     from services.brand_voice_storage import get_default_storage_adapter
+
     return PromptLoader(storage_adapter=get_default_storage_adapter())

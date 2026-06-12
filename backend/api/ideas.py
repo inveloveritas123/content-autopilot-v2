@@ -9,28 +9,26 @@ Workflow:
 5. POST /ideas/{id}/generate-post — Post aus Antworten generieren
 6. PATCH /ideas/{id} — Status/Prioritaet aendern
 """
+
 import asyncio
 import json
-import uuid
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+import uuid
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-from dependencies import get_db, get_tenant_id, get_tenant
-from models import SourceItem, ContentPiece
-from models.source import Source
+from dependencies import get_db, get_tenant, get_tenant_id
+from models import ContentPiece, SourceItem
 from models.content_idea import ContentIdea
 from models.entrepreneur_answer import EntrepreneurAnswer
+from models.source import Source
 from models.tenant import Tenant
+from services.brand_voice import format_voice_for_prompt
 from services.content_ideation import run_ideation_pipeline
-from services.content_generator import generate_linkedin_post_from_dialog
-from services.brand_voice import update_voice_from_answer, format_voice_for_prompt
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ideas", tags=["ideas"])
@@ -38,17 +36,18 @@ router = APIRouter(prefix="/ideas", tags=["ideas"])
 
 # ── Pydantic Schemas ────────────────────────────────────────────────────────
 
+
 class IdeaResponse(BaseModel):
     id: str
     title: str
     description: str
     angle: str
-    hook_suggestion: Optional[str] = None
+    hook_suggestion: str | None = None
     relevance_score: float
     priority: int
     status: str
-    entrepreneur_questions: Optional[list] = None
-    source_quotes: Optional[list] = None
+    entrepreneur_questions: list | None = None
+    source_quotes: list | None = None
     answers_count: int = 0
     created_at: str
 
@@ -59,7 +58,9 @@ class IdeaResponse(BaseModel):
 class AnswerSubmit(BaseModel):
     question_index: int
     question_text: str
-    answer_text: str = Field(min_length=10, description="Antwort muss mindestens 10 Zeichen lang sein")
+    answer_text: str = Field(
+        min_length=10, description="Antwort muss mindestens 10 Zeichen lang sein"
+    )
     answer_source: str = "web_ui"
 
 
@@ -68,11 +69,12 @@ class GeneratePostRequest(BaseModel):
 
 
 class IdeaStatusUpdate(BaseModel):
-    status: Optional[str] = None
-    priority: Optional[int] = None
+    status: str | None = None
+    priority: int | None = None
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
+
 
 @router.get("/source-breakdown")
 async def ideas_source_breakdown(
@@ -80,8 +82,9 @@ async def ideas_source_breakdown(
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ):
     """Aufschlüsselung der Ideen nach Quelle — für Cleanup-UI."""
-    rows = (await db.execute(
-        text("""
+    rows = (
+        await db.execute(
+            text("""
             SELECT s.id, s.name,
                    COUNT(ci.id) AS idea_count,
                    COUNT(ci.id) FILTER (WHERE ci.status = 'new') AS new_count
@@ -92,8 +95,9 @@ async def ideas_source_breakdown(
             GROUP BY s.id, s.name
             ORDER BY idea_count DESC
         """),
-        {"tid": str(tenant_id)},
-    )).all()
+            {"tid": str(tenant_id)},
+        )
+    ).all()
 
     return {
         "sources": [
@@ -156,7 +160,9 @@ async def generate_ideas_for_item(
         warmth = voice_dims.get("warmth", 0)
         expertise = voice_dims.get("expertise", 0)
         if directness or warmth or expertise:
-            brand_context = f"Direktheit: {directness}/10, Wärme: {warmth}/10, Expertise: {expertise}/10"
+            brand_context = (
+                f"Direktheit: {directness}/10, Wärme: {warmth}/10, Expertise: {expertise}/10"
+            )
 
     # Ideation-Pipeline ausfuehren
     ideas_data = await run_ideation_pipeline(
@@ -210,7 +216,12 @@ async def generate_ideas_for_item(
 def _resolve_period_ideas(period, date_from, date_to):
     now = datetime.utcnow()
     if period and period != "all":
-        periods = {"last_hour": timedelta(hours=1), "last_24h": timedelta(hours=24), "last_7d": timedelta(days=7), "last_30d": timedelta(days=30)}
+        periods = {
+            "last_hour": timedelta(hours=1),
+            "last_24h": timedelta(hours=24),
+            "last_7d": timedelta(days=7),
+            "last_30d": timedelta(days=30),
+        }
         if period in periods:
             return now - periods[period], now
         if period == "this_year":
@@ -224,16 +235,16 @@ def _resolve_period_ideas(period, date_from, date_to):
 
 @router.get("")
 async def list_ideas(
-    status: Optional[str] = Query(None, description="Filter nach Status"),
-    source_item_id: Optional[uuid.UUID] = Query(None, description="Filter nach Video"),
-    source_id: Optional[uuid.UUID] = Query(None, description="Filter nach Quelle"),
-    period: Optional[str] = Query(None),
-    date_from: Optional[str] = Query(None),
-    date_to: Optional[str] = Query(None),
+    status: str | None = Query(None, description="Filter nach Status"),
+    source_item_id: uuid.UUID | None = Query(None, description="Filter nach Video"),
+    source_id: uuid.UUID | None = Query(None, description="Filter nach Quelle"),
+    period: str | None = Query(None),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    angle: Optional[str] = Query(None, description="Filter nach Angle"),
-    search: Optional[str] = Query(None, description="Volltextsuche in Titel und Beschreibung"),
+    angle: str | None = Query(None, description="Filter nach Angle"),
+    search: str | None = Query(None, description="Volltextsuche in Titel und Beschreibung"),
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ):
@@ -244,7 +255,9 @@ async def list_ideas(
     if source_item_id:
         query = query.where(ContentIdea.source_item_id == source_item_id)
     if source_id:
-        query = query.join(SourceItem, ContentIdea.source_item_id == SourceItem.id).where(SourceItem.source_id == source_id)
+        query = query.join(SourceItem, ContentIdea.source_item_id == SourceItem.id).where(
+            SourceItem.source_id == source_id
+        )
     if angle:
         query = query.where(ContentIdea.angle == angle)
     if search:
@@ -297,7 +310,10 @@ async def list_ideas(
                 "questions_count": len(idea.entrepreneur_questions or []),
                 "created_at": idea.created_at.isoformat() if idea.created_at else None,
                 "source_item_id": str(idea.source_item_id) if idea.source_item_id else None,
-                **item_source_map.get(str(idea.source_item_id), {"source_id": None, "source_name": None, "source_title": None}),
+                **item_source_map.get(
+                    str(idea.source_item_id),
+                    {"source_id": None, "source_name": None, "source_title": None},
+                ),
             }
             for idea in ideas
         ],
@@ -311,40 +327,47 @@ async def ideas_stats(
 ):
     """Aggregierte Ideen-Statistiken für Analytics-Dashboard."""
     # By status
-    status_rows = (await db.execute(
-        select(ContentIdea.status, func.count(ContentIdea.id).label("cnt"))
-        .where(ContentIdea.tenant_id == tenant_id)
-        .group_by(ContentIdea.status)
-    )).all()
+    status_rows = (
+        await db.execute(
+            select(ContentIdea.status, func.count(ContentIdea.id).label("cnt"))
+            .where(ContentIdea.tenant_id == tenant_id)
+            .group_by(ContentIdea.status)
+        )
+    ).all()
 
     # By angle
-    angle_rows = (await db.execute(
-        select(ContentIdea.angle, func.count(ContentIdea.id).label("cnt"))
-        .where(ContentIdea.tenant_id == tenant_id)
-        .group_by(ContentIdea.angle)
-        .order_by(func.count(ContentIdea.id).desc())
-    )).all()
+    angle_rows = (
+        await db.execute(
+            select(ContentIdea.angle, func.count(ContentIdea.id).label("cnt"))
+            .where(ContentIdea.tenant_id == tenant_id)
+            .group_by(ContentIdea.angle)
+            .order_by(func.count(ContentIdea.id).desc())
+        )
+    ).all()
 
     # Weekly creation (last 8 weeks)
     since = datetime.utcnow() - timedelta(weeks=8)
-    week_rows = (await db.execute(
-        text("""
+    week_rows = (
+        await db.execute(
+            text("""
             SELECT date_trunc('week', created_at) AS week, count(id) AS cnt
             FROM content_ideas
             WHERE tenant_id = :tid AND created_at >= :since
             GROUP BY 1 ORDER BY 1
         """),
-        {"tid": str(tenant_id), "since": since},
-    )).all()
+            {"tid": str(tenant_id), "since": since},
+        )
+    ).all()
 
     # Total with posts generated
-    with_posts = (await db.execute(
-        select(func.count(ContentIdea.id))
-        .where(
-            ContentIdea.tenant_id == tenant_id,
-            ContentIdea.status.in_(["post_generated", "answered"]),
+    with_posts = (
+        await db.execute(
+            select(func.count(ContentIdea.id)).where(
+                ContentIdea.tenant_id == tenant_id,
+                ContentIdea.status.in_(["post_generated", "answered"]),
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
 
     by_status = {r.status: r.cnt for r in status_rows}
     by_angle = [{"angle": r.angle, "count": r.cnt} for r in angle_rows]
@@ -352,10 +375,12 @@ async def ideas_stats(
 
     weekly = []
     for r in week_rows:
-        weekly.append({
-            "week": r.week.date().isoformat() if r.week else None,
-            "count": r.cnt,
-        })
+        weekly.append(
+            {
+                "week": r.week.date().isoformat() if r.week else None,
+                "count": r.cnt,
+            }
+        )
 
     return {
         "total": total,
@@ -442,8 +467,9 @@ async def submit_answer(
     # Pruefen ob alle Fragen beantwortet
     total_questions = len(idea.entrepreneur_questions or [])
     answers_result = await db.execute(
-        select(func.count(EntrepreneurAnswer.id))
-        .where(EntrepreneurAnswer.content_idea_id == idea_id)
+        select(func.count(EntrepreneurAnswer.id)).where(
+            EntrepreneurAnswer.content_idea_id == idea_id
+        )
     )
     existing_count = answers_result.scalar() or 0
     # +1 fuer die gerade eingereichte Antwort
@@ -465,6 +491,7 @@ def _run_p12_p12b_pipeline(tenant_id, idea_id, answers_list, voice_payload, avat
     """Sync-Wrapper um P12 → P12b Pipeline (läuft in asyncio.to_thread)."""
     from tasks.p12_task import run_p12
     from tasks.p12b_task import run_p12b
+
     try:
         from celery.exceptions import MaxRetriesExceededError
     except ImportError:
@@ -492,10 +519,18 @@ def _run_p12_p12b_pipeline(tenant_id, idea_id, answers_list, voice_payload, avat
 
     # P12b — erste Iteration (loop_iteration=0)
     try:
-        p12b_result = run_p12b.apply(args=[tenant_id, p12_output, voice_payload, avatar_payload, 0]).get()
+        p12b_result = run_p12b.apply(
+            args=[tenant_id, p12_output, voice_payload, avatar_payload, 0]
+        ).get()
     except MaxRetriesExceededError as exc:
-        logger.warning("_run_p12_p12b_pipeline: P12b MaxRetriesExceeded, P12-Output direkt: %s", exc)
-        p12b_result = {"status": "loop_break", "final_post": p12_output.get("post", ""), "reason": "p12b_failed"}
+        logger.warning(
+            "_run_p12_p12b_pipeline: P12b MaxRetriesExceeded, P12-Output direkt: %s", exc
+        )
+        p12b_result = {
+            "status": "loop_break",
+            "final_post": p12_output.get("post", ""),
+            "reason": "p12b_failed",
+        }
 
     # P12b Cost-Cap: P12-Output ohne Lektor-Pass zurückgeben
     if p12b_result.get("status") == "paused_for_cost":
@@ -526,7 +561,11 @@ def _run_p12_p12b_pipeline(tenant_id, idea_id, answers_list, voice_payload, avat
                     args=[tenant_id, p12_loop_output, voice_payload, avatar_payload, 1]
                 ).get()
             except MaxRetriesExceededError:
-                p12b_result = {"status": "loop_break", "final_post": p12_loop_output.get("post", ""), "reason": "p12b_loop_failed"}
+                p12b_result = {
+                    "status": "loop_break",
+                    "final_post": p12_loop_output.get("post", ""),
+                    "reason": "p12b_loop_failed",
+                }
         else:
             # P12 Loop-Run fehlgeschlagen → Original-P12-Output direkt zurückgeben
             p12b_result = {
@@ -589,32 +628,43 @@ async def generate_post_from_answers(
         raise HTTPException(400, "Noch keine Antworten vorhanden — bitte zuerst Fragen beantworten")
 
     # Voice-Profil laden (aktives Profil des Tenants)
-    voice_row = (await db.execute(
-        text("SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"),
-        {"t": str(tenant_id)},
-    )).fetchone()
+    voice_row = (
+        await db.execute(
+            text(
+                "SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"
+            ),
+            {"t": str(tenant_id)},
+        )
+    ).fetchone()
     voice_payload = (voice_row[0] if voice_row else {}) or {}
     if isinstance(voice_payload, str):
         voice_payload = json.loads(voice_payload)
 
     # Audience-Avatar laden (aktives Profil des Tenants)
-    avatar_row = (await db.execute(
-        text("SELECT payload FROM tenant_audience_avatar WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"),
-        {"t": str(tenant_id)},
-    )).fetchone()
+    avatar_row = (
+        await db.execute(
+            text(
+                "SELECT payload FROM tenant_audience_avatar WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"
+            ),
+            {"t": str(tenant_id)},
+        )
+    ).fetchone()
     avatar_payload = (avatar_row[0] if avatar_row else {}) or {}
     if isinstance(avatar_payload, str):
         avatar_payload = json.loads(avatar_payload)
 
     answers_list = [
-        {"question_text": a.question_text, "answer_text": a.answer_text}
-        for a in answers
+        {"question_text": a.question_text, "answer_text": a.answer_text} for a in answers
     ]
 
     # Pipeline im Thread ausführen (Celery .get() ist blocking)
     pipeline_result = await asyncio.to_thread(
         _run_p12_p12b_pipeline,
-        str(tenant_id), str(idea_id), answers_list, voice_payload, avatar_payload,
+        str(tenant_id),
+        str(idea_id),
+        answers_list,
+        voice_payload,
+        avatar_payload,
     )
 
     if pipeline_result["status"] == "error":
@@ -634,14 +684,16 @@ async def generate_post_from_answers(
     p12_run_id = pipeline_result["p12_run_id"]
     piece_row = None
     if p12_run_id:
-        piece_row = (await db.execute(
-            select(ContentPiece)
-            .where(
-                ContentPiece.tenant_id == tenant_id,
-                ContentPiece.content_metadata["p12_run_id"].as_string() == p12_run_id,
+        piece_row = (
+            await db.execute(
+                select(ContentPiece)
+                .where(
+                    ContentPiece.tenant_id == tenant_id,
+                    ContentPiece.content_metadata["p12_run_id"].as_string() == p12_run_id,
+                )
+                .limit(1)
             )
-            .limit(1)
-        )).scalar_one_or_none()
+        ).scalar_one_or_none()
 
     if piece_row:
         # P12b-optimierten Text updaten und Metadaten erweitern
@@ -666,11 +718,13 @@ async def generate_post_from_answers(
                 "idea_id": str(idea_id),
                 "content_text": final_post,
                 "status": piece_status,
-                "content_metadata": json.dumps({
-                    "p12_run_id": p12_run_id,
-                    "p12b_status": pipeline_result["p12b_status"],
-                    "mode": "p12_p12b_fallback",
-                }),
+                "content_metadata": json.dumps(
+                    {
+                        "p12_run_id": p12_run_id,
+                        "p12b_status": pipeline_result["p12b_status"],
+                        "mode": "p12_p12b_fallback",
+                    }
+                ),
             },
         )
         piece_row = await db.get(ContentPiece, uuid.UUID(fallback_id))
@@ -682,6 +736,7 @@ async def generate_post_from_answers(
     # Review-Queue-Eintrag anlegen wenn Post geflaggt wurde (Issue #83)
     if pipeline_result.get("flagged_for_review"):
         import uuid as _uuid
+
         await db.execute(
             text(
                 "INSERT INTO tenant_review_queue "
@@ -706,12 +761,14 @@ async def generate_post_from_answers(
 
     response = {
         "message": "1 Post generiert",
-        "posts": [{
-            "id": str(piece_row.id),
-            "content_text": final_post,
-            "variant": 1,
-            "status": piece_row.status,
-        }],
+        "posts": [
+            {
+                "id": str(piece_row.id),
+                "content_text": final_post,
+                "variant": 1,
+                "status": piece_row.status,
+            }
+        ],
     }
 
     if include_design_notes:
@@ -736,17 +793,27 @@ async def batch_generate_ideas(
     from models import async_session_factory
 
     # Find content_ready items without ideas
-    items_with_ideas_subq = select(SourceItem.id).join(SourceItem.content_ideas).where(
-        SourceItem.tenant_id == tenant_id
+    items_with_ideas_subq = (
+        select(SourceItem.id)
+        .join(SourceItem.content_ideas)
+        .where(SourceItem.tenant_id == tenant_id)
     )
-    items = (await db.execute(
-        select(SourceItem).where(
-            SourceItem.tenant_id == tenant_id,
-            SourceItem.status == "content_ready",
-            SourceItem.id.not_in(items_with_ideas_subq),
-            SourceItem.analysis.isnot(None),
-        ).limit(20)
-    )).scalars().all()
+    items = (
+        (
+            await db.execute(
+                select(SourceItem)
+                .where(
+                    SourceItem.tenant_id == tenant_id,
+                    SourceItem.status == "content_ready",
+                    SourceItem.id.not_in(items_with_ideas_subq),
+                    SourceItem.analysis.isnot(None),
+                )
+                .limit(20)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     if not items:
         return {"message": "Keine neuen Items für Ideengenerierung", "triggered": 0}
@@ -762,18 +829,28 @@ async def batch_generate_ideas(
                         continue
                     # Load tenant profile for context-aware ideation
                     from models.tenant import Tenant as TenantModel
+
                     t = await session.get(TenantModel, item.tenant_id)
                     t_settings = (t.settings or {}) if t else {}
                     ent = t_settings.get("entrepreneur", {})
                     vp = t_settings.get("voice_profile", {})
                     parts = []
-                    if ent.get("name"): parts.append(f"Unternehmer: {ent['name']}")
-                    if ent.get("industry"): parts.append(f"Branche: {ent['industry']}")
-                    if ent.get("specialization"): parts.append(f"Spezialisierung: {ent['specialization']}")
-                    if ent.get("target_audience"): parts.append(f"Zielgruppe: {ent['target_audience']}")
-                    if vp.get("tone"): parts.append(f"Tonalität: {vp['tone']}")
+                    if ent.get("name"):
+                        parts.append(f"Unternehmer: {ent['name']}")
+                    if ent.get("industry"):
+                        parts.append(f"Branche: {ent['industry']}")
+                    if ent.get("specialization"):
+                        parts.append(f"Spezialisierung: {ent['specialization']}")
+                    if ent.get("target_audience"):
+                        parts.append(f"Zielgruppe: {ent['target_audience']}")
+                    if vp.get("tone"):
+                        parts.append(f"Tonalität: {vp['tone']}")
                     if vp.get("topics_avoid"):
-                        avoid = vp["topics_avoid"] if isinstance(vp["topics_avoid"], str) else ", ".join(vp["topics_avoid"])
+                        avoid = (
+                            vp["topics_avoid"]
+                            if isinstance(vp["topics_avoid"], str)
+                            else ", ".join(vp["topics_avoid"])
+                        )
                         parts.append(f"Vermeiden: {avoid}")
                     batch_industry_ctx = "\n".join(parts)
                     ideas_data = await run_ideation_pipeline(
@@ -832,7 +909,10 @@ async def refresh_ideas_with_profile(
     entrepreneur = settings.get("entrepreneur", {})
     industry = entrepreneur.get("industry", "")
     if not industry:
-        return {"message": "Kein Unternehmer-Profil gesetzt. Bitte zuerst in Einstellungen → Unternehmer-Profil ausfüllen.", "triggered": 0}
+        return {
+            "message": "Kein Unternehmer-Profil gesetzt. Bitte zuerst in Einstellungen → Unternehmer-Profil ausfüllen.",
+            "triggered": 0,
+        }
 
     # Build industry_context + brand_context
     parts = []
@@ -850,7 +930,11 @@ async def refresh_ideas_with_profile(
     if tone:
         parts.append(f"Tonalität: {tone}")
     if voice_profile.get("topics_avoid"):
-        avoid = voice_profile["topics_avoid"] if isinstance(voice_profile["topics_avoid"], str) else ", ".join(voice_profile["topics_avoid"])
+        avoid = (
+            voice_profile["topics_avoid"]
+            if isinstance(voice_profile["topics_avoid"], str)
+            else ", ".join(voice_profile["topics_avoid"])
+        )
         parts.append(f"Vermeiden: {avoid}")
     industry_context = "\n".join(parts)
 
@@ -859,13 +943,22 @@ async def refresh_ideas_with_profile(
     )
 
     # Find content_ready items with analysis
-    items = (await db.execute(
-        select(SourceItem).where(
-            SourceItem.tenant_id == tenant.id,
-            SourceItem.status == "content_ready",
-            SourceItem.analysis.isnot(None),
-        ).order_by(SourceItem.created_at.desc()).limit(limit)
-    )).scalars().all()
+    items = (
+        (
+            await db.execute(
+                select(SourceItem)
+                .where(
+                    SourceItem.tenant_id == tenant.id,
+                    SourceItem.status == "content_ready",
+                    SourceItem.analysis.isnot(None),
+                )
+                .order_by(SourceItem.created_at.desc())
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     if not items:
         return {"message": "Keine content_ready Items gefunden", "triggered": 0}
@@ -880,12 +973,18 @@ async def refresh_ideas_with_profile(
                     if not item or not item.analysis:
                         continue
                     # Delete existing 'new' ideas for this item
-                    old_ideas = (await session.execute(
-                        select(ContentIdea).where(
-                            ContentIdea.source_item_id == item.id,
-                            ContentIdea.status == "new",
+                    old_ideas = (
+                        (
+                            await session.execute(
+                                select(ContentIdea).where(
+                                    ContentIdea.source_item_id == item.id,
+                                    ContentIdea.status == "new",
+                                )
+                            )
                         )
-                    )).scalars().all()
+                        .scalars()
+                        .all()
+                    )
                     for old_idea in old_ideas:
                         await session.delete(old_idea)
 
@@ -961,7 +1060,7 @@ async def quick_generate_post_from_idea(
     if entrepreneur.get("industry"):
         voice_context += f"\nBranche: {entrepreneur['industry']}"
 
-    from services.llm import llm_service, BudgetExceededError
+    from services.llm import BudgetExceededError, llm_service
 
     prompt = f"""Erstelle einen LinkedIn-Post auf Basis dieser Content-Idee.
 
@@ -1040,6 +1139,7 @@ async def bulk_quick_generate_posts(
     Läuft im Hintergrund. Nutzt Quick-Generate Modus (kein Q&A erforderlich).
     """
     from models import async_session_factory
+
     tenant_id = tenant.id
 
     # Validate IDs belong to this tenant
@@ -1048,7 +1148,11 @@ async def bulk_quick_generate_posts(
         try:
             iid = uuid.UUID(id_str)
             idea = await db.get(ContentIdea, iid)
-            if idea and idea.tenant_id == tenant_id and idea.status not in ("content_generated", "post_generated", "rejected"):
+            if (
+                idea
+                and idea.tenant_id == tenant_id
+                and idea.status not in ("content_generated", "post_generated", "rejected")
+            ):
                 valid_ids.append(id_str)
         except (ValueError, Exception):
             pass
@@ -1059,7 +1163,8 @@ async def bulk_quick_generate_posts(
     settings = tenant.settings or {}
 
     async def _run_bulk(ids: list[str], t_settings: dict):
-        from services.llm import llm_service, BudgetExceededError
+        from services.llm import BudgetExceededError, llm_service
+
         voice_profile = t_settings.get("voice_profile", {})
         entrepreneur = t_settings.get("entrepreneur", {})
         voice_ctx = ""
@@ -1078,7 +1183,6 @@ async def bulk_quick_generate_posts(
                         continue
                     source_item = await session.get(SourceItem, idea.source_item_id)
                     analysis = (source_item.analysis or {}) if source_item else {}
-                    title = (source_item.title or "") if source_item else ""
 
                     prompt = f"""Erstelle einen LinkedIn-Post auf Basis dieser Content-Idee.
 
@@ -1105,7 +1209,11 @@ NUR der fertige Post."""
                         tenant_id=idea.tenant_id,
                         channel="linkedin",
                         content_text=post_text.strip(),
-                        content_metadata={"content_idea_id": id_str, "mode": "quick_generate", "angle": idea.angle},
+                        content_metadata={
+                            "content_idea_id": id_str,
+                            "mode": "quick_generate",
+                            "angle": idea.angle,
+                        },
                         status="draft",
                     )
                     session.add(piece)
@@ -1129,8 +1237,8 @@ NUR der fertige Post."""
 
 @router.post("/bulk-archive")
 async def bulk_archive_ideas(
-    source_id: Optional[uuid.UUID] = Query(None),
-    status_filter: Optional[str] = Query(None, alias="status"),
+    source_id: uuid.UUID | None = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
     db: AsyncSession = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
 ):
@@ -1143,7 +1251,7 @@ async def bulk_archive_ideas(
     if not source_id and not status_filter:
         raise HTTPException(
             status_code=400,
-            detail="Mindestens ein Filter (source_id oder status) erforderlich, um versehentliches Massen-Archivieren zu verhindern."
+            detail="Mindestens ein Filter (source_id oder status) erforderlich, um versehentliches Massen-Archivieren zu verhindern.",
         )
     query = select(ContentIdea).where(
         ContentIdea.tenant_id == tenant_id,
@@ -1170,10 +1278,10 @@ async def bulk_archive_ideas(
 
 class CreateManualIdeaRequest(BaseModel):
     title: str = Field(..., min_length=5, max_length=200)
-    description: Optional[str] = Field(None, max_length=1000)
-    angle: Optional[str] = Field("manual", max_length=50)
-    hook_suggestion: Optional[str] = Field(None, max_length=300)
-    relevance_score: Optional[float] = Field(8.0, ge=0, le=10)
+    description: str | None = Field(None, max_length=1000)
+    angle: str | None = Field("manual", max_length=50)
+    hook_suggestion: str | None = Field(None, max_length=300)
+    relevance_score: float | None = Field(8.0, ge=0, le=10)
 
 
 @router.post("/create-manual")
@@ -1268,17 +1376,19 @@ async def list_idea_variants(
     db: AsyncSession = Depends(get_db),
 ):
     """Liefert alle 3 Aufhänger-Varianten zu einer Idee (sofern generiert)."""
-    rows = (await db.execute(
-        text(
-            "SELECT id, variant_type, hook_text, body_outline, is_chosen, "
-            "       chosen_at, created_at "
-            "FROM idea_variants "
-            "WHERE idea_id = CAST(:id AS uuid) AND tenant_id = :tid "
-            "ORDER BY CASE variant_type "
-            "  WHEN 'hook' THEN 1 WHEN 'story' THEN 2 WHEN 'these' THEN 3 ELSE 4 END"
-        ),
-        {"id": idea_id, "tid": tenant.id},
-    )).fetchall()
+    rows = (
+        await db.execute(
+            text(
+                "SELECT id, variant_type, hook_text, body_outline, is_chosen, "
+                "       chosen_at, created_at "
+                "FROM idea_variants "
+                "WHERE idea_id = CAST(:id AS uuid) AND tenant_id = :tid "
+                "ORDER BY CASE variant_type "
+                "  WHEN 'hook' THEN 1 WHEN 'story' THEN 2 WHEN 'these' THEN 3 ELSE 4 END"
+            ),
+            {"id": idea_id, "tid": tenant.id},
+        )
+    ).fetchall()
     return [
         {
             "id": str(r.id),
@@ -1301,17 +1411,20 @@ async def regenerate_variants(
 ):
     """Stößt P12-Variants-Task an — generiert die 3 Varianten neu."""
     # Tenant-Isolation: Idea muss dem Tenant gehören
-    row = (await db.execute(
-        text("SELECT 1 FROM content_ideas WHERE id = CAST(:id AS uuid) AND tenant_id = :tid"),
-        {"id": idea_id, "tid": tenant.id},
-    )).fetchone()
+    row = (
+        await db.execute(
+            text("SELECT 1 FROM content_ideas WHERE id = CAST(:id AS uuid) AND tenant_id = :tid"),
+            {"id": idea_id, "tid": tenant.id},
+        )
+    ).fetchone()
     if not row:
         raise HTTPException(404, "Idee nicht gefunden")
     try:
         from tasks.p12_variants_task import generate_variants
+
         async_result = generate_variants.apply_async(args=[idea_id])
         return {"status": "queued", "task_id": getattr(async_result, "id", None)}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(500, f"Task-Dispatch fehlgeschlagen: {exc}")
 
 
@@ -1319,7 +1432,9 @@ async def regenerate_variants(
 async def choose_variant(
     idea_id: str,
     variant_id: str,
-    and_generate: bool = Query(False, description="Auto-trigger Post-Generierung mit chosen variant"),
+    and_generate: bool = Query(
+        False, description="Auto-trigger Post-Generierung mit chosen variant"
+    ),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1329,14 +1444,16 @@ async def choose_variant(
     content_ideas.hook_suggestion gespiegelt — der bestehende
     generate_post-Pfad nutzt das als Anker.
     """
-    v = (await db.execute(
-        text(
-            "SELECT id, hook_text, body_outline FROM idea_variants "
-            "WHERE id = CAST(:vid AS uuid) AND idea_id = CAST(:iid AS uuid) "
-            "  AND tenant_id = :tid"
-        ),
-        {"vid": variant_id, "iid": idea_id, "tid": tenant.id},
-    )).fetchone()
+    v = (
+        await db.execute(
+            text(
+                "SELECT id, hook_text, body_outline FROM idea_variants "
+                "WHERE id = CAST(:vid AS uuid) AND idea_id = CAST(:iid AS uuid) "
+                "  AND tenant_id = :tid"
+            ),
+            {"vid": variant_id, "iid": idea_id, "tid": tenant.id},
+        )
+    ).fetchone()
     if not v:
         raise HTTPException(404, "Variante nicht gefunden")
 
@@ -1375,13 +1492,14 @@ async def choose_variant(
     if and_generate:
         try:
             from tasks.p12_task import run_p12
+
             answers_with_hook = {
                 "_chosen_hook": v.hook_text,
                 "_chosen_outline": v.body_outline,
             }
             run_p12.apply_async(args=[str(tenant.id), idea_id, answers_with_hook])
             generation_status = "queued"
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             generation_status = f"dispatch_error: {str(exc)[:80]}"
 
     return {

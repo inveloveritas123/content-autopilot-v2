@@ -8,24 +8,23 @@ strukturierte Felder ins company_profile.
 - Konflikt-Resolution: höhere Trust-Quelle wird nicht überschrieben
 - LLM-Call (Gemini Flash via Requesty) mit fester JSON-Antwort
 """
+
 from __future__ import annotations
 
+import asyncio
 import datetime
-import json
 import logging
 import re
 from typing import Any
-
-import asyncio
 
 from sqlalchemy import select, text
 
 from models.base import sync_session_factory
 from models.company_profile import (
     AUTO_APPLY_THRESHOLD,
+    SOURCE_TRUST,
     CompanyProfile,
     ProfileFieldProvenance,
-    SOURCE_TRUST,
 )
 from tasks.celery_app import celery_app
 
@@ -79,8 +78,13 @@ def run_for_tenant(tenant_id: str, max_chunks: int = 30) -> dict:
     from services.llm import llm_service, set_llm_tenant
 
     set_llm_tenant(tenant_id)
-    out = {"tenant_id": tenant_id, "chunks_scanned": 0,
-           "suggestions": 0, "auto_applied": 0, "conflicts": 0}
+    out = {
+        "tenant_id": tenant_id,
+        "chunks_scanned": 0,
+        "suggestions": 0,
+        "auto_applied": 0,
+        "conflicts": 0,
+    }
 
     with sync_session_factory() as db:
         rows = db.execute(
@@ -134,12 +138,14 @@ def run_for_tenant(tenant_id: str, max_chunks: int = 30) -> dict:
             # event loop" scheitern. Dann: nest_asyncio.apply() vor dem run() einfügen
             # oder llm_service.complete_json_sync() verwenden falls verfügbar.
             # Aktuell: Celery-only → kein Problem. (#148-followup bei Async-Migration)
-            data = asyncio.run(llm_service.complete_json(
-                prompt="## TEXT:\n" + combined_text,
-                system=EXTRACTION_PROMPT,
-                model="gemini-flash",
-                purpose="profile_extraction",
-            ))
+            data = asyncio.run(
+                llm_service.complete_json(
+                    prompt="## TEXT:\n" + combined_text,
+                    system=EXTRACTION_PROMPT,
+                    model="gemini-flash",
+                    purpose="profile_extraction",
+                )
+            )
         except Exception as e:
             logger.warning(f"P06 LLM-call failed for {tenant_id}: {e}")
             return out
@@ -159,28 +165,32 @@ def run_for_tenant(tenant_id: str, max_chunks: int = 30) -> dict:
             existing_conf = existing_by_field.get(field_name, 0)
             if existing_conf > conf:
                 out["conflicts"] += 1
-                db.add(ProfileFieldProvenance(
+                db.add(
+                    ProfileFieldProvenance(
+                        tenant_id=tenant_id,
+                        field_name=field_name,
+                        source="voice_extracted",
+                        value=str(value)[:500],
+                        confidence=conf,
+                        applied=False,
+                        reviewed_by="auto_rejected_lower_trust",
+                    )
+                )
+                continue
+
+            will_apply = conf >= AUTO_APPLY_THRESHOLD
+            db.add(
+                ProfileFieldProvenance(
                     tenant_id=tenant_id,
                     field_name=field_name,
                     source="voice_extracted",
                     value=str(value)[:500],
                     confidence=conf,
-                    applied=False,
-                    reviewed_by="auto_rejected_lower_trust",
-                ))
-                continue
-
-            will_apply = conf >= AUTO_APPLY_THRESHOLD
-            db.add(ProfileFieldProvenance(
-                tenant_id=tenant_id,
-                field_name=field_name,
-                source="voice_extracted",
-                value=str(value)[:500],
-                confidence=conf,
-                applied=will_apply,
-                applied_at=now if will_apply else None,
-                reviewed_by="p06_auto" if will_apply else None,
-            ))
+                    applied=will_apply,
+                    applied_at=now if will_apply else None,
+                    reviewed_by="p06_auto" if will_apply else None,
+                )
+            )
             out["suggestions"] += 1
 
             if will_apply and hasattr(profile, field_name):
@@ -213,9 +223,7 @@ def run_for_tenant(tenant_id: str, max_chunks: int = 30) -> dict:
 def run_all(max_chunks: int = 30) -> dict:
     """Master-Task: für alle Tenants P06 ausführen."""
     with sync_session_factory() as db:
-        rows = db.execute(text(
-            "SELECT id FROM tenants WHERE enabled = true"
-        )).fetchall()
+        rows = db.execute(text("SELECT id FROM tenants WHERE enabled = true")).fetchall()
 
     total = {"tenants": 0, "errors": 0}
     for r in rows:

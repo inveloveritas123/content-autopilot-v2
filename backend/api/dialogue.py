@@ -7,28 +7,29 @@ These endpoints are called by the MCP Server tools:
 - dialogue_submit_answers
 - dialogue_generate_post
 """
+
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
-from models.tenant import Tenant
-from models.source_item import SourceItem
-from models.source import Source
-from models.dialogue_question import DialogueQuestion
 from models.content_piece import ContentPiece
+from models.dialogue_question import DialogueQuestion
+from models.source import Source
+from models.source_item import SourceItem
+from models.tenant import Tenant
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/dialogue", tags=["Dialogue"])
 
 
 # ── List items ready for dialogue ─────────────────────────────────────
+
 
 @router.get("/items")
 async def dialogue_list_items(
@@ -52,16 +53,22 @@ async def dialogue_list_items(
     result = []
     for item in items:
         # Count questions for this item
-        q_count = (await db.execute(
-            select(func.count(DialogueQuestion.id)).where(DialogueQuestion.source_item_id == item.id)
-        )).scalar() or 0
-
-        answered_count = (await db.execute(
-            select(func.count(DialogueQuestion.id)).where(
-                DialogueQuestion.source_item_id == item.id,
-                DialogueQuestion.answer_text.isnot(None),
+        q_count = (
+            await db.execute(
+                select(func.count(DialogueQuestion.id)).where(
+                    DialogueQuestion.source_item_id == item.id
+                )
             )
-        )).scalar() or 0
+        ).scalar() or 0
+
+        answered_count = (
+            await db.execute(
+                select(func.count(DialogueQuestion.id)).where(
+                    DialogueQuestion.source_item_id == item.id,
+                    DialogueQuestion.answer_text.isnot(None),
+                )
+            )
+        ).scalar() or 0
 
         # Determine dialogue status
         if answered_count > 0 and answered_count >= q_count:
@@ -79,25 +86,30 @@ async def dialogue_list_items(
 
         source = await db.get(Source, item.source_id)
 
-        result.append({
-            "id": str(item.id),
-            "title": item.title,
-            "source_name": source.name if source else "Unbekannte Quelle",
-            "source_type": source.type if source else "unknown",
-            "url": item.url,
-            "published_at": item.published_at.isoformat() if item.published_at else None,
-            "status": item.status,
-            "dialogue_status": dialogue_status,
-            "question_count": q_count,
-            "answered_count": answered_count,
-            "summary_1sentence": summary[:300] if summary else "Keine Zusammenfassung verfügbar",
-            "keywords": (item.keywords or [])[:5],
-        })
+        result.append(
+            {
+                "id": str(item.id),
+                "title": item.title,
+                "source_name": source.name if source else "Unbekannte Quelle",
+                "source_type": source.type if source else "unknown",
+                "url": item.url,
+                "published_at": item.published_at.isoformat() if item.published_at else None,
+                "status": item.status,
+                "dialogue_status": dialogue_status,
+                "question_count": q_count,
+                "answered_count": answered_count,
+                "summary_1sentence": summary[:300]
+                if summary
+                else "Keine Zusammenfassung verfügbar",
+                "keywords": (item.keywords or [])[:5],
+            }
+        )
 
     return result
 
 
 # ── Get full context for dialogue ─────────────────────────────────────
+
 
 @router.get("/items/{item_id}/context")
 async def dialogue_get_context(
@@ -120,10 +132,27 @@ async def dialogue_get_context(
     # Key quotes: find sentences with high-value markers
     key_quotes = []
     if transcript:
-        sentences = [s.strip() for s in transcript.replace("!", ".").replace("?", ".").split(".") if len(s.strip()) > 50]
+        sentences = [
+            s.strip()
+            for s in transcript.replace("!", ".").replace("?", ".").split(".")
+            if len(s.strip()) > 50
+        ]
         # Pick sentences that sound like insights (contain numbers, or key phrases)
         for s in sentences:
-            if any(marker in s.lower() for marker in ["prozent", "mal", "euro", "wichtig", "entscheidend", "problem", "lösung", "erfahrung", "kunden"]):
+            if any(
+                marker in s.lower()
+                for marker in [
+                    "prozent",
+                    "mal",
+                    "euro",
+                    "wichtig",
+                    "entscheidend",
+                    "problem",
+                    "lösung",
+                    "erfahrung",
+                    "kunden",
+                ]
+            ):
                 key_quotes.append(s[:200])
                 if len(key_quotes) >= 5:
                     break
@@ -132,11 +161,17 @@ async def dialogue_get_context(
     analysis = item.analysis or {}
 
     # Existing dialogue questions
-    questions_result = (await db.execute(
-        select(DialogueQuestion)
-        .where(DialogueQuestion.source_item_id == item.id)
-        .order_by(DialogueQuestion.order_index)
-    )).scalars().all()
+    questions_result = (
+        (
+            await db.execute(
+                select(DialogueQuestion)
+                .where(DialogueQuestion.source_item_id == item.id)
+                .order_by(DialogueQuestion.order_index)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     questions = [
         {
@@ -155,13 +190,19 @@ async def dialogue_get_context(
     # Voice profile from tenant settings
     voice_profile = tenant.settings.get("voice_profile", {})
     # Prefer Wizard voice profile from tenant_voice_profile table
-    from sqlalchemy import text as _sa_text
     import json as _json
+
+    from sqlalchemy import text as _sa_text
+
     try:
-        _vp_row = (await db.execute(
-            _sa_text("SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"),
-            {"t": str(tenant.id)},
-        )).fetchone()
+        _vp_row = (
+            await db.execute(
+                _sa_text(
+                    "SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"
+                ),
+                {"t": str(tenant.id)},
+            )
+        ).fetchone()
         if _vp_row and _vp_row[0]:
             _wp = _vp_row[0] if isinstance(_vp_row[0], dict) else _json.loads(_vp_row[0])
             if _wp:
@@ -172,12 +213,18 @@ async def dialogue_get_context(
     forbidden_phrases = tenant.settings.get("forbidden_phrases", [])
 
     # Recent posts for style reference
-    recent_posts_result = (await db.execute(
-        select(ContentPiece)
-        .where(ContentPiece.tenant_id == tenant.id, ContentPiece.status == "approved")
-        .order_by(ContentPiece.created_at.desc())
-        .limit(3)
-    )).scalars().all()
+    recent_posts_result = (
+        (
+            await db.execute(
+                select(ContentPiece)
+                .where(ContentPiece.tenant_id == tenant.id, ContentPiece.status == "approved")
+                .order_by(ContentPiece.created_at.desc())
+                .limit(3)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     recent_posts = [
         {
@@ -199,7 +246,9 @@ async def dialogue_get_context(
             "name": source.name if source else "Unbekannt",
             "type": source.type if source else "unknown",
             "url": source.url if source else None,
-        } if source else {},
+        }
+        if source
+        else {},
         "content": {
             "transcript_excerpt": transcript_excerpt,
             "key_quotes": key_quotes,
@@ -223,6 +272,7 @@ async def dialogue_get_context(
 
 
 # ── Submit answers ─────────────────────────────────────────────────────
+
 
 class AnswerItem(BaseModel):
     question_id: str
@@ -262,16 +312,22 @@ async def dialogue_submit_answers(
     await db.commit()
 
     # Count total answered
-    total_questions = (await db.execute(
-        select(func.count(DialogueQuestion.id)).where(DialogueQuestion.source_item_id == item.id)
-    )).scalar() or 0
-
-    answered_total = (await db.execute(
-        select(func.count(DialogueQuestion.id)).where(
-            DialogueQuestion.source_item_id == item.id,
-            DialogueQuestion.answer_text.isnot(None),
+    total_questions = (
+        await db.execute(
+            select(func.count(DialogueQuestion.id)).where(
+                DialogueQuestion.source_item_id == item.id
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
+
+    answered_total = (
+        await db.execute(
+            select(func.count(DialogueQuestion.id)).where(
+                DialogueQuestion.source_item_id == item.id,
+                DialogueQuestion.answer_text.isnot(None),
+            )
+        )
+    ).scalar() or 0
 
     return {
         "saved": len(saved),
@@ -284,6 +340,7 @@ async def dialogue_submit_answers(
 
 
 # ── Generate post (context for Claude) ───────────────────────────────
+
 
 @router.post("/items/{item_id}/generate-post")
 async def dialogue_generate_post(
@@ -308,11 +365,17 @@ async def dialogue_generate_post(
         raise HTTPException(status_code=404, detail="Item not found")
 
     # Get questions with answers
-    questions_result = (await db.execute(
-        select(DialogueQuestion)
-        .where(DialogueQuestion.source_item_id == item.id)
-        .order_by(DialogueQuestion.order_index)
-    )).scalars().all()
+    questions_result = (
+        (
+            await db.execute(
+                select(DialogueQuestion)
+                .where(DialogueQuestion.source_item_id == item.id)
+                .order_by(DialogueQuestion.order_index)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     answered_qas = [
         {
@@ -325,18 +388,26 @@ async def dialogue_generate_post(
     ]
 
     if not answered_qas:
-        raise HTTPException(status_code=400, detail="Keine Antworten vorhanden. Erst die Fragen beantworten.")
+        raise HTTPException(
+            status_code=400, detail="Keine Antworten vorhanden. Erst die Fragen beantworten."
+        )
 
     analysis = item.analysis or {}
     voice_profile = tenant.settings.get("voice_profile", {})
     # Prefer Wizard voice profile from tenant_voice_profile table
-    from sqlalchemy import text as _sa_text
     import json as _json
+
+    from sqlalchemy import text as _sa_text
+
     try:
-        _vp_row = (await db.execute(
-            _sa_text("SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"),
-            {"t": str(tenant.id)},
-        )).fetchone()
+        _vp_row = (
+            await db.execute(
+                _sa_text(
+                    "SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"
+                ),
+                {"t": str(tenant.id)},
+            )
+        ).fetchone()
         if _vp_row and _vp_row[0]:
             _wp = _vp_row[0] if isinstance(_vp_row[0], dict) else _json.loads(_vp_row[0])
             if _wp:
@@ -358,13 +429,13 @@ async def dialogue_generate_post(
         # Build prompt for Claude to generate directly
         prompt_parts = [
             f"Erstelle einen LinkedIn-Post im Format '{format}'.",
-            f"",
+            "",
             f"FORMAT-ANLEITUNG: {format_guidance}",
-            f"",
+            "",
             f"QUELLE: {item.title}",
             f"HAUPTTHEMA: {analysis.get('main_topic', '')}",
-            f"",
-            f"ROBERTS ANTWORTEN (das ist der echte Content):",
+            "",
+            "ROBERTS ANTWORTEN (das ist der echte Content):",
         ]
 
         for i, qa in enumerate(answered_qas, 1):
@@ -372,29 +443,39 @@ async def dialogue_generate_post(
             prompt_parts.append(f"  Antwort: {qa['answer']}")
             prompt_parts.append("")
 
-        _tone = (voice_profile.get('tone') or
-                 (voice_profile.get('tonalitaet', {}).get('grundton', '') if isinstance(voice_profile.get('tonalitaet'), dict) else '') or
-                 'professionell, direkt, authentisch')
-        prompt_parts.extend([
-            f"STIMME & STIL:",
-            f"  Ton: {_tone}",
-            f"  Unternehmer: {entrepreneur.get('name', 'Robert')}, {entrepreneur.get('industry', '')}",
-            f"  Zielgruppe: {entrepreneur.get('target_audience', 'LinkedIn-Entscheider')}",
-        ])
+        _tone = (
+            voice_profile.get("tone")
+            or (
+                voice_profile.get("tonalitaet", {}).get("grundton", "")
+                if isinstance(voice_profile.get("tonalitaet"), dict)
+                else ""
+            )
+            or "professionell, direkt, authentisch"
+        )
+        prompt_parts.extend(
+            [
+                "STIMME & STIL:",
+                f"  Ton: {_tone}",
+                f"  Unternehmer: {entrepreneur.get('name', 'Robert')}, {entrepreneur.get('industry', '')}",
+                f"  Zielgruppe: {entrepreneur.get('target_audience', 'LinkedIn-Entscheider')}",
+            ]
+        )
 
         if forbidden_phrases:
             prompt_parts.append(f"VERBOTENE FLOSKELN: {', '.join(forbidden_phrases[:10])}")
 
-        prompt_parts.extend([
-            "",
-            "REGELN:",
-            "- Maximal 1300 Zeichen (LinkedIn-Limit für volle Sichtbarkeit)",
-            "- Keine generischen Phrasen ('In der heutigen Welt...', 'Es ist wichtig...')",
-            "- Echte Zahlen/Beispiele aus Roberts Antworten verwenden",
-            "- Mit starkem Hook beginnen (1-2 Zeilen die zum Weiterlesen zwingen)",
-            "- Mit klarem Call-to-Action enden",
-            "- Roberts eigene Sprache und Formulierungen beibehalten",
-        ])
+        prompt_parts.extend(
+            [
+                "",
+                "REGELN:",
+                "- Maximal 1300 Zeichen (LinkedIn-Limit für volle Sichtbarkeit)",
+                "- Keine generischen Phrasen ('In der heutigen Welt...', 'Es ist wichtig...')",
+                "- Echte Zahlen/Beispiele aus Roberts Antworten verwenden",
+                "- Mit starkem Hook beginnen (1-2 Zeilen die zum Weiterlesen zwingen)",
+                "- Mit klarem Call-to-Action enden",
+                "- Roberts eigene Sprache und Formulierungen beibehalten",
+            ]
+        )
 
         return {
             "mode": "claude_direct",
@@ -405,15 +486,22 @@ async def dialogue_generate_post(
                 "source": item.title,
                 "answered_questions": len(answered_qas),
                 "format": format,
-                "voice": (voice_profile.get('tone') or
-                          (voice_profile.get('tonalitaet', {}).get('grundton', '') if isinstance(voice_profile.get('tonalitaet'), dict) else '') or
-                          'nicht konfiguriert'),
+                "voice": (
+                    voice_profile.get("tone")
+                    or (
+                        voice_profile.get("tonalitaet", {}).get("grundton", "")
+                        if isinstance(voice_profile.get("tonalitaet"), dict)
+                        else ""
+                    )
+                    or "nicht konfiguriert"
+                ),
             },
         }
     else:
         # Fallback: call backend LLM
         try:
             from services.content_generator import ContentGenerator
+
             generator = ContentGenerator()
             # Build context dict for generator
             context = {
@@ -436,11 +524,12 @@ async def dialogue_generate_post(
 
 # ── Save generated questions (called by pipeline after analysis) ──────
 
+
 class QuestionItem(BaseModel):
     question_text: str
-    transcript_reference: Optional[str] = None
-    why_relevant: Optional[str] = None
-    target_angle: Optional[str] = None
+    transcript_reference: str | None = None
+    why_relevant: str | None = None
+    target_angle: str | None = None
     order_index: int = 0
 
 
@@ -461,9 +550,15 @@ async def save_dialogue_questions(
         raise HTTPException(status_code=404, detail="Item not found")
 
     # Delete existing questions (replace)
-    existing = (await db.execute(
-        select(DialogueQuestion).where(DialogueQuestion.source_item_id == item.id)
-    )).scalars().all()
+    existing = (
+        (
+            await db.execute(
+                select(DialogueQuestion).where(DialogueQuestion.source_item_id == item.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     for q in existing:
         await db.delete(q)
 

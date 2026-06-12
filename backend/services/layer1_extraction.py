@@ -2,12 +2,15 @@
 Schicht-1 Extraktions-Service — Intent + Feature-Extraktion aus Telegram-Nachrichten.
 Sicherheitskritisch: Injection-Schutz via Pattern-Check vor LLM-Call.
 """
-import anthropic
+
 import hashlib
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from datetime import UTC
+
+import anthropic
 
 from models.base import sync_session_factory
 
@@ -18,9 +21,19 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 INJECTION_PATTERNS = [
-    "ignore previous", "ignoriere", "vergiss alles", "vergiss vorher",
-    "system:", "<|", "you are a", "du bist ein", "dein job ist",
-    "</user_input>", "</system>", "neue anweisung", "new instruction",
+    "ignore previous",
+    "ignoriere",
+    "vergiss alles",
+    "vergiss vorher",
+    "system:",
+    "<|",
+    "you are a",
+    "du bist ein",
+    "dein job ist",
+    "</user_input>",
+    "</system>",
+    "neue anweisung",
+    "new instruction",
 ]
 
 ANTHROPIC_MODEL_ID = "claude-sonnet-4-6-20251022"
@@ -57,7 +70,7 @@ _SCHEMA_PATH = os.path.normpath(
     os.path.join(os.path.dirname(__file__), "..", "schemas", "schicht1_extraction.schema.json")
 )
 try:
-    with open(_SCHEMA_PATH, "r", encoding="utf-8") as _f:
+    with open(_SCHEMA_PATH, encoding="utf-8") as _f:
         SCHEMA = json.load(_f)
 except Exception as _schema_err:
     logger.warning("[Layer1] Schema konnte nicht geladen werden: %s", _schema_err)
@@ -67,6 +80,7 @@ except Exception as _schema_err:
 # ---------------------------------------------------------------------------
 # Dataclass
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ExtractionResult:
@@ -81,6 +95,7 @@ class ExtractionResult:
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
+
 
 def _check_injection_patterns(text: str) -> list:
     """Prueft Text auf bekannte Injection-Muster (case-insensitive).
@@ -103,6 +118,7 @@ def _validate_schema(data: dict) -> list:
         return []
     try:
         import jsonschema
+
         jsonschema.validate(data, SCHEMA)
         return []
     except ImportError:
@@ -135,6 +151,7 @@ def _load_prompt():
     """Laedt schicht1_extraktion Prompt: NC → lokale Datei → Hardcoded."""
     try:
         from services.prompt_loader import get_default_prompt_loader
+
         loader = get_default_prompt_loader()
         return loader.load("schicht1_extraktion")
     except Exception as e:
@@ -146,32 +163,38 @@ def _load_prompt():
     )
     if os.path.exists(local_path):
         try:
-            with open(local_path, "r", encoding="utf-8") as f:
+            with open(local_path, encoding="utf-8") as f:
                 content = f.read()
+            from datetime import datetime
+
             from services.prompt_loader import LoadedPrompt, _extract_section
-            from datetime import datetime, timezone
+
             sha = hashlib.sha256(content.encode()).hexdigest()
             return LoadedPrompt(
                 content=content,
                 system_prompt=_extract_section(content, "System-Prompt"),
                 user_prompt_template=_extract_section(content, "User-Prompt"),
                 sha=sha,
-                loaded_at=datetime.now(timezone.utc),
+                loaded_at=datetime.now(UTC),
                 source_path=local_path,
             )
         except Exception as le:
             logger.warning("[Layer1] Lokaler Fallback fehlgeschlagen: %s", le)
 
     # Hardcoded fallback
+    from datetime import datetime
+
     from services.prompt_loader import LoadedPrompt
-    from datetime import datetime, timezone
-    fallback_content = f"## System-Prompt\n{_FALLBACK_SYSTEM}\n\n## User-Prompt\n{_FALLBACK_USER_TEMPLATE}"
+
+    fallback_content = (
+        f"## System-Prompt\n{_FALLBACK_SYSTEM}\n\n## User-Prompt\n{_FALLBACK_USER_TEMPLATE}"
+    )
     return LoadedPrompt(
         content=fallback_content,
         system_prompt=_FALLBACK_SYSTEM,
         user_prompt_template=_FALLBACK_USER_TEMPLATE,
         sha="fallback",
-        loaded_at=datetime.now(timezone.utc),
+        loaded_at=datetime.now(UTC),
         source_path="hardcoded",
     )
 
@@ -179,6 +202,7 @@ def _load_prompt():
 # ---------------------------------------------------------------------------
 # Haupt-Funktion
 # ---------------------------------------------------------------------------
+
 
 def extract_intent_features(
     transcript: str,
@@ -218,8 +242,10 @@ def extract_intent_features(
     # CostCapMiddleware requires an AsyncSession — not available in this sync service.
     # Instead, query the cost_tracking table directly to check today's spend.
     try:
-        from sqlalchemy import text as _text
         from datetime import date
+
+        from sqlalchemy import text as _text
+
         cap_usd = float(os.environ.get("COST_CAP_USD_PER_DAY", "5.0"))
         with sync_session_factory() as _cap_session:
             row = _cap_session.execute(
@@ -227,7 +253,12 @@ def extract_intent_features(
                 {"tid": tenant_id, "d": date.today().isoformat()},
             ).fetchone()
             if row and float(row[0]) >= cap_usd:
-                logger.warning("[Layer1] Cost-cap reached for tenant %s (%.4f >= %.4f USD)", tenant_id, float(row[0]), cap_usd)
+                logger.warning(
+                    "[Layer1] Cost-cap reached for tenant %s (%.4f >= %.4f USD)",
+                    tenant_id,
+                    float(row[0]),
+                    cap_usd,
+                )
                 return ExtractionResult(
                     intent="unclassified",
                     session_context="no_session",
@@ -256,11 +287,13 @@ def extract_intent_features(
     response = client.messages.create(
         model=model_id,
         max_tokens=512,
-        system=[{
-            "type": "text",
-            "text": prompt.system_prompt,
-            "cache_control": {"type": "ephemeral"},
-        }],
+        system=[
+            {
+                "type": "text",
+                "text": prompt.system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
         messages=[{"role": "user", "content": user_content}],
     )
     raw_output = response.content[0].text.strip()
@@ -276,18 +309,19 @@ def extract_intent_features(
             if attempt == 0:
                 logger.warning("[Layer1] Schema-Verletzung (Versuch 1): %s — retry", errors)
                 retry_content = (
-                    user_content
-                    + f"\n\nFehler im ersten Versuch: {errors}. "
+                    user_content + f"\n\nFehler im ersten Versuch: {errors}. "
                     "Bitte antworte exakt gemäß dem JSON-Schema."
                 )
                 response2 = client.messages.create(
                     model=model_id,
                     max_tokens=512,
-                    system=[{
-                        "type": "text",
-                        "text": prompt.system_prompt,
-                        "cache_control": {"type": "ephemeral"},
-                    }],
+                    system=[
+                        {
+                            "type": "text",
+                            "text": prompt.system_prompt,
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ],
                     messages=[{"role": "user", "content": retry_content}],
                 )
                 raw_output = response2.content[0].text.strip()
@@ -298,7 +332,7 @@ def extract_intent_features(
                     session_context="no_session",
                     extracted_features={},
                     flagged_for_review=True,
-                    flag_reasons=flag_reasons + ["schema_violation"],
+                    flag_reasons=[*flag_reasons, "schema_violation"],
                     routed_to="reviewer_queue",
                 )
         except ValueError as ve:
@@ -309,7 +343,7 @@ def extract_intent_features(
                     session_context="no_session",
                     extracted_features={},
                     flagged_for_review=True,
-                    flag_reasons=flag_reasons + ["json_parse_error"],
+                    flag_reasons=[*flag_reasons, "json_parse_error"],
                     routed_to="reviewer_queue",
                 )
             # On first parse error, retry without schema reminder (raw_output unchanged — loop continues)

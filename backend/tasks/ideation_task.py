@@ -7,18 +7,19 @@ Workflow:
 3. Dieser Task generiert 5-8 Content-Ideen mit Fragen
 4. Ideen landen in der DB mit Status "new" — bereit für MCP-Dialog
 """
-import logging
+
 import asyncio
-from services.llm import BudgetExceededError, set_llm_tenant
-from services.brand_voice import format_voice_for_prompt
+import logging
 
 from sqlalchemy import select, text
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
-from models.source_item import SourceItem
 from models.content_idea import ContentIdea
+from models.source_item import SourceItem
 from models.tenant import Tenant
+from services.brand_voice import format_voice_for_prompt
+from services.llm import BudgetExceededError, set_llm_tenant
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +44,11 @@ def auto_generate_ideas(item_id: str):
             return {"error": "no_analysis"}
 
         # Prüfe ob bereits Ideen existieren
-        existing_ideas = session.execute(
-            select(ContentIdea).where(ContentIdea.source_item_id == item.id)
-        ).scalars().all()
+        existing_ideas = (
+            session.execute(select(ContentIdea).where(ContentIdea.source_item_id == item.id))
+            .scalars()
+            .all()
+        )
 
         if existing_ideas:
             logger.info(f"Item {item_id} already has {len(existing_ideas)} ideas, skipping")
@@ -91,6 +94,7 @@ def auto_generate_ideas(item_id: str):
 
             # Phase 4.4: Industry-Boost auf relevance_score
             from services.industry_relevance import apply_industry_boost
+
             tenant_industry_ctx = None
             try:
                 _trow = session.execute(
@@ -137,16 +141,18 @@ def auto_generate_ideas(item_id: str):
                 saved_count += 1
 
             session.commit()
-            logger.info(f"Auto-ideation for item {item_id}: {saved_count} ideas with questions generated")
+            logger.info(
+                f"Auto-ideation for item {item_id}: {saved_count} ideas with questions generated"
+            )
 
             # Auto-score ideation quality (rule-based, no LLM cost)
             try:
-                from services.quality_scorer import score_ideation
                 from models.quality_metric import QualityMetric
-                from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+                from services.llm import PURPOSE_MODEL_MAP, REQUESTY_MODELS
+                from services.quality_scorer import score_ideation
+
                 saved_ideas_list = [
-                    {"angle": i.get("angle", ""), "title": i.get("title", "")}
-                    for i in ideas_data
+                    {"angle": i.get("angle", ""), "title": i.get("title", "")} for i in ideas_data
                 ]
                 scores = score_ideation(saved_ideas_list)
                 model_key = PURPOSE_MODEL_MAP.get("ideation", "claude-sonnet")
@@ -174,11 +180,15 @@ def auto_generate_ideas(item_id: str):
             session.rollback()
             # Set circuit breaker flag
             try:
-                import redis as redis_lib
                 import os
+
+                import redis as redis_lib
+
                 _r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://redis-v2:6379/1"))
                 _r.set("llm:budget_exceeded", "1")  # persists until manual reset
-                logger.warning("Budget exceeded in ideation — pipeline paused (llm:budget_exceeded flag set, no TTL)")
+                logger.warning(
+                    "Budget exceeded in ideation — pipeline paused (llm:budget_exceeded flag set, no TTL)"
+                )
             except Exception:
                 pass
             return {"error": str(e)}
@@ -196,7 +206,6 @@ def regenerate_ideas(item_id: str, force: bool = False):
         item_id: ID des SourceItem
         force: Wenn True, werden bestehende Ideen archiviert und neue generiert
     """
-    from services.content_ideation import run_ideation_pipeline
 
     with sync_session_factory() as session:
         item = session.get(SourceItem, item_id)
@@ -205,12 +214,16 @@ def regenerate_ideas(item_id: str, force: bool = False):
 
         if force:
             # Bestehende Ideen archivieren
-            existing = session.execute(
-                select(ContentIdea).where(
-                    ContentIdea.source_item_id == item.id,
-                    ContentIdea.status != "archived",
+            existing = (
+                session.execute(
+                    select(ContentIdea).where(
+                        ContentIdea.source_item_id == item.id,
+                        ContentIdea.status != "archived",
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             for idea in existing:
                 idea.status = "archived"
             session.commit()

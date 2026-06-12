@@ -15,13 +15,13 @@ Anmerkung zu Test-Grenzen:
   Der Policy-Guard (statischer Scan) und der Import-Test sind ohne DB testbar.
   Für Integration-Tests müssen DB + Celery verfügbar sein.
 """
-import os
-import sys
-import re
-import ast
-import types
-import pytest
 
+import contextlib
+import os
+import re
+import sys
+
+import pytest
 
 # ---------------------------------------------------------------------------
 # Pfade
@@ -51,6 +51,7 @@ def _read_task_source(filename: str) -> str:
 # Policy-Guard-Tests: statischer Quelltext-Scan
 # ---------------------------------------------------------------------------
 
+
 class TestPolicyGuard:
     """Stellt sicher dass keine verbotenen Direktzugriff-Muster in den Tasks stehen."""
 
@@ -61,12 +62,12 @@ class TestPolicyGuard:
         # Kommentare ausblenden für den Check
         lines_without_comments = _strip_comments(source)
 
-        assert "import anthropic" not in lines_without_comments, (
-            f"{filename}: 'import anthropic' gefunden — direkter SDK-Aufruf verboten"
-        )
-        assert "anthropic.Anthropic(" not in lines_without_comments, (
-            f"{filename}: 'anthropic.Anthropic(' gefunden — direkter SDK-Aufruf verboten"
-        )
+        assert (
+            "import anthropic" not in lines_without_comments
+        ), f"{filename}: 'import anthropic' gefunden — direkter SDK-Aufruf verboten"
+        assert (
+            "anthropic.Anthropic(" not in lines_without_comments
+        ), f"{filename}: 'anthropic.Anthropic(' gefunden — direkter SDK-Aufruf verboten"
 
     @pytest.mark.parametrize("filename", _P_TASK_FILES)
     def test_no_google_generativeai(self, filename):
@@ -74,9 +75,9 @@ class TestPolicyGuard:
         source = _read_task_source(filename)
         lines_without_comments = _strip_comments(source)
 
-        assert "google.generativeai" not in lines_without_comments, (
-            f"{filename}: 'google.generativeai' gefunden — direkter SDK-Aufruf verboten"
-        )
+        assert (
+            "google.generativeai" not in lines_without_comments
+        ), f"{filename}: 'google.generativeai' gefunden — direkter SDK-Aufruf verboten"
 
     @pytest.mark.parametrize("filename", _P_TASK_FILES)
     def test_no_literal_claude_sonnet_model_id(self, filename):
@@ -105,7 +106,7 @@ class TestPolicyGuard:
         forbidden = ["ANTHROPIC_MODEL_ID", "VERTEX_MODEL_ID", "ANTHROPIC_PRICING_KEY"]
         for forbidden_name in forbidden:
             # Prüfen ob es als Variable-Zuweisung vorkommt (= ...)
-            assignment_pattern = re.compile(rf'^{forbidden_name}\s*=', re.MULTILINE)
+            assignment_pattern = re.compile(rf"^{forbidden_name}\s*=", re.MULTILINE)
             assert not assignment_pattern.search(lines_without_comments), (
                 f"{filename}: '{forbidden_name} = ...' gefunden — "
                 "Modell-IDs dürfen nicht als Task-Konstanten definiert sein"
@@ -116,8 +117,7 @@ class TestPolicyGuard:
         """Jede Task-Datei muss call_pipeline_llm importieren oder referenzieren."""
         source = _read_task_source(filename)
         assert "call_pipeline_llm" in source, (
-            f"{filename}: 'call_pipeline_llm' nicht gefunden — "
-            "Tasks müssen den Seam nutzen"
+            f"{filename}: 'call_pipeline_llm' nicht gefunden — " "Tasks müssen den Seam nutzen"
         )
 
     @pytest.mark.parametrize("filename", _P_TASK_FILES)
@@ -134,6 +134,7 @@ class TestPolicyGuard:
 # Import-Tests: Module müssen importierbar sein (ohne DB)
 # ---------------------------------------------------------------------------
 
+
 class TestTaskModuleImports:
     """Prüft ob Task-Module importierbar sind (statische Analyse)."""
 
@@ -142,6 +143,7 @@ class TestTaskModuleImports:
         sys.path.insert(0, _BACKEND_DIR)
         try:
             import services.pipeline_llm as plm
+
             assert hasattr(plm, "call_pipeline_llm")
             assert hasattr(plm, "resolve_tier")
             assert hasattr(plm, "estimate_tier_cost")
@@ -156,6 +158,7 @@ class TestTaskModuleImports:
         sys.path.insert(0, _BACKEND_DIR)
         try:
             from services.pipeline_llm import TIER_MODELS
+
             assert "S6" in TIER_MODELS
             assert TIER_MODELS["S6"] == "anthropic/claude-sonnet-4-6"
         finally:
@@ -166,10 +169,11 @@ class TestTaskModuleImports:
         sys.path.insert(0, _BACKEND_DIR)
         try:
             from services.pipeline_llm import MODEL_PER_PROMPT
+
             for key in ["P01", "P03", "P04", "P12", "P12B", "P12C"]:
-                assert MODEL_PER_PROMPT.get(key) == "S6", (
-                    f"{key}: erwartet S6, got {MODEL_PER_PROMPT.get(key)}"
-                )
+                assert (
+                    MODEL_PER_PROMPT.get(key) == "S6"
+                ), f"{key}: erwartet S6, got {MODEL_PER_PROMPT.get(key)}"
         finally:
             sys.path.pop(0)
 
@@ -178,6 +182,7 @@ class TestTaskModuleImports:
         sys.path.insert(0, _BACKEND_DIR)
         try:
             from services.pipeline_llm import PROMPT_MAX_TOKENS
+
             for key in ["P01", "P03", "P04", "P12", "P12B", "P12C"]:
                 assert key in PROMPT_MAX_TOKENS, f"{key} fehlt in PROMPT_MAX_TOKENS"
                 assert PROMPT_MAX_TOKENS[key] > 0
@@ -189,6 +194,7 @@ class TestTaskModuleImports:
 # Tier-Auflösungs-Tests mit echtem Modul
 # ---------------------------------------------------------------------------
 
+
 class TestTierResolutionIntegration:
     """Auflösungs-Tests mit dem echten resolve_tier."""
 
@@ -196,39 +202,43 @@ class TestTierResolutionIntegration:
         sys.path.insert(0, _BACKEND_DIR)
 
     def teardown_method(self):
-        try:
+        with contextlib.suppress(ValueError):
             sys.path.remove(_BACKEND_DIR)
-        except ValueError:
-            pass
 
     def test_p01_resolves_to_s6_by_default(self):
-        from services.pipeline_llm import resolve_tier, TIER_MODELS
+        from services.pipeline_llm import resolve_tier
+
         tier, model_id = resolve_tier("P01")
         assert tier == "S6"
         assert model_id == "anthropic/claude-sonnet-4-6"
 
     def test_p03_resolves_to_s6_by_default(self):
         from services.pipeline_llm import resolve_tier
+
         tier, _ = resolve_tier("P03")
         assert tier == "S6"
 
     def test_p04_resolves_to_s6_by_default(self):
         from services.pipeline_llm import resolve_tier
+
         tier, _ = resolve_tier("P04")
         assert tier == "S6"
 
     def test_p12_resolves_to_s6_by_default(self):
         from services.pipeline_llm import resolve_tier
+
         tier, _ = resolve_tier("P12")
         assert tier == "S6"
 
     def test_p12b_resolves_to_s6_by_default(self):
         from services.pipeline_llm import resolve_tier
+
         tier, _ = resolve_tier("P12B")
         assert tier == "S6"
 
     def test_p12c_resolves_to_s6_by_default(self):
         from services.pipeline_llm import resolve_tier
+
         tier, _ = resolve_tier("P12C")
         assert tier == "S6"
 
@@ -236,6 +246,7 @@ class TestTierResolutionIntegration:
         """MODEL_TIER_P01=S1 ändert Tier für P01."""
         monkeypatch.setenv("MODEL_TIER_P01", "S1")
         from services.pipeline_llm import resolve_tier
+
         tier, _ = resolve_tier("P01")
         assert tier == "S1"
 
@@ -243,6 +254,7 @@ class TestTierResolutionIntegration:
         """MODEL_TIER_P01=S1 beeinflusst nicht P03."""
         monkeypatch.setenv("MODEL_TIER_P01", "S1")
         from services.pipeline_llm import resolve_tier
+
         tier_p01, _ = resolve_tier("P01")
         tier_p03, _ = resolve_tier("P03")
         assert tier_p01 == "S1"
@@ -252,6 +264,7 @@ class TestTierResolutionIntegration:
 # ---------------------------------------------------------------------------
 # BUG-1-Fix: Statischer Test — jeder Task hat except BudgetExceededError im Hauptpfad
 # ---------------------------------------------------------------------------
+
 
 class TestBudgetExceededHandling:
     """Statischer Scan: Jeder der 6 Tasks muss BudgetExceededError abfangen
@@ -275,7 +288,7 @@ class TestBudgetExceededHandling:
     def test_task_has_except_budget_exceeded_branch(self, filename):
         """Jede Task-Datei muss einen 'except BudgetExceededError' Zweig haben."""
         source = _read_task_source(filename)
-        assert re.search(r'except\s+BudgetExceededError', source), (
+        assert re.search(r"except\s+BudgetExceededError", source), (
             f"{filename}: kein 'except BudgetExceededError' Zweig gefunden — "
             "BUG-1-Fix nicht angewendet"
         )
@@ -293,13 +306,11 @@ class TestBudgetExceededHandling:
         # Striktere Prüfung: nach 'except BudgetExceededError' muss 'paused_for_cost' folgen
         # (mindestens innerhalb der nächsten 30 Zeilen nach dem except-Zweig)
         lines = source.splitlines()
-        found_except = False
         found_paused = False
         for i, line in enumerate(lines):
-            if re.search(r'except\s+BudgetExceededError', line):
-                found_except = True
+            if re.search(r"except\s+BudgetExceededError", line):
                 # Suche in den nächsten 30 Zeilen
-                window = "\n".join(lines[i:i+30])
+                window = "\n".join(lines[i : i + 30])
                 if "paused_for_cost" in window:
                     found_paused = True
                     break
@@ -312,6 +323,7 @@ class TestBudgetExceededHandling:
 # ---------------------------------------------------------------------------
 # Hilfsfunktion: Kommentare aus Python-Quelltext entfernen
 # ---------------------------------------------------------------------------
+
 
 def _strip_comments(source: str) -> str:
     """Entfernt Python-Kommentare (#...) und Docstrings aus dem Quelltext.
@@ -343,7 +355,7 @@ def _strip_comments(source: str) -> str:
 
         # Zeilweise Kommentare entfernen (# ...)
         # Achtung: '#' in Strings nicht entfernen — einfache Näherung reicht für Policy-Guard
-        hash_pos = line.find('#')
+        hash_pos = line.find("#")
         if hash_pos >= 0:
             # Nur entfernen wenn # nicht innerhalb eines Strings
             before = line[:hash_pos]

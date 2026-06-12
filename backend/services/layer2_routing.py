@@ -2,23 +2,25 @@
 Schicht-2 Routing — deterministisches Intent-zu-Pipeline-Mapping.
 KEIN LLM in dieser Schicht. Pure Python if-elif Logic.
 """
+
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 from models.base import sync_session_factory
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_TARGETS = frozenset({
-    "p08_response",
-    "p10_extract_post_kernel",
-    "voice_feedback_api",
-    "help_response",
-    "close_friendly",
-    "reviewer_queue",
-    "paused",
-})
+ALLOWED_TARGETS = frozenset(
+    {
+        "p08_response",
+        "p10_extract_post_kernel",
+        "voice_feedback_api",
+        "help_response",
+        "close_friendly",
+        "reviewer_queue",
+        "paused",
+    }
+)
 
 
 class SecurityException(Exception):
@@ -41,7 +43,7 @@ class RoutingDecision:
 def route_telegram_intent(
     extraction_result,
     tenant_id: str,
-    last_post_id: Optional[str] = None,
+    last_post_id: str | None = None,
     current_session=None,
 ) -> RoutingDecision:
     """

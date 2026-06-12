@@ -1,24 +1,23 @@
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, update, or_
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
-from models.tenant import Tenant
 from models.source import Source
 from models.source_item import SourceItem
-from tasks.transcribe_task import transcribe_item, batch_transcribe
+from models.tenant import Tenant
 from tasks.generate_task import analyze_item, generate_content
-from tasks.views_task import update_single_item_views, update_all_views
+from tasks.transcribe_task import batch_transcribe, transcribe_item
+from tasks.views_task import update_all_views
 
 router = APIRouter()
 
 
-def _resolve_period(period: Optional[str], date_from: Optional[str], date_to: Optional[str]):
+def _resolve_period(period: str | None, date_from: str | None, date_to: str | None):
     """Resolve period shortcut or date_from/date_to to (start, end) naive UTC datetimes."""
     now = datetime.utcnow()
     if period and period != "all":
@@ -41,17 +40,17 @@ def _resolve_period(period: Optional[str], date_from: Optional[str], date_to: Op
 
 @router.get("/items")
 async def list_items(
-    status: Optional[str] = None,
-    source_id: Optional[str] = None,
-    source_type: Optional[str] = None,
-    archived: Optional[str] = None,
-    sort: Optional[str] = "date_desc",
+    status: str | None = None,
+    source_id: str | None = None,
+    source_type: str | None = None,
+    archived: str | None = None,
+    sort: str | None = "date_desc",
     limit: int = Query(50, le=200),
     offset: int = 0,
-    period: Optional[str] = None,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    search: Optional[str] = Query(None, description="Full-text search in title and transcript"),
+    period: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    search: str | None = Query(None, description="Full-text search in title and transcript"),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -61,12 +60,14 @@ async def list_items(
     if source_id:
         query = query.where(SourceItem.source_id == uuid.UUID(source_id))
     if source_type:
-        source_ids_q = select(Source.id).where(Source.tenant_id == tenant.id, Source.type == source_type)
+        source_ids_q = select(Source.id).where(
+            Source.tenant_id == tenant.id, Source.type == source_type
+        )
         query = query.where(SourceItem.source_id.in_(source_ids_q))
     if archived == "true":
-        query = query.where(SourceItem.is_archived == True)
+        query = query.where(SourceItem.is_archived is True)
     elif archived != "all":
-        query = query.where(SourceItem.is_archived == False)
+        query = query.where(SourceItem.is_archived is False)
     if search and search.strip():
         term = f"%{search.strip()}%"
         query = query.where(
@@ -119,8 +120,8 @@ async def list_items(
 
 
 class ItemUpdate(BaseModel):
-    is_archived: Optional[bool] = None
-    status: Optional[str] = None
+    is_archived: bool | None = None
+    status: str | None = None
 
 
 @router.patch("/items/{item_id}")
@@ -142,8 +143,8 @@ async def update_item(
 
 
 class BulkArchiveRequest(BaseModel):
-    source_id: Optional[str] = None
-    item_ids: Optional[list[str]] = None
+    source_id: str | None = None
+    item_ids: list[str] | None = None
 
 
 @router.post("/items/bulk-archive")
@@ -154,13 +155,19 @@ async def bulk_archive(
 ):
     if data.item_ids:
         ids = [uuid.UUID(i) for i in data.item_ids]
-        stmt = update(SourceItem).where(
-            SourceItem.id.in_(ids), SourceItem.tenant_id == tenant.id
-        ).values(is_archived=True)
+        stmt = (
+            update(SourceItem)
+            .where(SourceItem.id.in_(ids), SourceItem.tenant_id == tenant.id)
+            .values(is_archived=True)
+        )
     elif data.source_id:
-        stmt = update(SourceItem).where(
-            SourceItem.source_id == uuid.UUID(data.source_id), SourceItem.tenant_id == tenant.id
-        ).values(is_archived=True)
+        stmt = (
+            update(SourceItem)
+            .where(
+                SourceItem.source_id == uuid.UUID(data.source_id), SourceItem.tenant_id == tenant.id
+            )
+            .values(is_archived=True)
+        )
     else:
         raise HTTPException(400, "source_id or item_ids required")
     result = await db.execute(stmt)
@@ -174,13 +181,20 @@ async def bulk_archive_failed(
     db: AsyncSession = Depends(get_db),
 ):
     """Archiviert alle Items mit Status transcription_failed (dauerhaft nicht verarbeitbar)."""
-    stmt = update(SourceItem).where(
-        SourceItem.tenant_id == tenant.id,
-        SourceItem.status == "transcription_failed",
-    ).values(is_archived=True)
+    stmt = (
+        update(SourceItem)
+        .where(
+            SourceItem.tenant_id == tenant.id,
+            SourceItem.status == "transcription_failed",
+        )
+        .values(is_archived=True)
+    )
     result = await db.execute(stmt)
     await db.commit()
-    return {"archived": result.rowcount, "message": f"{result.rowcount} fehlgeschlagene Items archiviert"}
+    return {
+        "archived": result.rowcount,
+        "message": f"{result.rowcount} fehlgeschlagene Items archiviert",
+    }
 
 
 @router.get("/items/{item_id}")
@@ -289,9 +303,12 @@ async def bulk_retry_failed(
 ):
     """Reset all transcription_failed / needs_voicescriptor items and retry."""
     from sqlalchemy import or_
+
     q = select(SourceItem).where(
         SourceItem.tenant_id == tenant.id,
-        or_(SourceItem.status == "transcription_failed", SourceItem.status == "needs_voicescriptor"),
+        or_(
+            SourceItem.status == "transcription_failed", SourceItem.status == "needs_voicescriptor"
+        ),
     )
     result = await db.execute(q)
     items = result.scalars().all()

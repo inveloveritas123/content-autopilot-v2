@@ -9,19 +9,19 @@ POST /pipeline/auto-trigger
 GET /pipeline/status
   - counts per status, quick health snapshot
 """
-import uuid
+
 import logging
+import uuid
 from datetime import datetime, timedelta
 
-from typing import Optional
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
-from sqlalchemy import select, func
+from fastapi import APIRouter, BackgroundTasks, Depends
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
-from models.tenant import Tenant
-from models.source_item import SourceItem
 from models.content_idea import ContentIdea
+from models.source_item import SourceItem
+from models.tenant import Tenant
 from tasks.generate_task import analyze_item, generate_content
 
 logger = logging.getLogger(__name__)
@@ -47,11 +47,16 @@ async def auto_trigger_pipeline(
     # ── 0. Check circuit breaker ──────────────────────────────────────────────
     try:
         import redis as redis_lib
+
+        from config import settings
+
         _r = redis_lib.from_url(settings.redis_url)
         if _r.get("llm:budget_exceeded"):
-            ttl = _r.ttl("llm:budget_exceeded")
+            _r.ttl("llm:budget_exceeded")
             return {
-                "analyze_triggered": 0, "generate_triggered": 0, "ideation_triggered": 0,
+                "analyze_triggered": 0,
+                "generate_triggered": 0,
+                "ideation_triggered": 0,
                 "total_triggered": 0,
                 "message": "Pipeline pausiert — LLM-Budget erschöpft. Bitte Guthaben bei Requesty.ai aufladen, dann 'Budget zurücksetzen' im Dashboard klicken.",
                 "budget_exceeded": True,
@@ -60,13 +65,21 @@ async def auto_trigger_pipeline(
         pass
 
     # ── 1. Transcribed → Analyze ──────────────────────────────────────────────
-    transcribed = (await db.execute(
-        select(SourceItem).where(
-            SourceItem.tenant_id == tid,
-            SourceItem.status == "transcribed",
-            SourceItem.transcript_text.isnot(None),
-        ).limit(BATCH_LIMIT)
-    )).scalars().all()
+    transcribed = (
+        (
+            await db.execute(
+                select(SourceItem)
+                .where(
+                    SourceItem.tenant_id == tid,
+                    SourceItem.status == "transcribed",
+                    SourceItem.transcript_text.isnot(None),
+                )
+                .limit(BATCH_LIMIT)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     analyze_triggered = []
     for item in transcribed:
@@ -77,13 +90,21 @@ async def auto_trigger_pipeline(
             logger.warning(f"auto-trigger analyze failed for {item.id}: {e}")
 
     # ── 2. Analyzed → Generate ────────────────────────────────────────────────
-    analyzed = (await db.execute(
-        select(SourceItem).where(
-            SourceItem.tenant_id == tid,
-            SourceItem.status == "analyzed",
-            SourceItem.analysis.isnot(None),
-        ).limit(BATCH_LIMIT)
-    )).scalars().all()
+    analyzed = (
+        (
+            await db.execute(
+                select(SourceItem)
+                .where(
+                    SourceItem.tenant_id == tid,
+                    SourceItem.status == "analyzed",
+                    SourceItem.analysis.isnot(None),
+                )
+                .limit(BATCH_LIMIT)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     generate_triggered = []
     for item in analyzed:
@@ -95,24 +116,30 @@ async def auto_trigger_pipeline(
 
     # ── 3. content_ready without ideas → Ideation ────────────────────────────
     items_with_ideas_subq = (
-        select(SourceItem.id)
-        .join(SourceItem.content_ideas)
-        .where(SourceItem.tenant_id == tid)
+        select(SourceItem.id).join(SourceItem.content_ideas).where(SourceItem.tenant_id == tid)
     )
-    ready_no_ideas = (await db.execute(
-        select(SourceItem).where(
-            SourceItem.tenant_id == tid,
-            SourceItem.status == "content_ready",
-            SourceItem.id.not_in(items_with_ideas_subq),
-            SourceItem.analysis.isnot(None),
-        ).limit(20)
-    )).scalars().all()
+    ready_no_ideas = (
+        (
+            await db.execute(
+                select(SourceItem)
+                .where(
+                    SourceItem.tenant_id == tid,
+                    SourceItem.status == "content_ready",
+                    SourceItem.id.not_in(items_with_ideas_subq),
+                    SourceItem.analysis.isnot(None),
+                )
+                .limit(20)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     idea_item_ids = [str(i.id) for i in ready_no_ideas]
 
     if idea_item_ids:
-        from services.content_ideation import run_ideation_pipeline
         from models import async_session_factory
+        from services.content_ideation import run_ideation_pipeline
 
         async def _run_ideation(ids: list[str]):
             for item_id in ids:
@@ -127,15 +154,25 @@ async def auto_trigger_pipeline(
                         entrepreneur = t_settings.get("entrepreneur", {})
                         voice_profile = t_settings.get("voice_profile", {})
                         # Prefer Wizard voice profile from tenant_voice_profile table
-                        from sqlalchemy import text as _sa_text
                         import json as _json
+
+                        from sqlalchemy import text as _sa_text
+
                         try:
-                            _vp_row = (await session.execute(
-                                _sa_text("SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"),
-                                {"t": str(item.tenant_id)},
-                            )).fetchone()
+                            _vp_row = (
+                                await session.execute(
+                                    _sa_text(
+                                        "SELECT payload FROM tenant_voice_profile WHERE tenant_id=:t AND is_active=true ORDER BY version DESC LIMIT 1"
+                                    ),
+                                    {"t": str(item.tenant_id)},
+                                )
+                            ).fetchone()
                             if _vp_row and _vp_row[0]:
-                                _wp = _vp_row[0] if isinstance(_vp_row[0], dict) else _json.loads(_vp_row[0])
+                                _wp = (
+                                    _vp_row[0]
+                                    if isinstance(_vp_row[0], dict)
+                                    else _json.loads(_vp_row[0])
+                                )
                                 if _wp:
                                     voice_profile = _wp
                         except Exception:
@@ -146,20 +183,33 @@ async def auto_trigger_pipeline(
                         if entrepreneur.get("industry"):
                             industry_parts.append(f"Branche: {entrepreneur['industry']}")
                         if entrepreneur.get("specialization"):
-                            industry_parts.append(f"Spezialisierung: {entrepreneur['specialization']}")
+                            industry_parts.append(
+                                f"Spezialisierung: {entrepreneur['specialization']}"
+                            )
                         if entrepreneur.get("target_audience"):
                             industry_parts.append(f"Zielgruppe: {entrepreneur['target_audience']}")
-                        _tone_val = (voice_profile.get('tone') or
-                                     (voice_profile.get('tonalitaet', {}).get('grundton', '') if isinstance(voice_profile.get('tonalitaet'), dict) else '') or
-                                     '')
+                        _tone_val = (
+                            voice_profile.get("tone")
+                            or (
+                                voice_profile.get("tonalitaet", {}).get("grundton", "")
+                                if isinstance(voice_profile.get("tonalitaet"), dict)
+                                else ""
+                            )
+                            or ""
+                        )
                         if _tone_val:
                             industry_parts.append(f"Tonalität: {_tone_val}")
                         _avoid_val = voice_profile.get("topics_avoid") or (
                             voice_profile.get("vermeidungsregeln")
-                            if isinstance(voice_profile.get("vermeidungsregeln"), (str, list)) else None
+                            if isinstance(voice_profile.get("vermeidungsregeln"), str | list)
+                            else None
                         )
                         if _avoid_val:
-                            avoid = _avoid_val if isinstance(_avoid_val, str) else ", ".join(str(x) for x in _avoid_val)
+                            avoid = (
+                                _avoid_val
+                                if isinstance(_avoid_val, str)
+                                else ", ".join(str(x) for x in _avoid_val)
+                            )
                             industry_parts.append(f"Vermeiden: {avoid}")
                         industry_context = "\n".join(industry_parts)
                         ideas_data = await run_ideation_pipeline(
@@ -213,18 +263,26 @@ async def pipeline_status(
 ):
     """Quick pipeline health snapshot — counts per status."""
     statuses = [
-        "new", "transcribing", "transcribed", "analyzing",
-        "analyzed", "generating", "content_ready", "transcription_failed",
+        "new",
+        "transcribing",
+        "transcribed",
+        "analyzing",
+        "analyzed",
+        "generating",
+        "content_ready",
+        "transcription_failed",
     ]
     counts = {}
     for status in statuses:
-        counts[status] = (await db.execute(
-            select(func.count(SourceItem.id)).where(
-                SourceItem.tenant_id == tenant.id,
-                SourceItem.status == status,
-                SourceItem.is_archived == False,
+        counts[status] = (
+            await db.execute(
+                select(func.count(SourceItem.id)).where(
+                    SourceItem.tenant_id == tenant.id,
+                    SourceItem.status == status,
+                    SourceItem.is_archived is False,
+                )
             )
-        )).scalar() or 0
+        ).scalar() or 0
 
     pending = counts["transcribed"] + counts["analyzed"]
     content_ready = counts["content_ready"]
@@ -235,7 +293,9 @@ async def pipeline_status(
     llm_budget_ttl = 0
     try:
         import redis as redis_lib
+
         from config import settings
+
         r = redis_lib.from_url(settings.redis_url)
         if r.get("llm:budget_exceeded"):
             llm_budget_exceeded = True
@@ -245,14 +305,17 @@ async def pipeline_status(
 
     # Throughput estimate: items analyzed in last 60 minutes
     from models.quality_metric import QualityMetric
+
     one_hour_ago = datetime.utcnow() - timedelta(hours=1)
-    items_last_hour = (await db.execute(
-        select(func.count(QualityMetric.id)).where(
-            QualityMetric.tenant_id == tenant.id,
-            QualityMetric.step == "analysis",
-            QualityMetric.created_at >= one_hour_ago,
+    items_last_hour = (
+        await db.execute(
+            select(func.count(QualityMetric.id)).where(
+                QualityMetric.tenant_id == tenant.id,
+                QualityMetric.step == "analysis",
+                QualityMetric.created_at >= one_hour_ago,
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
 
     # ETA estimate (in minutes) based on throughput
     # Fallback: 100 items/10 min = 600/hr for fresh start
@@ -281,13 +344,21 @@ async def retry_failed_transcriptions(
     """Retry all transcription_failed items — resets status to 'new' and re-queues."""
     from tasks.transcribe_task import transcribe_item
 
-    failed_items = (await db.execute(
-        select(SourceItem).where(
-            SourceItem.tenant_id == tenant.id,
-            SourceItem.status == "transcription_failed",
-            SourceItem.is_archived == False,
-        ).limit(100)
-    )).scalars().all()
+    failed_items = (
+        (
+            await db.execute(
+                select(SourceItem)
+                .where(
+                    SourceItem.tenant_id == tenant.id,
+                    SourceItem.status == "transcription_failed",
+                    SourceItem.is_archived is False,
+                )
+                .limit(100)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     queued = []
     for item in failed_items:
@@ -319,7 +390,6 @@ async def reset_stuck_items(
     Threshold: stuck for more than 15 minutes.
     """
     from datetime import timedelta
-    from sqlalchemy import update
 
     cutoff = datetime.utcnow() - timedelta(minutes=15)
 
@@ -366,13 +436,15 @@ async def get_stuck_count(
 
     counts = {}
     for status in stuck_statuses:
-        c = (await db.execute(
-            select(func.count(SourceItem.id)).where(
-                SourceItem.tenant_id == tenant.id,
-                SourceItem.status == status,
-                SourceItem.updated_at < cutoff,
+        c = (
+            await db.execute(
+                select(func.count(SourceItem.id)).where(
+                    SourceItem.tenant_id == tenant.id,
+                    SourceItem.status == status,
+                    SourceItem.updated_at < cutoff,
+                )
             )
-        )).scalar() or 0
+        ).scalar() or 0
         if c > 0:
             counts[status] = c
 
@@ -385,23 +457,33 @@ async def generate_questions_for_analyzed(
     tenant: Tenant = Depends(get_tenant),
 ):
     """Generiere smarte Fragen für alle analysierten Items ohne Fragen (Batch)."""
-    from tasks.questions_task import generate_smart_questions_task
+
     from models.dialogue_question import DialogueQuestion
-    from sqlalchemy import not_, exists
+    from tasks.questions_task import generate_smart_questions_task
 
     # Items without questions
-    subq = select(DialogueQuestion.source_item_id).where(
-        DialogueQuestion.tenant_id == tenant.id
-    ).scalar_subquery()
+    subq = (
+        select(DialogueQuestion.source_item_id)
+        .where(DialogueQuestion.tenant_id == tenant.id)
+        .scalar_subquery()
+    )
 
-    items_without_questions = (await db.execute(
-        select(SourceItem).where(
-            SourceItem.tenant_id == tenant.id,
-            SourceItem.status.in_(["analyzed", "content_ready"]),
-            SourceItem.analysis.isnot(None),
-            SourceItem.id.not_in(subq),
-        ).limit(50)
-    )).scalars().all()
+    items_without_questions = (
+        (
+            await db.execute(
+                select(SourceItem)
+                .where(
+                    SourceItem.tenant_id == tenant.id,
+                    SourceItem.status.in_(["analyzed", "content_ready"]),
+                    SourceItem.analysis.isnot(None),
+                    SourceItem.id.not_in(subq),
+                )
+                .limit(50)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     queued = []
     for item in items_without_questions:
@@ -428,13 +510,17 @@ async def reset_budget_flag(
     """
     try:
         import redis as redis_lib
+
         from config import settings
+
         r = redis_lib.from_url(settings.redis_url)
         was_set = bool(r.get("llm:budget_exceeded"))
         r.delete("llm:budget_exceeded")
         return {
             "cleared": was_set,
-            "message": "Budget-Flag gelöscht — Pipeline wird beim nächsten Pump-Lauf wieder aktiv." if was_set else "Flag war nicht gesetzt.",
+            "message": "Budget-Flag gelöscht — Pipeline wird beim nächsten Pump-Lauf wieder aktiv."
+            if was_set
+            else "Flag war nicht gesetzt.",
         }
     except Exception as e:
         return {"cleared": False, "error": str(e)}
@@ -447,18 +533,21 @@ async def transcribed_breakdown(
 ):
     """Return source breakdown of transcribed items — shows what would be analyzed."""
     from models.source import Source as SourceModel
-    rows = (await db.execute(
-        select(SourceModel.id, SourceModel.name, func.count(SourceItem.id).label("count"))
-        .join(SourceItem, SourceItem.source_id == SourceModel.id)
-        .where(
-            SourceItem.tenant_id == tenant.id,
-            SourceItem.status == "transcribed",
-            SourceItem.transcript_text.isnot(None),
-            SourceItem.is_archived == False,
+
+    rows = (
+        await db.execute(
+            select(SourceModel.id, SourceModel.name, func.count(SourceItem.id).label("count"))
+            .join(SourceItem, SourceItem.source_id == SourceModel.id)
+            .where(
+                SourceItem.tenant_id == tenant.id,
+                SourceItem.status == "transcribed",
+                SourceItem.transcript_text.isnot(None),
+                SourceItem.is_archived is False,
+            )
+            .group_by(SourceModel.id, SourceModel.name)
+            .order_by(func.count(SourceItem.id).desc())
         )
-        .group_by(SourceModel.id, SourceModel.name)
-        .order_by(func.count(SourceItem.id).desc())
-    )).all()
+    ).all()
     total = sum(r.count for r in rows)
     return {
         "total": total,
@@ -468,7 +557,7 @@ async def transcribed_breakdown(
 
 @router.post("/queue-all-analysis")
 async def queue_all_for_analysis(
-    source_id: Optional[str] = None,
+    source_id: str | None = None,
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -478,14 +567,15 @@ async def queue_all_for_analysis(
     Unlike auto-trigger (limit 100), this queues everything.
     Optionally filter by source_id to process only one source.
     """
-    from tasks.generate_task import analyze_item as analyze_item_task
     import uuid as _uuid
+
+    from tasks.generate_task import analyze_item as analyze_item_task
 
     query = select(SourceItem).where(
         SourceItem.tenant_id == tenant.id,
         SourceItem.status == "transcribed",
         SourceItem.transcript_text.isnot(None),
-        SourceItem.is_archived == False,
+        SourceItem.is_archived is False,
     )
     if source_id:
         query = query.where(SourceItem.source_id == _uuid.UUID(source_id))

@@ -3,6 +3,7 @@
 Authentifizierung: X-API-Key Header (bestehende get_tenant Dependency).
 Der Endpoint validiert den Key und gibt die noetigen Frontend-Initialisierungsdaten zurueck.
 """
+
 from fastapi import APIRouter, Depends
 
 from dependencies import get_tenant

@@ -1,17 +1,16 @@
 import secrets
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from dependencies import get_db, get_tenant, get_tenant_id
-from models.tenant import Tenant
+from dependencies import get_db, get_tenant
 from models.content_performance import ContentPerformance
+from models.tenant import Tenant
 from services.nextcloud import nextcloud_client
 from services.tenant_export import TenantExportService
 from services.tenant_import import TenantImportService
@@ -26,29 +25,29 @@ router = APIRouter()
 
 class TenantCreate(BaseModel):
     name: str
-    settings: Optional[dict] = None
+    settings: dict | None = None
 
 
 class SettingsUpdate(BaseModel):
-    tone: Optional[str] = None
-    language: Optional[str] = None
-    target_audience: Optional[str] = None
-    daily_token_budget: Optional[int] = None
-    monthly_token_budget: Optional[int] = None
-    daily_budget_eur: Optional[float] = None   # Daily EUR budget limit
-    llm_routing: Optional[dict] = None          # {task: model_id} overrides
-    youtube_api_key: Optional[str] = None
-    nc_write_path: Optional[str] = None
-    nc_read_paths: Optional[list[str]] = None
-    nc_transcript_path: Optional[str] = None
-    nc_analysis_path: Optional[str] = None
-    nc_content_path: Optional[str] = None
-    entrepreneur: Optional[dict] = None  # {name, industry, specialization, target_audience}
-    voice_profile: Optional[dict] = None  # {tone, vocabulary_level, sentence_style, ...}
+    tone: str | None = None
+    language: str | None = None
+    target_audience: str | None = None
+    daily_token_budget: int | None = None
+    monthly_token_budget: int | None = None
+    daily_budget_eur: float | None = None  # Daily EUR budget limit
+    llm_routing: dict | None = None  # {task: model_id} overrides
+    youtube_api_key: str | None = None
+    nc_write_path: str | None = None
+    nc_read_paths: list[str] | None = None
+    nc_transcript_path: str | None = None
+    nc_analysis_path: str | None = None
+    nc_content_path: str | None = None
+    entrepreneur: dict | None = None  # {name, industry, specialization, target_audience}
+    voice_profile: dict | None = None  # {tone, vocabulary_level, sentence_style, ...}
 
 
 class NCBrowseRequest(BaseModel):
-    path: Optional[str] = "/"
+    path: str | None = "/"
 
 
 class NCSearchRequest(BaseModel):
@@ -64,7 +63,8 @@ async def create_tenant(
     tenant = Tenant(
         name=data.name,
         api_key=api_key,
-        settings=data.settings or {
+        settings=data.settings
+        or {
             "tone": "professionell, informativ",
             "language": "de",
             "nc_transcript_path": "/zukunftsbund/Projekte/Content-Autopilot/Daten/Transkripte",
@@ -218,7 +218,7 @@ async def get_voice_profile(
     dimensions = dict(_ZB_VOICE_DEFAULTS)
     if stored and isinstance(stored, dict):
         for k, v in stored.items():
-            if k in dimensions and isinstance(v, (int, float)):
+            if k in dimensions and isinstance(v, int | float):
                 dimensions[k] = float(v)
 
     return {
@@ -244,7 +244,7 @@ async def update_voice_profile(
     # Validate and store only known dimensions
     valid_dims = {}
     for k, v in data.dimensions.items():
-        if k in _ZB_VOICE_DEFAULTS and isinstance(v, (int, float)):
+        if k in _ZB_VOICE_DEFAULTS and isinstance(v, int | float):
             valid_dims[k] = max(0.0, min(10.0, float(v)))
     current["voice_dimensions"] = valid_dims
     tenant.settings = current
@@ -266,15 +266,17 @@ async def list_voice_profiles(
         s = t.settings or {}
         vp = s.get("voice_profile", {})
         ent = s.get("entrepreneur", {})
-        profiles.append({
-            "id": str(t.id),
-            "name": t.name,
-            "is_current": t.id == tenant.id,
-            "industry": ent.get("industry", "—"),
-            "entrepreneur_name": ent.get("name", "—"),
-            "tone": vp.get("tone", "—"),
-            "configured": bool(vp.get("tone")),
-        })
+        profiles.append(
+            {
+                "id": str(t.id),
+                "name": t.name,
+                "is_current": t.id == tenant.id,
+                "industry": ent.get("industry", "—"),
+                "entrepreneur_name": ent.get("name", "—"),
+                "tone": vp.get("tone", "—"),
+                "configured": bool(vp.get("tone")),
+            }
+        )
     return {"profiles": profiles}
 
 
@@ -318,7 +320,9 @@ async def import_tenant_data(
     file: UploadFile = File(...),
     dry_run: bool = Query(False, description="Nur Validierung, kein echter Import"),
     merge: bool = Query(True, description="True=Upsert, False=Delete+Insert"),
-    confirm: bool = Query(False, description="Pflichtparameter für echten Import (Schutz gegen Versehen)"),
+    confirm: bool = Query(
+        False, description="Pflichtparameter für echten Import (Schutz gegen Versehen)"
+    ),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -367,7 +371,7 @@ async def import_tenant_data(
 @router.get("/settings/llm-routing")
 async def get_llm_routing_info(tenant: Tenant = Depends(get_tenant)):
     """Return current LLM model routing config (purpose → model)."""
-    from services.llm import PURPOSE_MODEL_MAP, REQUESTY_MODELS, PURPOSE_MAX_TOKENS
+    from services.llm import PURPOSE_MAX_TOKENS, PURPOSE_MODEL_MAP, REQUESTY_MODELS
 
     routing = []
     task_labels = {
@@ -392,14 +396,16 @@ async def get_llm_routing_info(tenant: Tenant = Depends(get_tenant)):
     for purpose, model_key in PURPOSE_MODEL_MAP.items():
         resolved = tenant_routing.get(purpose, model_key)
         info = cost_map.get(resolved, {"model": resolved, "cost_per_1m": None})
-        routing.append({
-            "purpose": purpose,
-            "label": task_labels.get(purpose, purpose),
-            "model_key": resolved,
-            "model_id": info["model"],
-            "cost_per_1m_usd": info["cost_per_1m"],
-            "max_tokens": PURPOSE_MAX_TOKENS.get(purpose, 1500),
-        })
+        routing.append(
+            {
+                "purpose": purpose,
+                "label": task_labels.get(purpose, purpose),
+                "model_key": resolved,
+                "model_id": info["model"],
+                "cost_per_1m_usd": info["cost_per_1m"],
+                "max_tokens": PURPOSE_MAX_TOKENS.get(purpose, 1500),
+            }
+        )
     return {
         "routing": routing,
         "daily_budget_eur": (tenant.settings or {}).get("daily_budget_eur"),
@@ -429,9 +435,10 @@ async def set_tenant_industry(
     queued = False
     try:
         from tasks.p05_industry_task import refresh_industry_context
+
         refresh_industry_context.apply_async(args=[str(tenant.id)])
         queued = True
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     return {"status": "ok", "industry": tenant.industry, "refresh_queued": queued}
 
@@ -445,9 +452,10 @@ async def refresh_industry_now(
         raise HTTPException(400, "Erst Branche setzen via PUT /tenants/me/industry")
     try:
         from tasks.p05_industry_task import refresh_industry_context
+
         refresh_industry_context.apply_async(args=[str(tenant.id)])
         return {"status": "queued", "industry": tenant.industry}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(500, f"Task-Dispatch: {exc}")
 
 

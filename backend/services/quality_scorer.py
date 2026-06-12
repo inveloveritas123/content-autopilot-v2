@@ -10,15 +10,15 @@ Primär regelbasiert (kein LLM, $0):
 
 Speichert QualityMetric in DB.
 """
+
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 def score_transcription(
     transcript_text: str,
-    duration_seconds: Optional[float] = None,
+    duration_seconds: float | None = None,
 ) -> dict:
     """Bewertet die Qualität einer Transkription.
 
@@ -44,7 +44,7 @@ def score_transcription(
     unique_ratio = len(set(words)) / max(len(words), 1)
     coherence_score = min(100.0, unique_ratio * 200)  # 50% unique = 100 score
 
-    overall = (completeness * 0.6 + coherence_score * 0.4)
+    overall = completeness * 0.6 + coherence_score * 0.4
 
     return {
         "completeness_score": round(completeness, 1),
@@ -74,20 +74,21 @@ def score_analysis(analysis: dict) -> dict:
         nonlocal score, max_score
         max_score += weight
         val = analysis.get(field)
-        if isinstance(val, list) and len(val) >= min_len:
+        if isinstance(val, list) and len(val) >= min_len or isinstance(val, str) and len(val) >= 10:
             score += weight
             return len(val)
-        elif isinstance(val, str) and len(val) >= 10:
-            score += weight
-            return len(val)
-        elif val and not isinstance(val, (list, str)):
+        elif val and not isinstance(val, list | str):
             score += weight * 0.5
             return str(val)
         return 0
 
     # Field names match actual analyzer output (see services/analyzer.py)
-    details["main_topic"] = check("topic_title", 15) or check("main_topic", 15) or check("topic_pitch", 15)
-    details["insights"] = check("key_points", 20, 2) or check("key_insights", 20, 2) or check("insights", 20, 2)
+    details["main_topic"] = (
+        check("topic_title", 15) or check("main_topic", 15) or check("topic_pitch", 15)
+    )
+    details["insights"] = (
+        check("key_points", 20, 2) or check("key_insights", 20, 2) or check("insights", 20, 2)
+    )
     details["hooks"] = check("content_angles", 10, 1) or check("hooks", 10, 1)
     details["keywords"] = check("tags", 10, 3) or check("keywords", 10, 3)
     details["summary"] = check("summary", 15)
@@ -161,12 +162,12 @@ def score_post_generation(post_text: str) -> dict:
     first_line_len = len(lines[0]) if lines else 0
     has_hook = first_line_len < 120  # Short hook
     has_paragraphs = len([l for l in lines if l.strip()]) >= 3
-    has_cta_markers = any(m in post_text.lower() for m in ["?", "kommentier", "teilt", "was meint", "wie seht"])
+    has_cta_markers = any(
+        m in post_text.lower() for m in ["?", "kommentier", "teilt", "was meint", "wie seht"]
+    )
 
     structure_score = (
-        (30 if has_hook else 0) +
-        (40 if has_paragraphs else 0) +
-        (30 if has_cta_markers else 0)
+        (30 if has_hook else 0) + (40 if has_paragraphs else 0) + (30 if has_cta_markers else 0)
     )
 
     overall = length_score * 0.5 + structure_score * 0.5
@@ -199,7 +200,11 @@ def score_smart_questions(questions: list) -> dict:
         angle = q.get("target_angle") if isinstance(q, dict) else getattr(q, "target_angle", None)
         if angle:
             angles.add(str(angle))
-        ref = q.get("transcript_reference") if isinstance(q, dict) else getattr(q, "transcript_reference", None)
+        ref = (
+            q.get("transcript_reference")
+            if isinstance(q, dict)
+            else getattr(q, "transcript_reference", None)
+        )
         if ref:
             with_references += 1
 
@@ -223,8 +228,9 @@ def score_smart_questions(questions: list) -> dict:
 def compute_overall_score(scores: dict) -> float:
     """Compute overall score from available sub-scores."""
     available = [
-        v for k, v in scores.items()
-        if k.endswith("_score") and v is not None and isinstance(v, (int, float))
+        v
+        for k, v in scores.items()
+        if k.endswith("_score") and v is not None and isinstance(v, int | float)
     ]
     if not available:
         return 0.0

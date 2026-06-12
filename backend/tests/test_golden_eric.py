@@ -13,6 +13,7 @@ und SKIPPT, wenn die Daten fehlen (z.B. in CI). Kein Kundendatensatz im Git.
     PYTHONPATH=. CONTENT_TRUTH_BASE_PATH=<repo>/content-truth \
         python -m pytest tests/test_golden_eric.py -v
 """
+
 import importlib.util
 import json
 import os
@@ -22,8 +23,11 @@ import pytest
 
 _DEFAULT_ERIC = (
     Path(__file__).resolve().parents[3]
-    / "Import" / "Linkedin-Content-Autopilot"
-    / "data" / "kunden" / "eric-spielhaus-2026-05-15"
+    / "Import"
+    / "Linkedin-Content-Autopilot"
+    / "data"
+    / "kunden"
+    / "eric-spielhaus-2026-05-15"
 )
 ERIC_DIR = Path(os.environ.get("GOLDEN_ERIC_DIR", str(_DEFAULT_ERIC)))
 
@@ -44,12 +48,12 @@ def _load_mod(name, relpath):
 st = _load_mod("st_golden", "services/schema_transformer.py")
 pp = _load_mod("pp_golden", "services/../tasks/p12_pruning.py")
 
-_META = dict(
-    tenant_id="eric-golden-tenant",
-    model="anthropic/claude-sonnet-4-6",
-    generated_at="2026-06-12T10:00:00+00:00",
-    tenant_name="Eric Spielhaus",
-)
+_META = {
+    "tenant_id": "eric-golden-tenant",
+    "model": "anthropic/claude-sonnet-4-6",
+    "generated_at": "2026-06-12T10:00:00+00:00",
+    "tenant_name": "Eric Spielhaus",
+}
 
 
 def _load(key):

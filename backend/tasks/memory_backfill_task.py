@@ -8,12 +8,12 @@ Triggers:
   - manuelle CLI: python -m tasks.memory_backfill_task --limit 50
   - Celery-Cron: stündlich, 100 chunks pro Run (rate-limit-safe)
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -29,7 +29,7 @@ DEFAULT_BATCH_LIMIT = 100
 
 async def _backfill_async(limit: int) -> dict:
     """Eine Backfill-Runde — async damit embedding_service genutzt werden kann."""
-    from services.embedding_service import embed_text, classify_chunk, _embedding_to_pg
+    from services.embedding_service import _embedding_to_pg, classify_chunk, embed_text
 
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     SessionMaker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -40,16 +40,18 @@ async def _backfill_async(limit: int) -> dict:
     try:
         async with SessionMaker() as db:
             # 1) Chunks ohne embedding
-            rows = (await db.execute(
-                text(
-                    "SELECT id, content_text, classification "
-                    "FROM memory_chunks "
-                    "WHERE embedding IS NULL "
-                    "ORDER BY created_at DESC "
-                    "LIMIT :lim"
-                ),
-                {"lim": limit},
-            )).fetchall()
+            rows = (
+                await db.execute(
+                    text(
+                        "SELECT id, content_text, classification "
+                        "FROM memory_chunks "
+                        "WHERE embedding IS NULL "
+                        "ORDER BY created_at DESC "
+                        "LIMIT :lim"
+                    ),
+                    {"lim": limit},
+                )
+            ).fetchall()
 
             for r in rows:
                 chunk_id = str(r.id)
@@ -80,28 +82,34 @@ async def _backfill_async(limit: int) -> dict:
                     continue
                 set_parts.append("updated_at = now()")
                 await db.execute(
-                    text(f"UPDATE memory_chunks SET {', '.join(set_parts)} WHERE id = CAST(:id AS uuid)"),
+                    text(
+                        f"UPDATE memory_chunks SET {', '.join(set_parts)} WHERE id = CAST(:id AS uuid)"
+                    ),
                     params,
                 )
             await db.commit()
 
             # 2) Bonus-Pass: Chunks mit embedding aber ohne classification
-            unclassified = (await db.execute(
-                text(
-                    "SELECT id, content_text "
-                    "FROM memory_chunks "
-                    "WHERE classification IS NULL AND length(content_text) >= 20 "
-                    "ORDER BY created_at DESC "
-                    "LIMIT :lim"
-                ),
-                {"lim": min(limit, 50)},
-            )).fetchall()
+            unclassified = (
+                await db.execute(
+                    text(
+                        "SELECT id, content_text "
+                        "FROM memory_chunks "
+                        "WHERE classification IS NULL AND length(content_text) >= 20 "
+                        "ORDER BY created_at DESC "
+                        "LIMIT :lim"
+                    ),
+                    {"lim": min(limit, 50)},
+                )
+            ).fetchall()
 
             for r in unclassified:
                 cls = await classify_chunk(r.content_text or "")
                 if cls:
                     await db.execute(
-                        text("UPDATE memory_chunks SET classification = :cls, updated_at = now() WHERE id = :id"),
+                        text(
+                            "UPDATE memory_chunks SET classification = :cls, updated_at = now() WHERE id = :id"
+                        ),
                         {"id": r.id, "cls": cls},
                     )
                     classified_count += 1
@@ -124,12 +132,14 @@ def run_backfill(self, limit: int = DEFAULT_BATCH_LIMIT) -> dict:
     """
     try:
         result = asyncio.run(_backfill_async(limit))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("memory_backfill failed: %s", exc)
         return {"status": "error", "reason": str(exc)[:120]}
     logger.info(
         "memory_backfill: embedded=%s classified=%s failed=%s",
-        result["embedded"], result["classified"], result["failed"],
+        result["embedded"],
+        result["classified"],
+        result["failed"],
     )
     return {"status": "ok", **result}
 
@@ -137,6 +147,7 @@ def run_backfill(self, limit: int = DEFAULT_BATCH_LIMIT) -> dict:
 # CLI-Entry für manuelle Runs
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Backfill embeddings/classifications")
     parser.add_argument("--limit", type=int, default=DEFAULT_BATCH_LIMIT)
     args = parser.parse_args()

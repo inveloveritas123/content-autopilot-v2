@@ -10,18 +10,19 @@ Nach erfolgreichem Abschluss:
   - Email-Fallback (Stub, TODO)
   - setup_pipeline_run.status auf 'done' setzen
 """
+
 import asyncio
 import concurrent.futures
+import contextlib
 import json
 import logging
-import uuid
 import time
-from datetime import datetime, timezone
+import uuid
 
 from sqlalchemy import text
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,8 @@ logger = logging.getLogger(__name__)
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
 
-def _update_pipeline_status(run_id: str, status: str, error: str = None):
+
+def _update_pipeline_status(run_id: str, status: str, error: str | None = None):
     with sync_session_factory() as session:
         params = {"id": run_id, "status": status}
         extra = ""
@@ -97,6 +99,7 @@ def _schedule_email_fallback(tenant_id: str, pipeline_run_id: str, delay_seconds
 # Celery Tasks
 # ---------------------------------------------------------------------------
 
+
 @celery_app.task(name="tasks.setup_pipeline_task.run_setup_pipeline", bind=True)
 def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) -> dict:
     """Haupt-Orchestrator für den Brand-Voice-Setup-Prozess.
@@ -144,6 +147,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
 
         elif source == "md_upload":
             from services.md_converter import convert_md_to_p03_json
+
             p03_bypass_json = convert_md_to_p03_json(source_payload["content"], tenant_id)
             transcript_text = source_payload.get("transcript", "")
 
@@ -153,6 +157,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
 
         elif source == "nc_import":
             from services.brand_voice_storage import get_default_nc_adapter
+
             adapter = get_default_nc_adapter()
             raw = adapter.read(source_payload["path"])
             content_str = raw.decode("utf-8")
@@ -161,6 +166,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
                 transcript_text = ""
             else:  # .md
                 from services.md_converter import convert_md_to_p03_json
+
                 p03_bypass_json = convert_md_to_p03_json(content_str, tenant_id)
                 transcript_text = ""
 
@@ -189,7 +195,9 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
         from tasks.p03_task import run_p03
 
         def _run_p01_sync():
-            return run_p01.run(tenant_id, transcript_text or "", mini_form_data=None, project_id=project_id)
+            return run_p01.run(
+                tenant_id, transcript_text or "", mini_form_data=None, project_id=project_id
+            )
 
         def _run_p03_sync():
             bypass = p03_bypass_json is not None
@@ -216,7 +224,10 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
             p03_result.get("status"),
         )
 
-        if p01_result.get("status") == "paused_for_cost" or p03_result.get("status") == "paused_for_cost":
+        if (
+            p01_result.get("status") == "paused_for_cost"
+            or p03_result.get("status") == "paused_for_cost"
+        ):
             _update_pipeline_status(pipeline_run_id, "paused_for_cost")
             return {"pipeline_run_id": pipeline_run_id, "status": "paused_for_cost"}
 
@@ -224,7 +235,10 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
         p01_payload = _load_p01_payload(tenant_id, project_id=project_id)
 
         from tasks.p04_task import run_p04
-        p04_result = run_p04.run(tenant_id, p01_payload, transcript=transcript_text, project_id=project_id)
+
+        p04_result = run_p04.run(
+            tenant_id, p01_payload, transcript=transcript_text, project_id=project_id
+        )
 
         logger.info("setup_pipeline tenant=%s: P04=%s", tenant_id, p04_result.get("status"))
 
@@ -236,7 +250,11 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
         # D. Atomarer is_active-Wechsel
         # ------------------------------------------------------------------
         with sync_session_factory() as session:
-            for table in ["tenant_customer_context", "tenant_voice_profile", "tenant_audience_avatar"]:
+            for table in [
+                "tenant_customer_context",
+                "tenant_voice_profile",
+                "tenant_audience_avatar",
+            ]:
                 if project_id is None:
                     session.execute(
                         text(
@@ -272,6 +290,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
         # ------------------------------------------------------------------
         try:
             from services.brand_voice_storage import sync_brand_voice_to_nc
+
             nc_result = sync_brand_voice_to_nc(tenant_id, project_id=project_id)
             if nc_result.get("synced"):
                 logger.info(
@@ -305,6 +324,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
         # direkter ws_manager-Import würde einen leeren Singleton ansprechen)
         try:
             import httpx
+
             resp = httpx.post(
                 "http://localhost:8000/internal/notify",
                 json={
@@ -318,7 +338,9 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
                 timeout=5,
             )
             clients_reached = resp.json().get("sent", 0) if resp.is_success else 0
-            logger.info("WS push via HTTP: %d clients reached, tenant=%s", clients_reached, tenant_id)
+            logger.info(
+                "WS push via HTTP: %d clients reached, tenant=%s", clients_reached, tenant_id
+            )
         except Exception as ws_err:
             logger.warning("WS push fehlgeschlagen: %s", ws_err)
             clients_reached = 0
@@ -348,6 +370,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
 
         async def _push_ws_error(err: str):
             from services.ws_manager import ws_manager
+
             channel = f"tenant:{tenant_id}:setup"
             await ws_manager.broadcast(
                 channel,
@@ -359,10 +382,8 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
                 },
             )
 
-        try:
+        with contextlib.suppress(Exception):
             asyncio.run(_push_ws_error(str(exc)))
-        except Exception:
-            pass
 
         return {"pipeline_run_id": pipeline_run_id, "status": "failed", "error": str(exc)}
 
@@ -382,7 +403,5 @@ def resume_paused_pipelines():
         logger.info("Resuming paused pipeline for tenant=%s", row.tenant_id)
         # source + source_payload nicht persistiert — manueller Eingriff nötig
         # TODO: source + source_payload in setup_pipeline_run persistieren für Resume
-        logger.warning(
-            "Resume nicht möglich ohne source_payload — manueller Eingriff erforderlich"
-        )
+        logger.warning("Resume nicht möglich ohne source_payload — manueller Eingriff erforderlich")
     return {"checked": len(rows)}

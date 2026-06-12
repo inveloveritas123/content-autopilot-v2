@@ -2,21 +2,27 @@
 Backtest-Task: Wiederholt die Post-Generierung für die letzten N freigegebenen Posts
 eines Tenants mit einem neuen Modell und speichert die Vergleichsdaten.
 """
+
 import json
 import logging
-import uuid
-from datetime import datetime
-from tasks.celery_app import celery_app
-from models.base import sync_session_factory
+
 from sqlalchemy import text
+
+from models.base import sync_session_factory
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="tasks.backtest_task.run_backtest", bind=True, max_retries=0)
-def run_backtest(self, backtest_run_id: str, tenant_id: str,
-                 current_model_id: str, candidate_model_id: str,
-                 post_ids: list):
+def run_backtest(
+    self,
+    backtest_run_id: str,
+    tenant_id: str,
+    current_model_id: str,
+    candidate_model_id: str,
+    post_ids: list,
+):
     """
     Für jeden Post in post_ids:
     1. Lade Original-Post + seine Idee + Antworten
@@ -32,28 +38,26 @@ def run_backtest(self, backtest_run_id: str, tenant_id: str,
         # Update status to running
         db.execute(
             text("UPDATE backtest_runs SET status = 'running', started_at = NOW() WHERE id = :id"),
-            {"id": backtest_run_id}
+            {"id": backtest_run_id},
         )
         db.commit()
 
     for post_id in post_ids:
         result = _backtest_single_post(
-            backtest_run_id, tenant_id, post_id,
-            current_model_id, candidate_model_id
+            backtest_run_id, tenant_id, post_id, current_model_id, candidate_model_id
         )
         results.append(result)
 
         # Persist intermediate result
         with sync_session_factory() as db:
             existing = db.execute(
-                text("SELECT results FROM backtest_runs WHERE id = :id"),
-                {"id": backtest_run_id}
+                text("SELECT results FROM backtest_runs WHERE id = :id"), {"id": backtest_run_id}
             ).fetchone()
             current_results = json.loads(existing[0]) if existing and existing[0] else []
             current_results.append(result)
             db.execute(
                 text("UPDATE backtest_runs SET results = :r WHERE id = :id"),
-                {"r": json.dumps(current_results), "id": backtest_run_id}
+                {"r": json.dumps(current_results), "id": backtest_run_id},
             )
             db.commit()
 
@@ -69,8 +73,8 @@ def run_backtest(self, backtest_run_id: str, tenant_id: str,
                     WHERE id = :id"""),
             {
                 "s": json.dumps({"total": len(results), "passed": passed, "score_pct": score_pct}),
-                "id": backtest_run_id
-            }
+                "id": backtest_run_id,
+            },
         )
         db.commit()
 
@@ -79,8 +83,9 @@ def run_backtest(self, backtest_run_id: str, tenant_id: str,
 
 def _backtest_single_post(backtest_run_id, tenant_id, post_id, current_model, candidate_model):
     """Führt Backtest für einen einzelnen Post durch."""
-    from api.ideas import _run_p12_p12b_pipeline
     import os
+
+    from api.ideas import _run_p12_p12b_pipeline
 
     with sync_session_factory() as db:
         # Load post + metadata
@@ -88,41 +93,58 @@ def _backtest_single_post(backtest_run_id, tenant_id, post_id, current_model, ca
             text("""SELECT cp.content_text, cp.content_metadata, cp.idea_id
                     FROM content_pieces cp
                     WHERE cp.id = :pid AND cp.tenant_id = :tid"""),
-            {"pid": post_id, "tid": tenant_id}
+            {"pid": post_id, "tid": tenant_id},
         ).fetchone()
 
         if not post_row:
             return {"post_id": post_id, "error": "Post not found", "quality_pass": False}
 
         original_text, metadata_raw, idea_id = post_row
-        metadata = json.loads(metadata_raw) if isinstance(metadata_raw, str) else (metadata_raw or {})
+        metadata = (
+            json.loads(metadata_raw) if isinstance(metadata_raw, str) else (metadata_raw or {})
+        )
 
         if not idea_id:
-            return {"post_id": post_id, "error": "No idea_id — cannot backtest", "quality_pass": False}
+            return {
+                "post_id": post_id,
+                "error": "No idea_id — cannot backtest",
+                "quality_pass": False,
+            }
 
         # Load answers from content_metadata (P12 stored them there)
         answers = metadata.get("answers", [])
         if not answers:
             # Try to load from the idea's associated answers
             idea_row = db.execute(
-                text("SELECT final_answers FROM content_ideas WHERE id = :iid"),
-                {"iid": idea_id}
+                text("SELECT final_answers FROM content_ideas WHERE id = :iid"), {"iid": idea_id}
             ).fetchone()
             if idea_row and idea_row[0]:
                 answers = json.loads(idea_row[0]) if isinstance(idea_row[0], str) else idea_row[0]
 
         # Load voice + avatar profiles
         voice_row = db.execute(
-            text("SELECT payload FROM tenant_voice_profile WHERE tenant_id = :tid AND is_active = true"),
-            {"tid": tenant_id}
+            text(
+                "SELECT payload FROM tenant_voice_profile WHERE tenant_id = :tid AND is_active = true"
+            ),
+            {"tid": tenant_id},
         ).fetchone()
         avatar_row = db.execute(
-            text("SELECT payload FROM tenant_audience_avatar WHERE tenant_id = :tid AND is_active = true"),
-            {"tid": tenant_id}
+            text(
+                "SELECT payload FROM tenant_audience_avatar WHERE tenant_id = :tid AND is_active = true"
+            ),
+            {"tid": tenant_id},
         ).fetchone()
 
-        voice_payload = json.loads(voice_row[0]) if voice_row and isinstance(voice_row[0], str) else (voice_row[0] or {} if voice_row else {})
-        avatar_payload = json.loads(avatar_row[0]) if avatar_row and isinstance(avatar_row[0], str) else (avatar_row[0] or {} if avatar_row else {})
+        voice_payload = (
+            json.loads(voice_row[0])
+            if voice_row and isinstance(voice_row[0], str)
+            else (voice_row[0] or {} if voice_row else {})
+        )
+        avatar_payload = (
+            json.loads(avatar_row[0])
+            if avatar_row and isinstance(avatar_row[0], str)
+            else (avatar_row[0] or {} if avatar_row else {})
+        )
 
     # Override model via env (temporary per-task override)
     original_model_env = os.environ.get("BACKTEST_MODEL_OVERRIDE")
@@ -142,10 +164,17 @@ def _backtest_single_post(backtest_run_id, tenant_id, post_id, current_model, ca
 
     # Quality heuristics (same as eval suite)
     def normalize(t):
-        return t.lower().replace('ä', 'ae').replace('ö', 'oe').replace('ü', 'ue').replace('ß', 'ss')
+        return t.lower().replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
 
-    FORBIDDEN = ["ich hoffe", "als ki", "meiner meinung nach", "fazit:",
-                 "in diesem beitrag", "zusammenfassend", "uebrigens"]
+    FORBIDDEN = [
+        "ich hoffe",
+        "als ki",
+        "meiner meinung nach",
+        "fazit:",
+        "in diesem beitrag",
+        "zusammenfassend",
+        "uebrigens",
+    ]
 
     quality_issues = []
     if len(new_text) < 200:

@@ -1,6 +1,6 @@
 """Reservoir API — Ingest source texts for quote validation."""
+
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/reservoir", tags=["reservoir"])
 
 class ReservoirIngestRequest(BaseModel):
     source_type: str  # 'transcript', 'article', 'voice_profile'
-    source_ref: Optional[str] = None
+    source_ref: str | None = None
     content_text: str
 
 
@@ -35,6 +35,7 @@ async def ingest_source(
     entry_id = str(uuid.uuid4())
     # PostgreSQL TEXT[] requires json cast for safe binding of lists via text()
     import json as _json
+
     await db.execute(
         text("""
             INSERT INTO tenant_reservoir (id, tenant_id, source_type, source_ref, content_text, extracted_quotes)
@@ -48,7 +49,7 @@ async def ingest_source(
             "sref": (req.source_ref or "")[:500],
             "ctext": req.content_text,
             "quotes": _json.dumps(quotes),
-        }
+        },
     )
     await db.commit()
     return {
@@ -68,7 +69,7 @@ async def list_reservoir(
     rows = await db.execute(
         text("""SELECT id, source_type, source_ref, array_length(extracted_quotes, 1) as quote_count, created_at
                 FROM tenant_reservoir WHERE tenant_id = :tid ORDER BY created_at DESC"""),
-        {"tid": str(tenant.id)}
+        {"tid": str(tenant.id)},
     )
     return {"entries": [dict(r._mapping) for r in rows.fetchall()]}
 
@@ -82,7 +83,7 @@ async def delete_reservoir_entry(
     """Delete a reservoir entry."""
     result = await db.execute(
         text("DELETE FROM tenant_reservoir WHERE id = :id AND tenant_id = :tid"),
-        {"id": entry_id, "tid": str(tenant.id)}
+        {"id": entry_id, "tid": str(tenant.id)},
     )
     await db.commit()
     if result.rowcount == 0:

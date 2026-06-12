@@ -8,8 +8,8 @@ tasks/p12_task.py and tasks/p12b_task.py:
   response.usage.output_tokens
   response.usage.cache_read_input_tokens  (optional attr)
 """
+
 import json
-from typing import Any
 
 
 class MockUsage:
@@ -92,6 +92,4 @@ def build_p12b_response(post_text: str) -> dict:
 
 
 def _default_p12_response() -> dict:
-    return build_p12_response(
-        "Das ist ein generischer Test-Post fuer die Eval-Suite."
-    )
+    return build_p12_response("Das ist ein generischer Test-Post fuer die Eval-Suite.")

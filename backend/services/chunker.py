@@ -15,13 +15,12 @@ Design-Entscheidungen:
   Hier werden sie als positions-basierte Platzhalter-Indizes gesetzt,
   damit der caller sie ohne zweiten Durchlauf verknuepfen kann.
 """
+
 from __future__ import annotations
 
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Optional
-
 
 # ── Konfiguration ────────────────────────────────────────────────────────
 
@@ -71,8 +70,8 @@ _YT_BOILERPLATE_PATTERNS: list[re.Pattern] = [
 _OCR_ARTIFACT_PATTERNS: list[re.Pattern] = [
     re.compile(r"[A-Z]{2,}:\d{4}:\d{2}:\d{2}\s+\d{2}:\d{2}:\d{2}"),  # EXIF Datum
     re.compile(r"\bExif\b", re.I),
-    re.compile(r"\bI{3,}\b"),           # III oder mehr (OCR-Artefakt)
-    re.compile(r"[|_]{4,}"),            # Horizontale Linien-Artefakte
+    re.compile(r"\bI{3,}\b"),  # III oder mehr (OCR-Artefakt)
+    re.compile(r"[|_]{4,}"),  # Horizontale Linien-Artefakte
     re.compile(r"[\x00-\x08\x0b-\x1f]"),  # Steuerzeichen ausser \t \n
 ]
 
@@ -85,12 +84,12 @@ class Chunk:
     """Ein einzelner Text-Chunk mit Positions- und Link-Informationen."""
 
     text: str
-    position: int                           # 0-basierter Index im Gesamttext
-    prev_chunk_index: Optional[int] = None  # position des Vorgaengers
-    next_chunk_index: Optional[int] = None  # position des Nachfolgers
+    position: int  # 0-basierter Index im Gesamttext
+    prev_chunk_index: int | None = None  # position des Vorgaengers
+    next_chunk_index: int | None = None  # position des Nachfolgers
     # Wird vom caller befuellt sobald DB-IDs bekannt sind:
-    prev_chunk_id: Optional[str] = None
-    next_chunk_id: Optional[str] = None
+    prev_chunk_id: str | None = None
+    next_chunk_id: str | None = None
     metadata: dict = field(default_factory=dict)
 
 
@@ -248,7 +247,7 @@ def _split_with_overlap(text: str, config: ChunkConfig) -> list[Chunk]:
         sentence_chunks: list[str] = []
         i = 0
         while i < len(words):
-            chunk_words = words[i:i + words_per_chunk]
+            chunk_words = words[i : i + words_per_chunk]
             sentence_chunks.append(" ".join(chunk_words))
             i += max(1, words_per_chunk - overlap_words)
         sentences = sentence_chunks
@@ -274,7 +273,7 @@ def _split_with_overlap(text: str, config: ChunkConfig) -> list[Chunk]:
                     overlap_total += pt
                 else:
                     break
-            current_sentences = overlap_sentences + [sentence]
+            current_sentences = [*overlap_sentences, sentence]
             current_tokens = sum(count_tokens(s) for s in current_sentences)
         else:
             current_sentences.append(sentence)

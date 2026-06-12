@@ -38,11 +38,33 @@ ignore = [
     "E501",   # line-too-long — wir lassen Ruff-Format das machen
     "B008",   # function-call-in-default-arg (FastAPI Depends-Pattern)
     "SIM108", # ternary-instead-of-if-else — Lesbarkeit
+    # --- Bewusst zurueckgestellt (konservative Auswahl, spaeter ausbaubar) ---
+    "RUF001", # ambiguous-unicode (deutsche Texte: –, „ ", … — kein echtes Risiko)
+    "RUF002", # dito in Docstrings
+    "RUF003", # dito in Kommentaren
+    "E741",   # ambiguous variable name (l/I) — Altbestand, kosmetisch
+    "SIM102", # collapsible-if — Lesbarkeit
+    "SIM105", # suppressible-exception (contextlib.suppress) — Lesbarkeit
+    "SIM117", # multiple-with-statements — verschachteltes patch() in Tests lesbarer
+    "B904",   # raise-without-from — Exception-Chaining-Nachruestung als Follow-up (#tech-debt)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["B011", "B017"]   # asserts + bare-except sind in Tests OK
+"tests/**" = ["B011", "B017", "E402", "RUF012"]  # asserts/bare-except OK; E402: Stub-vor-Import gewollt; RUF012: Test-Konstanten
 "__init__.py" = ["F401"]        # re-exports
+# E402: diese Module setzen bewusst Code (Stubs/sys.path/Conditional-Logging) VOR den Imports
+"main.py" = ["E402"]
+"api/brand_voice.py" = ["E402"]
+"services/quote_extractor.py" = ["B005"]  # .strip('"\'„"') entfernt absichtlich umgebende Quote-Zeichen
+"api/llm_settings.py" = ["E402"]
+"api/wizard.py" = ["E402"]
+"eval/run_quality_gate_eval.py" = ["E402"]
+"middleware/csrf_middleware.py" = ["E402"]
+"services/brand_voice_storage.py" = ["E402"]
+"services/llm.py" = ["E402"]
+"tasks/p12_task.py" = ["E402"]
+"tasks/p12b_task.py" = ["E402"]
+"tasks/p12c_task.py" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "double"

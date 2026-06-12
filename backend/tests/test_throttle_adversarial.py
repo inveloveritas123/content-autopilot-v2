@@ -9,12 +9,14 @@ Acceptance-Kriterien:
 
 KEIN Datenbank-Zugriff nötig — alles via MagicMock.
 """
-import asyncio
-import pytest
-from unittest.mock import MagicMock, patch, call
 
+import asyncio
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
+
 
 def _make_throttle_session(tenant_count: int, global_count: int):
     """
@@ -43,10 +45,10 @@ def _make_throttle_session(tenant_count: int, global_count: int):
     insert_result = MagicMock()
 
     session.execute.side_effect = [
-        lock_result,          # pg_advisory_xact_lock
+        lock_result,  # pg_advisory_xact_lock
         tenant_count_result,  # COUNT tenant calls
         global_count_result,  # COUNT global calls
-        insert_result,        # INSERT throttle_events (if throttled)
+        insert_result,  # INSERT throttle_events (if throttled)
     ] + [insert_result] * 20  # fallback for repeated calls in loops
 
     session.commit = MagicMock()
@@ -66,6 +68,7 @@ def _make_session_factory(tenant_count: int, global_count: int):
 
 # ─── Test 1: Adversarial — 250 Calls, 50 müssen geblockt werden ─────────────
 
+
 class TestAdversarial250Calls:
     """
     Simulate 250 consecutive calls with limit=200.
@@ -73,15 +76,16 @@ class TestAdversarial250Calls:
     """
 
     def test_250_calls_50_rejected(self):
-        from services.throttle import check_and_record_throttle, RateLimitExceededError
         from config import settings
+        from services.throttle import check_and_record_throttle
 
         allowed_count = 0
         blocked_count = 0
 
-        with patch.object(settings, 'max_calls_per_tenant_per_hour', 200), \
-             patch.object(settings, 'max_calls_global_per_hour', 1000):
-
+        with (
+            patch.object(settings, "max_calls_per_tenant_per_hour", 200),
+            patch.object(settings, "max_calls_global_per_hour", 1000),
+        ):
             for call_n in range(1, 251):
                 # Simulate cumulative: before this call, call_n-1 calls exist
                 current_count = call_n - 1
@@ -97,17 +101,13 @@ class TestAdversarial250Calls:
                 else:
                     blocked_count += 1
 
-        assert allowed_count == 200, (
-            f"Expected 200 allowed calls, got {allowed_count}"
-        )
-        assert blocked_count == 50, (
-            f"Expected 50 blocked calls, got {blocked_count}"
-        )
+        assert allowed_count == 200, f"Expected 200 allowed calls, got {allowed_count}"
+        assert blocked_count == 50, f"Expected 50 blocked calls, got {blocked_count}"
 
     def test_ratelimit_error_raised_in_llm_service(self):
         """_litellm() raises RateLimitExceededError when throttle check fails."""
-        from services.llm import LLMService, RateLimitExceededError, set_llm_tenant
         from config import settings
+        from services.llm import LLMService, RateLimitExceededError, set_llm_tenant
 
         # Build an LLMService in LiteLLM path
         svc = LLMService.__new__(LLMService)
@@ -135,17 +135,20 @@ class TestAdversarial250Calls:
 
         budget_factory = MagicMock(side_effect=[budget_cm, throttle_cm])
 
-        with patch.object(settings, 'max_calls_per_tenant_per_hour', 200), \
-             patch.object(settings, 'max_calls_global_per_hour', 1000), \
-             patch("services.provider_resolver._GLOBAL_CAP_USD", 100.0), \
-             patch("services.provider_resolver._DAILY_CAP_USD", 50.0), \
-             patch("services.provider_resolver.get_active_provider", return_value=None), \
-             patch("models.base.sync_session_factory", budget_factory):
+        with (
+            patch.object(settings, "max_calls_per_tenant_per_hour", 200),
+            patch.object(settings, "max_calls_global_per_hour", 1000),
+            patch("services.provider_resolver._GLOBAL_CAP_USD", 100.0),
+            patch("services.provider_resolver._DAILY_CAP_USD", 50.0),
+            patch("services.provider_resolver.get_active_provider", return_value=None),
+            patch("models.base.sync_session_factory", budget_factory),
+        ):
             with pytest.raises(RateLimitExceededError, match="Throttle"):
                 asyncio.run(svc._litellm("test prompt", None, "gemini-flash", purpose="analysis"))
 
 
 # ─── Test 2: E2E — pump_pipeline enqueues exactly 200, rest stay pending ─────
+
 
 class TestPumpPipelineE2EThrottle:
     """
@@ -161,12 +164,13 @@ class TestPumpPipelineE2EThrottle:
 
     def test_throttle_blocks_at_exact_limit(self):
         """199 calls existing → 200th is allowed. 200 calls existing → 201st is blocked."""
-        from services.throttle import check_and_record_throttle
         from config import settings
+        from services.throttle import check_and_record_throttle
 
-        with patch.object(settings, 'max_calls_per_tenant_per_hour', 200), \
-             patch.object(settings, 'max_calls_global_per_hour', 1000):
-
+        with (
+            patch.object(settings, "max_calls_per_tenant_per_hour", 200),
+            patch.object(settings, "max_calls_global_per_hour", 1000),
+        ):
             # 199 calls existing — should be ALLOWED (call 200)
             session_199 = _make_throttle_session(tenant_count=199, global_count=199)
             allowed_200, tc, _ = check_and_record_throttle(
@@ -186,15 +190,15 @@ class TestPumpPipelineE2EThrottle:
         _throttle_check_for_enqueue returns False when limit reached.
         Verifies the helper correctly returns False and logs a WARNING.
         """
-        import logging
-        from tasks.pipeline_pump_task import _throttle_check_for_enqueue
         from config import settings
+        from tasks.pipeline_pump_task import _throttle_check_for_enqueue
 
         session = _make_throttle_session(tenant_count=200, global_count=200)
 
-        with patch.object(settings, 'max_calls_per_tenant_per_hour', 200), \
-             patch.object(settings, 'max_calls_global_per_hour', 1000):
-
+        with (
+            patch.object(settings, "max_calls_per_tenant_per_hour", 200),
+            patch.object(settings, "max_calls_global_per_hour", 1000),
+        ):
             with patch("tasks.pipeline_pump_task.logger") as mock_logger:
                 result = _throttle_check_for_enqueue(session, "tenant-pump-test", "analyze_item")
 
@@ -206,13 +210,15 @@ class TestPumpPipelineE2EThrottle:
 
     def test_pump_pipeline_allows_enqueue_below_limit(self):
         """_throttle_check_for_enqueue returns True when count < limit."""
-        from tasks.pipeline_pump_task import _throttle_check_for_enqueue
         from config import settings
+        from tasks.pipeline_pump_task import _throttle_check_for_enqueue
 
         session = _make_throttle_session(tenant_count=50, global_count=50)
 
-        with patch.object(settings, 'max_calls_per_tenant_per_hour', 200), \
-             patch.object(settings, 'max_calls_global_per_hour', 1000):
+        with (
+            patch.object(settings, "max_calls_per_tenant_per_hour", 200),
+            patch.object(settings, "max_calls_global_per_hour", 1000),
+        ):
             result = _throttle_check_for_enqueue(session, "tenant-pump-test", "analyze_item")
 
         assert result is True
@@ -220,42 +226,48 @@ class TestPumpPipelineE2EThrottle:
 
 # ─── Test 3: Boundary Edge-Cases ────────────────────────────────────────────
 
+
 class TestBoundaryConditions:
     """199+1=200 OK; 200+1=201st throttled."""
 
-    @pytest.mark.parametrize("existing,expected_allowed", [
-        (0, True),
-        (199, True),    # exactly at limit-1: allowed
-        (200, False),   # exactly at limit: blocked
-        (201, False),   # over limit: blocked
-        (9999, False),  # way over limit: blocked
-    ])
+    @pytest.mark.parametrize(
+        "existing,expected_allowed",
+        [
+            (0, True),
+            (199, True),  # exactly at limit-1: allowed
+            (200, False),  # exactly at limit: blocked
+            (201, False),  # over limit: blocked
+            (9999, False),  # way over limit: blocked
+        ],
+    )
     def test_boundary_values(self, existing, expected_allowed):
-        from services.throttle import check_and_record_throttle
         from config import settings
+        from services.throttle import check_and_record_throttle
 
         session = _make_throttle_session(tenant_count=existing, global_count=existing)
 
-        with patch.object(settings, 'max_calls_per_tenant_per_hour', 200), \
-             patch.object(settings, 'max_calls_global_per_hour', 1000):
-            allowed, _, _ = check_and_record_throttle(
-                session, "tenant-boundary-test", "test_task"
-            )
+        with (
+            patch.object(settings, "max_calls_per_tenant_per_hour", 200),
+            patch.object(settings, "max_calls_global_per_hour", 1000),
+        ):
+            allowed, _, _ = check_and_record_throttle(session, "tenant-boundary-test", "test_task")
 
-        assert allowed == expected_allowed, (
-            f"existing={existing}: expected allowed={expected_allowed}, got {allowed}"
-        )
+        assert (
+            allowed == expected_allowed
+        ), f"existing={existing}: expected allowed={expected_allowed}, got {allowed}"
 
     def test_global_boundary(self):
         """Global limit=1000 triggers when global_count >= 1000."""
-        from services.throttle import check_and_record_throttle
         from config import settings
+        from services.throttle import check_and_record_throttle
 
         # Tenant under limit (5), global at limit (1000)
         session = _make_throttle_session(tenant_count=5, global_count=1000)
 
-        with patch.object(settings, 'max_calls_per_tenant_per_hour', 200), \
-             patch.object(settings, 'max_calls_global_per_hour', 1000):
+        with (
+            patch.object(settings, "max_calls_per_tenant_per_hour", 200),
+            patch.object(settings, "max_calls_global_per_hour", 1000),
+        ):
             allowed, _, _ = check_and_record_throttle(
                 session, "tenant-global-boundary", "test_task"
             )
@@ -265,28 +277,26 @@ class TestBoundaryConditions:
 
 # ─── Test 4: Tenant Isolation ────────────────────────────────────────────────
 
+
 class TestTenantIsolation:
     """Tenant A at 200 is throttled; Tenant B at 5 can continue."""
 
     def test_tenant_a_throttled_tenant_b_allowed(self):
-        from services.throttle import check_and_record_throttle
         from config import settings
+        from services.throttle import check_and_record_throttle
 
-        with patch.object(settings, 'max_calls_per_tenant_per_hour', 200), \
-             patch.object(settings, 'max_calls_global_per_hour', 1000):
-
+        with (
+            patch.object(settings, "max_calls_per_tenant_per_hour", 200),
+            patch.object(settings, "max_calls_global_per_hour", 1000),
+        ):
             # Tenant A: 200 calls → throttled
             session_a = _make_throttle_session(tenant_count=200, global_count=205)
-            allowed_a, _, _ = check_and_record_throttle(
-                session_a, "tenant-A-uuid-1234", "creative"
-            )
+            allowed_a, _, _ = check_and_record_throttle(session_a, "tenant-A-uuid-1234", "creative")
             assert allowed_a is False, "Tenant A at 200 calls should be throttled"
 
             # Tenant B: 5 calls — global also low (5), well below limit
             session_b = _make_throttle_session(tenant_count=5, global_count=5)
-            allowed_b, _, _ = check_and_record_throttle(
-                session_b, "tenant-B-uuid-5678", "creative"
-            )
+            allowed_b, _, _ = check_and_record_throttle(session_b, "tenant-B-uuid-5678", "creative")
             assert allowed_b is True, "Tenant B at 5 calls should NOT be throttled"
 
     def test_different_tenant_ids_checked_independently(self):
@@ -301,6 +311,7 @@ class TestTenantIsolation:
 
 
 # ─── Test 5: Fail-Open Behavior ──────────────────────────────────────────────
+
 
 class TestFailOpen:
     """Throttle check must not block calls when DB is unavailable."""
@@ -321,8 +332,8 @@ class TestFailOpen:
 
     def test_ratelimit_not_raised_in_llm_on_throttle_db_failure(self):
         """If throttle DB check raises, _litellm() proceeds normally (fail-open)."""
-        from services.llm import LLMService, set_llm_tenant
         from config import settings
+        from services.llm import LLMService, set_llm_tenant
 
         svc = LLMService.__new__(LLMService)
         svc._litellm_base_url = "https://router.requesty.ai/v1"
@@ -341,7 +352,9 @@ class TestFailOpen:
 
         # Mock the HTTP call to succeed (use AsyncMock for async context manager)
         from unittest.mock import AsyncMock
+
         import httpx
+
         mock_resp = MagicMock(spec=httpx.Response)
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -355,13 +368,15 @@ class TestFailOpen:
         mock_client.__aexit__ = AsyncMock(return_value=None)
         mock_client.post = AsyncMock(return_value=mock_resp)
 
-        with patch.object(settings, 'max_calls_per_tenant_per_hour', 200), \
-             patch.object(settings, 'max_calls_global_per_hour', 1000), \
-             patch("services.provider_resolver._GLOBAL_CAP_USD", 100.0), \
-             patch("services.provider_resolver._DAILY_CAP_USD", 50.0), \
-             patch("services.provider_resolver.get_active_provider", return_value=None), \
-             patch("models.base.sync_session_factory", broken_factory), \
-             patch("httpx.AsyncClient", return_value=mock_client):
+        with (
+            patch.object(settings, "max_calls_per_tenant_per_hour", 200),
+            patch.object(settings, "max_calls_global_per_hour", 1000),
+            patch("services.provider_resolver._GLOBAL_CAP_USD", 100.0),
+            patch("services.provider_resolver._DAILY_CAP_USD", 50.0),
+            patch("services.provider_resolver.get_active_provider", return_value=None),
+            patch("models.base.sync_session_factory", broken_factory),
+            patch("httpx.AsyncClient", return_value=mock_client),
+        ):
             # Should NOT raise RateLimitExceededError
             result = asyncio.run(
                 svc._litellm("test prompt", None, "gemini-flash", purpose="analysis")
@@ -371,13 +386,14 @@ class TestFailOpen:
 
 # ─── Test 6: RateLimitExceededError no-retry in complete() ──────────────────
 
+
 class TestNoRetryOnRateLimit:
     """complete() must not retry when RateLimitExceededError is raised."""
 
     def test_rate_limit_not_retried(self):
         """RateLimitExceededError propagates immediately without retry from complete()."""
+
         from services.llm import LLMService, RateLimitExceededError, set_llm_tenant
-        from unittest.mock import AsyncMock
 
         svc = LLMService.__new__(LLMService)
         svc._litellm_base_url = "https://router.requesty.ai/v1"
@@ -400,11 +416,10 @@ class TestNoRetryOnRateLimit:
             asyncio.run(svc.complete("prompt", model="gemini-flash", max_retries=3))
 
         # Must have been called exactly once — no retry
-        assert call_count == 1, (
-            f"Expected exactly 1 call (no retry), got {call_count}"
-        )
+        assert call_count == 1, f"Expected exactly 1 call (no retry), got {call_count}"
 
     def test_rate_limit_error_importable_from_llm(self):
         """RateLimitExceededError can be imported from services.llm."""
         from services.llm import RateLimitExceededError
+
         assert issubclass(RateLimitExceededError, Exception)

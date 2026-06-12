@@ -4,6 +4,7 @@ MD→JSON Konverter fuer Content-Autopilot v2 (Issue #57).
 Konvertiert ein Markdown-Voice-Dokument in ein P03-Voice-Profil-JSON.
 Nutzt Claude Haiku (sync Anthropic SDK) mit Cost-Cap-Pruefung.
 """
+
 import asyncio
 import json
 import logging
@@ -33,6 +34,7 @@ INJECTION_PATTERNS = [
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
 
+
 def _extract_section(content: str, section: str) -> str:
     """Extrahiert den Inhalt einer Markdown-Sektion.
 
@@ -40,12 +42,14 @@ def _extract_section(content: str, section: str) -> str:
     Identisches Verhalten: System-Prompt umfasst alle zwischenliegenden ##-Abschnitte.
     """
     from services.prompt_loader import _extract_section as _pl_extract
+
     return _pl_extract(content, section)
 
 
 # ---------------------------------------------------------------------------
 # Oeffentliche Service-Funktion
 # ---------------------------------------------------------------------------
+
 
 def convert_md_to_p03_json(
     md_content: str,
@@ -63,12 +67,8 @@ def convert_md_to_p03_json(
     # ------------------------------------------------------------------
     for pattern in INJECTION_PATTERNS:
         if re.search(pattern, md_content):
-            logger.warning(
-                "Possible prompt injection in MD upload: pattern=%s", pattern
-            )
-            raise ValueError(
-                "Moeglicher Injection-Versuch im hochgeladenen Dokument erkannt."
-            )
+            logger.warning("Possible prompt injection in MD upload: pattern=%s", pattern)
+            raise ValueError("Moeglicher Injection-Versuch im hochgeladenen Dokument erkannt.")
 
     # ------------------------------------------------------------------
     # 2. Prompt laden
@@ -76,15 +76,14 @@ def convert_md_to_p03_json(
     if storage_adapter is not None:
         # Via PromptLoader aus Nextcloud
         from services.prompt_loader import PromptLoader
+
         loader = PromptLoader(storage_adapter=storage_adapter)
         loaded = loader.load("P03")
         system_prompt = loaded.system_prompt
         user_template = loaded.user_prompt_template
     else:
         # Direkt aus lokaler Prompt-Datei
-        prompt_file = os.path.join(
-            os.path.dirname(__file__), "../prompts/md_to_p03_converter.md"
-        )
+        prompt_file = os.path.join(os.path.dirname(__file__), "../prompts/md_to_p03_converter.md")
         with open(prompt_file, encoding="utf-8") as f:
             raw = f.read()
         system_prompt = _extract_section(raw, "System-Prompt")
@@ -104,15 +103,13 @@ def convert_md_to_p03_json(
         from services.cost_cap import CostCapMiddleware, estimate_anthropic_cost
 
         engine = create_async_engine(s.database_url)
-        SessionLocal = sessionmaker(
-            engine, class_=AsyncSession, expire_on_commit=False
-        )
+        SessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         async with SessionLocal() as sess:
             mw = CostCapMiddleware(sess)
             est = estimate_anthropic_cost(
                 ANTHROPIC_MODEL_ID,
                 len(md_content) // 4,  # grobe Token-Schaetzung
-                1000,                  # Output-Budget
+                1000,  # Output-Budget
             )
             await mw.check_and_record(tenant_id, est)
 
@@ -145,21 +142,13 @@ def convert_md_to_p03_json(
     # ------------------------------------------------------------------
     # 5. JSON-Parsing
     # ------------------------------------------------------------------
-    raw_clean = (
-        raw_text
-        .removeprefix("```json")
-        .removeprefix("```")
-        .removesuffix("```")
-        .strip()
-    )
+    raw_clean = raw_text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
     output_json = json.loads(raw_clean)
 
     # ------------------------------------------------------------------
     # 6. Schema-Validierung
     # ------------------------------------------------------------------
-    schema_file = os.path.join(
-        os.path.dirname(__file__), "../schemas/p03_output_schema.json"
-    )
+    schema_file = os.path.join(os.path.dirname(__file__), "../schemas/p03_output_schema.json")
     if os.path.exists(schema_file):
         with open(schema_file, encoding="utf-8") as f:
             schema = json.load(f)

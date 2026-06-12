@@ -5,11 +5,13 @@ Bei neuem Modell: Insert + Admin-Notification (Log + Telegram-Stub).
 Nutzt Requesty-Proxy (kein direkter anthropic.models.list() call —
 da der Stack über Requesty.ai proxied).
 """
+
 import logging
-from datetime import datetime
-from tasks.celery_app import celery_app
-from models.base import sync_session_factory
+
 from sqlalchemy import text
+
+from models.base import sync_session_factory
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -33,14 +35,13 @@ def check_model_availability(self):
     with sync_session_factory() as db:
         for provider, model_id, display_name in KNOWN_MODELS:
             row = db.execute(
-                text("SELECT id FROM models_available WHERE model_id = :mid"),
-                {"mid": model_id}
+                text("SELECT id FROM models_available WHERE model_id = :mid"), {"mid": model_id}
             ).fetchone()
             if not row:
                 db.execute(
                     text("""INSERT INTO models_available (provider, model_id, display_name, first_seen_at)
                             VALUES (:provider, :model_id, :display_name, NOW())"""),
-                    {"provider": provider, "model_id": model_id, "display_name": display_name}
+                    {"provider": provider, "model_id": model_id, "display_name": display_name},
                 )
                 new_models.append(model_id)
                 logger.info(f"[ModelCheck] Neues Modell entdeckt: {model_id}")

@@ -4,11 +4,11 @@ Source Adapter Pattern — Abstrakte Basis + konkrete Adapter für verschiedene 
 Jeder Adapter produziert einheitliche RawItem-Dicts, unabhängig vom Input-Format.
 Die Analyse-Pipeline sieht keinen Unterschied zwischen YouTube, Blog oder Podcast.
 """
+
 import logging
 import re
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Optional
 from urllib.parse import urlparse
 
 import feedparser
@@ -41,7 +41,7 @@ class AbstractSourceAdapter(ABC):
         ...
 
     @abstractmethod
-    async def extract_content(self, item_data: dict) -> Optional[str]:
+    async def extract_content(self, item_data: dict) -> str | None:
         """Extract text content from an item (article body, transcript, etc.).
 
         For YouTube: returns None (transcript fetched separately via transcription service)
@@ -61,7 +61,9 @@ class AbstractSourceAdapter(ABC):
         }
         adapter = adapters.get(source_type)
         if not adapter:
-            raise ValueError(f"No adapter for source type: {source_type}. Available: {list(adapters.keys())}")
+            raise ValueError(
+                f"No adapter for source type: {source_type}. Available: {list(adapters.keys())}"
+            )
         return adapter
 
 
@@ -91,7 +93,7 @@ class YouTubeAdapter(AbstractSourceAdapter):
         logger.info(f"YouTube '{source.name}': {len(videos)} total, {len(new_videos)} new")
         return new_videos
 
-    async def extract_content(self, item_data: dict) -> Optional[str]:
+    async def extract_content(self, item_data: dict) -> str | None:
         # YouTube transcripts are fetched via transcription service, not here
         return None
 
@@ -124,17 +126,19 @@ class YouTubeAdapter(AbstractSourceAdapter):
 
             thumbnail = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None
 
-            videos.append({
-                "external_id": video_id,
-                "title": entry.get("title", ""),
-                "url": entry.get("link", ""),
-                "published_at": published,
-                "thumbnail_url": thumbnail,
-                "content_text": None,
-                "content_type": "video",
-                "source_type": "youtube",
-                "author": entry.get("author", ""),
-            })
+            videos.append(
+                {
+                    "external_id": video_id,
+                    "title": entry.get("title", ""),
+                    "url": entry.get("link", ""),
+                    "published_at": published,
+                    "thumbnail_url": thumbnail,
+                    "content_text": None,
+                    "content_type": "video",
+                    "source_type": "youtube",
+                    "author": entry.get("author", ""),
+                }
+            )
 
         return videos
 
@@ -173,16 +177,20 @@ class YouTubeAdapter(AbstractSourceAdapter):
         logger.info(f"Fetched {len(videos)} total videos for channel {channel_id}")
         return videos[:max_videos]
 
-    def _extract_playlist_videos(self, data: dict, is_first: bool) -> tuple[list[dict], Optional[str]]:
+    def _extract_playlist_videos(self, data: dict, is_first: bool) -> tuple[list[dict], str | None]:
         """Extract video info and continuation token from innertube response."""
         videos = []
         continuation = None
 
         if is_first:
-            tabs = data.get("contents", {}).get("twoColumnBrowseResultsRenderer", {}).get("tabs", [])
+            tabs = (
+                data.get("contents", {}).get("twoColumnBrowseResultsRenderer", {}).get("tabs", [])
+            )
             items_container = None
             for tab in tabs:
-                section = tab.get("tabRenderer", {}).get("content", {}).get("sectionListRenderer", {})
+                section = (
+                    tab.get("tabRenderer", {}).get("content", {}).get("sectionListRenderer", {})
+                )
                 for content in section.get("contents", []):
                     playlist = content.get("itemSectionRenderer", {}).get("contents", [{}])[0]
                     items_container = playlist.get("playlistVideoListRenderer", {})
@@ -208,17 +216,19 @@ class YouTubeAdapter(AbstractSourceAdapter):
                 duration = self._parse_duration(length_text)
                 thumbnail = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None
 
-                videos.append({
-                    "external_id": video_id,
-                    "title": title,
-                    "url": f"https://www.youtube.com/watch?v={video_id}",
-                    "published_at": None,
-                    "thumbnail_url": thumbnail,
-                    "content_text": None,
-                    "content_type": "video",
-                    "source_type": "youtube",
-                    "duration_seconds": duration,
-                })
+                videos.append(
+                    {
+                        "external_id": video_id,
+                        "title": title,
+                        "url": f"https://www.youtube.com/watch?v={video_id}",
+                        "published_at": None,
+                        "thumbnail_url": thumbnail,
+                        "content_text": None,
+                        "content_type": "video",
+                        "source_type": "youtube",
+                        "duration_seconds": duration,
+                    }
+                )
 
             cont = item.get("continuationItemRenderer", {})
             endpoint = cont.get("continuationEndpoint", {})
@@ -235,10 +245,12 @@ class YouTubeAdapter(AbstractSourceAdapter):
         runs = obj.get("runs", [])
         if runs:
             return "".join(r.get("text", "") for r in runs)
-        return obj.get("simpleText", obj.get("accessibility", {}).get("accessibilityData", {}).get("label", ""))
+        return obj.get(
+            "simpleText", obj.get("accessibility", {}).get("accessibilityData", {}).get("label", "")
+        )
 
     @staticmethod
-    def _parse_duration(text: str) -> Optional[int]:
+    def _parse_duration(text: str) -> int | None:
         if not text:
             return None
         parts = text.strip().split(":")
@@ -255,6 +267,7 @@ class YouTubeAdapter(AbstractSourceAdapter):
 # ═══════════════════════════════════════════════════
 # RSS ADAPTER (NEU)
 # ═══════════════════════════════════════════════════
+
 
 class RSSAdapter(AbstractSourceAdapter):
     """Adapter für generische RSS/Atom-Feeds (Blogs, News, Substack, Newsletter-Archive).
@@ -275,10 +288,13 @@ class RSSAdapter(AbstractSourceAdapter):
 
         try:
             async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-                resp = await client.get(feed_url, headers={
-                    "User-Agent": "ContentAutopilot/2.0 (RSS Reader)",
-                    "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml",
-                })
+                resp = await client.get(
+                    feed_url,
+                    headers={
+                        "User-Agent": "ContentAutopilot/2.0 (RSS Reader)",
+                        "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml",
+                    },
+                )
                 resp.raise_for_status()
         except Exception as e:
             logger.error(f"RSS fetch failed for {source.name} ({feed_url}): {e}")
@@ -291,7 +307,8 @@ class RSSAdapter(AbstractSourceAdapter):
             return []
 
         # Determine base URL for resolving relative links
-        from urllib.parse import urljoin, urlparse
+        from urllib.parse import urljoin
+
         parsed_feed_url = urlparse(feed_url)
         base_url = f"{parsed_feed_url.scheme}://{parsed_feed_url.netloc}"
 
@@ -315,24 +332,30 @@ class RSSAdapter(AbstractSourceAdapter):
 
             # Resolve relative URLs to absolute
             raw_link = entry.get("link", "")
-            item_url = urljoin(base_url, raw_link) if raw_link and not raw_link.startswith("http") else raw_link
+            item_url = (
+                urljoin(base_url, raw_link)
+                if raw_link and not raw_link.startswith("http")
+                else raw_link
+            )
 
-            items.append({
-                "external_id": external_id,
-                "title": entry.get("title", "Ohne Titel"),
-                "url": item_url,
-                "published_at": published,
-                "thumbnail_url": thumbnail,
-                "content_text": content_text,
-                "content_type": "article",
-                "source_type": "rss",
-                "author": entry.get("author", feed.feed.get("title", "")),
-            })
+            items.append(
+                {
+                    "external_id": external_id,
+                    "title": entry.get("title", "Ohne Titel"),
+                    "url": item_url,
+                    "published_at": published,
+                    "thumbnail_url": thumbnail,
+                    "content_text": content_text,
+                    "content_type": "article",
+                    "source_type": "rss",
+                    "author": entry.get("author", feed.feed.get("title", "")),
+                }
+            )
 
         logger.info(f"RSS '{source.name}': {len(feed.entries)} entries, {len(items)} new")
         return items
 
-    async def extract_content(self, item_data: dict) -> Optional[str]:
+    async def extract_content(self, item_data: dict) -> str | None:
         """Fetch full article content from URL using readability extraction.
 
         Falls back to feed content if URL fetch fails.
@@ -345,21 +368,26 @@ class RSSAdapter(AbstractSourceAdapter):
 
         try:
             async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
-                resp = await client.get(url, headers={
-                    "User-Agent": "Mozilla/5.0 (compatible; ContentAutopilot/2.0)",
-                })
+                resp = await client.get(
+                    url,
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (compatible; ContentAutopilot/2.0)",
+                    },
+                )
                 resp.raise_for_status()
 
             # Try readability-lxml for clean text extraction
             try:
                 from readability import Document as ReadabilityDoc
+
                 doc = ReadabilityDoc(resp.text)
                 # Get clean text from HTML
                 import re
+
                 html_content = doc.summary()
                 # Strip HTML tags for plain text
-                clean_text = re.sub(r'<[^>]+>', ' ', html_content)
-                clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+                clean_text = re.sub(r"<[^>]+>", " ", html_content)
+                clean_text = re.sub(r"\s+", " ", clean_text).strip()
 
                 if len(clean_text) > 200:  # Meaningful content
                     return clean_text
@@ -382,6 +410,7 @@ class RSSAdapter(AbstractSourceAdapter):
             return entry["link"]
         # Fallback: hash of title + date
         import hashlib
+
         text = f"{entry.get('title', '')}{entry.get('published', '')}"
         return hashlib.sha256(text.encode()).hexdigest()[:32]
 
@@ -393,22 +422,22 @@ class RSSAdapter(AbstractSourceAdapter):
             for c in entry.content:
                 if c.get("value"):
                     # Strip HTML
-                    text = re.sub(r'<[^>]+>', ' ', c["value"])
-                    text = re.sub(r'\s+', ' ', text).strip()
+                    text = re.sub(r"<[^>]+>", " ", c["value"])
+                    text = re.sub(r"\s+", " ", text).strip()
                     if len(text) > 100:
                         return text
 
         # Try summary/description
         summary = entry.get("summary", entry.get("description", ""))
         if summary:
-            text = re.sub(r'<[^>]+>', ' ', summary)
-            text = re.sub(r'\s+', ' ', text).strip()
+            text = re.sub(r"<[^>]+>", " ", summary)
+            text = re.sub(r"\s+", " ", text).strip()
             return text
 
         return ""
 
     @staticmethod
-    def _extract_thumbnail(entry) -> Optional[str]:
+    def _extract_thumbnail(entry) -> str | None:
         """Extract thumbnail URL from feed entry."""
         # Media RSS thumbnail
         if hasattr(entry, "media_thumbnail") and entry.media_thumbnail:
@@ -430,6 +459,7 @@ class RSSAdapter(AbstractSourceAdapter):
 # PODCAST ADAPTER (NEU — Grundgerüst)
 # ═══════════════════════════════════════════════════
 
+
 class PodcastAdapter(AbstractSourceAdapter):
     """Adapter für Podcast-RSS-Feeds.
 
@@ -445,9 +475,12 @@ class PodcastAdapter(AbstractSourceAdapter):
 
         try:
             async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-                resp = await client.get(feed_url, headers={
-                    "User-Agent": "ContentAutopilot/2.0 (Podcast Reader)",
-                })
+                resp = await client.get(
+                    feed_url,
+                    headers={
+                        "User-Agent": "ContentAutopilot/2.0 (Podcast Reader)",
+                    },
+                )
                 resp.raise_for_status()
         except Exception as e:
             logger.error(f"Podcast feed fetch failed for {source.name}: {e}")
@@ -499,27 +532,32 @@ class PodcastAdapter(AbstractSourceAdapter):
             description = entry.get("summary", entry.get("description", ""))
             if description:
                 import re
+
                 description = re.sub(r"<[^>]+>", " ", description).strip()
                 description = re.sub(r"\s+", " ", description)
 
-            items.append({
-                "external_id": external_id,
-                "title": entry.get("title", ""),
-                "url": entry.get("link", audio_url),
-                "published_at": published,
-                "thumbnail_url": thumbnail,
-                "content_text": description or None,
-                "content_type": "podcast",
-                "source_type": "podcast",
-                "author": entry.get("author", feed.feed.get("title", "")),
-                "audio_url": audio_url,
-                "duration_seconds": duration,
-            })
+            items.append(
+                {
+                    "external_id": external_id,
+                    "title": entry.get("title", ""),
+                    "url": entry.get("link", audio_url),
+                    "published_at": published,
+                    "thumbnail_url": thumbnail,
+                    "content_text": description or None,
+                    "content_type": "podcast",
+                    "source_type": "podcast",
+                    "author": entry.get("author", feed.feed.get("title", "")),
+                    "audio_url": audio_url,
+                    "duration_seconds": duration,
+                }
+            )
 
-        logger.info(f"Podcast '{source.name}': {len(feed.entries)} entries, {len(items)} new episodes")
+        logger.info(
+            f"Podcast '{source.name}': {len(feed.entries)} entries, {len(items)} new episodes"
+        )
         return items
 
-    async def extract_content(self, item_data: dict) -> Optional[str]:
+    async def extract_content(self, item_data: dict) -> str | None:
         """Podcast content is transcribed via Gemini Audio API — not extracted here.
 
         The transcription happens in the transcribe_task via LLMService.
@@ -528,7 +566,7 @@ class PodcastAdapter(AbstractSourceAdapter):
         return item_data.get("content_text")
 
     @staticmethod
-    def _parse_podcast_duration(text: str) -> Optional[int]:
+    def _parse_podcast_duration(text: str) -> int | None:
         """Parse podcast duration (HH:MM:SS or MM:SS or seconds)."""
         if not text:
             return None
@@ -553,6 +591,7 @@ class PodcastAdapter(AbstractSourceAdapter):
 # WEB SCRAPING ADAPTER (NEU — Change Detection)
 # ═══════════════════════════════════════════════════
 
+
 class WebScrapingAdapter(AbstractSourceAdapter):
     """Adapter fuer Webseiten-Monitoring mit Change Detection.
 
@@ -568,9 +607,12 @@ class WebScrapingAdapter(AbstractSourceAdapter):
 
         try:
             async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-                resp = await client.get(page_url, headers={
-                    "User-Agent": "ContentAutopilot/2.0 (Web Monitor)",
-                })
+                resp = await client.get(
+                    page_url,
+                    headers={
+                        "User-Agent": "ContentAutopilot/2.0 (Web Monitor)",
+                    },
+                )
                 resp.raise_for_status()
                 html = resp.text
         except Exception as e:
@@ -580,11 +622,14 @@ class WebScrapingAdapter(AbstractSourceAdapter):
         # Extract content with readability
         content_text = self._extract_readable_content(html, page_url)
         if not content_text or len(content_text) < 50:
-            logger.warning(f"Web source {source.name}: too little content extracted ({len(content_text or '')} chars)")
+            logger.warning(
+                f"Web source {source.name}: too little content extracted ({len(content_text or '')} chars)"
+            )
             return []
 
         # Hash for change detection
         import hashlib
+
         content_hash = hashlib.sha256(content_text.encode()).hexdigest()[:16]
         external_id = f"web-{content_hash}"
 
@@ -597,18 +642,20 @@ class WebScrapingAdapter(AbstractSourceAdapter):
         title = self._extract_title(html) or source.name
 
         logger.info(f"Web '{source.name}': change detected, {len(content_text)} chars")
-        return [{
-            "external_id": external_id,
-            "title": f"{title} ({datetime.now().strftime('%d.%m.%Y')})",
-            "url": page_url,
-            "published_at": datetime.now(),
-            "thumbnail_url": None,
-            "content_text": content_text,
-            "content_type": "article",
-            "source_type": "web",
-        }]
+        return [
+            {
+                "external_id": external_id,
+                "title": f"{title} ({datetime.now().strftime('%d.%m.%Y')})",
+                "url": page_url,
+                "published_at": datetime.now(),
+                "thumbnail_url": None,
+                "content_text": content_text,
+                "content_type": "article",
+                "source_type": "web",
+            }
+        ]
 
-    async def extract_content(self, item_data: dict) -> Optional[str]:
+    async def extract_content(self, item_data: dict) -> str | None:
         """Content already extracted during fetch."""
         return item_data.get("content_text")
 
@@ -617,24 +664,25 @@ class WebScrapingAdapter(AbstractSourceAdapter):
         """Extract main content using readability-lxml."""
         try:
             from readability import Document as ReadabilityDoc
+
             doc = ReadabilityDoc(html, url=url)
             readable_html = doc.summary()
-            text = re.sub(r'<[^>]+>', ' ', readable_html)
-            text = re.sub(r'\s+', ' ', text).strip()
+            text = re.sub(r"<[^>]+>", " ", readable_html)
+            text = re.sub(r"\s+", " ", text).strip()
             return text
         except Exception as e:
             logger.warning(f"Readability failed for {url}: {e}")
             # Fallback: strip all tags — no hard-cap, raw data must be preserved
-            text = re.sub(r'<[^>]+>', ' ', html)
-            text = re.sub(r'\s+', ' ', text).strip()
+            text = re.sub(r"<[^>]+>", " ", html)
+            text = re.sub(r"\s+", " ", text).strip()
             return text
 
     @staticmethod
-    def _extract_title(html: str) -> Optional[str]:
+    def _extract_title(html: str) -> str | None:
         """Extract page title from HTML."""
-        match = re.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
+        match = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
         if match:
-            title = re.sub(r'\s+', ' ', match.group(1)).strip()
+            title = re.sub(r"\s+", " ", match.group(1)).strip()
             return title[:200] if title else None
         return None
 
@@ -642,6 +690,7 @@ class WebScrapingAdapter(AbstractSourceAdapter):
 # ═══════════════════════════════════════════════════
 # UPDATED check_source_for_new_items — uses Adapter Pattern
 # ═══════════════════════════════════════════════════
+
 
 async def check_source_for_new_items(
     source: Source,

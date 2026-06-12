@@ -3,6 +3,7 @@ Voice-Feedback API Endpoint (Issue #77).
 
 POST /api/posts/{post_id}/voice-feedback — "So sage ich das nicht"-Feedback speichern
 """
+
 import html
 import logging
 import re
@@ -41,6 +42,7 @@ def _sanitize_feedback(text_input: str) -> str:
 # Request-Modell
 # ---------------------------------------------------------------------------
 
+
 class VoiceFeedbackRequest(BaseModel):
     problem_part: str = Field(..., min_length=1, max_length=500)
     user_note: str = Field(..., min_length=1, max_length=1000)
@@ -49,6 +51,7 @@ class VoiceFeedbackRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # POST /posts/{post_id}/voice-feedback
 # ---------------------------------------------------------------------------
+
 
 @router.post("/posts/{post_id}/voice-feedback", status_code=201)
 async def create_voice_feedback(
@@ -66,10 +69,12 @@ async def create_voice_feedback(
     sanitized_user_note = _sanitize_feedback(data.user_note)
 
     # Post-Ownership-Pruefung: Tenant darf nur auf eigene Posts Feedback geben
-    post_row = (await db.execute(
-        text("SELECT id FROM content_pieces WHERE id = :post_id AND tenant_id = :tenant_id"),
-        {"post_id": str(post_id), "tenant_id": tenant_id_str},
-    )).fetchone()
+    post_row = (
+        await db.execute(
+            text("SELECT id FROM content_pieces WHERE id = :post_id AND tenant_id = :tenant_id"),
+            {"post_id": str(post_id), "tenant_id": tenant_id_str},
+        )
+    ).fetchone()
     if not post_row:
         raise HTTPException(status_code=404, detail="Post nicht gefunden")
 
@@ -91,13 +96,12 @@ async def create_voice_feedback(
 
     # Drift-Trigger-Check: unverarbeitete Feedback-Eintraege zaehlen
     # VOR dem Commit — in derselben Transaktion, um Race-Condition zu vermeiden
-    count_row = (await db.execute(
-        text(
-            "SELECT id FROM voice_feedback "
-            "WHERE tenant_id = :t AND processed_at IS NULL"
-        ),
-        {"t": tenant_id_str},
-    )).fetchall()
+    count_row = (
+        await db.execute(
+            text("SELECT id FROM voice_feedback " "WHERE tenant_id = :t AND processed_at IS NULL"),
+            {"t": tenant_id_str},
+        )
+    ).fetchall()
 
     unprocessed_ids = [str(row.id) for row in count_row]
     count = len(unprocessed_ids)
@@ -110,6 +114,7 @@ async def create_voice_feedback(
     if count >= 3:
         try:
             from tasks.voice_drift_task import run_voice_drift
+
             run_voice_drift.delay(
                 tenant_id_str,
                 trigger_type="feedback",

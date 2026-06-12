@@ -12,23 +12,24 @@ Limits pro Lauf: 30 / 30 / 20 — verhindert Überlastung des LLM-Proxys.
 Throttle (#156): Pre-Enqueue-Check verhindert Enqueue wenn Tenant bereits
 MAX_CALLS_PER_TENANT_PER_HOUR oder MAX_CALLS_GLOBAL_PER_HOUR erreicht hat.
 """
+
 import logging
 from datetime import datetime, timedelta
 
-from sqlalchemy import select, func, update, text
+from sqlalchemy import select, text, update
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
-from models.source_item import SourceItem
 from models.content_idea import ContentIdea
 from models.idea_variant import IdeaVariant
 from models.source import Source
+from models.source_item import SourceItem
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
-ANALYZE_LIMIT = 100   # was 30 — 2 workers @ -c 2 can handle 100 per 10-min window easily
-GENERATE_LIMIT = 50   # was 30
-IDEATION_LIMIT = 30   # was 20
+ANALYZE_LIMIT = 100  # was 30 — 2 workers @ -c 2 can handle 100 per 10-min window easily
+GENERATE_LIMIT = 50  # was 30
+IDEATION_LIMIT = 30  # was 20
 
 
 def _get_tenant_id_for_item(session, item_id) -> str | None:
@@ -54,6 +55,7 @@ def _throttle_check_for_enqueue(session, tenant_id: str, task_name: str) -> bool
     """
     try:
         from services.throttle import check_and_record_throttle
+
         allowed, tenant_count, global_count = check_and_record_throttle(
             session, tenant_id, task_name
         )
@@ -77,12 +79,16 @@ def pump_pipeline():
     # Circuit breaker: skip LLM analysis if budget exceeded recently
     budget_exceeded = False
     try:
-        import redis as redis_lib
         import os
+
+        import redis as redis_lib
+
         _r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://redis-v2:6379/1"))
         if _r.get("llm:budget_exceeded"):
             budget_exceeded = True
-            logger.info("Pipeline pump: LLM budget exceeded flag set — skipping analyze/generate steps until manually reset")
+            logger.info(
+                "Pipeline pump: LLM budget exceeded flag set — skipping analyze/generate steps until manually reset"
+            )
     except Exception:
         pass
 
@@ -90,9 +96,9 @@ def pump_pipeline():
         # ── 0. Stuck item recovery — items in transitional state >30 min ──────
         stuck_cutoff = datetime.utcnow() - timedelta(minutes=30)
         stuck_resets = {
-            "transcribing": "new",        # Retry transcription
-            "analyzing": "transcribed",    # Retry analysis
-            "generating": "analyzed",      # Retry generation
+            "transcribing": "new",  # Retry transcription
+            "analyzing": "transcribed",  # Retry analysis
+            "generating": "analyzed",  # Retry generation
         }
         total_reset = 0
         for stuck_status, reset_to in stuck_resets.items():
@@ -105,7 +111,9 @@ def pump_pipeline():
                 .values(status=reset_to)
             )
             if result.rowcount:
-                logger.warning(f"Stuck recovery: reset {result.rowcount} items from {stuck_status} → {reset_to}")
+                logger.warning(
+                    f"Stuck recovery: reset {result.rowcount} items from {stuck_status} → {reset_to}"
+                )
                 total_reset += result.rowcount
         if total_reset:
             session.commit()
@@ -115,27 +123,34 @@ def pump_pipeline():
         if not budget_exceeded:
             # Only process items from ACTIVE sources (respects archive/deactivate)
             # Order: sources with existing content_ready first (proven quality)
-            transcribed = session.execute(
-                select(SourceItem.id)
-                .join(Source, Source.id == SourceItem.source_id)
-                .where(
-                    SourceItem.status == "transcribed",
-                    SourceItem.transcript_text.isnot(None),
-                    Source.is_active == True,
-                    SourceItem.is_archived == False,
+            transcribed = (
+                session.execute(
+                    select(SourceItem.id)
+                    .join(Source, Source.id == SourceItem.source_id)
+                    .where(
+                        SourceItem.status == "transcribed",
+                        SourceItem.transcript_text.isnot(None),
+                        Source.is_active is True,
+                        SourceItem.is_archived is False,
+                    )
+                    .order_by(SourceItem.created_at.asc())
+                    .limit(ANALYZE_LIMIT)
                 )
-                .order_by(SourceItem.created_at.asc())
-                .limit(ANALYZE_LIMIT)
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
             stats["throttled"] = 0
             for item_id in transcribed:
                 tenant_id = _get_tenant_id_for_item(session, item_id)
-                if tenant_id and not _throttle_check_for_enqueue(session, tenant_id, "analyze_item"):
+                if tenant_id and not _throttle_check_for_enqueue(
+                    session, tenant_id, "analyze_item"
+                ):
                     stats["throttled"] += 1
                     continue
                 try:
                     from tasks.generate_task import analyze_item
+
                     analyze_item.delay(str(item_id))
                     stats["analyze"] += 1
                 except Exception as e:
@@ -146,26 +161,33 @@ def pump_pipeline():
 
         # ── 2. analyzed → generate ────────────────────────────────────────────
         if not budget_exceeded:
-            analyzed = session.execute(
-                select(SourceItem.id)
-                .join(Source, Source.id == SourceItem.source_id)
-                .where(
-                    SourceItem.status == "analyzed",
-                    SourceItem.analysis.isnot(None),
-                    Source.is_active == True,
-                    SourceItem.is_archived == False,
+            analyzed = (
+                session.execute(
+                    select(SourceItem.id)
+                    .join(Source, Source.id == SourceItem.source_id)
+                    .where(
+                        SourceItem.status == "analyzed",
+                        SourceItem.analysis.isnot(None),
+                        Source.is_active is True,
+                        SourceItem.is_archived is False,
+                    )
+                    .order_by(SourceItem.created_at.asc())
+                    .limit(GENERATE_LIMIT)
                 )
-                .order_by(SourceItem.created_at.asc())
-                .limit(GENERATE_LIMIT)
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
             for item_id in analyzed:
                 tenant_id = _get_tenant_id_for_item(session, item_id)
-                if tenant_id and not _throttle_check_for_enqueue(session, tenant_id, "generate_content"):
+                if tenant_id and not _throttle_check_for_enqueue(
+                    session, tenant_id, "generate_content"
+                ):
                     stats["throttled"] = stats.get("throttled", 0) + 1
                     continue
                 try:
                     from tasks.generate_task import generate_content
+
                     generate_content.delay(str(item_id))
                     stats["generate"] += 1
                 except Exception as e:
@@ -175,31 +197,38 @@ def pump_pipeline():
         # ── 3. content_ready without ideas → ideation ─────────────────────────
         if not budget_exceeded:
             # Subquery: item IDs that already have at least one idea
-            ids_with_ideas = session.execute(
-                select(ContentIdea.source_item_id).distinct()
-            ).scalars().all()
+            ids_with_ideas = (
+                session.execute(select(ContentIdea.source_item_id).distinct()).scalars().all()
+            )
 
-            ready_no_ideas = session.execute(
-                select(SourceItem.id)
-                .join(Source, Source.id == SourceItem.source_id)
-                .where(
-                    SourceItem.status == "content_ready",
-                    SourceItem.analysis.isnot(None),
-                    Source.is_active == True,
-                    SourceItem.is_archived == False,
-                    SourceItem.id.not_in(ids_with_ideas) if ids_with_ideas else True,
+            ready_no_ideas = (
+                session.execute(
+                    select(SourceItem.id)
+                    .join(Source, Source.id == SourceItem.source_id)
+                    .where(
+                        SourceItem.status == "content_ready",
+                        SourceItem.analysis.isnot(None),
+                        Source.is_active is True,
+                        SourceItem.is_archived is False,
+                        SourceItem.id.not_in(ids_with_ideas) if ids_with_ideas else True,
+                    )
+                    .order_by(SourceItem.created_at.asc())
+                    .limit(IDEATION_LIMIT)
                 )
-                .order_by(SourceItem.created_at.asc())
-                .limit(IDEATION_LIMIT)
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
             for item_id in ready_no_ideas:
                 tenant_id = _get_tenant_id_for_item(session, item_id)
-                if tenant_id and not _throttle_check_for_enqueue(session, tenant_id, "auto_generate_ideas"):
+                if tenant_id and not _throttle_check_for_enqueue(
+                    session, tenant_id, "auto_generate_ideas"
+                ):
                     stats["throttled"] = stats.get("throttled", 0) + 1
                     continue
                 try:
                     from tasks.ideation_task import auto_generate_ideas
+
                     auto_generate_ideas.delay(str(item_id))
                     stats["ideation"] += 1
                 except Exception as e:
@@ -213,9 +242,9 @@ def pump_pipeline():
             # text() IN :param with a Python tuple is not safe without
             # bindparam(..., expanding=True) and is inconsistent with the
             # ORM pattern used in the ideation block above (see .not_in() line).
-            ideas_with_variants = session.execute(
-                select(IdeaVariant.idea_id).distinct()
-            ).scalars().all()
+            ideas_with_variants = (
+                session.execute(select(IdeaVariant.idea_id).distinct()).scalars().all()
+            )
             cutoff_recent = datetime.utcnow() - timedelta(days=7)
             new_ideas = session.execute(
                 select(ContentIdea.id)
@@ -230,6 +259,7 @@ def pump_pipeline():
             for r in new_ideas:
                 try:
                     from tasks.p12_variants_task import generate_variants
+
                     generate_variants.apply_async(args=[str(r.id)])
                     stats["variants"] += 1
                 except Exception as e:

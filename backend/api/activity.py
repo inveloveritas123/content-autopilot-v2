@@ -1,17 +1,18 @@
 """Activity log and pipeline progress tracking."""
-from datetime import datetime, timedelta
+
+import contextlib
 import os
 import uuid
-from typing import Optional
+from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, func, case, text
+from fastapi import APIRouter, Body, Depends
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
-from models.tenant import Tenant
-from models.source_item import SourceItem
 from models.source import Source
+from models.source_item import SourceItem
+from models.tenant import Tenant
 
 router = APIRouter()
 
@@ -28,7 +29,7 @@ async def get_pipeline_progress(
             func.count(SourceItem.id),
         )
         .where(SourceItem.tenant_id == tenant.id)
-        .where(SourceItem.is_archived == False)
+        .where(SourceItem.is_archived is False)
         .group_by(SourceItem.status)
     )
     status_counts = dict(result.all())
@@ -55,8 +56,14 @@ async def get_pipeline_progress(
         "done": done,
         "failed": failed,
         "by_status": status_counts,
-        "percent_transcribed": round((transcribed + analyzed + content_ready + approved) / total * 100) if total else 0,
-        "percent_analyzed": round((analyzed + content_ready + approved) / total * 100) if total else 0,
+        "percent_transcribed": round(
+            (transcribed + analyzed + content_ready + approved) / total * 100
+        )
+        if total
+        else 0,
+        "percent_analyzed": round((analyzed + content_ready + approved) / total * 100)
+        if total
+        else 0,
         "percent_content": round((content_ready + approved) / total * 100) if total else 0,
     }
 
@@ -73,12 +80,12 @@ STATUS_GROUP_MAP = {
 async def get_activity_log(
     limit: int = 50,
     offset: int = 0,
-    status_group: Optional[str] = None,
-    status: Optional[str] = None,
-    source_id: Optional[str] = None,
-    period: Optional[str] = None,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
+    status_group: str | None = None,
+    status: str | None = None,
+    source_id: str | None = None,
+    period: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -87,27 +94,34 @@ async def get_activity_log(
         select(SourceItem)
         .where(SourceItem.tenant_id == tenant.id)
         .where(SourceItem.status != "new")
-        .where(SourceItem.is_archived == False)
+        .where(SourceItem.is_archived is False)
     )
     if status_group and status_group in STATUS_GROUP_MAP:
         query = query.where(SourceItem.status.in_(STATUS_GROUP_MAP[status_group]))
     elif status:
         query = query.where(SourceItem.status == status)
     if source_id:
-        try:
+        with contextlib.suppress(ValueError):
             query = query.where(SourceItem.source_id == uuid.UUID(source_id))
-        except ValueError:
-            pass
     # Time filter
     now = datetime.utcnow()
     if period and period != "all":
-        periods = {"last_hour": timedelta(hours=1), "last_24h": timedelta(hours=24), "last_7d": timedelta(days=7), "last_30d": timedelta(days=30)}
+        periods = {
+            "last_hour": timedelta(hours=1),
+            "last_24h": timedelta(hours=24),
+            "last_7d": timedelta(days=7),
+            "last_30d": timedelta(days=30),
+        }
         if period in periods:
             query = query.where(SourceItem.updated_at >= now - periods[period])
         elif period == "this_year":
             query = query.where(SourceItem.updated_at >= datetime(now.year, 1, 1))
         elif period == "last_year":
-            query = query.where(SourceItem.updated_at.between(datetime(now.year - 1, 1, 1), datetime(now.year, 1, 1)))
+            query = query.where(
+                SourceItem.updated_at.between(
+                    datetime(now.year - 1, 1, 1), datetime(now.year, 1, 1)
+                )
+            )
     if date_from:
         query = query.where(SourceItem.updated_at >= datetime.fromisoformat(date_from))
     if date_to:
@@ -122,7 +136,9 @@ async def get_activity_log(
     source_ids = list({i.source_id for i in items if i.source_id})
     source_names: dict = {}
     if source_ids:
-        src_result = await db.execute(select(Source.id, Source.name).where(Source.id.in_(source_ids)))
+        src_result = await db.execute(
+            select(Source.id, Source.name).where(Source.id.in_(source_ids))
+        )
         source_names = {str(row.id): row.name for row in src_result.all()}
 
     log_entries = []
@@ -155,19 +171,21 @@ async def get_activity_log(
         is_error = item.status in ("needs_voicescriptor", "transcription_failed")
         is_processing = item.status in ("transcribing", "analyzing", "generating")
 
-        log_entries.append({
-            "id": str(item.id),
-            "title": item.title or item.external_id,
-            "status": item.status,
-            "message": status_msg,
-            "is_error": is_error,
-            "is_processing": is_processing,
-            "transcript_source": item.transcript_source,
-            "updated_at": item.updated_at.isoformat() if item.updated_at else None,
-            "channel_name": item.channel_name,
-            "source_id": str(item.source_id) if item.source_id else None,
-            "source_name": source_names.get(str(item.source_id)) if item.source_id else None,
-        })
+        log_entries.append(
+            {
+                "id": str(item.id),
+                "title": item.title or item.external_id,
+                "status": item.status,
+                "message": status_msg,
+                "is_error": is_error,
+                "is_processing": is_processing,
+                "transcript_source": item.transcript_source,
+                "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+                "channel_name": item.channel_name,
+                "source_id": str(item.source_id) if item.source_id else None,
+                "source_name": source_names.get(str(item.source_id)) if item.source_id else None,
+            }
+        )
 
     return log_entries
 
@@ -182,12 +200,14 @@ async def get_cookie_status(
 
     status = check_cookies()
 
-    needs_vs = (await db.execute(
-        select(func.count(SourceItem.id)).where(
-            SourceItem.tenant_id == tenant.id,
-            SourceItem.status == "needs_voicescriptor",
+    needs_vs = (
+        await db.execute(
+            select(func.count(SourceItem.id)).where(
+                SourceItem.tenant_id == tenant.id,
+                SourceItem.status == "needs_voicescriptor",
+            )
         )
-    )).scalar() or 0
+    ).scalar() or 0
 
     return {
         "has_cookies": status["autopilot_cookies"]["exists"],
@@ -199,9 +219,6 @@ async def get_cookie_status(
     }
 
 
-from fastapi import Body
-
-
 @router.post("/pipeline/save-cookies")
 async def save_cookies(
     cookie_text: str = Body(..., media_type="text/plain"),
@@ -209,6 +226,7 @@ async def save_cookies(
 ):
     """Save cookies + sync to VoiceScriptor."""
     from pathlib import Path
+
     from services.cookie_validator import sync_cookies_to_voicescriptor
 
     cookie_file = Path(

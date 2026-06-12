@@ -1,18 +1,19 @@
 """Tests fuer GET /api/tenant-init (Issue #157)."""
+
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 from fastapi.testclient import TestClient
-
 
 # ---------------------------------------------------------------------------
 # Minimal FastAPI app fixture — isoliert von der vollen main.py
 # ---------------------------------------------------------------------------
 
+
 def _make_app(tenant_fixture):
     """Erstellt eine Test-App mit gemocktem get_tenant."""
     from fastapi import FastAPI
+
     from api.tenant_init import router
 
     app = FastAPI()
@@ -21,6 +22,7 @@ def _make_app(tenant_fixture):
         return tenant_fixture
 
     from dependencies import get_tenant
+
     app.dependency_overrides[get_tenant] = _override_get_tenant
     app.include_router(router, prefix="/api")
     return app
@@ -40,6 +42,7 @@ def _fake_tenant(name="Test-Tenant"):
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestTenantInitEndpoint:
     def test_returns_tenant_data_on_valid_key(self):
@@ -71,9 +74,10 @@ class TestTenantInitEndpoint:
 
     def test_missing_api_key_returns_422(self):
         """Ohne X-API-Key Header muss FastAPI 422 zurueckgeben."""
-        tenant = _fake_tenant()
+        _fake_tenant()
         # Kein Override — echte Dependency wird getriggert, Header fehlt
         from fastapi import FastAPI
+
         from api.tenant_init import router
 
         app = FastAPI()
@@ -86,9 +90,8 @@ class TestTenantInitEndpoint:
 
     def test_no_hardcoded_tenant_key_in_module(self):
         """Stellt sicher dass kein 'cap-tenant-' String im tenant_init-Modul hardcodiert ist."""
-        import importlib.util, pathlib
+        import pathlib
+
         src = pathlib.Path(__file__).parent.parent / "api" / "tenant_init.py"
         code = src.read_text()
-        assert "cap-tenant-" not in code, (
-            "Hardcodierter Tenant-Key in api/tenant_init.py gefunden!"
-        )
+        assert "cap-tenant-" not in code, "Hardcodierter Tenant-Key in api/tenant_init.py gefunden!"

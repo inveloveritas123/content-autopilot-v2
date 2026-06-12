@@ -6,12 +6,12 @@ und persistiert sie in idea_variants.
 Wird aus dem Pipeline-Pump aufgerufen oder manuell via UI-Trigger
 „Regenerate Varianten".
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -34,14 +34,16 @@ async def _generate_variants_async(idea_id: str) -> dict:
     try:
         async with SessionMaker() as db:
             # Lade Idea + Tenant — Schema content_ideas: title, description, angle, hook_suggestion
-            idea_row = (await db.execute(
-                text(
-                    "SELECT id, tenant_id, title, description, angle, hook_suggestion, "
-                    "       source_quotes, source_context "
-                    "FROM content_ideas WHERE id = CAST(:id AS uuid)"
-                ),
-                {"id": idea_id},
-            )).fetchone()
+            idea_row = (
+                await db.execute(
+                    text(
+                        "SELECT id, tenant_id, title, description, angle, hook_suggestion, "
+                        "       source_quotes, source_context "
+                        "FROM content_ideas WHERE id = CAST(:id AS uuid)"
+                    ),
+                    {"id": idea_id},
+                )
+            ).fetchone()
             if not idea_row:
                 return {"status": "error", "reason": "idea_not_found"}
 
@@ -69,14 +71,16 @@ async def _generate_variants_async(idea_id: str) -> dict:
             # voice_profile-Lookup in Savepoint — bei Schema-Drift kein Transaktions-Abort
             try:
                 async with db.begin_nested():
-                    vp_row = (await db.execute(
-                        text(
-                            "SELECT payload FROM voice_profile_versions "
-                            "WHERE tenant_id = CAST(:tid AS uuid) AND is_active = true "
-                            "ORDER BY version DESC LIMIT 1"
-                        ),
-                        {"tid": tenant_id},
-                    )).fetchone()
+                    vp_row = (
+                        await db.execute(
+                            text(
+                                "SELECT payload FROM voice_profile_versions "
+                                "WHERE tenant_id = CAST(:tid AS uuid) AND is_active = true "
+                                "ORDER BY version DESC LIMIT 1"
+                            ),
+                            {"tid": tenant_id},
+                        )
+                    ).fetchone()
                     if vp_row and vp_row.payload:
                         ctx["voice_profile"] = vp_row.payload
             except Exception:
@@ -90,7 +94,7 @@ async def _generate_variants_async(idea_id: str) -> dict:
                     model="claude-sonnet",
                     purpose="creative",
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("p12_variants LLM-Call fehlgeschlagen: %s", exc)
                 return {"status": "error", "reason": str(exc)[:120]}
 
@@ -125,8 +129,13 @@ async def _generate_variants_async(idea_id: str) -> dict:
                         "  is_chosen = false, chosen_at = NULL, "
                         "  created_at = now()"
                     ),
-                    {"idea_id": idea_id, "tid": tenant_id, "vt": vtype,
-                     "h": hook_text[:1000], "b": body_outline[:3000]},
+                    {
+                        "idea_id": idea_id,
+                        "tid": tenant_id,
+                        "vt": vtype,
+                        "h": hook_text[:1000],
+                        "b": body_outline[:3000],
+                    },
                 )
                 inserted.append(vtype)
 
@@ -142,6 +151,7 @@ async def _generate_variants_async(idea_id: str) -> dict:
 def _load_variants_system_prompt() -> str:
     """Lädt p12_variants.md aus dem Prompts-Ordner (Container-Pfad /app/prompts)."""
     from pathlib import Path
+
     paths = [
         Path("/app/prompts/p12_variants.md"),
         Path(__file__).parent.parent / "prompts" / "p12_variants.md",
@@ -167,6 +177,6 @@ def _load_variants_system_prompt() -> str:
 def generate_variants(self, idea_id: str) -> dict:
     try:
         return asyncio.run(_generate_variants_async(idea_id))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("generate_variants top-level: %s", exc)
         return {"status": "error", "reason": str(exc)[:200]}

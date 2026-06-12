@@ -1,7 +1,7 @@
 """
 Tests für sensitive_detector.py — Pattern-Schicht A only (kein LLM-Aufruf).
 """
-import pytest
+
 from services.sensitive_detector import detect_sensitive_topics
 
 # 10+ adversariale Posts (MÜSSEN geflaggt werden)

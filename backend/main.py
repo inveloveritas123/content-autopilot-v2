@@ -5,13 +5,15 @@ from fastapi import FastAPI, Response
 from sqlalchemy import select, text
 
 import logging_config
+
 logging_config.setup_logging()
 
 import sentry_config
+
 sentry_config.init_sentry()
 
 from config import settings
-from models import async_session_factory, Tenant
+from models import Tenant, async_session_factory
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Run alembic migrations on startup
     import subprocess
+
     logger.info("Running database migrations...")
     try:
         subprocess.run(["alembic", "upgrade", "head"], check=True, cwd="/app", timeout=30)
@@ -30,8 +33,8 @@ async def lifespan(app: FastAPI):
     async with async_session_factory() as session:
         result = await session.execute(
             select(Tenant).where(
-                (Tenant.api_key == settings.default_tenant_key) |
-                (Tenant.api_key_secondary == settings.default_tenant_key)
+                (Tenant.api_key == settings.default_tenant_key)
+                | (Tenant.api_key_secondary == settings.default_tenant_key)
             )
         )
         tenant = result.scalars().first()
@@ -39,7 +42,10 @@ async def lifespan(app: FastAPI):
             tenant = Tenant(
                 name="Default Tenant",
                 api_key=settings.default_tenant_key,
-                settings={"tone": "professionell, informativ, mit persoenlicher Note", "language": "de"},
+                settings={
+                    "tone": "professionell, informativ, mit persoenlicher Note",
+                    "language": "de",
+                },
             )
             session.add(tenant)
             await session.commit()
@@ -47,7 +53,10 @@ async def lifespan(app: FastAPI):
 
         # Auto-setup default project if none exists
         from models.project import Project
-        existing_projects = await session.execute(select(Project).where(Project.tenant_id == tenant.id))
+
+        existing_projects = await session.execute(
+            select(Project).where(Project.tenant_id == tenant.id)
+        )
         if not existing_projects.scalars().first():
             default_project = Project(
                 tenant_id=tenant.id,
@@ -61,19 +70,24 @@ async def lifespan(app: FastAPI):
 
             # Assign existing sources to default project
             from models.source import Source
+
             await session.execute(
-                Source.__table__.update().where(
-                    Source.tenant_id == tenant.id, Source.project_id == None
-                ).values(project_id=default_project.id)
+                Source.__table__.update()
+                .where(Source.tenant_id == tenant.id, Source.project_id is None)
+                .values(project_id=default_project.id)
             )
             await session.commit()
 
         # Auto-setup Requesty.ai provider if REQUESTY_API_KEY is set and no providers exist
         if settings.requesty_api_key and tenant:
             from models.llm_provider import LLMProvider
-            existing = await session.execute(select(LLMProvider).where(LLMProvider.tenant_id == tenant.id))
+
+            existing = await session.execute(
+                select(LLMProvider).where(LLMProvider.tenant_id == tenant.id)
+            )
             if not existing.scalars().first():
                 from api.llm_settings import _encrypt_key
+
                 provider = LLMProvider(
                     tenant_id=tenant.id,
                     name="Requesty.ai",
@@ -92,7 +106,10 @@ async def lifespan(app: FastAPI):
     # Register Telegram webhook if token configured
     if settings.telegram_bot_token and settings.telegram_webhook_secret:
         try:
-            import httpx, os
+            import os
+
+            import httpx
+
             webhook_url = os.environ.get("TELEGRAM_WEBHOOK_URL", "")
             if webhook_url:
                 resp = httpx.post(
@@ -122,6 +139,7 @@ app = FastAPI(
 
 # CORS — needed for Cowork dashboard and external integrations
 from fastapi.middleware.cors import CORSMiddleware
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -131,23 +149,25 @@ app.add_middleware(
 
 # CSRF — Double-Submit Cookie pattern (exempt: X-API-Key requests, Telegram webhook)
 from middleware.csrf_middleware import CSRFMiddleware
+
 app.add_middleware(CSRFMiddleware)
 
 # Structured JSON logging middleware — sets correlation_id / tenant_id context
 from middleware.logging_middleware import LoggingMiddleware
+
 app.add_middleware(LoggingMiddleware)
 
 # Import and include routers
-from api.dashboard import router as dashboard_router
-from api.sources import router as sources_router
-from api.items import router as items_router
-from api.content import router as content_router
-from api.campaigns import router as campaigns_router
-from api.tenants import router as tenants_router
 from api.activity import router as activity_router
-from api.ideas import router as ideas_router
+from api.campaigns import router as campaigns_router
+from api.content import router as content_router
+from api.dashboard import router as dashboard_router
 from api.feedback import router as feedback_router
+from api.ideas import router as ideas_router
+from api.items import router as items_router
 from api.llm_settings import router as llm_settings_router
+from api.sources import router as sources_router
+from api.tenants import router as tenants_router
 
 app.include_router(dashboard_router, prefix="/api", tags=["Dashboard"])
 app.include_router(sources_router, prefix="/api", tags=["Sources"])
@@ -161,88 +181,113 @@ app.include_router(feedback_router, prefix="/api", tags=["Feedback"])
 app.include_router(llm_settings_router, prefix="/api", tags=["Settings"])
 
 from api.scheduling import router as scheduling_router
+
 app.include_router(scheduling_router, prefix="/api", tags=["Scheduling"])
 
 from api.carousels import router as carousels_router
+
 app.include_router(carousels_router, prefix="/api", tags=["Carousels"])
 
 from api.projects import router as projects_router
+
 app.include_router(projects_router, prefix="/api", tags=["Projects"])
 
 from api.content_dna import router as content_dna_router
+
 app.include_router(content_dna_router, prefix="/api", tags=["ContentDNA"])
 
 from api.pipeline import router as pipeline_router
+
 app.include_router(pipeline_router, prefix="/api", tags=["Pipeline"])
 
 from api.dialogue import router as dialogue_router
+
 app.include_router(dialogue_router, prefix="/api", tags=["Dialogue"])
 
 from api.cowork import router as cowork_router
+
 app.include_router(cowork_router, tags=["Cowork"])
 
 from api.quality import router as quality_router
+
 app.include_router(quality_router, prefix="/api", tags=["Quality"])
 
 from services.ws_manager import ws_router
+
 app.include_router(ws_router, tags=["WebSocket"])
 
 from api.brand_voice import router as brand_voice_router
+
 app.include_router(brand_voice_router, prefix="/api", tags=["BrandVoice"])
 
 from api.voice_feedback import router as voice_feedback_router
+
 app.include_router(voice_feedback_router, prefix="/api", tags=["VoiceFeedback"])
 
 from api.wizard import router as wizard_router
+
 app.include_router(wizard_router, prefix="/api", tags=["Wizard"])
 
 from api.admin import router as admin_router
+
 app.include_router(admin_router, prefix="/api", tags=["Admin"])
 
 from api.reservoir import router as reservoir_router
+
 app.include_router(reservoir_router, prefix="/api", tags=["Reservoir"])
 
 from api.telegram import router as telegram_router
+
 app.include_router(telegram_router, prefix="/api", tags=["Telegram"])
 
 from api.whatsapp import router as whatsapp_router
+
 app.include_router(whatsapp_router, prefix="/api", tags=["WhatsApp"])
 
+from api.hooks import router as hooks_router
 from api.memory import router as memory_router
 from api.research import router as research_router
-from api.hooks import router as hooks_router
+
 app.include_router(memory_router, prefix="/api", tags=["Memory"])
 app.include_router(research_router, prefix="/api", tags=["Research"])
 app.include_router(hooks_router, prefix="/api", tags=["Hooks"])
 
 from api.analytics import router as analytics_router
+
 app.include_router(analytics_router, prefix="/api", tags=["Analytics"])
 
 from api.company_profile import router as company_profile_router
+
 app.include_router(company_profile_router, prefix="/api", tags=["CompanyProfile"])
 
 from api.data_deletion import router as data_deletion_router
+
 app.include_router(data_deletion_router, prefix="/api", tags=["DataDeletion"])
 
 from api.memory_viz import router as memory_viz_router
+
 app.include_router(memory_viz_router, prefix="/api", tags=["MemoryViz"])
 
 from api.tenant_init import router as tenant_init_router
+
 app.include_router(tenant_init_router, prefix="/api", tags=["TenantInit"])
 
 from api.eval import router as eval_router
+
 app.include_router(eval_router, prefix="/api", tags=["Eval"])
 
 from api.prompt_studio import router as prompt_studio_router
+
 app.include_router(prompt_studio_router, prefix="/api", tags=["PromptStudio"])
 
 
 @app.get("/api/health")
 async def health():
     import asyncio
-    import redis as redis_lib
-    from models.base import async_engine
+
     from fastapi.responses import JSONResponse
+
+    from models.base import async_engine
 
     checks = {}
     overall = "ok"
@@ -260,6 +305,7 @@ async def health():
     # Redis check (async — kein Event-Loop-Blocking)
     try:
         import redis.asyncio as aioredis
+
         r = aioredis.from_url(settings.redis_url, socket_connect_timeout=3)
         await asyncio.wait_for(r.ping(), timeout=3.0)
         await r.aclose()
@@ -272,6 +318,7 @@ async def health():
     # NC Storage check (optional, timeout 5s)
     try:
         from services.brand_voice_storage import get_default_nc_adapter
+
         adapter = get_default_nc_adapter()
         # stat() the root path — fast check without reading file content
         adapter.stat("/")
@@ -295,15 +342,16 @@ async def get_csrf_token(response: Response):
     Frontend: call once on load, store token, include as X-CSRF-Token header
     on state-changing requests. Cookie is SameSite=Strict to prevent leakage.
     """
-    from middleware.csrf_middleware import generate_csrf_token, CSRF_COOKIE, TOKEN_TTL
+    from middleware.csrf_middleware import CSRF_COOKIE, TOKEN_TTL, generate_csrf_token
+
     token = generate_csrf_token()
     response.set_cookie(
         key=CSRF_COOKIE,
         value=token,
         max_age=TOKEN_TTL,
-        httponly=False,       # Frontend JS needs to read it
+        httponly=False,  # Frontend JS needs to read it
         samesite="strict",
-        secure=False,         # Set to True when HTTPS is enabled
+        secure=False,  # Set to True when HTTPS is enabled
     )
     return {"csrf_token": token}
 
@@ -312,7 +360,9 @@ async def get_csrf_token(response: Response):
 async def sentry_test_error():
     """Dev-only: Trigger a test Sentry event to verify integration."""
     from config import settings as _s
+
     if _s.app_env not in ("dev", "development", "staging"):
         from fastapi import HTTPException
+
         raise HTTPException(404, "Not found")
     raise RuntimeError("Sentry test error — intentional from /api/_test/sentry-error")

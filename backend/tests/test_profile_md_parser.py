@@ -1,8 +1,8 @@
 """Unit-Tests für MD-Onboarding-Parser (Issue #148, Welle C)."""
+
 from __future__ import annotations
 
 from services.profile_md_parser import parse_onboarding_md
-
 
 SAMPLE_MD = """# Onboarding — Acme Corp
 

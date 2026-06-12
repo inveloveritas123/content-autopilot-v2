@@ -9,6 +9,7 @@ Start:  PYTHONPATH=. CONTENT_TRUTH_BASE_PATH=<repo>/content-truth \
         CONTENT_TRUTH_OVERLAY_PATH=/tmp/cap-overlay \
         python demo_prompt_studio.py
 """
+
 import os
 import sys
 import types
@@ -56,9 +57,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from api.prompt_studio import router as prompt_studio_router  # noqa: E402
 
 app = FastAPI(title="Prompt-Studio DEMO")
-app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(prompt_studio_router, prefix="/api", tags=["PromptStudio"])
 
 

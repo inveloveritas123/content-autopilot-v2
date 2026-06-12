@@ -16,9 +16,9 @@ Advisory-Lock: pg_advisory_xact_lock serialises per-tenant checks within a
 transaction — analogous to the #131 Cost-Cap TOCTOU fix — preventing two
 concurrent workers from both reading the same count and both proceeding.
 """
+
+import contextlib
 import logging
-from typing import Optional, Tuple
-from datetime import datetime, timezone
 
 from sqlalchemy import text
 
@@ -29,16 +29,19 @@ logger = logging.getLogger(__name__)
 
 class RateLimitExceededError(Exception):
     """Raised when the per-tenant or global LLM call rate limit is exceeded."""
+
     pass
 
 
 # ── Advisory Lock Key helpers ─────────────────────────────────────────────────
+
 
 def _tenant_lock_key(tenant_id: str) -> str:
     return f"throttle_tenant:{tenant_id}"
 
 
 # ── Core check helpers ────────────────────────────────────────────────────────
+
 
 def _count_tenant_calls_1h(session, tenant_id: str) -> int:
     """COUNT calls in llm_call_logs for tenant in last 1 hour (sync session)."""
@@ -72,7 +75,7 @@ def _insert_throttle_event(
     scope: str,
     count: int,
     limit: int,
-    task_name: Optional[str],
+    task_name: str | None,
 ) -> None:
     """Insert a throttle_events row (best-effort, no FK to tenants to avoid issues).
 
@@ -100,19 +103,18 @@ def _insert_throttle_event(
         # No session.commit() here — see docstring above (M5 fix).
     except Exception as exc:
         logger.warning(f"throttle_event insert failed (non-fatal): {exc}")
-        try:
+        with contextlib.suppress(Exception):
             session.rollback()
-        except Exception:
-            pass
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+
 def check_and_record_throttle(
     session,
     tenant_id: str,
-    task_name: Optional[str] = None,
-) -> Tuple[bool, int, int]:
+    task_name: str | None = None,
+) -> tuple[bool, int, int]:
     """
     Full throttle check (tenant + global) within one DB roundtrip.
 
@@ -177,8 +179,8 @@ def check_and_record_throttle(
 
 def check_and_record_throttle_async_compatible(
     tenant_id: str,
-    task_name: Optional[str] = None,
-) -> Tuple[bool, int, int]:
+    task_name: str | None = None,
+) -> tuple[bool, int, int]:
     """
     Sync-session wrapper for use in Celery tasks and async _litellm().
 
@@ -190,5 +192,6 @@ def check_and_record_throttle_async_compatible(
     the async call path in llm.py.
     """
     from models.base import sync_session_factory
+
     with sync_session_factory() as session:
         return check_and_record_throttle(session, tenant_id, task_name)

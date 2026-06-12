@@ -1,6 +1,5 @@
 import logging
 import xml.etree.ElementTree as ET
-from typing import Optional
 from urllib.parse import unquote
 
 import httpx
@@ -37,7 +36,8 @@ class NextcloudClient:
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.request(
-                    "PROPFIND", url,
+                    "PROPFIND",
+                    url,
                     content=body,
                     headers={"Depth": "1", "Content-Type": "application/xml"},
                     auth=self._auth(),
@@ -56,7 +56,11 @@ class NextcloudClient:
 
                 # Extract clean path
                 clean_path = unquote(href.replace(base_path, "")).rstrip("/")
-                name = displayname_el.text if displayname_el is not None and displayname_el.text else clean_path.split("/")[-1]
+                name = (
+                    displayname_el.text
+                    if displayname_el is not None and displayname_el.text
+                    else clean_path.split("/")[-1]
+                )
 
                 # Skip the folder itself
                 req_path = path.rstrip("/")
@@ -66,13 +70,15 @@ class NextcloudClient:
                 size_el = response.find(".//d:getcontentlength", ns)
                 modified_el = response.find(".//d:getlastmodified", ns)
 
-                entries.append({
-                    "path": clean_path,
-                    "name": name,
-                    "is_directory": is_dir,
-                    "size": int(size_el.text) if size_el is not None and size_el.text else None,
-                    "modified": modified_el.text if modified_el is not None else None,
-                })
+                entries.append(
+                    {
+                        "path": clean_path,
+                        "name": name,
+                        "is_directory": is_dir,
+                        "size": int(size_el.text) if size_el is not None and size_el.text else None,
+                        "modified": modified_el.text if modified_el is not None else None,
+                    }
+                )
             return entries
         except Exception as e:
             logger.error(f"Nextcloud list_folder '{path}' failed: {e}")
@@ -98,7 +104,8 @@ class NextcloudClient:
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.request(
-                    "SEARCH", url,
+                    "SEARCH",
+                    url,
                     content=body,
                     headers={"Content-Type": "application/xml"},
                     auth=self._auth(),
@@ -146,13 +153,15 @@ class NextcloudClient:
             url = f"{self.dav_url}{current}"
             try:
                 async with httpx.AsyncClient(timeout=15) as client:
-                    resp = await client.request("MKCOL", url, auth=self._auth())
+                    await client.request("MKCOL", url, auth=self._auth())
                     # 201 = created, 405 = already exists
             except Exception:
                 pass
         return True
 
-    async def upload_file(self, path: str, content: bytes, content_type: str = "text/plain") -> bool:
+    async def upload_file(
+        self, path: str, content: bytes, content_type: str = "text/plain"
+    ) -> bool:
         """Upload a file to Nextcloud, creating parent folders if needed."""
         folder = "/".join(path.split("/")[:-1])
         if folder:
@@ -162,7 +171,8 @@ class NextcloudClient:
         try:
             async with httpx.AsyncClient(timeout=60) as client:
                 resp = await client.put(
-                    url, content=content,
+                    url,
+                    content=content,
                     headers={"Content-Type": content_type},
                     auth=self._auth(),
                 )
@@ -171,7 +181,7 @@ class NextcloudClient:
             logger.error(f"Nextcloud upload failed: {e}")
             return False
 
-    async def download_file(self, path: str) -> Optional[bytes]:
+    async def download_file(self, path: str) -> bytes | None:
         """Download a file from Nextcloud."""
         url = f"{self.dav_url}{path}"
         try:

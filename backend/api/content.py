@@ -1,8 +1,8 @@
+import contextlib
 import csv
 import io
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -11,26 +11,26 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
-from models.tenant import Tenant
 from models.content_piece import ContentPiece
 from models.source import Source
 from models.source_item import SourceItem
+from models.tenant import Tenant
 
 router = APIRouter()
 
 
 class ContentUpdate(BaseModel):
-    content_text: Optional[str] = None
-    content_metadata: Optional[dict] = None
-    status: Optional[str] = None
+    content_text: str | None = None
+    content_metadata: dict | None = None
+    status: str | None = None
 
 
 class BulkApproveRequest(BaseModel):
-    ids: Optional[list[str]] = None  # None = approve all drafts
+    ids: list[str] | None = None  # None = approve all drafts
 
 
 class BulkRejectRequest(BaseModel):
-    ids: Optional[list[str]] = None  # None = reject all drafts
+    ids: list[str] | None = None  # None = reject all drafts
 
 
 class ScheduleData(BaseModel):
@@ -39,9 +39,9 @@ class ScheduleData(BaseModel):
 
 @router.get("/content")
 async def list_content(
-    channel: Optional[str] = None,
-    status: Optional[str] = None,
-    source_id: Optional[str] = None,
+    channel: str | None = None,
+    status: str | None = None,
+    source_id: str | None = None,
     limit: int = Query(50, le=200),
     offset: int = 0,
     tenant: Tenant = Depends(get_tenant),
@@ -54,6 +54,7 @@ async def list_content(
         query = query.where(ContentPiece.status == status)
     if source_id:
         import uuid as _uuid
+
         query = query.join(SourceItem, ContentPiece.source_item_id == SourceItem.id).where(
             SourceItem.source_id == _uuid.UUID(source_id)
         )
@@ -66,24 +67,44 @@ async def list_content(
     item_ids = [p.source_item_id for p in pieces if p.source_item_id]
     item_titles: dict = {}
     if item_ids:
-        from models.source_item import SourceItem as _SI
-        from models.source import Source as _Source
         from sqlalchemy import select as sa_select
-        rows = (await db.execute(
-            sa_select(_SI.id, _SI.title, _SI.url, _SI.source_id, _Source.name)
-            .join(_Source, _SI.source_id == _Source.id, isouter=True)
-            .where(_SI.id.in_(item_ids))
-        )).all()
-        item_titles = {r.id: {"title": r.title, "url": r.url, "source_id": str(r.source_id) if r.source_id else None, "source_name": r.name} for r in rows}
+
+        from models.source import Source as _Source
+        from models.source_item import SourceItem as _SI
+
+        rows = (
+            await db.execute(
+                sa_select(_SI.id, _SI.title, _SI.url, _SI.source_id, _Source.name)
+                .join(_Source, _SI.source_id == _Source.id, isouter=True)
+                .where(_SI.id.in_(item_ids))
+            )
+        ).all()
+        item_titles = {
+            r.id: {
+                "title": r.title,
+                "url": r.url,
+                "source_id": str(r.source_id) if r.source_id else None,
+                "source_name": r.name,
+            }
+            for r in rows
+        }
 
     return [
         {
             "id": str(p.id),
             "source_item_id": str(p.source_item_id) if p.source_item_id else None,
-            "source_item_title": item_titles.get(p.source_item_id, {}).get("title") if p.source_item_id else None,
-            "source_item_url": item_titles.get(p.source_item_id, {}).get("url") if p.source_item_id else None,
-            "source_id": item_titles.get(p.source_item_id, {}).get("source_id") if p.source_item_id else None,
-            "source_name": item_titles.get(p.source_item_id, {}).get("source_name") if p.source_item_id else None,
+            "source_item_title": item_titles.get(p.source_item_id, {}).get("title")
+            if p.source_item_id
+            else None,
+            "source_item_url": item_titles.get(p.source_item_id, {}).get("url")
+            if p.source_item_id
+            else None,
+            "source_id": item_titles.get(p.source_item_id, {}).get("source_id")
+            if p.source_item_id
+            else None,
+            "source_name": item_titles.get(p.source_item_id, {}).get("source_name")
+            if p.source_item_id
+            else None,
             "channel": p.channel,
             "content_text": p.content_text,
             "content_metadata": p.content_metadata,
@@ -99,8 +120,8 @@ async def list_content(
 
 @router.get("/content/export")
 async def export_content(
-    status: Optional[str] = Query(None, description="Filter by status (draft/approved/published)"),
-    channel: Optional[str] = Query(None),
+    status: str | None = Query(None, description="Filter by status (draft/approved/published)"),
+    channel: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     tenant: Tenant = Depends(get_tenant),
 ):
@@ -116,21 +137,35 @@ async def export_content(
 
     output = io.StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_ALL)
-    writer.writerow(["id", "status", "channel", "angle", "variant", "content_text", "char_count", "created_at", "approved_at"])
+    writer.writerow(
+        [
+            "id",
+            "status",
+            "channel",
+            "angle",
+            "variant",
+            "content_text",
+            "char_count",
+            "created_at",
+            "approved_at",
+        ]
+    )
 
     for p in pieces:
         meta = p.content_metadata or {}
-        writer.writerow([
-            str(p.id),
-            p.status or "",
-            p.channel or "linkedin",
-            meta.get("angle", ""),
-            meta.get("variant", ""),
-            (p.content_text or "").replace("\n", " ↵ "),
-            len(p.content_text or ""),
-            p.created_at.isoformat() if p.created_at else "",
-            p.approved_at.isoformat() if getattr(p, "approved_at", None) else "",
-        ])
+        writer.writerow(
+            [
+                str(p.id),
+                p.status or "",
+                p.channel or "linkedin",
+                meta.get("angle", ""),
+                meta.get("variant", ""),
+                (p.content_text or "").replace("\n", " ↵ "),
+                len(p.content_text or ""),
+                p.created_at.isoformat() if p.created_at else "",
+                p.approved_at.isoformat() if getattr(p, "approved_at", None) else "",
+            ]
+        )
 
     output.seek(0)
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M")
@@ -197,7 +232,7 @@ async def update_content(
                 detail={
                     "error": "unapproved_post",
                     "message": "Post muss zuerst freigegeben werden — status 'published' via PUT nicht erlaubt ohne Approval",
-                }
+                },
             )
 
     for field, value in update_data.items():
@@ -231,6 +266,7 @@ async def update_content_tags(
         meta.pop("tags", None)
     piece.content_metadata = meta
     from sqlalchemy.orm.attributes import flag_modified
+
     flag_modified(piece, "content_metadata")
     await db.commit()
     return {"id": str(piece.id), "tags": tags}
@@ -244,7 +280,6 @@ async def update_content_pillar(
     db: AsyncSession = Depends(get_db),
 ):
     """Set or clear the content pillar (merges into content_metadata)."""
-    from fastapi import Body
     piece = await db.get(ContentPiece, uuid.UUID(content_id))
     if not piece or piece.tenant_id != tenant.id:
         raise HTTPException(status_code=404, detail="Content not found")
@@ -256,6 +291,7 @@ async def update_content_pillar(
         meta.pop("pillar", None)
     piece.content_metadata = meta
     from sqlalchemy.orm.attributes import flag_modified
+
     flag_modified(piece, "content_metadata")
     await db.commit()
     return {"id": str(piece.id), "pillar": pillar}
@@ -294,17 +330,18 @@ async def bulk_approve_content(
 @router.post("/content/bulk-reject")
 async def bulk_reject_content(
     data: BulkRejectRequest,
-    source_id: Optional[str] = Query(None),
+    source_id: str | None = Query(None),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """Reject multiple content pieces at once.
     Requires ids list OR source_id to prevent accidental mass-reject."""
     from fastapi import HTTPException as _HTTPException
+
     if data.ids is None and not source_id:
         raise _HTTPException(
             status_code=400,
-            detail="Entweder ids[] oder source_id erforderlich, um versehentliches Massen-Ablehnen zu verhindern."
+            detail="Entweder ids[] oder source_id erforderlich, um versehentliches Massen-Ablehnen zu verhindern.",
         )
     if data.ids is not None:
         uuids = [uuid.UUID(i) for i in data.ids]
@@ -345,12 +382,18 @@ async def bulk_publish_content(
     if not data.ids:
         raise HTTPException(status_code=400, detail="ids[] erforderlich")
     uuids = [uuid.UUID(i) for i in data.ids]
-    pieces = (await db.execute(
-        select(ContentPiece).where(
-            ContentPiece.tenant_id == tenant.id,
-            ContentPiece.id.in_(uuids),
+    pieces = (
+        (
+            await db.execute(
+                select(ContentPiece).where(
+                    ContentPiece.tenant_id == tenant.id,
+                    ContentPiece.id.in_(uuids),
+                )
+            )
         )
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     unapproved = [p for p in pieces if p.status != "approved" or not p.approved_by]
     if unapproved:
@@ -360,7 +403,7 @@ async def bulk_publish_content(
                 "error": "unapproved_posts",
                 "message": f"{len(unapproved)} Post(s) noch nicht freigegeben",
                 "ids": [str(p.id) for p in unapproved],
-            }
+            },
         )
 
     now = datetime.utcnow()
@@ -390,7 +433,7 @@ async def mark_published(
             detail={
                 "error": "unapproved_post",
                 "message": "Post muss zuerst manuell freigegeben werden (status='approved' und approved_by gesetzt)",
-            }
+            },
         )
 
     piece.status = "published"
@@ -398,6 +441,7 @@ async def mark_published(
 
     # Also update the linked ScheduledPost to published
     from models.scheduled_post import ScheduledPost
+
     sp_q = await db.execute(
         select(ScheduledPost).where(
             ScheduledPost.content_piece_id == piece.id,
@@ -409,7 +453,11 @@ async def mark_published(
         sp.published_at = datetime.utcnow()
 
     await db.commit()
-    return {"id": str(piece.id), "status": "published", "published_at": datetime.utcnow().isoformat()}
+    return {
+        "id": str(piece.id),
+        "status": "published",
+        "published_at": datetime.utcnow().isoformat(),
+    }
 
 
 @router.post("/content/{content_id}/approve")
@@ -446,7 +494,11 @@ async def schedule_content(
     piece.scheduled_for = data.scheduled_for
     await db.commit()
 
-    return {"id": str(piece.id), "status": "scheduled", "scheduled_for": data.scheduled_for.isoformat()}
+    return {
+        "id": str(piece.id),
+        "status": "scheduled",
+        "scheduled_for": data.scheduled_for.isoformat(),
+    }
 
 
 @router.post("/content/{content_id}/hashtags")
@@ -465,11 +517,12 @@ async def suggest_hashtags(
         raise HTTPException(status_code=404, detail="Content not found")
 
     from services.llm import llm_service
+
     text = (piece.content_text or "")[:1000]
     prompt = (
         f"Analysiere diesen LinkedIn-Post und schlage 5-8 relevante deutsche und englische Hashtags vor.\n\n"
         f"Post:\n{text}\n\n"
-        f"Antworte NUR mit einer JSON-Liste von Hashtags, z.B.: [\"#KI\", \"#Handwerk\", \"#LinkedIn\"]"
+        f'Antworte NUR mit einer JSON-Liste von Hashtags, z.B.: ["#KI", "#Handwerk", "#LinkedIn"]'
     )
     try:
         result = await llm_service.complete_json(prompt, purpose="tagging")
@@ -482,7 +535,7 @@ async def suggest_hashtags(
 
 @router.get("/hook-library")
 async def get_hook_library(
-    angle: Optional[str] = None,
+    angle: str | None = None,
     tenant: Tenant = Depends(get_tenant),
 ):
     """Hook-Bibliothek: Bewährte Einstiegssätze für LinkedIn-Posts nach Post-Typ."""
@@ -575,7 +628,7 @@ async def repurpose_content(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"LLM error: {e!s}")
 
     created = []
     for v in variants[:3]:
@@ -584,11 +637,13 @@ async def repurpose_content(
         if not text:
             continue
         base_meta = dict(piece.content_metadata or {})
-        base_meta.update({
-            "angle": angle,
-            "variant": "repurposed",
-            "repurposed_from": str(piece.id),
-        })
+        base_meta.update(
+            {
+                "angle": angle,
+                "variant": "repurposed",
+                "repurposed_from": str(piece.id),
+            }
+        )
         new_piece = ContentPiece(
             source_item_id=piece.source_item_id,
             tenant_id=tenant.id,
@@ -605,6 +660,7 @@ async def repurpose_content(
 
 
 # ── Multi-Format Repurposer ──────────────────────────────────────────────────
+
 
 @router.post("/content/{content_id}/repurpose-formats")
 async def repurpose_formats(
@@ -697,6 +753,7 @@ async def repurpose_formats(
 
 # ── A/B Variant Generator ────────────────────────────────────────────────────
 
+
 @router.post("/content/{content_id}/variants")
 async def generate_ab_variants(
     content_id: str,
@@ -732,7 +789,7 @@ async def generate_ab_variants(
         "- Emotional, authentisch — 700–1000 Zeichen\n\n"
         f"ORIGINAL:\n{original}\n\n"
         "Antworte NUR mit einem JSON-Objekt:\n"
-        "{ \"variant_a\": \"<Listen-Format Text>\", \"variant_b\": \"<Story-Format Text>\" }\n"
+        '{ "variant_a": "<Listen-Format Text>", "variant_b": "<Story-Format Text>" }\n'
         "Gleiche Kernaussage, anderer Stil. Beide auf Deutsch. Kein Lorem ipsum."
     )
 
@@ -758,20 +815,21 @@ async def generate_ab_variants(
 
 class QuickCreateRequest(BaseModel):
     topic: str
-    angle: Optional[str] = "thought_leadership"
-    pillar: Optional[str] = None
-    style_notes: Optional[str] = None
+    angle: str | None = "thought_leadership"
+    pillar: str | None = None
+    style_notes: str | None = None
     channel: str = "linkedin"
 
 
 class SaveDirectRequest(BaseModel):
     """Speichert einen von Claude direkt geschriebenen Post — ohne Backend-LLM."""
+
     content_text: str
-    title: Optional[str] = None
-    angle: Optional[str] = "manual"
-    pillar: Optional[str] = None
+    title: str | None = None
+    angle: str | None = "manual"
+    pillar: str | None = None
     channel: str = "linkedin"
-    idea_id: Optional[str] = None  # optional: Link zur Quell-Idee
+    idea_id: str | None = None  # optional: Link zur Quell-Idee
 
 
 @router.post("/content/save-direct")
@@ -783,6 +841,7 @@ async def save_direct_post(
     """Speichert einen fertig geschriebenen Post (z.B. von Claude direkt) ohne LLM-Kosten."""
     # Find or create the "manual" source
     from models.source import Source
+
     manual_source_q = await db.execute(
         select(Source).where(Source.tenant_id == tenant.id, Source.type == "manual")
     )
@@ -830,6 +889,7 @@ async def save_direct_post(
     if data.idea_id:
         try:
             from models.content_idea import ContentIdea
+
             idea = await db.get(ContentIdea, uuid.UUID(data.idea_id))
             if idea and idea.tenant_id == tenant.id:
                 idea.status = "post_generated"
@@ -910,7 +970,7 @@ async def quick_create_post(
         f"- 3-5 kurze Absätze mit Leerzeilen\n"
         f"- Endet mit einer konkreten Frage ans Netzwerk\n"
         f"- Kein Hashtag-Spam (max. 3 am Ende)\n"
-        f"- Kein \"Liebe Community\" oder generische Floskeln\n\n"
+        f'- Kein "Liebe Community" oder generische Floskeln\n\n'
         f"Antworte NUR mit dem Post-Text, ohne Einleitung oder Erklärung."
     )
 
@@ -922,7 +982,7 @@ async def quick_create_post(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"LLM error: {e!s}")
 
     meta = {"angle": data.angle or "manual", "quick_created": True}
     if data.pillar:
@@ -952,7 +1012,7 @@ async def quick_create_post(
 
 class SeriesCreateRequest(BaseModel):
     topic: str
-    pillar: Optional[str] = None
+    pillar: str | None = None
     channel: str = "linkedin"
 
 
@@ -1038,7 +1098,7 @@ async def create_content_series(
         f"Post 2 (Deep Dive): Hauptinhalt mit konkreten Tipps/Erkenntnissen\n"
         f"Post 3 (Fazit/CTA): Zusammenfassung + starke Handlungsaufforderung\n\n"
         f"Antworte NUR mit einem JSON-Array mit 3 Objekten:\n"
-        f"[{{\"part\": 1, \"label\": \"Intro\", \"text\": \"...\"}}, ...]\n"
+        f'[{{"part": 1, "label": "Intro", "text": "..."}}, ...]\n'
         f"Kein weiterer Text außerhalb des JSON-Arrays."
     )
 
@@ -1049,11 +1109,11 @@ async def create_content_series(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"LLM error: {e!s}")
 
     series_id = str(uuid.uuid4())
     created = []
-    for i, (meta_info, llm_part) in enumerate(zip(series_posts, result[:3])):
+    for _i, (meta_info, llm_part) in enumerate(zip(series_posts, result[:3], strict=False)):
         text = (llm_part.get("text") or "").strip()
         if not text:
             continue
@@ -1077,12 +1137,14 @@ async def create_content_series(
             content_metadata=meta,
         )
         db.add(piece)
-        created.append({
-            "part": meta_info["part"],
-            "label": meta_info["label"],
-            "char_count": len(text),
-            "preview": text[:120],
-        })
+        created.append(
+            {
+                "part": meta_info["part"],
+                "label": meta_info["label"],
+                "char_count": len(text),
+                "preview": text[:120],
+            }
+        )
 
     await db.commit()
     return {
@@ -1095,9 +1157,9 @@ async def create_content_series(
 
 class UrlPostRequest(BaseModel):
     url: str
-    angle: Optional[str] = "thought_leadership"
-    pillar: Optional[str] = None
-    style_notes: Optional[str] = None
+    angle: str | None = "thought_leadership"
+    pillar: str | None = None
+    style_notes: str | None = None
     channel: str = "linkedin"
 
 
@@ -1109,8 +1171,10 @@ async def post_from_url(
 ):
     """Generate a LinkedIn post from any URL (article, YouTube, blog post)."""
     import re
-    import httpx
     from html.parser import HTMLParser
+
+    import httpx
+
     from services.llm import llm_service
 
     class MetaExtractor(HTMLParser):
@@ -1151,25 +1215,27 @@ async def post_from_url(
             resp = await client.get(data.url, headers=headers)
             html = resp.text[:50000]  # Limit to first 50KB
     except Exception as e:
-        raise HTTPException(status_code=422, detail=f"URL konnte nicht geladen werden: {str(e)}")
+        raise HTTPException(status_code=422, detail=f"URL konnte nicht geladen werden: {e!s}")
 
     # Extract meta info
     extractor = MetaExtractor()
-    try:
+    with contextlib.suppress(Exception):
         extractor.feed(html)
-    except Exception:
-        pass
 
     page_title = extractor.og_title or extractor.title or data.url
     page_desc = extractor.og_description or extractor.description or ""
 
     # Also try to extract some body text (first 1000 chars of visible text)
-    clean_html = re.sub(r'<(script|style)[^>]*>.*?</(script|style)>', '', html, flags=re.DOTALL | re.IGNORECASE)
-    body_text = re.sub(r'<[^>]+>', ' ', clean_html)
-    body_text = re.sub(r'\s+', ' ', body_text).strip()[:1500]
+    clean_html = re.sub(
+        r"<(script|style)[^>]*>.*?</(script|style)>", "", html, flags=re.DOTALL | re.IGNORECASE
+    )
+    body_text = re.sub(r"<[^>]+>", " ", clean_html)
+    body_text = re.sub(r"\s+", " ", body_text).strip()[:1500]
 
     if not page_title and not page_desc and not body_text:
-        raise HTTPException(status_code=422, detail="Keine verwertbaren Inhalte von der URL extrahiert")
+        raise HTTPException(
+            status_code=422, detail="Keine verwertbaren Inhalte von der URL extrahiert"
+        )
 
     angle_map = {
         "thought_leadership": "Thought-Leadership (persönliche Meinung, Expertise zeigen)",
@@ -1207,7 +1273,7 @@ async def post_from_url(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"LLM error: {e!s}")
 
     # Find/create manual source
     manual_source_q = await db.execute(
@@ -1215,7 +1281,13 @@ async def post_from_url(
     )
     manual_source = manual_source_q.scalars().first()
     if not manual_source:
-        manual_source = Source(tenant_id=tenant.id, name="Manuell erstellt", type="manual", language="de", is_active=True)
+        manual_source = Source(
+            tenant_id=tenant.id,
+            name="Manuell erstellt",
+            type="manual",
+            language="de",
+            is_active=True,
+        )
         db.add(manual_source)
         await db.flush()
 
@@ -1231,7 +1303,12 @@ async def post_from_url(
     db.add(source_item)
     await db.flush()
 
-    meta = {"angle": data.angle or "manual", "source_url": data.url, "source_title": page_title, "quick_created": True}
+    meta = {
+        "angle": data.angle or "manual",
+        "source_url": data.url,
+        "source_title": page_title,
+        "quick_created": True,
+    }
     if data.pillar:
         meta["pillar"] = data.pillar
 
@@ -1259,6 +1336,7 @@ async def post_from_url(
 
 # ── AI Post Rewriter ────────────────────────────────────────────────────────
 
+
 class RewriteRequest(BaseModel):
     mode: str  # shorter | hook | cta | professional | casual
 
@@ -1270,7 +1348,6 @@ Gib NUR den überarbeiteten Post zurück, ohne Kommentar oder Erklärung.
 
 Original:
 {text}""",
-
     "hook": """Du bist LinkedIn-Content-Experte spezialisiert auf DACH B2B.
 Die ersten 2-3 Zeilen eines LinkedIn-Posts entscheiden ob jemand „mehr anzeigen" klickt.
 Schreibe die ersten 2-3 Zeilen des folgenden Posts komplett neu: provokanter, neugieriger, emotionaler.
@@ -1278,21 +1355,18 @@ Der Rest des Posts bleibt unverändert. Gib den GESAMTEN Post zurück.
 
 Original:
 {text}""",
-
     "cta": """Du bist LinkedIn-Content-Experte. Der folgende Post braucht einen stärkeren Abschluss.
 Schreibe die letzten 1-2 Zeilen neu als klarer Call-to-Action oder Engagement-Frage (z.B. „Was denkst du?" oder „Hast du ähnliche Erfahrungen?").
 Der Rest des Posts bleibt unverändert. Gib den GESAMTEN Post zurück.
 
 Original:
 {text}""",
-
     "professional": """Du bist LinkedIn-Content-Experte für B2B DACH-Kommunikation.
 Mache den folgenden Post professioneller und seriöser: weniger Umgangssprache, präzisere Formulierungen, mehr Autorität.
 Behalte die Kernaussage. Gib NUR den überarbeiteten Post zurück.
 
 Original:
 {text}""",
-
     "casual": """Du bist LinkedIn-Content-Experte. Mache den folgenden Post zugänglicher und persönlicher:
 lockerer Ton, kürzere Sätze, mehr Ich-Perspektive, weniger Fachvokabular.
 Behalte die Kernaussage. Gib NUR den überarbeiteten Post zurück.
@@ -1324,9 +1398,12 @@ async def rewrite_content(
 
     mode = data.mode
     if mode not in REWRITE_PROMPTS:
-        raise HTTPException(status_code=400, detail=f"Unknown mode: {mode}. Use: {list(REWRITE_PROMPTS.keys())}")
+        raise HTTPException(
+            status_code=400, detail=f"Unknown mode: {mode}. Use: {list(REWRITE_PROMPTS.keys())}"
+        )
 
     from services.llm import llm_service
+
     prompt = REWRITE_PROMPTS[mode].format(text=piece.content_text)
     try:
         rewritten = (await llm_service.complete(prompt, purpose="generation") or "").strip()
@@ -1357,13 +1434,13 @@ _PILLAR_LABELS = {
 }
 
 _BEST_SLOTS = {
-    0: {"name": "Montag",    "hours": [8, 12, 17]},
-    1: {"name": "Dienstag",  "hours": [8, 9, 12, 17]},
-    2: {"name": "Mittwoch",  "hours": [8, 9, 12, 17]},
-    3: {"name": "Donnerstag","hours": [8, 9, 12]},
-    4: {"name": "Freitag",   "hours": [8, 12]},
-    5: {"name": "Samstag",   "hours": []},
-    6: {"name": "Sonntag",   "hours": []},
+    0: {"name": "Montag", "hours": [8, 12, 17]},
+    1: {"name": "Dienstag", "hours": [8, 9, 12, 17]},
+    2: {"name": "Mittwoch", "hours": [8, 9, 12, 17]},
+    3: {"name": "Donnerstag", "hours": [8, 9, 12]},
+    4: {"name": "Freitag", "hours": [8, 12]},
+    5: {"name": "Samstag", "hours": []},
+    6: {"name": "Sonntag", "hours": []},
 }
 
 
@@ -1406,10 +1483,13 @@ async def get_today_brief(
     gap_count = pillar_counts[gap_pillar]
 
     result2 = await db.execute(
-        select(ContentPiece).where(
+        select(ContentPiece)
+        .where(
             ContentPiece.tenant_id == tenant.id,
             ContentPiece.status == "approved",
-        ).order_by(ContentPiece.created_at.asc()).limit(10)
+        )
+        .order_by(ContentPiece.created_at.asc())
+        .limit(10)
     )
     approved_posts = result2.scalars().all()
 
@@ -1439,12 +1519,18 @@ async def get_today_brief(
     writing_prompt = prompts.get(gap_pillar, "Teile eine Erkenntnis aus dieser Woche")
 
     score = 0
-    if total_approved > 0: score += 30
-    if total_approved >= 5: score += 20
-    if drafts > 0: score += 15
-    if is_good_day: score += 15
-    if next_slot: score += 10
-    if gap_count == 0: score -= 10
+    if total_approved > 0:
+        score += 30
+    if total_approved >= 5:
+        score += 20
+    if drafts > 0:
+        score += 15
+    if is_good_day:
+        score += 15
+    if next_slot:
+        score += 10
+    if gap_count == 0:
+        score -= 10
     score = max(0, min(100, score))
 
     return {
@@ -1469,13 +1555,16 @@ async def get_today_brief(
             "angle": (recommended_post.content_metadata or {}).get("angle", ""),
             "pillar": (recommended_post.content_metadata or {}).get("pillar", ""),
             "chars": len(recommended_post.content_text or ""),
-        } if recommended_post else None,
+        }
+        if recommended_post
+        else None,
         "momentum_score": score,
         "pillar_counts": pillar_counts,
     }
 
 
 # ── Content Performance Predictor (Cycle 39) ────────────────────────────────
+
 
 @router.post("/content/{content_id}/predict-performance")
 async def predict_performance(
@@ -1501,10 +1590,12 @@ async def predict_performance(
 
     # Load top-performing approved/published posts for context
     top_result = await db.execute(
-        select(ContentPiece).where(
+        select(ContentPiece)
+        .where(
             ContentPiece.tenant_id == tenant.id,
             ContentPiece.status.in_(["approved", "published", "scheduled"]),
-        ).limit(10)
+        )
+        .limit(10)
     )
     top_posts = top_result.scalars().all()
 
@@ -1522,7 +1613,7 @@ async def predict_performance(
         samples = []
         for p in top_posts[:3]:
             txt = (p.content_text or "")[:300]
-            samples.append(f"- \"{txt}...\"")
+            samples.append(f'- "{txt}..."')
         ref_examples = "\n".join(samples)
     else:
         ref_examples = "(keine Referenzdaten verfügbar)"
@@ -1593,25 +1684,20 @@ async def predict_performance(
 @router.get("/content/top-templates")
 async def get_top_templates(
     limit: int = 9,
-    angle: Optional[str] = None,
+    angle: str | None = None,
     db: AsyncSession = Depends(get_db),
     tenant: Tenant = Depends(get_tenant),
 ):
     """Top-scoring posts as inspiration templates — grouped by angle, no LLM needed."""
-    from sqlalchemy import desc, case
+    from sqlalchemy import case
 
-    query = (
-        select(ContentPiece)
-        .where(
-            ContentPiece.tenant_id == tenant.id,
-            ContentPiece.content_text.isnot(None),
-            ContentPiece.channel == "linkedin",
-        )
+    query = select(ContentPiece).where(
+        ContentPiece.tenant_id == tenant.id,
+        ContentPiece.content_text.isnot(None),
+        ContentPiece.channel == "linkedin",
     )
     if angle:
-        query = query.where(
-            ContentPiece.content_metadata["angle"].astext == angle
-        )
+        query = query.where(ContentPiece.content_metadata["angle"].astext == angle)
     # Order: approved first, then by text length as quality proxy (500-1500 chars = good)
     query = query.order_by(
         case({"approved": 0, "published": 0}, value=ContentPiece.status, else_=1).asc(),
@@ -1622,7 +1708,6 @@ async def get_top_templates(
     pieces = result.scalars().all()
 
     templates = []
-    seen_angles = {}
     for p in pieces:
         meta = p.content_metadata or {}
         p_angle = meta.get("angle", "")
@@ -1631,25 +1716,33 @@ async def get_top_templates(
 
         # Quick quality score: length 500-1500 + has emoji + has question
         score = 0
-        if 400 <= length <= 1600: score += 5
-        elif 250 <= length: score += 2
+        if 400 <= length <= 1600:
+            score += 5
+        elif length >= 250:
+            score += 2
         import re
-        if re.search(r"\?", text[-200:]): score += 2
-        if re.search(r"\p{Emoji}", text, re.UNICODE): score += 1
-        if text.count("\n\n") >= 2: score += 2
+
+        if re.search(r"\?", text[-200:]):
+            score += 2
+        if re.search(r"\p{Emoji}", text, re.UNICODE):
+            score += 1
+        if text.count("\n\n") >= 2:
+            score += 2
 
         if len(templates) < limit:
-            templates.append({
-                "id": str(p.id),
-                "angle": p_angle,
-                "pillar": meta.get("pillar", ""),
-                "preview": text[:200],
-                "full_text": text,
-                "chars": length,
-                "score": score,
-                "status": p.status,
-                "source_name": p.source_name,
-            })
+            templates.append(
+                {
+                    "id": str(p.id),
+                    "angle": p_angle,
+                    "pillar": meta.get("pillar", ""),
+                    "preview": text[:200],
+                    "full_text": text,
+                    "chars": length,
+                    "score": score,
+                    "status": p.status,
+                    "source_name": p.source_name,
+                }
+            )
 
     # Sort by score desc
     templates.sort(key=lambda x: x["score"], reverse=True)

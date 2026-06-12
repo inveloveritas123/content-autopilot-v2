@@ -15,22 +15,26 @@ Umgestellt: 2026-06-11 (P5-anthropic-provider.md)
   - Modell-ID kommt jetzt aus PipelineLLMResult.model_id (Tier S6 = "anthropic/claude-sonnet-4-6")
   - Kosten-Schätzung über estimate_tier_cost statt estimate_vertex_cost
 """
+
 import asyncio
 import hashlib
 import json
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
 
 from sqlalchemy import text
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
+from services.pipeline_llm import (
+    call_pipeline_llm,
+    estimate_tier_cost,
+    resolve_tier,
+)
 from services.prompt_loader import get_default_prompt_loader
-from services.pipeline_llm import call_pipeline_llm, resolve_tier, estimate_tier_cost, BudgetExceededError
 from services.schema_transformer import build_canonical_meta, finalize_canonical
 from tasks.canonical_wiring import fetch_tenant_meta, now_iso
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +42,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
+
 
 def _extract_json_from_text(raw: str) -> dict:
     """JSON aus dem LLM-Output parsen — entfernt Markdown-Code-Zaun falls vorhanden."""
@@ -57,6 +62,7 @@ async def _run_cost_check(tenant_id: str, estimated_cost: float) -> None:
     """Async Cost-Cap-Check — soll via asyncio.run() aus Celery aufgerufen werden."""
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker as async_sm
+
     from config import settings
     from services.cost_cap import CostCapMiddleware
 
@@ -74,6 +80,7 @@ async def _record_actual_cost(tenant_id: str, actual_cost: float) -> None:
     """Actual-Cost nach erfolgreichem LLM-Call ins daily_cost_tenant schreiben."""
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker as async_sm
+
     from config import settings
     from services.cost_cap import CostCapMiddleware
 
@@ -92,8 +99,15 @@ async def _record_actual_cost(tenant_id: str, actual_cost: float) -> None:
 # Celery Task
 # ---------------------------------------------------------------------------
 
+
 @celery_app.task(name="tasks.p01_task.run_p01", bind=True, max_retries=2)
-def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, project_id: str | None = None) -> dict:
+def run_p01(
+    self,
+    tenant_id: str,
+    transcript: str,
+    mini_form_data: dict | None = None,
+    project_id: str | None = None,
+) -> dict:
     """P01-Extraktion: Kundenkontext aus Transkript + optionalem Mini-Formular.
 
     Args:
@@ -104,7 +118,8 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
     Returns:
         {"run_id": str, "status": "done"|"paused_for_cost"|"failed", "error": str|None}
     """
-    from services.kill_switch import check_kill_switch, KillSwitchTriggered
+    from services.kill_switch import KillSwitchTriggered, check_kill_switch
+
     try:
         check_kill_switch(tenant_id)
     except KillSwitchTriggered:
@@ -141,7 +156,8 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
         except CostCapExceeded:
             logger.warning(
                 "p01 run_id=%s tenant=%s: daily cost cap exceeded, pausing",
-                run_id, tenant_id,
+                run_id,
+                tenant_id,
             )
             with sync_session_factory() as session:
                 session.execute(
@@ -156,7 +172,8 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
         except BudgetExceededError:
             logger.warning(
                 "p01 run_id=%s tenant=%s: Router-Budget überschritten (412), pausing",
-                run_id, tenant_id,
+                run_id,
+                tenant_id,
             )
             with sync_session_factory() as session:
                 session.execute(
@@ -177,17 +194,12 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
         prompt_version_hash = loaded.sha
         system_prompt_text = loaded.system_prompt
         user_prompt_text = loaded.user_prompt_template
-        logger.debug(
-            "p01 run_id=%s: prompt sha=%s geladen", run_id, prompt_version_hash[:12]
-        )
+        logger.debug("p01 run_id=%s: prompt sha=%s geladen", run_id, prompt_version_hash[:12])
 
         # ------------------------------------------------------------------
         # 4. LLM-Call über den Seam (kein direkter SDK-Aufruf)
         # ------------------------------------------------------------------
-        user_content = (
-            f"{user_prompt_text}\n\n"
-            f"<transkript>{transcript}</transkript>"
-        )
+        user_content = f"{user_prompt_text}\n\n" f"<transkript>{transcript}</transkript>"
         if mini_form_data:
             user_content += (
                 f"\n<formular>{json.dumps(mini_form_data, ensure_ascii=False)}</formular>"
@@ -208,7 +220,11 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
         logger.debug("p01 run_id=%s: LLM-Antwort erhalten (%d Zeichen)", run_id, len(raw_text))
         logger.info(
             "p01 run_id=%s: usage input=%d output=%d cache_read=%d cost=%.6f USD",
-            run_id, input_tokens, output_tokens, res.cache_read_tokens, actual_cost,
+            run_id,
+            input_tokens,
+            output_tokens,
+            res.cache_read_tokens,
+            actual_cost,
         )
 
         # ------------------------------------------------------------------
@@ -219,7 +235,8 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
         except json.JSONDecodeError as first_err:
             logger.warning(
                 "p01 run_id=%s: JSON-Parsing fehlgeschlagen (%s), Retry mit Schema-Reminder",
-                run_id, first_err,
+                run_id,
+                first_err,
             )
             # JSON-Retry: Schema-Hint an user_content anhängen, neuer Call.
             # Felder = Louis' kanonische Top-Level-Keys (content-truth/schemas/p01).
@@ -271,15 +288,14 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
         if schema_errors:
             logger.warning(
                 "p01 run_id=%s: %d kanonische Schema-Luecke(n) in _meta.luecken dokumentiert",
-                run_id, len(schema_errors),
+                run_id,
+                len(schema_errors),
             )
 
         # ------------------------------------------------------------------
         # 7. DB-Insert: tenant_customer_context (kanonischer Payload inkl. _meta)
         # ------------------------------------------------------------------
-        output_hash = hashlib.sha256(
-            json.dumps(output_json, sort_keys=True).encode()
-        ).hexdigest()
+        output_hash = hashlib.sha256(json.dumps(output_json, sort_keys=True).encode()).hexdigest()
 
         with sync_session_factory() as session:
             row = session.execute(
@@ -312,7 +328,9 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
             session.commit()
         logger.info(
             "p01 run_id=%s tenant=%s: customer_context version=%d inserted",
-            run_id, tenant_id, next_version,
+            run_id,
+            tenant_id,
+            next_version,
         )
 
         # ------------------------------------------------------------------
@@ -321,7 +339,9 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
         try:
             asyncio.run(_record_actual_cost(tenant_id, actual_cost))
         except Exception as cost_err:
-            logger.warning("p01 run_id=%s: actual-cost recording fehlgeschlagen: %s", run_id, cost_err)
+            logger.warning(
+                "p01 run_id=%s: actual-cost recording fehlgeschlagen: %s", run_id, cost_err
+            )
 
         # ------------------------------------------------------------------
         # 8b. Audit-Update: setup_pipeline_run auf 'done' setzen
@@ -356,7 +376,10 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
             session.commit()
         logger.info(
             "p01 run_id=%s: done in %dms, cost=%.6f USD, output_hash=%s",
-            run_id, duration_ms, actual_cost, output_hash[:16],
+            run_id,
+            duration_ms,
+            actual_cost,
+            output_hash[:16],
         )
 
         # ------------------------------------------------------------------
@@ -364,9 +387,11 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
         # ------------------------------------------------------------------
         return {"run_id": run_id, "status": "done", "p01_run_id": run_id}
 
-    except BudgetExceededError as exc:
+    except BudgetExceededError:
         # BUG-1-Fix: Router-Budget überschritten (HTTP 412) aus call_pipeline_llm → paused_for_cost
-        logger.warning("p01 run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id)
+        logger.warning(
+            "p01 run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id
+        )
         try:
             with sync_session_factory() as session:
                 session.execute(
@@ -378,7 +403,9 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
                 )
                 session.commit()
         except Exception as db_err:
-            logger.error("p01 run_id=%s: DB-Update (paused_for_cost) fehlgeschlagen: %s", run_id, db_err)
+            logger.error(
+                "p01 run_id=%s: DB-Update (paused_for_cost) fehlgeschlagen: %s", run_id, db_err
+            )
         return {"run_id": run_id, "status": "paused_for_cost"}
 
     except Exception as exc:
@@ -400,7 +427,5 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
                 )
                 session.commit()
         except Exception as db_err:
-            logger.error(
-                "p01 run_id=%s: Fehler beim DB-Update auf 'failed': %s", run_id, db_err
-            )
+            logger.error("p01 run_id=%s: Fehler beim DB-Update auf 'failed': %s", run_id, db_err)
         return {"run_id": run_id, "status": "failed", "error": str(exc)}

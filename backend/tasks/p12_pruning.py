@@ -16,7 +16,7 @@ Dep-frei (keine sqlalchemy/celery/google-Imports) → via importlib testbar.
 VOICE_KEYS_FOR_P12 = [
     "grundton",
     "satzarchitektur",
-    "wortschatz",            # kanonischer Container (signalwoerter/verbotene_woerter/…)
+    "wortschatz",  # kanonischer Container (signalwoerter/verbotene_woerter/…)
     "erzaehlmuster",
     "emotionaler_ausdruck",
     "persoenlichkeits_stance",
@@ -36,9 +36,9 @@ CONTEXT_KEYS_FOR_P12 = [
     "person",
     "angebot",
     "positionierung",
-    "zielkunde",             # kanonisch (Zielkunden-Kontext)
-    "sprache",               # kanonisch (Lieblings-/Vermeidungswörter, du/sie)
-    "vertrauen",             # kanonisch (Belege/Erfolgsgeschichten)
+    "zielkunde",  # kanonisch (Zielkunden-Kontext)
+    "sprache",  # kanonisch (Lieblings-/Vermeidungswörter, du/sie)
+    "vertrauen",  # kanonisch (Belege/Erfolgsgeschichten)
     # Alt-v2-Toleranz (absent bei kanonischen Rows)
     "kernbotschaft",
     "expertise",
@@ -54,7 +54,7 @@ AVATAR_KEYS_FOR_P12 = [
 VOICE_KEYS_FOR_P12B = [
     "grundton",
     "satzarchitektur",
-    "wortschatz",            # kanonischer Container
+    "wortschatz",  # kanonischer Container
     "persoenlichkeits_stance",
     "vermeidungsprofil",
     # Transitions-Toleranz

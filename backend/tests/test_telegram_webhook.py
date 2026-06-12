@@ -4,17 +4,16 @@ Tests for Telegram webhook receiver + one-time-token auth flow (Issue #61).
 Run with: pytest backend/tests/test_telegram_webhook.py -v
 No DB required — all DB/HTTP calls are patched.
 """
+
 import sys
 import types
-import uuid
-from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch, call
-
-import pytest
+from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # Stubs for heavy dependencies not available in the test environment
 # ---------------------------------------------------------------------------
+
 
 def _ensure_stub(name: str) -> types.ModuleType:
     if name not in sys.modules:
@@ -63,14 +62,13 @@ with (
     # We import after patching sys.modules so the module picks up fake config
     sys.modules["config"] = types.SimpleNamespace(settings=_fake_settings)
 
-    import importlib
     import api.telegram as tg_module
 
 # Re-apply settings patch on the already-imported module
 tg_module.settings = _fake_settings
 
-from fastapi.testclient import TestClient
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 _app = FastAPI()
 _app.include_router(tg_module.router, prefix="/api")
@@ -96,6 +94,7 @@ def _make_text_update(text: str, user_id: int = 12345, chat_id: int = 99999) -> 
 # 1. test_webhook_rejects_missing_secret
 # ---------------------------------------------------------------------------
 
+
 def test_webhook_rejects_missing_secret():
     resp = client.post(WEBHOOK_URL, json=_make_text_update("hello"))
     assert resp.status_code == 401
@@ -104,6 +103,7 @@ def test_webhook_rejects_missing_secret():
 # ---------------------------------------------------------------------------
 # 2. test_webhook_rejects_wrong_secret
 # ---------------------------------------------------------------------------
+
 
 def test_webhook_rejects_wrong_secret():
     resp = client.post(
@@ -118,6 +118,7 @@ def test_webhook_rejects_wrong_secret():
 # 3. test_webhook_accepts_valid_secret
 # ---------------------------------------------------------------------------
 
+
 def test_webhook_accepts_valid_secret():
     # Mock DB: no active link found → send "Unbekannter User"
     mock_session = MagicMock()
@@ -127,7 +128,7 @@ def test_webhook_accepts_valid_secret():
 
     with (
         patch.object(tg_module, "sync_session_factory", return_value=mock_session),
-        patch.object(tg_module, "_send_telegram_message") as mock_send,
+        patch.object(tg_module, "_send_telegram_message"),
     ):
         resp = client.post(
             WEBHOOK_URL,
@@ -143,8 +144,9 @@ def test_webhook_accepts_valid_secret():
 # 4. test_start_command_valid_token
 # ---------------------------------------------------------------------------
 
+
 def test_start_command_valid_token():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     mock_session = MagicMock()
     mock_session.__enter__ = MagicMock(return_value=mock_session)
@@ -190,8 +192,9 @@ def test_start_command_valid_token():
 # 5. test_start_command_expired_token
 # ---------------------------------------------------------------------------
 
+
 def test_start_command_expired_token():
-    expired_time = datetime.now(timezone.utc) - timedelta(minutes=31)
+    expired_time = datetime.now(UTC) - timedelta(minutes=31)
 
     mock_session = MagicMock()
     mock_session.__enter__ = MagicMock(return_value=mock_session)
@@ -225,6 +228,7 @@ def test_start_command_expired_token():
 # 6. test_unknown_user_gets_reply
 # ---------------------------------------------------------------------------
 
+
 def test_unknown_user_gets_reply():
     mock_session = MagicMock()
     mock_session.__enter__ = MagicMock(return_value=mock_session)
@@ -253,12 +257,12 @@ def test_unknown_user_gets_reply():
 # 7. test_link_generation_returns_deeplink
 # ---------------------------------------------------------------------------
 
+
 def test_link_generation_returns_deeplink():
     """
     Tests generate_telegram_link() function from brand_voice.py directly.
     Patches DB and config so no real DB needed.
     """
-    import secrets as _secrets
 
     # Build minimal stubs so brand_voice module can be imported
     _fake_bv_settings = MagicMock()
@@ -282,6 +286,7 @@ def test_link_generation_returns_deeplink():
         patch.object(tg_module, "sync_session_factory", return_value=mock_session),
     ):
         import secrets
+
         tok = secrets.token_urlsafe(24)
         bot = "test_bot"
         deeplink = f"https://t.me/{bot}?start={tok}"
@@ -297,6 +302,7 @@ def test_link_generation_returns_deeplink():
 # ---------------------------------------------------------------------------
 # 8. test_token_single_use
 # ---------------------------------------------------------------------------
+
 
 def test_token_single_use():
     """

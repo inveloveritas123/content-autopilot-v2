@@ -7,10 +7,10 @@ Endpoints:
   POST   /api/hooks/library/import    — aus content_pieces importieren
                                         (top-N nach performance)
 """
+
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -29,12 +29,12 @@ HOOK_TYPES = {"general", "hook", "story", "these", "manual"}
 class HookIn(BaseModel):
     hook_text: str = Field(..., min_length=5, max_length=500)
     hook_type: str = "manual"
-    metadata: Optional[dict] = None
+    metadata: dict | None = None
 
 
 @router.get("/library")
 async def list_hooks(
-    hook_type: Optional[str] = Query(None),
+    hook_type: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     sort: str = Query("performance", regex="^(performance|recent|usage)$"),
     tenant: Tenant = Depends(get_tenant),
@@ -52,15 +52,17 @@ async def list_hooks(
         "recent": "created_at DESC",
         "usage": "used_count DESC, performance_score DESC",
     }[sort]
-    rows = (await db.execute(
-        text(
-            f"SELECT id, source_piece_id, hook_text, hook_type, performance_score, "
-            f"       used_count, last_used_at, metadata, created_at "
-            f"FROM hook_library WHERE {' AND '.join(where)} "
-            f"ORDER BY {order_clause} LIMIT :lim"
-        ),
-        params,
-    )).fetchall()
+    rows = (
+        await db.execute(
+            text(
+                f"SELECT id, source_piece_id, hook_text, hook_type, performance_score, "
+                f"       used_count, last_used_at, metadata, created_at "
+                f"FROM hook_library WHERE {' AND '.join(where)} "
+                f"ORDER BY {order_clause} LIMIT :lim"
+            ),
+            params,
+        )
+    ).fetchall()
     return [
         {
             "id": str(r.id),
@@ -84,19 +86,21 @@ async def add_hook(
     db: AsyncSession = Depends(get_db),
 ):
     if payload.hook_type not in HOOK_TYPES:
-        raise HTTPException(400, f"Unbekannter hook_type")
-    new_id = (await db.execute(
-        text(
-            "INSERT INTO hook_library (tenant_id, hook_text, hook_type, metadata) "
-            "VALUES (:tid, :h, :ht, CAST(:m AS jsonb)) RETURNING id"
-        ),
-        {
-            "tid": tenant.id,
-            "h": payload.hook_text.strip(),
-            "ht": payload.hook_type,
-            "m": json.dumps(payload.metadata or {}, ensure_ascii=False),
-        },
-    )).fetchone()
+        raise HTTPException(400, "Unbekannter hook_type")
+    new_id = (
+        await db.execute(
+            text(
+                "INSERT INTO hook_library (tenant_id, hook_text, hook_type, metadata) "
+                "VALUES (:tid, :h, :ht, CAST(:m AS jsonb)) RETURNING id"
+            ),
+            {
+                "tid": tenant.id,
+                "h": payload.hook_text.strip(),
+                "ht": payload.hook_type,
+                "m": json.dumps(payload.metadata or {}, ensure_ascii=False),
+            },
+        )
+    ).fetchone()
     await db.commit()
     return {"id": str(new_id.id), "status": "ok"}
 
@@ -132,24 +136,26 @@ async def import_from_pieces(
     Idempotent: skip wenn source_piece_id bereits in hook_library.
     Performance-Score aus content_performances falls verfügbar, sonst 0.
     """
-    rows = (await db.execute(
-        text(
-            "SELECT cp.id, cp.content_text, cp.category, "
-            "       COALESCE(MAX(perf.engagement_rate), 0) AS perf_score "
-            "FROM content_pieces cp "
-            "LEFT JOIN content_performances perf ON perf.content_piece_id = cp.id "
-            "WHERE cp.tenant_id = :tid AND cp.status IN ('draft', 'approved', 'published') "
-            "  AND LENGTH(COALESCE(cp.content_text, '')) >= :minc "
-            "  AND cp.id NOT IN ("
-            "    SELECT source_piece_id FROM hook_library "
-            "    WHERE source_piece_id IS NOT NULL AND tenant_id = :tid"
-            "  ) "
-            "GROUP BY cp.id, cp.content_text, cp.category "
-            "ORDER BY perf_score DESC NULLS LAST, cp.created_at DESC "
-            "LIMIT :lim"
-        ),
-        {"tid": tenant.id, "minc": min_chars, "lim": limit},
-    )).fetchall()
+    rows = (
+        await db.execute(
+            text(
+                "SELECT cp.id, cp.content_text, cp.category, "
+                "       COALESCE(MAX(perf.engagement_rate), 0) AS perf_score "
+                "FROM content_pieces cp "
+                "LEFT JOIN content_performances perf ON perf.content_piece_id = cp.id "
+                "WHERE cp.tenant_id = :tid AND cp.status IN ('draft', 'approved', 'published') "
+                "  AND LENGTH(COALESCE(cp.content_text, '')) >= :minc "
+                "  AND cp.id NOT IN ("
+                "    SELECT source_piece_id FROM hook_library "
+                "    WHERE source_piece_id IS NOT NULL AND tenant_id = :tid"
+                "  ) "
+                "GROUP BY cp.id, cp.content_text, cp.category "
+                "ORDER BY perf_score DESC NULLS LAST, cp.created_at DESC "
+                "LIMIT :lim"
+            ),
+            {"tid": tenant.id, "minc": min_chars, "lim": limit},
+        )
+    ).fetchall()
 
     imported = 0
     for r in rows:

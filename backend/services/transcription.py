@@ -12,13 +12,10 @@ Podcasts/Audio:
 
 KEIN lokales Whisper — alles über Cloud-APIs.
 """
+
 import logging
-import tempfile
-from typing import Optional
 
 import httpx
-
-from services.llm import llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +24,8 @@ logger = logging.getLogger(__name__)
 # YOUTUBE TRANSCRIPT (bestehend, optimiert)
 # ═══════════════════════════════════════════════════
 
-async def get_youtube_transcript(video_id: str, languages: list[str] = None) -> Optional[str]:
+
+async def get_youtube_transcript(video_id: str, languages: list[str] | None = None) -> str | None:
     """Get transcript from YouTube's own subtitle system.
 
     Dies ist die primäre Methode für YouTube-Videos:
@@ -83,7 +81,9 @@ async def get_youtube_transcript(video_id: str, languages: list[str] = None) -> 
 
             fetched = api.fetch(video_id, languages=[transcript.language_code])
             text = " ".join(s.text for s in fetched)
-            logger.info(f"YouTube transcript for {video_id}: {len(text)} chars, lang={transcript.language_code}")
+            logger.info(
+                f"YouTube transcript for {video_id}: {len(text)} chars, lang={transcript.language_code}"
+            )
             return text if len(text) > 50 else None
 
         except Exception as e:
@@ -99,10 +99,11 @@ async def get_youtube_transcript(video_id: str, languages: list[str] = None) -> 
 # GEMINI URL-DIREKT TRANSKRIPTION (Stufe 2)
 # ═══════════════════════════════════════════════════
 
+
 async def transcribe_youtube_with_gemini_url(
     video_id: str,
     language: str = "de",
-) -> Optional[str]:
+) -> str | None:
     """Gemini 2.0 Flash verarbeitet YouTube-URL direkt — kein Audio-Download nötig.
 
     Vorteile:
@@ -163,11 +164,12 @@ async def transcribe_youtube_with_gemini_url(
 # GEMINI AUDIO API TRANSCRIPTION (via LiteLLM Proxy)
 # ═══════════════════════════════════════════════════
 
+
 async def transcribe_with_gemini_audio(
     audio_url: str,
     language: str = "de",
     max_duration_hours: float = 3.0,
-) -> Optional[str]:
+) -> str | None:
     """Transkribiere Audio via Gemini Flash 2.0 durch den LiteLLM-Proxy.
 
     Gemini Flash 2.0 kann Audio direkt verarbeiten:
@@ -178,6 +180,7 @@ async def transcribe_with_gemini_audio(
     Nutzt den LiteLLM-Proxy (OpenAI-kompatibles Chat-Format mit Audio-Part).
     """
     import base64
+
     from config import settings
 
     try:
@@ -261,6 +264,7 @@ async def transcribe_with_gemini_audio(
 # UNIFIED TRANSCRIPTION INTERFACE
 # ═══════════════════════════════════════════════════
 
+
 async def transcribe_content(
     source_type: str,
     external_id: str = "",
@@ -268,7 +272,7 @@ async def transcribe_content(
     audio_url: str = "",
     language: str = "de",
     content_text: str = "",
-) -> Optional[str]:
+) -> str | None:
     """Einheitliche Transkriptions-Schnittstelle für alle Quelltypen.
 
     Args:
@@ -295,6 +299,7 @@ async def transcribe_content(
         # Stufe 3: yt-dlp + Whisper/Gemini Audio (mit Cookie-Support)
         logger.info(f"Gemini URL-direct failed for {external_id}, trying yt-dlp + audio")
         from services.audio_transcription import transcribe_youtube_video
+
         transcript = await transcribe_youtube_video(external_id, language)
         if transcript:
             return transcript
@@ -309,6 +314,7 @@ async def transcribe_content(
         # Falls nur URL: Artikel nachträglich fetchen
         if url:
             from services.source_adapters import RSSAdapter
+
             adapter = RSSAdapter()
             extracted = await adapter.extract_content({"url": url, "content_text": content_text})
             return extracted
@@ -320,7 +326,7 @@ async def transcribe_content(
             transcript = await transcribe_with_gemini_audio(audio_url, language)
             if transcript:
                 return transcript
-            logger.warning(f"Audio transcription failed for podcast, checking show notes fallback")
+            logger.warning("Audio transcription failed for podcast, checking show notes fallback")
         # Fallback: use show notes / episode description if available (>200 chars = real content)
         if content_text and len(content_text) > 200:
             logger.info(f"Using show-notes as transcript for podcast ({len(content_text)} chars)")

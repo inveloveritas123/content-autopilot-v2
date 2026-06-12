@@ -1,13 +1,14 @@
 """Publish scheduled posts when their time arrives."""
+
 import logging
 from datetime import datetime
 
 from sqlalchemy import select
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
-from models.scheduled_post import ScheduledPost
 from models.content_piece import ContentPiece
+from models.scheduled_post import ScheduledPost
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,9 @@ def publish_scheduled_posts():
                 if post.content_piece_id:
                     cp = session.get(ContentPiece, post.content_piece_id)
                     if not cp or cp.status != "approved" or not cp.approved_by:
-                        logger.warning(f"[PublishTask] Post {post.id} skipped — content piece not approved (content_piece_id={post.content_piece_id})")
+                        logger.warning(
+                            f"[PublishTask] Post {post.id} skipped — content piece not approved (content_piece_id={post.content_piece_id})"
+                        )
                         continue
                 # TODO: LinkedIn OAuth publish when configured
                 # For now: mark as published (manual copy-paste workflow)

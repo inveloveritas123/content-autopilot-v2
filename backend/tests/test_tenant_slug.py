@@ -6,18 +6,19 @@ Acceptance:
   2. Existing Tenants: kein Datenverlust (backward-compat fallback)
   3. Zwei Tenants mit ähnlichem Namen → unterschiedliche NC-Pfade
 """
-import json
+
 import uuid
 from unittest.mock import MagicMock, patch
-
 
 # ---------------------------------------------------------------------------
 # _slugify unit tests
 # ---------------------------------------------------------------------------
 
+
 class TestSlugify:
     def _fn(self):
         from services.brand_voice_storage import _slugify
+
         return _slugify
 
     def test_basic(self):
@@ -46,6 +47,7 @@ class TestSlugify:
 # ---------------------------------------------------------------------------
 # sync_brand_voice_to_nc — slug column usage
 # ---------------------------------------------------------------------------
+
 
 def _make_session(tenant_row, project_row=None, pillar_rows=None):
     """Build a mock sync_session_factory that returns given rows."""
@@ -103,10 +105,12 @@ class TestSyncBrandVoiceUsesSlugColumn:
 
         mock_factory = _make_session(tenant_row)
 
-        with patch("models.base.sync_session_factory", mock_factory):
-            with patch("services.brand_voice_storage.get_default_nc_adapter", return_value=mock_adapter):
-                with patch("services.brand_voice_storage._get_brand_voice_base", return_value="/Kunde/"):
-                    result = sync_brand_voice_to_nc(tenant_id)
+        with (
+            patch("models.base.sync_session_factory", mock_factory),
+            patch("services.brand_voice_storage.get_default_nc_adapter", return_value=mock_adapter),
+            patch("services.brand_voice_storage._get_brand_voice_base", return_value="/Kunde/"),
+        ):
+            result = sync_brand_voice_to_nc(tenant_id)
 
         # No pillars were written (all skipped — no payload rows), but we can
         # verify the resolved path by checking skipped (zero errors)
@@ -127,9 +131,7 @@ class TestSyncBrandVoiceUsesSlugColumn:
         pillar_payload = {"key": "value"}
 
         pillar_row_with_data = MagicMock()
-        pillar_row_with_data.__getitem__ = lambda self, i: (
-            pillar_payload if i == 0 else None
-        )
+        pillar_row_with_data.__getitem__ = lambda self, i: (pillar_payload if i == 0 else None)
         pillar_row_with_data.__bool__ = lambda self: True
 
         written_paths = []
@@ -143,10 +145,10 @@ class TestSyncBrandVoiceUsesSlugColumn:
         # Custom session: tenant_row, then 3 pillar rows (first has data, others None)
         mock_session = MagicMock()
         responses = [
-            tenant_row,           # SELECT name, slug
-            pillar_row_with_data, # voice_profile pillar
-            None,                 # customer_context pillar
-            None,                 # audience_avatar pillar
+            tenant_row,  # SELECT name, slug
+            pillar_row_with_data,  # voice_profile pillar
+            None,  # customer_context pillar
+            None,  # audience_avatar pillar
         ]
         idx = [0]
 
@@ -161,18 +163,20 @@ class TestSyncBrandVoiceUsesSlugColumn:
         cm.__exit__ = MagicMock(return_value=False)
         mock_factory = MagicMock(return_value=cm)
 
-        with patch("models.base.sync_session_factory", mock_factory):
-            with patch("services.brand_voice_storage.get_default_nc_adapter", return_value=mock_adapter):
-                with patch("services.brand_voice_storage._get_brand_voice_base", return_value="/Kunde/"):
-                    result = sync_brand_voice_to_nc(tenant_id)
+        with (
+            patch("models.base.sync_session_factory", mock_factory),
+            patch("services.brand_voice_storage.get_default_nc_adapter", return_value=mock_adapter),
+            patch("services.brand_voice_storage._get_brand_voice_base", return_value="/Kunde/"),
+        ):
+            sync_brand_voice_to_nc(tenant_id)
 
         assert len(written_paths) == 1
-        assert "zkg-gmbh-unique" in written_paths[0], (
-            f"Expected 'zkg-gmbh-unique' (from slug column) in path, got: {written_paths[0]}"
-        )
-        assert "zkg-gmbh" not in written_paths[0].replace("zkg-gmbh-unique", ""), (
-            "Should NOT use _slugify(name) path 'zkg-gmbh' when slug column is populated"
-        )
+        assert (
+            "zkg-gmbh-unique" in written_paths[0]
+        ), f"Expected 'zkg-gmbh-unique' (from slug column) in path, got: {written_paths[0]}"
+        assert "zkg-gmbh" not in written_paths[0].replace(
+            "zkg-gmbh-unique", ""
+        ), "Should NOT use _slugify(name) path 'zkg-gmbh' when slug column is populated"
 
     def test_fallback_to_slugify_when_slug_column_empty(self):
         """If slug column is empty/None (pre-migration), fall back to _slugify(name)."""
@@ -184,9 +188,7 @@ class TestSyncBrandVoiceUsesSlugColumn:
 
         pillar_payload = {"key": "value"}
         pillar_row_with_data = MagicMock()
-        pillar_row_with_data.__getitem__ = lambda self, i: (
-            pillar_payload if i == 0 else None
-        )
+        pillar_row_with_data.__getitem__ = lambda self, i: (pillar_payload if i == 0 else None)
 
         written_paths = []
         mock_adapter = MagicMock()
@@ -207,15 +209,17 @@ class TestSyncBrandVoiceUsesSlugColumn:
         cm.__exit__ = MagicMock(return_value=False)
         mock_factory = MagicMock(return_value=cm)
 
-        with patch("models.base.sync_session_factory", mock_factory):
-            with patch("services.brand_voice_storage.get_default_nc_adapter", return_value=mock_adapter):
-                with patch("services.brand_voice_storage._get_brand_voice_base", return_value="/Kunde/"):
-                    result = sync_brand_voice_to_nc(tenant_id)
+        with (
+            patch("models.base.sync_session_factory", mock_factory),
+            patch("services.brand_voice_storage.get_default_nc_adapter", return_value=mock_adapter),
+            patch("services.brand_voice_storage._get_brand_voice_base", return_value="/Kunde/"),
+        ):
+            sync_brand_voice_to_nc(tenant_id)
 
         assert len(written_paths) == 1
-        assert "zkg-gmbh" in written_paths[0], (
-            f"Expected fallback slug 'zkg-gmbh' in path, got: {written_paths[0]}"
-        )
+        assert (
+            "zkg-gmbh" in written_paths[0]
+        ), f"Expected fallback slug 'zkg-gmbh' in path, got: {written_paths[0]}"
 
 
 class TestTwoTenantsNoCollision:
@@ -237,10 +241,12 @@ class TestTwoTenantsNoCollision:
 
     def test_migration_backfill_deduplicates(self):
         """Migration collision-resolution logic produces unique slugs."""
+
         # Simulate the SQL UPDATE logic: second tenant gets a suffix
         def simulate_backfill(names: list[str]) -> list[str]:
             """Approximate the migration's dedup logic."""
             from services.brand_voice_storage import _slugify
+
             slugs = [_slugify(n) for n in names]
             # Dedup: if collision, append short id suffix
             seen = {}

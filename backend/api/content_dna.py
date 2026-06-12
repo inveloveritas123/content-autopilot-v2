@@ -1,6 +1,6 @@
 """Content DNA — LinkedIn Post Analysis for Voice Profile."""
+
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -8,14 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
-from models.tenant import Tenant
 from models.content_dna import ContentDNAProfile, ScrapedPost
+from models.tenant import Tenant
 
 router = APIRouter(prefix="/content-dna", tags=["content-dna"])
 
 
 class DNACreateRequest(BaseModel):
-    linkedin_url: Optional[str] = None
+    linkedin_url: str | None = None
 
 
 class PostImportRequest(BaseModel):
@@ -108,7 +108,9 @@ async def get_profile(
         raise HTTPException(404, "Profile not found")
 
     posts_result = await db.execute(
-        select(ScrapedPost).where(ScrapedPost.dna_profile_id == profile.id).order_by(ScrapedPost.created_at.desc())
+        select(ScrapedPost)
+        .where(ScrapedPost.dna_profile_id == profile.id)
+        .order_by(ScrapedPost.created_at.desc())
     )
     posts = posts_result.scalars().all()
 

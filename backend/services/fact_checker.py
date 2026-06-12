@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 from services.llm import llm_service
 
@@ -14,7 +13,7 @@ Fuer jede Behauptung, gib zurueck:
 Antworte NUR als JSON-Array. Kein Markdown, keine Erklaerung."""
 
 
-async def check_facts(key_points: list[str], max_claims: int = 3) -> Optional[list[dict]]:
+async def check_facts(key_points: list[str], max_claims: int = 3) -> list[dict] | None:
     """
     Fact-check the top claims from video analysis.
     Uses Claude Sonnet for higher quality.

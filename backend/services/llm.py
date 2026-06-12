@@ -1,22 +1,21 @@
+import asyncio
 import json
 import logging
-import asyncio
 from contextvars import ContextVar
-from typing import Optional
 
-import httpx
-import google.generativeai as genai
 import anthropic
+import google.generativeai as genai
+import httpx
 
 from config import settings
 
 logger = logging.getLogger(__name__)
 
 # ── Tenant Context (propagated via contextvars into asyncio.run coroutines) ──
-_tenant_id_ctx: ContextVar[Optional[str]] = ContextVar("llm_tenant_id", default=None)
+_tenant_id_ctx: ContextVar[str | None] = ContextVar("llm_tenant_id", default=None)
 
 
-def set_llm_tenant(tenant_id: Optional[str]) -> None:
+def set_llm_tenant(tenant_id: str | None) -> None:
     """Set the current tenant_id for LLM cost tracking.
     Must be called in the same thread/context before asyncio.run()."""
     _tenant_id_ctx.set(str(tenant_id) if tenant_id else None)
@@ -24,12 +23,15 @@ def set_llm_tenant(tenant_id: Optional[str]) -> None:
 
 class BudgetExceededError(Exception):
     """Raised when the LLM provider returns 412 (portal-level budget exceeded)."""
+
     pass
 
 
 # RateLimitExceededError is defined in services.throttle — re-export here so
 # callers only need to import from services.llm (one-stop import).
-from services.throttle import RateLimitExceededError  # noqa: E402 (after BudgetExceededError)
+from datetime import UTC
+
+from services.throttle import RateLimitExceededError
 
 
 def _maybe_send_global_cap_alert(spent_usd: float, cap_usd: float, today) -> None:
@@ -40,10 +42,13 @@ def _maybe_send_global_cap_alert(spent_usd: float, cap_usd: float, today) -> Non
     """
     try:
         if not settings.telegram_admin_chat_id:
-            logger.warning("_maybe_send_global_cap_alert: telegram_admin_chat_id not configured, skipping")
+            logger.warning(
+                "_maybe_send_global_cap_alert: telegram_admin_chat_id not configured, skipping"
+            )
             return
 
         import redis as _redis
+
         r = _redis.from_url(settings.redis_url, decode_responses=True)
         try:
             redis_key = f"llm-global-50pct-alert:{today}"
@@ -55,6 +60,7 @@ def _maybe_send_global_cap_alert(spent_usd: float, cap_usd: float, today) -> Non
             return
 
         from api.telegram import _send_telegram_message
+
         pct = 100 * spent_usd / cap_usd
         msg = (
             f"⚠️ Cost-Cap Vorwarnung: Globale Tageskosten bei "
@@ -119,7 +125,10 @@ class LLMService:
         if not self._litellm_base_url:
             if settings.gemini_api_key and settings.gemini_api_key != "not-needed-using-litellm":
                 genai.configure(api_key=settings.gemini_api_key)
-            if settings.anthropic_api_key and settings.anthropic_api_key != "not-needed-using-litellm":
+            if (
+                settings.anthropic_api_key
+                and settings.anthropic_api_key != "not-needed-using-litellm"
+            ):
                 self._anthropic = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
             else:
                 self._anthropic = None
@@ -127,7 +136,9 @@ class LLMService:
             self._anthropic = None
             logger.info(f"LLM Service using LiteLLM proxy at {self._litellm_base_url}")
 
-    def _resolve_model(self, model: str, purpose: Optional[str] = None, routing_override: Optional[dict] = None) -> str:
+    def _resolve_model(
+        self, model: str, purpose: str | None = None, routing_override: dict | None = None
+    ) -> str:
         """Resolve model name from purpose or explicit model string.
 
         routing_override: tenant-level dict {purpose: model_key} — takes precedence over global map.
@@ -147,12 +158,12 @@ class LLMService:
     async def complete(
         self,
         prompt: str,
-        system: Optional[str] = None,
+        system: str | None = None,
         model: str = "gemini-flash",
-        purpose: Optional[str] = None,
+        purpose: str | None = None,
         response_format: str = "text",
         max_retries: int = 3,
-        routing_override: Optional[dict] = None,
+        routing_override: dict | None = None,
     ) -> str:
         """Unified LLM completion with purpose-based routing and retry logic."""
         model = self._resolve_model(model, purpose, routing_override)
@@ -173,8 +184,10 @@ class LLMService:
                 raise  # No retry for rate-limit exceeded — it won't help
             except Exception as e:
                 last_error = e
-                wait = 2 ** attempt
-                logger.warning(f"LLM call failed (attempt {attempt + 1}/{max_retries}, model={model}, purpose={purpose}): {e}")
+                wait = 2**attempt
+                logger.warning(
+                    f"LLM call failed (attempt {attempt + 1}/{max_retries}, model={model}, purpose={purpose}): {e}"
+                )
                 if attempt < max_retries - 1:
                     await asyncio.sleep(wait)
         raise last_error
@@ -182,13 +195,20 @@ class LLMService:
     async def complete_json(
         self,
         prompt: str,
-        system: Optional[str] = None,
+        system: str | None = None,
         model: str = "gemini-flash",
-        purpose: Optional[str] = None,
-        routing_override: Optional[dict] = None,
+        purpose: str | None = None,
+        routing_override: dict | None = None,
     ) -> dict:
         """Complete and parse JSON response."""
-        text = await self.complete(prompt, system, model, purpose=purpose, response_format="json", routing_override=routing_override)
+        text = await self.complete(
+            prompt,
+            system,
+            model,
+            purpose=purpose,
+            response_format="json",
+            routing_override=routing_override,
+        )
         # Strip markdown code fences if present
         text = text.strip()
         if text.startswith("```"):
@@ -199,18 +219,16 @@ class LLMService:
             text = "\n".join(lines)
         return json.loads(text)
 
-    async def _gemini(self, prompt: str, system: Optional[str], model: str = "gemini-flash") -> str:
+    async def _gemini(self, prompt: str, system: str | None, model: str = "gemini-flash") -> str:
         model_name = "gemini-2.0-flash" if "flash" in model else "gemini-2.0-flash"
         gmodel = genai.GenerativeModel(
             model_name=model_name,
             system_instruction=system,
         )
-        response = await asyncio.to_thread(
-            gmodel.generate_content, prompt
-        )
+        response = await asyncio.to_thread(gmodel.generate_content, prompt)
         return response.text
 
-    async def _claude(self, prompt: str, system: Optional[str], model: str = "claude-sonnet") -> str:
+    async def _claude(self, prompt: str, system: str | None, model: str = "claude-sonnet") -> str:
         if not self._anthropic:
             raise ValueError("Anthropic API key not configured")
         model_id = "claude-sonnet-4-20250514"
@@ -221,33 +239,45 @@ class LLMService:
         response = await self._anthropic.messages.create(**kwargs)
         return response.content[0].text
 
-    async def _litellm(self, prompt: str, system: Optional[str], model: str, purpose: Optional[str] = None) -> str:
+    async def _litellm(
+        self, prompt: str, system: str | None, model: str, purpose: str | None = None
+    ) -> str:
         """Route through configured provider (Requesty.ai or LiteLLM proxy)."""
-        from services.provider_resolver import get_active_provider, track_cost, get_model_for_task, _DAILY_CAP_USD, _GLOBAL_CAP_USD
-        from services.cost_cap import CostCapExceeded
-        import os
-        from datetime import datetime, timezone
+        from datetime import datetime
+
+        from services.provider_resolver import (
+            _DAILY_CAP_USD,
+            _GLOBAL_CAP_USD,
+            get_active_provider,
+            track_cost,
+        )
 
         # Pre-call cap check (sync DB read — fast, protects against runaway)
         # Advisory lock serializes per-tenant checks so two workers can't both
         # read the same $4.90 and both proceed past the $5.00 cap. (#131)
         try:
-            from models.base import sync_session_factory
             from sqlalchemy import text as _t
-            today = datetime.now(timezone.utc).date()
+
+            from models.base import sync_session_factory
+
+            today = datetime.now(UTC).date()
             tid_ctx = _tenant_id_ctx.get()
             with sync_session_factory() as _s:
                 # Advisory lock: per-tenant-per-day to serialise cap reads (#131)
                 if tid_ctx:
                     lock_key = f"llm-cap:{tid_ctx}:{today}"
-                    _s.execute(_t(
-                        "SELECT pg_advisory_xact_lock(('x' || md5(:key))::bit(64)::bigint)"
-                    ), {"key": lock_key})
+                    _s.execute(
+                        _t("SELECT pg_advisory_xact_lock(('x' || md5(:key))::bit(64)::bigint)"),
+                        {"key": lock_key},
+                    )
 
                 # Global cap
-                g_row = _s.execute(_t(
-                    "SELECT COALESCE(SUM(cost_usd), 0) FROM daily_cost_tenant WHERE date = :today"
-                ), {"today": today}).fetchone()
+                g_row = _s.execute(
+                    _t(
+                        "SELECT COALESCE(SUM(cost_usd), 0) FROM daily_cost_tenant WHERE date = :today"
+                    ),
+                    {"today": today},
+                ).fetchone()
                 if g_row and float(g_row[0]) >= _GLOBAL_CAP_USD:
                     raise BudgetExceededError(
                         f"Global daily cost cap exceeded: {float(g_row[0]):.2f} >= {_GLOBAL_CAP_USD:.2f} USD. "
@@ -258,10 +288,13 @@ class LLMService:
                     _maybe_send_global_cap_alert(float(g_row[0]), _GLOBAL_CAP_USD, today)
                 # Per-tenant cap — use tenant_id from ContextVar when available
                 if tid_ctx:
-                    t_row = _s.execute(_t(
-                        "SELECT COALESCE(cost_usd, 0) FROM daily_cost_tenant "
-                        "WHERE tenant_id = :tid AND date = :today"
-                    ), {"tid": tid_ctx, "today": today}).fetchone()
+                    t_row = _s.execute(
+                        _t(
+                            "SELECT COALESCE(cost_usd, 0) FROM daily_cost_tenant "
+                            "WHERE tenant_id = :tid AND date = :today"
+                        ),
+                        {"tid": tid_ctx, "today": today},
+                    ).fetchone()
                     if t_row and float(t_row[0]) >= _DAILY_CAP_USD:
                         raise BudgetExceededError(
                             f"Tenant daily cost cap exceeded: {float(t_row[0]):.2f} >= {_DAILY_CAP_USD:.2f} USD. "
@@ -278,12 +311,11 @@ class LLMService:
         # tenant_isolation enforced by WHERE tenant_id = :t in the SQL query.
         try:
             from services.throttle import check_and_record_throttle
+
             _tid_for_throttle = tid_ctx  # already read above
             if _tid_for_throttle:
                 with sync_session_factory() as _ts:
-                    _allowed, _tc, _gc = check_and_record_throttle(
-                        _ts, _tid_for_throttle, purpose
-                    )
+                    _allowed, _tc, _gc = check_and_record_throttle(_ts, _tid_for_throttle, purpose)
                 if not _allowed:
                     raise RateLimitExceededError(
                         f"Throttle: tenant {_tid_for_throttle} at {_tc} calls/h "
@@ -296,7 +328,13 @@ class LLMService:
             pass  # Throttle check failure must not block calls (fail-open)
 
         # Try DB-configured provider first
-        task = "analysis" if model in ("gemini-flash",) else "creative" if model in ("claude-sonnet",) else "all"
+        task = (
+            "analysis"
+            if model in ("gemini-flash",)
+            else "creative"
+            if model in ("claude-sonnet",)
+            else "all"
+        )
         provider = get_active_provider(task=task)
         purpose_task = purpose or task  # For cost tracking
 
@@ -306,7 +344,9 @@ class LLMService:
             # Map internal model names to provider model strings
             litellm_model = REQUESTY_MODELS.get(model, provider["model_name"])
             if model == "claude-sonnet":
-                litellm_model = REQUESTY_MODELS.get("claude-sonnet", "anthropic/claude-sonnet-4-20250514")
+                litellm_model = REQUESTY_MODELS.get(
+                    "claude-sonnet", "anthropic/claude-sonnet-4-20250514"
+                )
             elif model == "gemini-flash":
                 litellm_model = REQUESTY_MODELS.get("gemini-flash", "google/gemini-2.0-flash-exp")
         else:
@@ -345,14 +385,18 @@ class LLMService:
             )
             # 401 from DB provider → fall back to env config (expired key)
             if resp.status_code == 401 and provider:
-                logger.warning(f"DB provider returned 401, falling back to env LiteLLM config")
+                logger.warning("DB provider returned 401, falling back to env LiteLLM config")
                 env_base = self._litellm_base_url or "https://router.requesty.ai/v1"
                 env_key = self._litellm_api_key or ""
                 env_headers = {"Content-Type": "application/json"}
                 if env_key:
                     env_headers["Authorization"] = f"Bearer {env_key}"
                 is_requesty_fallback = "requesty.ai" in env_base
-                fallback_body = {"model": litellm_model, "messages": messages, "max_tokens": max_tokens}
+                fallback_body = {
+                    "model": litellm_model,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                }
                 if is_requesty_fallback and auto_cache_enabled:
                     fallback_body["extra_body"] = {"requesty": {"auto_cache": True}}
                 resp = await client.post(
@@ -372,10 +416,14 @@ class LLMService:
             if data.get("usage"):
                 usage = data["usage"]
                 # Extract Requesty.ai cache token telemetry
-                cache_read = int(usage.get("cache_read_input_tokens", 0) or usage.get("cached_tokens", 0) or 0)
+                cache_read = int(
+                    usage.get("cache_read_input_tokens", 0) or usage.get("cached_tokens", 0) or 0
+                )
                 cache_write = int(usage.get("cache_creation_input_tokens", 0) or 0)
                 if cache_read > 0:
-                    logger.info(f"Cache HIT: {cache_read} read tokens saved (model={litellm_model})")
+                    logger.info(
+                        f"Cache HIT: {cache_read} read tokens saved (model={litellm_model})"
+                    )
                 track_cost(
                     provider["provider_id"] if provider else None,
                     usage,

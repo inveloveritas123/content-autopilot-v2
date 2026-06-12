@@ -4,6 +4,7 @@ Validiert dass `build_export_excel`, `build_export_csv_zip` und
 `build_export_all` korrektes Output produzieren, wenn `data` direkt
 vorgegeben wird (kein DB-Roundtrip nötig).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -64,6 +65,7 @@ class TestExcelExport:
 
     def test_excel_contains_expected_sheets(self):
         from openpyxl import load_workbook
+
         from services.tenant_export import TenantExportService
 
         svc = TenantExportService()
@@ -74,7 +76,14 @@ class TestExcelExport:
         wb = load_workbook(io.BytesIO(result))
         sheet_names = wb.sheetnames
         # Mindestens diese Sheets müssen drin sein
-        for required in ("posts", "sources", "source_items", "ideas", "dialogue_questions", "llm_calls"):
+        for required in (
+            "posts",
+            "sources",
+            "source_items",
+            "ideas",
+            "dialogue_questions",
+            "llm_calls",
+        ):
             assert required in sheet_names, f"Sheet '{required}' fehlt in Excel-Export"
 
 
@@ -122,6 +131,8 @@ class TestExportAll:
             names = zf.namelist()
             # Erwartet: mindestens je einen Eintrag mit .json/.xlsx/.zip oder ähnlich
             has_excel = any(n.endswith(".xlsx") for n in names)
-            has_json_or_csv = any(n.endswith(".json") or n.endswith(".csv") or "json" in n.lower() for n in names)
+            has_json_or_csv = any(
+                n.endswith(".json") or n.endswith(".csv") or "json" in n.lower() for n in names
+            )
             assert has_excel, f"Excel fehlt in all-export. Files: {names}"
             assert has_json_or_csv, f"JSON/CSV fehlt in all-export. Files: {names}"

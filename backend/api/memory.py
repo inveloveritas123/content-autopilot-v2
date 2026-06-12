@@ -7,11 +7,11 @@ Endpoints:
   GET  /api/memory/stats    — Counts pro source_type + classification
   POST /api/memory/note     — manuelle Notiz hinzufügen
 """
+
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -35,8 +35,8 @@ router = APIRouter()
 async def memory_search(
     q: str = Query(..., min_length=2, description="Suchanfrage"),
     limit: int = Query(10, ge=1, le=50),
-    classification: Optional[str] = Query(None),
-    source_types: Optional[str] = Query(
+    classification: str | None = Query(None),
+    source_types: str | None = Query(
         None, description="Komma-separierte Liste, z.B. voice_telegram,manual_note"
     ),
     min_similarity: float = Query(0.0, ge=0.0, le=1.0),
@@ -74,17 +74,19 @@ async def memory_recent(
     db: AsyncSession = Depends(get_db),
 ):
     """Neueste Chunks chronologisch — auch ohne Embedding."""
-    rows = (await db.execute(
-        text(
-            "SELECT id, source_type, source_ref, content_text, classification, "
-            "       metadata, created_at, "
-            "       (embedding IS NOT NULL) AS has_embedding "
-            "FROM memory_chunks "
-            "WHERE tenant_id = :tid "
-            "ORDER BY created_at DESC LIMIT :lim"
-        ),
-        {"tid": tenant.id, "lim": limit},
-    )).all()
+    rows = (
+        await db.execute(
+            text(
+                "SELECT id, source_type, source_ref, content_text, classification, "
+                "       metadata, created_at, "
+                "       (embedding IS NOT NULL) AS has_embedding "
+                "FROM memory_chunks "
+                "WHERE tenant_id = :tid "
+                "ORDER BY created_at DESC LIMIT :lim"
+            ),
+            {"tid": tenant.id, "lim": limit},
+        )
+    ).all()
     return [
         {
             "id": str(r.id),
@@ -117,19 +119,21 @@ async def memory_picker(
         raise HTTPException(400, "days_min muss < days_max sein")
     cutoff_min = datetime.utcnow() - timedelta(days=days_max)
     cutoff_max = datetime.utcnow() - timedelta(days=days_min)
-    rows = (await db.execute(
-        text(
-            "SELECT id, source_type, content_text, classification, metadata, created_at "
-            "FROM memory_chunks "
-            "WHERE tenant_id = :tid "
-            "  AND created_at BETWEEN :cmin AND :cmax "
-            "ORDER BY "
-            "  CASE classification WHEN 'stories' THEN 0 WHEN 'werte' THEN 1 ELSE 2 END, "
-            "  random() "
-            "LIMIT :lim"
-        ),
-        {"tid": tenant.id, "cmin": cutoff_min, "cmax": cutoff_max, "lim": limit},
-    )).all()
+    rows = (
+        await db.execute(
+            text(
+                "SELECT id, source_type, content_text, classification, metadata, created_at "
+                "FROM memory_chunks "
+                "WHERE tenant_id = :tid "
+                "  AND created_at BETWEEN :cmin AND :cmax "
+                "ORDER BY "
+                "  CASE classification WHEN 'stories' THEN 0 WHEN 'werte' THEN 1 ELSE 2 END, "
+                "  random() "
+                "LIMIT :lim"
+            ),
+            {"tid": tenant.id, "cmin": cutoff_min, "cmax": cutoff_max, "lim": limit},
+        )
+    ).all()
     out = []
     for r in rows:
         days_ago = (datetime.utcnow() - r.created_at).days if r.created_at else None
@@ -137,19 +141,21 @@ async def memory_picker(
         preview = (r.content_text or "")[:120]
         if len(r.content_text or "") > 120:
             preview += "…"
-        out.append({
-            "id": str(r.id),
-            "source_type": r.source_type,
-            "preview": preview,
-            "classification": r.classification,
-            "days_ago": days_ago,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-            "suggestion": _suggestion_text(r.classification, days_ago),
-        })
+        out.append(
+            {
+                "id": str(r.id),
+                "source_type": r.source_type,
+                "preview": preview,
+                "classification": r.classification,
+                "days_ago": days_ago,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "suggestion": _suggestion_text(r.classification, days_ago),
+            }
+        )
     return {"count": len(out), "items": out}
 
 
-def _suggestion_text(classification: Optional[str], days_ago: Optional[int]) -> str:
+def _suggestion_text(classification: str | None, days_ago: int | None) -> str:
     when = f"vor {days_ago} Tagen" if days_ago else "kürzlich"
     if classification == "stories":
         return f"Du hast {when} eine Geschichte erzählt — daraus wird ein guter Post."
@@ -166,32 +172,40 @@ async def memory_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Counts pro source_type + classification + Embedding-Coverage."""
-    total = (await db.execute(
-        text("SELECT COUNT(*) AS c FROM memory_chunks WHERE tenant_id = :tid"),
-        {"tid": tenant.id},
-    )).scalar() or 0
-    embedded = (await db.execute(
-        text(
-            "SELECT COUNT(*) AS c FROM memory_chunks "
-            "WHERE tenant_id = :tid AND embedding IS NOT NULL"
-        ),
-        {"tid": tenant.id},
-    )).scalar() or 0
-    by_source = (await db.execute(
-        text(
-            "SELECT source_type, COUNT(*) AS c FROM memory_chunks "
-            "WHERE tenant_id = :tid GROUP BY source_type ORDER BY c DESC"
-        ),
-        {"tid": tenant.id},
-    )).all()
-    by_class = (await db.execute(
-        text(
-            "SELECT COALESCE(classification, 'unklassifiziert') AS c, COUNT(*) AS n "
-            "FROM memory_chunks WHERE tenant_id = :tid "
-            "GROUP BY classification ORDER BY n DESC"
-        ),
-        {"tid": tenant.id},
-    )).all()
+    total = (
+        await db.execute(
+            text("SELECT COUNT(*) AS c FROM memory_chunks WHERE tenant_id = :tid"),
+            {"tid": tenant.id},
+        )
+    ).scalar() or 0
+    embedded = (
+        await db.execute(
+            text(
+                "SELECT COUNT(*) AS c FROM memory_chunks "
+                "WHERE tenant_id = :tid AND embedding IS NOT NULL"
+            ),
+            {"tid": tenant.id},
+        )
+    ).scalar() or 0
+    by_source = (
+        await db.execute(
+            text(
+                "SELECT source_type, COUNT(*) AS c FROM memory_chunks "
+                "WHERE tenant_id = :tid GROUP BY source_type ORDER BY c DESC"
+            ),
+            {"tid": tenant.id},
+        )
+    ).all()
+    by_class = (
+        await db.execute(
+            text(
+                "SELECT COALESCE(classification, 'unklassifiziert') AS c, COUNT(*) AS n "
+                "FROM memory_chunks WHERE tenant_id = :tid "
+                "GROUP BY classification ORDER BY n DESC"
+            ),
+            {"tid": tenant.id},
+        )
+    ).all()
     return {
         "total": int(total),
         "embedded": int(embedded),

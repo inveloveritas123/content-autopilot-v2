@@ -4,6 +4,7 @@ test_canonical_profiles.py — Resolver-Kern der Lese-Fassade (dep-frei via impo
 Deckt is_canonical() + pick_active() ab — die deterministische Aktiv-Row-Auflösung,
 die den Multi-Active-Row-Bug (global + Projekt-Rows) behebt.
 """
+
 import importlib.util
 from pathlib import Path
 

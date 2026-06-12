@@ -2,11 +2,13 @@
 LocalFsStorageAdapter — liest und schreibt Dateien direkt aus dem lokalen Filesystem.
 Dient als Default-Ersatz fuer den Nextcloud-WebDAV-Adapter.
 """
+
+import contextlib
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from services.brand_voice_storage import StorageEntry, StorageStat, StorageError
+from services.brand_voice_storage import StorageEntry, StorageError, StorageStat
 
 
 class LocalFsStorageAdapter:
@@ -72,10 +74,8 @@ class LocalFsStorageAdapter:
                 os.replace(tmp_path, full)
             except Exception:
                 # Aufräumen bei Fehler
-                try:
+                with contextlib.suppress(OSError):
                     os.unlink(tmp_path)
-                except OSError:
-                    pass
                 raise
         except OSError as exc:
             raise StorageError(f"Schreiben fehlgeschlagen: {exc}", path) from exc
@@ -95,7 +95,7 @@ class LocalFsStorageAdapter:
             st = os.stat(full)
         except OSError as exc:
             raise StorageError(f"stat() fehlgeschlagen: {exc}", path) from exc
-        mtime = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+        mtime = datetime.fromtimestamp(st.st_mtime, tz=UTC)
         size = st.st_size
         # ETag aus mtime in Nanosekunden + Groesse — stabil auch bei zwei Writes/Sekunde
         etag = f"{st.st_mtime_ns}-{size}"

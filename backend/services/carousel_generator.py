@@ -3,16 +3,13 @@
 Generates multi-page PDFs optimized for LinkedIn carousel posts.
 Each page = one slide (1080x1080px or 1080x1350px).
 """
+
 import io
 import logging
 import textwrap
 
-from reportlab.lib.pagesizes import landscape
-from reportlab.lib.units import mm
-from reportlab.lib.colors import HexColor, white, black
+from reportlab.lib.colors import HexColor, white
 from reportlab.pdfgen import canvas
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +38,7 @@ def _wrap_text(text: str, max_chars: int = 40) -> list[str]:
 
 def generate_carousel_pdf(
     slides: list[dict],
-    brand_colors: dict = None,
+    brand_colors: dict | None = None,
     title: str = "Carousel",
 ) -> bytes:
     """Generate a multi-slide PDF for LinkedIn carousel post.
@@ -156,7 +153,7 @@ def _draw_quote_slide(c, slide, colors):
     # Large opening quote mark
     c.setFillColor(_hex(colors["accent"]))
     c.setFont("Helvetica-Bold", 180)
-    c.drawString(60, SLIDE_H - 220, "\u201C")
+    c.drawString(60, SLIDE_H - 220, "\u201c")
 
     # Quote text
     c.setFillColor(_hex(colors["text"]))
@@ -229,6 +226,13 @@ def split_text_into_slides(text: str, max_chars_per_slide: int = 400) -> list[di
             slides.append({"type": "content", "body": p})
 
     # CTA slide
-    slides.append({"type": "cta", "heading": "Hat dir das geholfen?", "body": "Folge mir fuer mehr Content wie diesen.", "footer": "Folgen"})
+    slides.append(
+        {
+            "type": "cta",
+            "heading": "Hat dir das geholfen?",
+            "body": "Folge mir fuer mehr Content wie diesen.",
+            "footer": "Folgen",
+        }
+    )
 
     return slides

@@ -1,15 +1,15 @@
-import logging
 import asyncio
+import logging
 from datetime import datetime, timedelta
 
-from sqlalchemy import select, or_
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from models.source import Source
 from models.source_item import SourceItem
 from services.source_adapters import check_source_for_new_items
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +19,9 @@ def monitor_all_sources():
     """Check sources that are DUE for polling based on their individual interval."""
     with sync_session_factory() as session:
         now = datetime.utcnow()
-        all_sources = session.execute(
-            select(Source).where(Source.is_active == True)
-        ).scalars().all()
+        all_sources = (
+            session.execute(select(Source).where(Source.is_active is True)).scalars().all()
+        )
 
         # Filter to sources that are due for polling
         sources = []
@@ -40,29 +40,36 @@ def monitor_all_sources():
         for source in sources:
             try:
                 # Get existing external IDs for this source
-                existing = session.execute(
-                    select(SourceItem.external_id).where(SourceItem.source_id == source.id)
-                ).scalars().all()
+                existing = (
+                    session.execute(
+                        select(SourceItem.external_id).where(SourceItem.source_id == source.id)
+                    )
+                    .scalars()
+                    .all()
+                )
                 existing_ids = set(existing)
 
                 # Fetch new items via Adapter Pattern
-                new_items = asyncio.run(
-                    check_source_for_new_items(source, existing_ids)
-                )
+                new_items = asyncio.run(check_source_for_new_items(source, existing_ids))
 
                 # Apply keyword filter if configured
                 if source.keywords:
-                    kws = [k.strip().lower() for k in source.keywords.split(',') if k.strip()]
+                    kws = [k.strip().lower() for k in source.keywords.split(",") if k.strip()]
                     if kws:
+
                         def _matches(item_data, kws=kws):
                             haystack = (
-                                (item_data.get('title') or '') + ' ' +
-                                (item_data.get('content_text') or '')
+                                (item_data.get("title") or "")
+                                + " "
+                                + (item_data.get("content_text") or "")
                             ).lower()
                             return any(kw in haystack for kw in kws)
+
                         before = len(new_items)
                         new_items = [it for it in new_items if _matches(it)]
-                        logger.info(f"Keyword filter '{source.keywords}': {before} → {len(new_items)} items")
+                        logger.info(
+                            f"Keyword filter '{source.keywords}': {before} → {len(new_items)} items"
+                        )
 
                 if new_items:
                     rows = []
@@ -85,8 +92,10 @@ def monitor_all_sources():
                             row["status"] = "transcribed"
                         rows.append(row)
 
-                    stmt = pg_insert(SourceItem).values(rows).on_conflict_do_nothing(
-                        constraint="uq_source_external"
+                    stmt = (
+                        pg_insert(SourceItem)
+                        .values(rows)
+                        .on_conflict_do_nothing(constraint="uq_source_external")
                     )
                     result = session.execute(stmt)
                     inserted = result.rowcount if result.rowcount >= 0 else len(rows)
@@ -108,10 +117,12 @@ def monitor_all_sources():
                             if result.status == "transcribed":
                                 # RSS/Text-Quellen: direkt analysieren (kein Transkript noetig)
                                 from tasks.generate_task import analyze_item
+
                                 analyze_item.delay(str(result.id))
                             else:
                                 # YouTube/Podcast: erst transkribieren
                                 from tasks.transcribe_task import transcribe_item
+
                                 transcribe_item.delay(str(result.id))
 
             except Exception as e:
@@ -131,25 +142,26 @@ def check_single_source(source_id: str):
             logger.error(f"Source {source_id} not found")
             return
 
-        existing = session.execute(
-            select(SourceItem.external_id).where(SourceItem.source_id == source.id)
-        ).scalars().all()
+        existing = (
+            session.execute(select(SourceItem.external_id).where(SourceItem.source_id == source.id))
+            .scalars()
+            .all()
+        )
         existing_ids = set(existing)
 
-        new_items = asyncio.run(
-            check_source_for_new_items(source, existing_ids)
-        )
+        new_items = asyncio.run(check_source_for_new_items(source, existing_ids))
 
         # Apply keyword filter if configured
         if source.keywords:
-            kws = [k.strip().lower() for k in source.keywords.split(',') if k.strip()]
+            kws = [k.strip().lower() for k in source.keywords.split(",") if k.strip()]
             if kws:
+
                 def _matches(item_data, kws=kws):
                     haystack = (
-                        (item_data.get('title') or '') + ' ' +
-                        (item_data.get('content_text') or '')
+                        (item_data.get("title") or "") + " " + (item_data.get("content_text") or "")
                     ).lower()
                     return any(kw in haystack for kw in kws)
+
                 new_items = [it for it in new_items if _matches(it)]
 
         inserted = 0
@@ -174,8 +186,10 @@ def check_single_source(source_id: str):
                     row["status"] = "transcribed"
                 rows.append(row)
 
-            stmt = pg_insert(SourceItem).values(rows).on_conflict_do_nothing(
-                constraint="uq_source_external"
+            stmt = (
+                pg_insert(SourceItem)
+                .values(rows)
+                .on_conflict_do_nothing(constraint="uq_source_external")
             )
             result = session.execute(stmt)
             inserted = result.rowcount if result.rowcount >= 0 else len(rows)
@@ -183,5 +197,7 @@ def check_single_source(source_id: str):
         source.last_checked_at = datetime.utcnow()
         session.commit()
 
-        logger.info(f"Source '{source.name}' ({source.type}): {inserted} new items saved ({len(new_items)} candidates)")
+        logger.info(
+            f"Source '{source.name}' ({source.type}): {inserted} new items saved ({len(new_items)} candidates)"
+        )
         return {"new_items": len(new_items)}

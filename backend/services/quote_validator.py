@@ -3,11 +3,12 @@ Quote-Validator (Issue #86) — Fuzzy Substring Match gegen Reservoir.
 
 Erkennt Zitat-Halluzinationen in generierten Posts.
 """
+
 from __future__ import annotations
-import re
+
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -15,11 +16,11 @@ logger = logging.getLogger(__name__)
 _QUOTE_PATTERNS = [
     # Typografische Anführungszeichen — alle gängigen Kombinationen
     re.compile(r'\u201e([^\u201c\u201d"]+)[\u201c\u201d"]'),  # „Zitat" / „Zitat‟ / „Zitat"
-    re.compile(r'"([^"]+)"'),          # "Zitat" (ASCII double quotes)
-    re.compile(r'\u201c([^\u201d]+)\u201d'),  # "Zitat" (typographic left/right)
-    re.compile(r"'([^']+)'"),          # 'Zitat'
+    re.compile(r'"([^"]+)"'),  # "Zitat" (ASCII double quotes)
+    re.compile(r"\u201c([^\u201d]+)\u201d"),  # "Zitat" (typographic left/right)
+    re.compile(r"'([^']+)'"),  # 'Zitat'
     # Gedankenstrich-Einleitung: "- Ich glaube..."
-    re.compile(r'(?:^|\n)\s*[-\u2013\u2014]\s*(.{20,200})(?:$|\n)', re.MULTILINE),
+    re.compile(r"(?:^|\n)\s*[-\u2013\u2014]\s*(.{20,200})(?:$|\n)", re.MULTILINE),
 ]
 
 
@@ -34,8 +35,8 @@ class QuoteValidationResult:
 def _normalize(text: str) -> str:
     """Normalisiert Text für Vergleich: lowercase, entferne Satzzeichen, collapse Whitespace."""
     text = text.lower()
-    text = re.sub(r'[.,;:!?„"\'\u201c\u201d\u2018\u2019\u2013\u2014\-]', ' ', text)
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'[.,;:!?„"\'\u201c\u201d\u2018\u2019\u2013\u2014\-]', " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
@@ -122,8 +123,8 @@ def validate_post_quotes(
 
     if hallucinated:
         hint = (
-            f"Zitat-Halluzination erkannt: Die folgenden Zitate konnten nicht im "
-            f"Quellmaterial des Tenants verifiziert werden: "
+            "Zitat-Halluzination erkannt: Die folgenden Zitate konnten nicht im "
+            "Quellmaterial des Tenants verifiziert werden: "
             + ", ".join(f'"{q}"' for q in hallucinated)
             + ". Bitte nur verifizierte Aussagen aus dem Transkript verwenden."
         )

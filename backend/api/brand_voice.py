@@ -8,21 +8,23 @@ GET    /api/brand-voice/{tenant_id}      — Aktive Profile + kompakte History
 PATCH  /api/brand-voice/{tenant_id}/{profile_type}/field  — Einzelfeld editieren
 GET    /api/brand-voice/pipeline/{run_id} — Pipeline-Run-Status abrufen
 """
+
 import copy
 import html
 import json
 import logging
+import secrets as _secrets
 import uuid
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from dependencies import get_db, get_tenant_id, get_tenant
+from dependencies import get_db, get_tenant, get_tenant_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -36,7 +38,7 @@ UPLOAD_RATE_LIMIT = 10  # Anfragen pro Minute
 
 
 def _check_rate_limit(api_key: str) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     cutoff = now - timedelta(seconds=60)
     _upload_counter[api_key] = [t for t in _upload_counter[api_key] if t >= cutoff]
     if len(_upload_counter[api_key]) >= UPLOAD_RATE_LIMIT:
@@ -50,6 +52,7 @@ def _check_rate_limit(api_key: str) -> None:
 # ---------------------------------------------------------------------------
 # Sanitizer fuer PATCH-Werte (XSS-Schutz fuer String-Felder)
 # ---------------------------------------------------------------------------
+
 
 def _sanitize_value(v: Any) -> Any:
     if isinstance(v, str):
@@ -101,8 +104,7 @@ _SQL: dict[str, dict[str, str]] = {
             f"WHERE tenant_id = :t ORDER BY version DESC LIMIT 10"
         ),
         "select_active_for_edit": (
-            f"SELECT id, payload, version FROM {tbl} "
-            f"WHERE tenant_id = :t AND is_active = true"
+            f"SELECT id, payload, version FROM {tbl} " f"WHERE tenant_id = :t AND is_active = true"
         ),
         "insert": (
             f"INSERT INTO {tbl} (tenant_id, version, is_active, source, payload, "
@@ -118,6 +120,7 @@ _SQL: dict[str, dict[str, str]] = {
 # ---------------------------------------------------------------------------
 # Request-Modelle
 # ---------------------------------------------------------------------------
+
 
 class UploadRequest(BaseModel):
     type: Literal["voice", "context", "avatar"]
@@ -144,6 +147,7 @@ class FieldEditRequest(BaseModel):
 # Hilfsfunktion: verschachteltes Feld in einem dict setzen
 # ---------------------------------------------------------------------------
 
+
 def _set_nested(d: dict, path: str, value: Any) -> None:
     """Setzt `value` im dict `d` anhand eines Punkt-getrennten Pfads."""
     parts = path.split(".")
@@ -163,10 +167,11 @@ def _set_nested(d: dict, path: str, value: Any) -> None:
 # POST /brand-voice/upload
 # ---------------------------------------------------------------------------
 
+
 @router.post("/brand-voice/upload", status_code=202)
 async def upload_brand_voice(
     data: UploadRequest,
-    project_id: Optional[str] = Query(None),
+    project_id: str | None = Query(None),
     x_api_key: str = Header(..., alias="X-API-Key"),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -213,10 +218,11 @@ async def upload_brand_voice(
 # POST /brand-voice/import-source
 # ---------------------------------------------------------------------------
 
+
 @router.post("/brand-voice/import-source", status_code=202)
 async def import_source(
     data: ImportSourceRequest,
-    project_id: Optional[str] = Query(None),
+    project_id: str | None = Query(None),
     x_api_key: str = Header(..., alias="X-API-Key"),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -245,10 +251,11 @@ async def import_source(
 # POST /brand-voice/regenerate
 # ---------------------------------------------------------------------------
 
+
 @router.post("/brand-voice/regenerate", status_code=202)
 async def regenerate(
     data: RegenerateRequest,
-    project_id: Optional[str] = Query(None),
+    project_id: str | None = Query(None),
     x_api_key: str = Header(..., alias="X-API-Key"),
     tenant_id: uuid.UUID = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -274,6 +281,7 @@ async def regenerate(
 # GET /brand-voice/pipeline/{run_id}  — muss VOR /{tenant_id} definiert sein
 # GET /brand-voice/drift-observations — muss VOR /{tenant_id} definiert sein
 # ---------------------------------------------------------------------------
+
 
 @router.get("/brand-voice/pipeline/{run_id}")
 async def get_pipeline_run(
@@ -318,6 +326,7 @@ async def get_pipeline_run(
 # ---------------------------------------------------------------------------
 # GET /brand-voice/drift-observations  — muss VOR /{tenant_id} definiert sein
 # ---------------------------------------------------------------------------
+
 
 @router.get("/brand-voice/drift-observations")
 async def get_drift_observations(
@@ -365,6 +374,7 @@ async def get_drift_observations(
 # GET  /brand-voice/review-queue        — muss VOR /{tenant_id} definiert sein
 # POST /brand-voice/review-queue/{id}/decide
 # ---------------------------------------------------------------------------
+
 
 class ReviewDecideRequest(BaseModel):
     action: Literal["approved", "rejected"]
@@ -429,6 +439,7 @@ async def decide_review_queue(
 ):
     """Review-Entscheidung für einen geflaggten Post: approved oder rejected."""
     import uuid as _uuid_mod
+
     try:
         _uuid_mod.UUID(queue_id)
     except ValueError:
@@ -473,8 +484,7 @@ async def decide_review_queue(
         new_piece_status = "draft" if data.action == "approved" else "rejected"
         await db.execute(
             text(
-                "UPDATE content_pieces SET status = :status "
-                "WHERE id = :id AND tenant_id = :tid"
+                "UPDATE content_pieces SET status = :status " "WHERE id = :id AND tenant_id = :tid"
             ),
             {
                 "status": new_piece_status,
@@ -491,6 +501,7 @@ async def decide_review_queue(
 # ---------------------------------------------------------------------------
 # GET /brand-voice/{tenant_id}
 # ---------------------------------------------------------------------------
+
 
 async def _fetch_active_and_history(
     db: AsyncSession,
@@ -524,13 +535,9 @@ async def _fetch_active_and_history(
         params_active = {"t": tenant_id_str, "pid": project_id}
         params_history = {"t": tenant_id_str, "pid": project_id}
 
-    active_row = (
-        await db.execute(text(active_sql), params_active)
-    ).fetchone()
+    active_row = (await db.execute(text(active_sql), params_active)).fetchone()
 
-    history_rows = (
-        await db.execute(text(history_sql), params_history)
-    ).fetchall()
+    history_rows = (await db.execute(text(history_sql), params_history)).fetchall()
 
     active = None
     if active_row:
@@ -556,7 +563,7 @@ async def _fetch_active_and_history(
 @router.get("/brand-voice/{tenant_id}")
 async def get_brand_voice(
     tenant_id: str,
-    project_id: Optional[str] = Query(None),
+    project_id: str | None = Query(None),
     auth_tenant=Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -567,9 +574,15 @@ async def get_brand_voice(
     if resolved_id != str(auth_tenant.id):
         raise HTTPException(status_code=403, detail="Zugriff verweigert")
 
-    cc_active, cc_history = await _fetch_active_and_history(db, "customer_context", resolved_id, project_id)
-    vp_active, vp_history = await _fetch_active_and_history(db, "voice_profile", resolved_id, project_id)
-    aa_active, aa_history = await _fetch_active_and_history(db, "audience_avatar", resolved_id, project_id)
+    cc_active, cc_history = await _fetch_active_and_history(
+        db, "customer_context", resolved_id, project_id
+    )
+    vp_active, vp_history = await _fetch_active_and_history(
+        db, "voice_profile", resolved_id, project_id
+    )
+    aa_active, aa_history = await _fetch_active_and_history(
+        db, "audience_avatar", resolved_id, project_id
+    )
 
     return {
         "tenant_name": auth_tenant.name,
@@ -588,12 +601,15 @@ async def get_brand_voice(
 # PATCH /brand-voice/{tenant_id}/{profile_type}/field
 # ---------------------------------------------------------------------------
 
+
 @router.patch("/brand-voice/{tenant_id}/{profile_type}/field")
 async def patch_profile_field(
     tenant_id: str,
     profile_type: str,
     data: FieldEditRequest,
-    project_id: Optional[str] = Query(None, description="Projekt-ID für project-scoped Profile (None = globaler Slot)"),
+    project_id: str | None = Query(
+        None, description="Projekt-ID für project-scoped Profile (None = globaler Slot)"
+    ),
     auth_tenant_id: uuid.UUID = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -609,11 +625,16 @@ async def patch_profile_field(
     # P17-Update-Pfad steht, ist Feld-Editing deaktiviert. Profil-Korrektur via
     # Re-Run: POST /brand-voice/regenerate. Override: BRAND_VOICE_FIELD_EDIT_ENABLED=1.
     import os as _os
-    if _os.environ.get("BRAND_VOICE_FIELD_EDIT_ENABLED", "").strip().lower() not in ("1", "true", "yes"):
+
+    if _os.environ.get("BRAND_VOICE_FIELD_EDIT_ENABLED", "").strip().lower() not in (
+        "1",
+        "true",
+        "yes",
+    ):
         raise HTTPException(
             status_code=410,
             detail="Feld-Editor deaktiviert (Schutz kanonischer Louis-Profile, #29). "
-                   "Bitte Profil neu generieren statt einzelne Felder zu patchen.",
+            "Bitte Profil neu generieren statt einzelne Felder zu patchen.",
         )
 
     resolved_id = str(auth_tenant_id) if tenant_id == "me" else tenant_id
@@ -625,7 +646,7 @@ async def patch_profile_field(
         raise HTTPException(
             status_code=422,
             detail=f"Unbekannter profile_type '{profile_type}'. "
-                   f"Erlaubt: {list(_PROFILE_TABLE.keys())}",
+            f"Erlaubt: {list(_PROFILE_TABLE.keys())}",
         )
 
     # Root-Key aus field_path extrahieren und gegen Allow-List pruefen
@@ -635,7 +656,7 @@ async def patch_profile_field(
         raise HTTPException(
             status_code=422,
             detail=f"Feld '{root_key}' nicht editierbar fuer '{profile_type}'. "
-                   f"Erlaubte Root-Keys: {allowed_keys}",
+            f"Erlaubte Root-Keys: {allowed_keys}",
         )
 
     tbl = _PROFILE_TABLE[profile_type]
@@ -659,7 +680,8 @@ async def patch_profile_field(
         raise HTTPException(
             status_code=404,
             detail=f"Kein aktives {profile_type} fuer diesen Tenant"
-                   + (f" (Projekt {project_id})" if project_id else "") + " gefunden",
+            + (f" (Projekt {project_id})" if project_id else "")
+            + " gefunden",
         )
 
     # Deep-Copy, Feld setzen
@@ -718,6 +740,7 @@ async def patch_profile_field(
 # Request-Modelle fuer Drift-Review (Issue #78)
 # ---------------------------------------------------------------------------
 
+
 class DriftChange(BaseModel):
     field_path: str
     accepted: bool
@@ -731,6 +754,7 @@ class DriftDecideRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # POST /brand-voice/drift-observations/{observation_id}/decide
 # ---------------------------------------------------------------------------
+
 
 @router.post("/brand-voice/drift-observations/{observation_id}/decide")
 async def decide_drift_observation(
@@ -879,8 +903,6 @@ async def decide_drift_observation(
 # POST /brand-voice/{tenant_id}/telegram/link
 # ---------------------------------------------------------------------------
 
-import secrets as _secrets
-
 
 @router.post("/brand-voice/{tenant_id}/telegram/link")
 async def generate_telegram_link(
@@ -916,6 +938,7 @@ async def generate_telegram_link(
     await db.commit()
 
     from config import settings as _settings
+
     bot_username = _settings.telegram_bot_username or "content_autopilot_bot"
 
     return {

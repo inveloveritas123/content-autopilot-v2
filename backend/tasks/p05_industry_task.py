@@ -13,6 +13,7 @@ Trigger:
   - manuell via API: POST /api/tenants/me/industry-refresh
   - Cron: monatlich (Branche ändert sich langsam)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -38,8 +39,8 @@ SYSTEM_PROMPT = (
     "- sub_branchen: Liste optionaler Untersegmente (max 5)\n"
     "- typische_kundenfragen: 5 Fragen die Kunden in dieser Branche typischerweise stellen\n\n"
     "Antworte AUSSCHLIESSLICH mit JSON:\n"
-    "{\"top_themen\":[...], \"trigger_woerter\":[...], "
-    "\"sub_branchen\":[...], \"typische_kundenfragen\":[...]}"
+    '{"top_themen":[...], "trigger_woerter":[...], '
+    '"sub_branchen":[...], "typische_kundenfragen":[...]}'
 )
 
 
@@ -51,10 +52,12 @@ async def _refresh_industry_context_async(tenant_id: str) -> dict:
     SessionMaker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     try:
         async with SessionMaker() as db:
-            row = (await db.execute(
-                text("SELECT industry, name FROM tenants WHERE id = CAST(:tid AS uuid)"),
-                {"tid": tenant_id},
-            )).fetchone()
+            row = (
+                await db.execute(
+                    text("SELECT industry, name FROM tenants WHERE id = CAST(:tid AS uuid)"),
+                    {"tid": tenant_id},
+                )
+            ).fetchone()
             if not row:
                 return {"status": "error", "reason": "tenant_not_found"}
             if not row.industry:
@@ -68,7 +71,7 @@ async def _refresh_industry_context_async(tenant_id: str) -> dict:
                     model="gemini-flash",
                     purpose="analysis",
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 return {"status": "error", "reason": str(exc)[:120]}
 
             # Defensive: validate response shape
@@ -76,7 +79,9 @@ async def _refresh_industry_context_async(tenant_id: str) -> dict:
                 return {"status": "error", "reason": "no_dict_response"}
             ctx = {
                 "top_themen": list(result.get("top_themen") or [])[:8],
-                "trigger_woerter": [str(w).lower().strip() for w in result.get("trigger_woerter") or [] if w][:15],
+                "trigger_woerter": [
+                    str(w).lower().strip() for w in result.get("trigger_woerter") or [] if w
+                ][:15],
                 "sub_branchen": list(result.get("sub_branchen") or [])[:5],
                 "typische_kundenfragen": list(result.get("typische_kundenfragen") or [])[:5],
                 "industry_label": industry,
@@ -104,6 +109,6 @@ async def _refresh_industry_context_async(tenant_id: str) -> dict:
 def refresh_industry_context(self, tenant_id: str) -> dict:
     try:
         return asyncio.run(_refresh_industry_context_async(tenant_id))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("p05 top-level fail %s: %s", tenant_id, exc)
         return {"status": "error", "reason": str(exc)[:200]}

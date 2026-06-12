@@ -1,17 +1,17 @@
 """LinkedIn Post Scheduling — Calendar + CRUD."""
+
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, extract
+from sqlalchemy import extract, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
-from models.tenant import Tenant
-from models.scheduled_post import ScheduledPost
 from models.content_piece import ContentPiece
+from models.scheduled_post import ScheduledPost
+from models.tenant import Tenant
 
 router = APIRouter(prefix="/posts", tags=["scheduling"])
 
@@ -22,8 +22,8 @@ class ScheduleRequest(BaseModel):
 
 
 class ScheduleUpdate(BaseModel):
-    scheduled_at: Optional[datetime] = None
-    status: Optional[str] = None
+    scheduled_at: datetime | None = None
+    status: str | None = None
 
 
 @router.post("/schedule")
@@ -45,7 +45,11 @@ async def schedule_post(
     db.add(post)
     await db.commit()
     await db.refresh(post)
-    return {"id": str(post.id), "scheduled_at": post.scheduled_at.isoformat(), "status": post.status}
+    return {
+        "id": str(post.id),
+        "scheduled_at": post.scheduled_at.isoformat(),
+        "status": post.status,
+    }
 
 
 def _enrich(sp: ScheduledPost, piece: ContentPiece | None) -> dict:
@@ -69,7 +73,7 @@ def _enrich(sp: ScheduledPost, piece: ContentPiece | None) -> dict:
 
 @router.get("/scheduled")
 async def list_scheduled(
-    status: Optional[str] = None,
+    status: str | None = None,
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -148,7 +152,7 @@ async def cancel_scheduled(
 
 class AutoScheduleRequest(BaseModel):
     max_per_day: int = 2  # Max posts per day
-    channel: Optional[str] = "linkedin"  # Filter by channel (None = all)
+    channel: str | None = "linkedin"  # Filter by channel (None = all)
     weeks_ahead: int = 4  # How many weeks to fill
 
 
@@ -182,7 +186,11 @@ async def auto_schedule_posts(
     to_schedule = [p for p in approved if p.id not in existing_ids]
 
     if not to_schedule:
-        return {"scheduled": 0, "message": "Alle freigegebenen Posts sind bereits eingeplant.", "slots": []}
+        return {
+            "scheduled": 0,
+            "message": "Alle freigegebenen Posts sind bereits eingeplant.",
+            "slots": [],
+        }
 
     # Generate slots: best hours Mon-Fri for the next N weeks
     BEST_HOURS = [8, 9, 12, 17]  # In priority order
@@ -195,7 +203,7 @@ async def auto_schedule_posts(
         candidate_date = now + timedelta(days=days_scanned + 1)  # Start from tomorrow
         weekday = candidate_date.weekday()
         if weekday < 5:  # Mon-Fri only
-            hours_for_day = BEST_HOURS[:data.max_per_day]
+            hours_for_day = BEST_HOURS[: data.max_per_day]
             for h in hours_for_day:
                 slot_dt = candidate_date.replace(hour=h, minute=0, second=0, microsecond=0)
                 slots.append(slot_dt)
@@ -205,7 +213,7 @@ async def auto_schedule_posts(
 
     # Create ScheduledPost records
     created = []
-    for piece, slot_dt in zip(to_schedule, slots):
+    for piece, slot_dt in zip(to_schedule, slots, strict=False):
         sp = ScheduledPost(
             tenant_id=tenant.id,
             content_piece_id=piece.id,
@@ -213,11 +221,13 @@ async def auto_schedule_posts(
             status="scheduled",
         )
         db.add(sp)
-        created.append({
-            "content_piece_id": str(piece.id),
-            "scheduled_at": slot_dt.isoformat(),
-            "channel": piece.channel,
-        })
+        created.append(
+            {
+                "content_piece_id": str(piece.id),
+                "scheduled_at": slot_dt.isoformat(),
+                "channel": piece.channel,
+            }
+        )
 
     await db.commit()
     return {
@@ -240,21 +250,126 @@ async def best_posting_times(tenant: Tenant = Depends(get_tenant)):
     # LinkedIn engagement research data (Sprout Social, HubSpot, Buffer 2024)
     # B2B-fokussiert, deutsch-sprachiger Raum
     heatmap = {
-        "0": [0,0,0,0,0,0,1,3,4,3,2,3,2,2,2,2,2,3,2,1,0,0,0,0],  # Montag
-        "1": [0,0,0,0,0,0,1,4,5,4,3,4,3,2,2,2,3,4,3,1,0,0,0,0],  # Dienstag ★★★
-        "2": [0,0,0,0,0,0,1,4,5,4,3,4,3,2,2,2,3,4,3,1,0,0,0,0],  # Mittwoch ★★★
-        "3": [0,0,0,0,0,0,1,4,5,4,3,4,3,2,2,2,3,3,2,1,0,0,0,0],  # Donnerstag ★★
-        "4": [0,0,0,0,0,0,1,3,4,3,2,3,2,1,1,1,1,2,1,0,0,0,0,0],  # Freitag ★
-        "5": [0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0],  # Samstag
-        "6": [0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0],  # Sonntag
+        "0": [0, 0, 0, 0, 0, 0, 1, 3, 4, 3, 2, 3, 2, 2, 2, 2, 2, 3, 2, 1, 0, 0, 0, 0],  # Montag
+        "1": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            4,
+            5,
+            4,
+            3,
+            4,
+            3,
+            2,
+            2,
+            2,
+            3,
+            4,
+            3,
+            1,
+            0,
+            0,
+            0,
+            0,
+        ],  # Dienstag ★★★
+        "2": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            4,
+            5,
+            4,
+            3,
+            4,
+            3,
+            2,
+            2,
+            2,
+            3,
+            4,
+            3,
+            1,
+            0,
+            0,
+            0,
+            0,
+        ],  # Mittwoch ★★★
+        "3": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            4,
+            5,
+            4,
+            3,
+            4,
+            3,
+            2,
+            2,
+            2,
+            3,
+            3,
+            2,
+            1,
+            0,
+            0,
+            0,
+            0,
+        ],  # Donnerstag ★★
+        "4": [0, 0, 0, 0, 0, 0, 1, 3, 4, 3, 2, 3, 2, 1, 1, 1, 1, 2, 1, 0, 0, 0, 0, 0],  # Freitag ★
+        "5": [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # Samstag
+        "6": [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # Sonntag
     }
 
     recommendations = [
-        {"day": 1, "day_name": "Dienstag", "hours": [8, 9, 12, 17], "score": 5, "note": "Bester Tag der Woche"},
-        {"day": 2, "day_name": "Mittwoch", "hours": [8, 9, 12, 17], "score": 5, "note": "Gleichauf mit Dienstag"},
-        {"day": 3, "day_name": "Donnerstag", "hours": [8, 9, 12], "score": 4, "note": "Sehr gut, etwas schwächer nachmittags"},
-        {"day": 0, "day_name": "Montag", "hours": [8, 12, 17], "score": 3, "note": "Gut für Wochenstarter-Content"},
-        {"day": 4, "day_name": "Freitag", "hours": [8, 12], "score": 2, "note": "Nur Morgen sinnvoll"},
+        {
+            "day": 1,
+            "day_name": "Dienstag",
+            "hours": [8, 9, 12, 17],
+            "score": 5,
+            "note": "Bester Tag der Woche",
+        },
+        {
+            "day": 2,
+            "day_name": "Mittwoch",
+            "hours": [8, 9, 12, 17],
+            "score": 5,
+            "note": "Gleichauf mit Dienstag",
+        },
+        {
+            "day": 3,
+            "day_name": "Donnerstag",
+            "hours": [8, 9, 12],
+            "score": 4,
+            "note": "Sehr gut, etwas schwächer nachmittags",
+        },
+        {
+            "day": 0,
+            "day_name": "Montag",
+            "hours": [8, 12, 17],
+            "score": 3,
+            "note": "Gut für Wochenstarter-Content",
+        },
+        {
+            "day": 4,
+            "day_name": "Freitag",
+            "hours": [8, 12],
+            "score": 2,
+            "note": "Nur Morgen sinnvoll",
+        },
     ]
 
     # Calculate next optimal slots (next 7 days)
@@ -271,12 +386,14 @@ async def best_posting_times(tenant: Tenant = Depends(get_tenant)):
             slot = candidate.replace(hour=hour, minute=0, second=0, microsecond=0)
             if slot > now:
                 score = heatmap[str(weekday)][hour]
-                next_slots.append({
-                    "datetime": slot.isoformat(),
-                    "weekday": weekday,
-                    "hour": hour,
-                    "score": score,
-                })
+                next_slots.append(
+                    {
+                        "datetime": slot.isoformat(),
+                        "weekday": weekday,
+                        "hour": hour,
+                        "score": score,
+                    }
+                )
         if len(next_slots) >= 6:
             break
 

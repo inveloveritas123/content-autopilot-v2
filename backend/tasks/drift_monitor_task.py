@@ -10,13 +10,14 @@ Workflow (pro Tenant):
 
 Beat-Schedule: Montag 03:15 (crontab day_of_week=1, hour=3, minute=15).
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
 import uuid as _uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -35,6 +36,7 @@ _RECALL_DROP_THRESHOLD = 0.10  # >10% Drop gegen 4-Wochen-Schnitt → WARNING
 # Beat-Task
 # ---------------------------------------------------------------------------
 
+
 @celery_app.task(
     name="tasks.drift_monitor_task.run_embedding_drift_monitor",
     bind=True,
@@ -49,7 +51,7 @@ def run_embedding_drift_monitor(self) -> dict:
     """
     try:
         result = asyncio.run(_drift_monitor_async())
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("drift_monitor: FAILED — %s", exc)
         return {"status": "error", "reason": str(exc)[:200]}
     return result
@@ -58,6 +60,7 @@ def run_embedding_drift_monitor(self) -> dict:
 # ---------------------------------------------------------------------------
 # Async-Implementierung
 # ---------------------------------------------------------------------------
+
 
 async def _drift_monitor_async() -> dict:
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
@@ -92,8 +95,11 @@ async def _drift_monitor_async() -> dict:
                     logger.warning(
                         "drift_monitor: tenant=%s Recall-Drop! recall=%.3f avg_4w=%.3f "
                         "drop=%.3f (Schwelle=%.2f) — Telegram-Alert: TODO",
-                        tenant_id, recall, avg_recall,
-                        avg_recall - recall, _RECALL_DROP_THRESHOLD,
+                        tenant_id,
+                        recall,
+                        avg_recall,
+                        avg_recall - recall,
+                        _RECALL_DROP_THRESHOLD,
                     )
                     # TODO: Telegram-Alert implementieren (Followup-Issue)
                     tenant_results[tenant_id] = {
@@ -105,7 +111,8 @@ async def _drift_monitor_async() -> dict:
                 else:
                     logger.info(
                         "drift_monitor: tenant=%s recall=%.3f avg_4w=%s p95_ms=%.1f — OK",
-                        tenant_id, recall,
+                        tenant_id,
+                        recall,
                         f"{avg_recall:.3f}" if avg_recall is not None else "n/a",
                         p95_ms,
                     )
@@ -120,18 +127,20 @@ async def _drift_monitor_async() -> dict:
 
     return {
         "status": "done",
-        "checked_at": datetime.now(tz=timezone.utc).isoformat(),
+        "checked_at": datetime.now(tz=UTC).isoformat(),
         "tenants": tenant_results,
     }
 
 
 async def _get_active_tenant_ids(db: AsyncSession) -> list[str]:
-    rows = (await db.execute(
-        text(
-            "SELECT DISTINCT tenant_id FROM memory_chunks "
-            "WHERE deleted_at IS NULL AND embedding IS NOT NULL"
+    rows = (
+        await db.execute(
+            text(
+                "SELECT DISTINCT tenant_id FROM memory_chunks "
+                "WHERE deleted_at IS NULL AND embedding IS NOT NULL"
+            )
         )
-    )).fetchall()
+    ).fetchall()
     return [str(r[0]) for r in rows]
 
 
@@ -144,16 +153,18 @@ async def _measure_tenant(
     Returns None wenn nicht genug Embeddings vorhanden.
     """
     # Zufällige Sample-Query-Chunks holen
-    rows = (await db.execute(
-        text(
-            "SELECT id, embedding FROM memory_chunks "
-            "WHERE tenant_id = CAST(:tid AS uuid) "
-            "  AND deleted_at IS NULL "
-            "  AND embedding IS NOT NULL "
-            "ORDER BY random() LIMIT :n"
-        ),
-        {"tid": tenant_id, "n": _N_SAMPLE_QUERIES},
-    )).fetchall()
+    rows = (
+        await db.execute(
+            text(
+                "SELECT id, embedding FROM memory_chunks "
+                "WHERE tenant_id = CAST(:tid AS uuid) "
+                "  AND deleted_at IS NULL "
+                "  AND embedding IS NOT NULL "
+                "ORDER BY random() LIMIT :n"
+            ),
+            {"tid": tenant_id, "n": _N_SAMPLE_QUERIES},
+        )
+    ).fetchall()
 
     if len(rows) < 5:
         return None  # Zu wenige Daten
@@ -166,17 +177,19 @@ async def _measure_tenant(
         qemb_str = str(row.embedding)
 
         t0 = time.perf_counter()
-        neighbors = (await db.execute(
-            text(
-                "SELECT id FROM memory_chunks "
-                "WHERE tenant_id = CAST(:tid AS uuid) "
-                "  AND deleted_at IS NULL "
-                "  AND embedding IS NOT NULL "
-                "ORDER BY embedding <=> CAST(:qemb AS vector) "
-                "LIMIT :k"
-            ),
-            {"tid": tenant_id, "qemb": qemb_str, "k": _K},
-        )).fetchall()
+        neighbors = (
+            await db.execute(
+                text(
+                    "SELECT id FROM memory_chunks "
+                    "WHERE tenant_id = CAST(:tid AS uuid) "
+                    "  AND deleted_at IS NULL "
+                    "  AND embedding IS NOT NULL "
+                    "ORDER BY embedding <=> CAST(:qemb AS vector) "
+                    "LIMIT :k"
+                ),
+                {"tid": tenant_id, "qemb": qemb_str, "k": _K},
+            )
+        ).fetchall()
         elapsed_ms = (time.perf_counter() - t0) * 1000
         latencies_ms.append(elapsed_ms)
 
@@ -203,16 +216,18 @@ async def _load_4week_avg_recall(
     Recall wird als count_at_throttle/1000 gespeichert (Integer-Encoding).
     Returns None wenn keine historischen Daten vorhanden.
     """
-    row = (await db.execute(
-        text(
-            "SELECT AVG(count_at_throttle) AS avg_recall_enc "
-            "FROM throttle_events "
-            "WHERE tenant_id = CAST(:tid AS uuid) "
-            "  AND scope = 'embedding_drift' "
-            "  AND created_at >= NOW() - INTERVAL '4 weeks'"
-        ),
-        {"tid": tenant_id},
-    )).fetchone()
+    row = (
+        await db.execute(
+            text(
+                "SELECT AVG(count_at_throttle) AS avg_recall_enc "
+                "FROM throttle_events "
+                "WHERE tenant_id = CAST(:tid AS uuid) "
+                "  AND scope = 'embedding_drift' "
+                "  AND created_at >= NOW() - INTERVAL '4 weeks'"
+            ),
+            {"tid": tenant_id},
+        )
+    ).fetchone()
 
     if row is None or row.avg_recall_enc is None:
         return None
@@ -244,9 +259,9 @@ async def _insert_drift_event(
             "id": str(_uuid.uuid4()),
             "tid": tenant_id,
             "scope": "embedding_drift",
-            "cnt": int(recall * 1000),   # Promille-Encoding für Integer-Spalte
+            "cnt": int(recall * 1000),  # Promille-Encoding für Integer-Spalte
             "lim": int(p95_ms),
             "task": "drift_monitor_task.run_embedding_drift_monitor",
-            "now": datetime.now(tz=timezone.utc),
+            "now": datetime.now(tz=UTC),
         },
     )

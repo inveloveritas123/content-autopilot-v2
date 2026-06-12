@@ -1,12 +1,12 @@
 """Tests fuer Schicht-1 Extraktions-Service (Issue #63)."""
-import json
-import pytest
-from unittest.mock import MagicMock, patch
 
+import json
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
+
 
 def _make_anthropic_response(data: dict) -> MagicMock:
     """Erstellt ein Mock-Anthropic-Response-Objekt."""
@@ -19,7 +19,7 @@ def _valid_response(
     intent: str = "spontaneous_idea",
     session_context: str = "no_session",
     flagged: bool = False,
-    flag_reasons: list = None,
+    flag_reasons: list | None = None,
 ) -> dict:
     return {
         "intent": intent,
@@ -39,8 +39,8 @@ def _valid_response(
 # Tests
 # ---------------------------------------------------------------------------
 
-class TestLayer1Extraction:
 
+class TestLayer1Extraction:
     def test_clean_input_classifies_correctly(self):
         """Sauberer Input wird korrekt klassifiziert und routed_to='ok'."""
         from services.layer1_extraction import extract_intent_features
@@ -181,7 +181,11 @@ class TestLayer1Extraction:
         from services.layer1_extraction import extract_intent_features
 
         invalid_response = MagicMock()
-        invalid_response.content = [MagicMock(text='{"intent": "INVALID_ENUM_VALUE", "session_context": "no_session", "extracted_features": {"topic_keywords": [], "sentiment": "neutral", "has_question": false}, "flagged_for_review": false, "flag_reasons": []}')]
+        invalid_response.content = [
+            MagicMock(
+                text='{"intent": "INVALID_ENUM_VALUE", "session_context": "no_session", "extracted_features": {"topic_keywords": [], "sentiment": "neutral", "has_question": false}, "flagged_for_review": false, "flag_reasons": []}'
+            )
+        ]
 
         valid_resp = _make_anthropic_response(_valid_response(intent="smalltalk"))
 
@@ -227,12 +231,14 @@ class TestLayer1Extraction:
         # Return row with total_usd >= cap
         mock_session.execute.return_value.fetchone.return_value = (10.0,)
 
-        with patch("services.layer1_extraction.anthropic.Anthropic") as MockClient:
-            with patch("services.layer1_extraction.sync_session_factory", return_value=mock_session):
-                result = extract_intent_features(
-                    transcript="Ich moechte etwas posten.",
-                    tenant_id="tenant_test",
-                )
+        with (
+            patch("services.layer1_extraction.anthropic.Anthropic") as MockClient,
+            patch("services.layer1_extraction.sync_session_factory", return_value=mock_session),
+        ):
+            result = extract_intent_features(
+                transcript="Ich moechte etwas posten.",
+                tenant_id="tenant_test",
+            )
 
         MockClient.return_value.messages.create.assert_not_called()
         assert result.routed_to == "paused_for_cost"
@@ -240,6 +246,7 @@ class TestLayer1Extraction:
     def test_injection_attempt_neue_anweisung(self):
         """Injection via 'neue anweisung'."""
         from services.layer1_extraction import extract_intent_features
+
         mock_resp = _make_anthropic_response(_valid_response(intent="spontaneous_idea"))
         with patch("services.layer1_extraction.anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.return_value = mock_resp
@@ -253,6 +260,7 @@ class TestLayer1Extraction:
     def test_injection_attempt_you_are_a(self):
         """Injection via 'you are a' (englische Rollenzuweisung)."""
         from services.layer1_extraction import extract_intent_features
+
         mock_resp = _make_anthropic_response(_valid_response(intent="unclassified"))
         with patch("services.layer1_extraction.anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.return_value = mock_resp
@@ -266,6 +274,7 @@ class TestLayer1Extraction:
     def test_injection_attempt_du_bist_ein(self):
         """Injection via 'du bist ein' (deutsche Rollenzuweisung)."""
         from services.layer1_extraction import extract_intent_features
+
         mock_resp = _make_anthropic_response(_valid_response(intent="unclassified"))
         with patch("services.layer1_extraction.anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.return_value = mock_resp
@@ -279,6 +288,7 @@ class TestLayer1Extraction:
     def test_injection_attempt_dein_job_ist(self):
         """Injection via 'dein job ist' (Aufgaben-Umdefinition)."""
         from services.layer1_extraction import extract_intent_features
+
         mock_resp = _make_anthropic_response(_valid_response(intent="unclassified"))
         with patch("services.layer1_extraction.anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.return_value = mock_resp
@@ -292,6 +302,7 @@ class TestLayer1Extraction:
     def test_injection_attempt_uppercase(self):
         """Injection mit Grossschreibung wird ebenfalls erkannt (case-insensitive)."""
         from services.layer1_extraction import extract_intent_features
+
         mock_resp = _make_anthropic_response(_valid_response(intent="spontaneous_idea"))
         with patch("services.layer1_extraction.anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.return_value = mock_resp
@@ -306,6 +317,7 @@ class TestLayer1Extraction:
     def test_injection_attempt_vergiss_vorher(self):
         """Injection via 'vergiss vorher' (Variante)."""
         from services.layer1_extraction import extract_intent_features
+
         mock_resp = _make_anthropic_response(_valid_response(intent="spontaneous_idea"))
         with patch("services.layer1_extraction.anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.return_value = mock_resp

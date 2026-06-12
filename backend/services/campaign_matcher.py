@@ -1,6 +1,5 @@
 import logging
 import uuid
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +17,7 @@ def match_item_to_campaigns(
     analysis: dict,
     campaigns: list[dict],
     threshold: float = 0.1,
-) -> Optional[uuid.UUID]:
+) -> uuid.UUID | None:
     """
     Match a source item's analysis against active campaigns.
     Returns the campaign ID of the best match, or None.
@@ -29,7 +28,7 @@ def match_item_to_campaigns(
         return None
 
     # Build item keyword set from tags + key_points words
-    item_tags = set(t.lower() for t in analysis.get("tags", []))
+    item_tags = {t.lower() for t in analysis.get("tags", [])}
     key_point_words = set()
     for kp in analysis.get("key_points", []):
         for word in kp.lower().split():
@@ -42,7 +41,7 @@ def match_item_to_campaigns(
     best_score = 0.0
 
     for campaign in campaigns:
-        campaign_keywords = set(k.lower() for k in campaign.get("keywords", []))
+        campaign_keywords = {k.lower() for k in campaign.get("keywords", [])}
         if not campaign_keywords:
             continue
 

@@ -1,7 +1,6 @@
 """Tests für LinkedIn-Posts als P03-Voice-Quelle (Issue #89)."""
-import pytest
-from tasks.p03_task import _filter_linkedin_posts
 
+from tasks.p03_task import _filter_linkedin_posts
 
 MARCUS_POSTS = [
     "In meinen 20 Jahren als Unternehmer habe ich gelernt: Vertrauen ist alles.\n\nOhne Vertrauen keine Kunden. Ohne Kunden kein Unternehmen.\n\nWie baut ihr Vertrauen auf? #Unternehmertum #Leadership",

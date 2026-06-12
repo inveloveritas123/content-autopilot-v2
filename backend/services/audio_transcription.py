@@ -3,10 +3,10 @@
 For videos without subtitles: download audio → send to Whisper API → get transcript.
 Uses Requesty.ai or OpenAI-compatible Whisper endpoint.
 """
+
 import logging
 import os
 import tempfile
-from typing import Optional
 
 import httpx
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 COOKIES_FILE = os.environ.get("YTDLP_COOKIES_FILE", "/opt/content-autopilot-v2/cookies.txt")
 
 
-def download_youtube_audio(video_url: str) -> Optional[str]:
+def download_youtube_audio(video_url: str) -> str | None:
     """Download audio from YouTube video using yt-dlp.
 
     Uses cookies if YTDLP_COOKIES_FILE exists (helps with IP-blocking on Datacenter IPs).
@@ -33,11 +33,13 @@ def download_youtube_audio(video_url: str) -> Optional[str]:
 
     ydl_opts = {
         "format": "bestaudio/best",
-        "postprocessors": [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "64",
-        }],
+        "postprocessors": [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "64",
+            }
+        ],
         "outtmpl": output_path,
         "quiet": True,
         "no_warnings": True,
@@ -72,7 +74,7 @@ async def transcribe_with_whisper(
     language: str = "de",
     api_base: str = "",
     api_key: str = "",
-) -> Optional[str]:
+) -> str | None:
     """Transcribe audio file using OpenAI-compatible Whisper API.
 
     Works with OpenAI, Groq, or any Whisper-compatible endpoint.
@@ -80,6 +82,7 @@ async def transcribe_with_whisper(
     if not api_base or not api_key:
         # Try to get from provider resolver
         from services.provider_resolver import get_active_provider
+
         provider = get_active_provider(task="transcription")
         if provider:
             api_base = provider["base_url"]
@@ -136,7 +139,7 @@ async def _fallback_gemini_transcription(
     language: str,
     api_base: str,
     api_key: str,
-) -> Optional[str]:
+) -> str | None:
     """Fallback: Send audio to Gemini via chat completions with audio content."""
     import base64
 
@@ -155,13 +158,18 @@ async def _fallback_gemini_transcription(
                 f"{api_base}/chat/completions",
                 json={
                     "model": "vertex/gemini-2.5-flash-lite@europe-central2",
-                    "messages": [{
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
-                        ],
-                    }],
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {
+                                    "type": "input_audio",
+                                    "input_audio": {"data": audio_b64, "format": "mp3"},
+                                },
+                            ],
+                        }
+                    ],
                     "max_tokens": 100000,
                 },
                 headers={"Authorization": f"Bearer {api_key}"},
@@ -179,7 +187,7 @@ async def _fallback_gemini_transcription(
 async def transcribe_youtube_video(
     video_id: str,
     language: str = "de",
-) -> Optional[str]:
+) -> str | None:
     """Full pipeline: download YouTube audio → transcribe with Whisper/Gemini.
 
     Returns transcript text or None.

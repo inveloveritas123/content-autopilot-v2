@@ -1,8 +1,7 @@
 """Tests fuer P12c Carousel Generator (Issue #87)."""
-import base64
+
 import json
-import pytest
-from unittest.mock import MagicMock, patch
+
 from services.carousel_generator import generate_carousel_pdf, split_text_into_slides
 
 MARCUS_WEBER_POST = """
@@ -46,7 +45,7 @@ def test_generate_carousel_pdf_produces_bytes():
     pdf = generate_carousel_pdf(slides=slides, title="Test Carousel")
     assert isinstance(pdf, bytes)
     assert len(pdf) > 100
-    assert pdf[:4] == b'%PDF'
+    assert pdf[:4] == b"%PDF"
 
 
 def test_generate_carousel_pdf_with_branding():
@@ -71,6 +70,7 @@ def test_generate_carousel_pdf_size_limit():
 def test_parse_slides_html_escape():
     """HTML in Slide-Inhalten wird escaped."""
     from tasks.p12c_task import _parse_slides
+
     raw = '{"slides": [{"type": "point", "title": "<script>alert(1)</script>", "body": "Test"}]}'
     slides = _parse_slides(raw)
     assert "<script>" not in slides[0]["title"]
@@ -80,6 +80,7 @@ def test_parse_slides_html_escape():
 def test_parse_slides_max_8():
     """Mehr als 8 Slides werden auf 8 begrenzt."""
     from tasks.p12c_task import _parse_slides
+
     raw_slides = [{"type": "point", "title": f"Slide {i}", "body": "Text"} for i in range(12)]
     raw = json.dumps({"slides": raw_slides, "slide_count": 12})
     slides = _parse_slides(raw)
@@ -89,6 +90,7 @@ def test_parse_slides_max_8():
 def test_parse_slides_invalid_json_fallback():
     """Bei ungueltigem JSON wird Fallback-Slide erstellt."""
     from tasks.p12c_task import _parse_slides
+
     slides = _parse_slides("KEIN JSON HIER")
     assert len(slides) >= 1
     # fallback slide has type="cover" which gets mapped to "title" by TYPE_MAP

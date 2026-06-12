@@ -7,16 +7,28 @@ Testet zwei zentrale Faelle:
 2. Project-scoped slot (project_id=<uuid>): SELECT nutzt "project_id = :pid",
    INSERT enthaelt project_id-Spalte mit :project_id-Parameter
 """
+
 import asyncio
 import json
 import types
 import uuid
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _enable_field_editor(monkeypatch):
+    # #29: Der Feld-Editor ist in Produktion standardmaessig deaktiviert (HTTP 410).
+    # Diese Tests pruefen die Editor-LOGIK und aktivieren ihn daher explizit.
+    # monkeypatch macht das Cleanup automatisch (kein Env-Leak in andere Tests).
+    monkeypatch.setenv("BRAND_VOICE_FIELD_EDIT_ENABLED", "1")
 
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktion: Fake DB-Session bauen
 # ---------------------------------------------------------------------------
+
 
 def _make_fake_row(row_id=None, payload=None, version=1):
     """Erstellt eine Fake-Datenbankzeile mit id, payload, version."""
@@ -62,12 +74,13 @@ def _make_db_mock(fake_row):
 # Hilfsfunktion: Endpoint direkt aufrufen
 # ---------------------------------------------------------------------------
 
+
 async def _call_patch(tenant_id_str, profile_type, field_path, new_value, project_id, fake_row):
     """
     Ruft patch_profile_field direkt auf (ohne HTTP-Layer).
     Gibt zurueck: (response_dict, executed_sqls, executed_params)
     """
-    from api.brand_voice import patch_profile_field, FieldEditRequest
+    from api.brand_voice import FieldEditRequest, patch_profile_field
 
     db, sqls, params = _make_db_mock(fake_row)
     auth_tenant_id = uuid.UUID(tenant_id_str)
@@ -89,6 +102,7 @@ async def _call_patch(tenant_id_str, profile_type, field_path, new_value, projec
 # Test 1: Globaler Slot (kein project_id)
 # ---------------------------------------------------------------------------
 
+
 def test_global_slot_select_uses_is_null():
     """SELECT fuer globalen Slot muss 'project_id IS NULL' enthalten."""
     tenant_id = str(uuid.uuid4())
@@ -109,9 +123,9 @@ def test_global_slot_select_uses_is_null():
     )
 
     select_sql = sqls[0]
-    assert "project_id IS NULL" in select_sql, (
-        f"Globaler SELECT muss 'project_id IS NULL' enthalten, got: {select_sql!r}"
-    )
+    assert (
+        "project_id IS NULL" in select_sql
+    ), f"Globaler SELECT muss 'project_id IS NULL' enthalten, got: {select_sql!r}"
 
 
 def test_global_slot_insert_omits_project_id_column():
@@ -137,9 +151,9 @@ def test_global_slot_insert_omits_project_id_column():
     assert len(sqls) >= 2, f"Erwartet mindestens SELECT+INSERT, got {len(sqls)} SQLs"
     insert_sql = sqls[1]
     assert "INSERT" in insert_sql.upper(), f"sqls[1] sollte INSERT sein, got: {insert_sql!r}"
-    assert "project_id" not in insert_sql, (
-        f"Globaler INSERT darf kein 'project_id' enthalten, got: {insert_sql!r}"
-    )
+    assert (
+        "project_id" not in insert_sql
+    ), f"Globaler INSERT darf kein 'project_id' enthalten, got: {insert_sql!r}"
 
 
 def test_global_slot_insert_params_omit_project_id():
@@ -197,6 +211,7 @@ def test_global_slot_returns_correct_response():
 # Test 2: Project-scoped Slot (mit project_id)
 # ---------------------------------------------------------------------------
 
+
 def test_project_slot_select_uses_project_id_param():
     """SELECT fuer project-scoped Slot muss 'project_id = :pid' enthalten."""
     tenant_id = str(uuid.uuid4())
@@ -218,9 +233,9 @@ def test_project_slot_select_uses_project_id_param():
     )
 
     select_sql = sqls[0]
-    assert "project_id = :pid" in select_sql, (
-        f"Project-scoped SELECT muss 'project_id = :pid' enthalten, got: {select_sql!r}"
-    )
+    assert (
+        "project_id = :pid" in select_sql
+    ), f"Project-scoped SELECT muss 'project_id = :pid' enthalten, got: {select_sql!r}"
 
 
 def test_project_slot_select_not_uses_is_null():
@@ -244,9 +259,9 @@ def test_project_slot_select_not_uses_is_null():
     )
 
     select_sql = sqls[0]
-    assert "IS NULL" not in select_sql, (
-        f"Project-scoped SELECT darf kein 'IS NULL' enthalten, got: {select_sql!r}"
-    )
+    assert (
+        "IS NULL" not in select_sql
+    ), f"Project-scoped SELECT darf kein 'IS NULL' enthalten, got: {select_sql!r}"
 
 
 def test_project_slot_insert_contains_project_id_column():
@@ -272,9 +287,9 @@ def test_project_slot_insert_contains_project_id_column():
     assert len(sqls) >= 2, f"Erwartet mindestens SELECT+INSERT, got {len(sqls)} SQLs"
     insert_sql = sqls[1]
     assert "INSERT" in insert_sql.upper(), f"sqls[1] sollte INSERT sein, got: {insert_sql!r}"
-    assert "project_id" in insert_sql, (
-        f"Project-scoped INSERT muss 'project_id' Spalte enthalten, got: {insert_sql!r}"
-    )
+    assert (
+        "project_id" in insert_sql
+    ), f"Project-scoped INSERT muss 'project_id' Spalte enthalten, got: {insert_sql!r}"
 
 
 def test_project_slot_insert_params_contain_project_id():
@@ -365,6 +380,7 @@ def test_project_slot_returns_correct_response():
 # Test 3: Deactivate-SQL wird in beiden Faellen ausgefuehrt
 # ---------------------------------------------------------------------------
 
+
 def test_global_slot_deactivate_sql_executed():
     """Nach INSERT muss UPDATE (deactivate) ausgefuehrt werden — globaler Slot."""
     tenant_id = str(uuid.uuid4())
@@ -385,9 +401,9 @@ def test_global_slot_deactivate_sql_executed():
 
     assert len(sqls) == 3, f"Erwartet SELECT + INSERT + UPDATE, got {len(sqls)} SQLs: {sqls}"
     deactivate_sql = sqls[2]
-    assert "UPDATE" in deactivate_sql.upper() and "is_active = false" in deactivate_sql, (
-        f"sqls[2] sollte das Deactivate-UPDATE sein, got: {deactivate_sql!r}"
-    )
+    assert (
+        "UPDATE" in deactivate_sql.upper() and "is_active = false" in deactivate_sql
+    ), f"sqls[2] sollte das Deactivate-UPDATE sein, got: {deactivate_sql!r}"
 
 
 def test_project_slot_deactivate_sql_executed():
@@ -411,19 +427,21 @@ def test_project_slot_deactivate_sql_executed():
 
     assert len(sqls) == 3, f"Erwartet SELECT + INSERT + UPDATE, got {len(sqls)} SQLs: {sqls}"
     deactivate_sql = sqls[2]
-    assert "UPDATE" in deactivate_sql.upper() and "is_active = false" in deactivate_sql, (
-        f"sqls[2] sollte das Deactivate-UPDATE sein, got: {deactivate_sql!r}"
-    )
+    assert (
+        "UPDATE" in deactivate_sql.upper() and "is_active = false" in deactivate_sql
+    ), f"sqls[2] sollte das Deactivate-UPDATE sein, got: {deactivate_sql!r}"
 
 
 # ---------------------------------------------------------------------------
 # Test 4: Edge-Cases
 # ---------------------------------------------------------------------------
 
+
 def test_unknown_profile_type_raises_422():
     """Unbekannter profile_type wird mit 422 abgelehnt."""
     from fastapi import HTTPException
-    from api.brand_voice import patch_profile_field, FieldEditRequest
+
+    from api.brand_voice import FieldEditRequest, patch_profile_field
 
     tenant_id = str(uuid.uuid4())
     db = MagicMock()
@@ -440,6 +458,7 @@ def test_unknown_profile_type_raises_422():
         )
 
     import pytest
+
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(run())
     assert exc_info.value.status_code == 422
@@ -448,7 +467,8 @@ def test_unknown_profile_type_raises_422():
 def test_invalid_field_path_raises_422():
     """Nicht-editierbares Feld wird mit 422 abgelehnt."""
     from fastapi import HTTPException
-    from api.brand_voice import patch_profile_field, FieldEditRequest
+
+    from api.brand_voice import FieldEditRequest, patch_profile_field
 
     tenant_id = str(uuid.uuid4())
     db = MagicMock()
@@ -465,6 +485,7 @@ def test_invalid_field_path_raises_422():
         )
 
     import pytest
+
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(run())
     assert exc_info.value.status_code == 422
@@ -473,7 +494,8 @@ def test_invalid_field_path_raises_422():
 def test_tenant_mismatch_raises_403():
     """Anderer Tenant-ID im Pfad wird mit 403 abgelehnt."""
     from fastapi import HTTPException
-    from api.brand_voice import patch_profile_field, FieldEditRequest
+
+    from api.brand_voice import FieldEditRequest, patch_profile_field
 
     tenant_id = str(uuid.uuid4())
     other_tenant_id = str(uuid.uuid4())
@@ -482,15 +504,16 @@ def test_tenant_mismatch_raises_403():
 
     async def run():
         return await patch_profile_field(
-            tenant_id=other_tenant_id,   # anderer Tenant im Pfad
+            tenant_id=other_tenant_id,  # anderer Tenant im Pfad
             profile_type="voice_profile",
             data=FieldEditRequest(field_path="tonalitaet", new_value="x"),
             project_id=None,
-            auth_tenant_id=uuid.UUID(tenant_id),   # echter Auth-Tenant
+            auth_tenant_id=uuid.UUID(tenant_id),  # echter Auth-Tenant
             db=db,
         )
 
     import pytest
+
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(run())
     assert exc_info.value.status_code == 403
@@ -499,7 +522,8 @@ def test_tenant_mismatch_raises_403():
 def test_missing_active_row_raises_404():
     """Wenn keine aktive Row gefunden wird, muss 404 zurueckgegeben werden."""
     from fastapi import HTTPException
-    from api.brand_voice import patch_profile_field, FieldEditRequest
+
+    from api.brand_voice import FieldEditRequest, patch_profile_field
 
     tenant_id = str(uuid.uuid4())
 
@@ -523,6 +547,7 @@ def test_missing_active_row_raises_404():
         )
 
     import pytest
+
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(run())
     assert exc_info.value.status_code == 404
@@ -551,9 +576,5 @@ def test_xss_sanitization_in_string_value():
     payload_str = insert_params["payload"]
     payload_dict = json.loads(payload_str)
     sanitized = payload_dict["tonalitaet"]
-    assert "<script>" not in sanitized, (
-        f"<script>-Tag muss HTML-escaped sein, got: {sanitized!r}"
-    )
-    assert "&lt;script&gt;" in sanitized, (
-        f"Erwartet HTML-escapeten Wert, got: {sanitized!r}"
-    )
+    assert "<script>" not in sanitized, f"<script>-Tag muss HTML-escaped sein, got: {sanitized!r}"
+    assert "&lt;script&gt;" in sanitized, f"Erwartet HTML-escapeten Wert, got: {sanitized!r}"

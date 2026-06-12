@@ -29,7 +29,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
+
 
 def _slugify(name: str) -> str:
     """Wandelt einen Anzeige-Namen in einen URL-sicheren Slug um (kebab-case).
@@ -69,6 +70,7 @@ def _get_content_truth_schemas_dir() -> Path:
     try:
         # Lazy-Import: config zieht keine google-Deps
         from config import settings  # type: ignore
+
         return Path(settings.content_truth_base_path) / "schemas"
     except Exception:
         pass
@@ -156,6 +158,7 @@ def load_canonical_schema(prompt_key: str) -> dict:
 # ---------------------------------------------------------------------------
 # Validierung
 # ---------------------------------------------------------------------------
+
 
 def validate_canonical(prompt_key: str, payload: dict) -> list[str]:
     """Validiert einen Payload gegen das kanonische Louis-Schema (Draft 2020-12).
@@ -539,6 +542,7 @@ _MAPPING_TABLES: dict[str, list[dict]] = {
 # Interne Mapping-Hilfsfunktionen (Best-Effort, nie halluzinierend)
 # ---------------------------------------------------------------------------
 
+
 def _get_nested(obj: Any, dotted_path: str, default: Any = None) -> Any:
     """Gibt den Wert an einem Dotted-Path zurück oder default."""
     parts = dotted_path.split(".")
@@ -647,8 +651,7 @@ def _map_tonalitaet_to_grundton(tonalitaet: Any) -> dict:
             ),
             "spektrum": tonalitaet.get("spektrum"),
             "linkedin_kalibrierung": (
-                tonalitaet.get("linkedin_kalibrierung")
-                or tonalitaet.get("kalibrierung")
+                tonalitaet.get("linkedin_kalibrierung") or tonalitaet.get("kalibrierung")
             ),
         }
     return {"charakterisierung": str(tonalitaet)}
@@ -659,7 +662,12 @@ def _map_stilprinzipien_to_satzarchitektur(stilprinzipien: Any) -> dict:
     if stilprinzipien is None:
         return {}
     if isinstance(stilprinzipien, str):
-        return {"laenge": stilprinzipien, "typische_satzanfaenge": [], "verbindungen": None, "beispiele": []}
+        return {
+            "laenge": stilprinzipien,
+            "typische_satzanfaenge": [],
+            "verbindungen": None,
+            "beispiele": [],
+        }
     if isinstance(stilprinzipien, dict):
         return {
             "laenge": (
@@ -696,9 +704,7 @@ def _map_wortschatz_p03(wortschatz: Any) -> dict:
                 or []
             ),
             "fuellwoerter": (
-                wortschatz.get("fuellwoerter")
-                or wortschatz.get("fuell_woerter")
-                or []
+                wortschatz.get("fuellwoerter") or wortschatz.get("fuell_woerter") or []
             ),
             "verbotene_woerter": (
                 wortschatz.get("verbotene_woerter")
@@ -754,7 +760,7 @@ def _map_kernschmerzen_to_innenwelt(kernschmerzen: Any) -> dict:
         return {}
     items = kernschmerzen if isinstance(kernschmerzen, list) else [str(kernschmerzen)]
     return {
-        "innerer_monolog": items[:max(len(items), 3)],
+        "innerer_monolog": items[: max(len(items), 3)],
         "unausgesprochene_angst": items[0] if items else None,
     }
 
@@ -773,8 +779,7 @@ def _map_transformation_to_wunschbild(transformation: Any) -> dict:
                 or transformation.get("transformation")
             ),
             "wunschidentitaet": (
-                transformation.get("wunschidentitaet")
-                or transformation.get("neue_identitaet")
+                transformation.get("wunschidentitaet") or transformation.get("neue_identitaet")
             ),
             "status_signal": transformation.get("status_signal"),
         }
@@ -816,15 +821,10 @@ def _map_sprachmuster_to_sprache_der_zielgruppe(sprachmuster: Any) -> dict:
     if isinstance(sprachmuster, dict):
         return {
             "redewendungen": (
-                sprachmuster.get("redewendungen")
-                or sprachmuster.get("phrasen")
-                or []
+                sprachmuster.get("redewendungen") or sprachmuster.get("phrasen") or []
             ),
             "tabu_woerter": sprachmuster.get("tabu_woerter") or [],
-            "ansprache": (
-                sprachmuster.get("ansprache")
-                or sprachmuster.get("du_sie")
-            ),
+            "ansprache": (sprachmuster.get("ansprache") or sprachmuster.get("du_sie")),
         }
     return {"redewendungen": [], "ansprache": None}
 
@@ -832,6 +832,7 @@ def _map_sprachmuster_to_sprache_der_zielgruppe(sprachmuster: Any) -> dict:
 # ---------------------------------------------------------------------------
 # _meta-Rehydrierung aus DB-Spalten
 # ---------------------------------------------------------------------------
+
 
 def _build_meta(prompt_key: str, meta: dict) -> dict:
     """Rehydriert das kanonische _meta-Objekt aus DB-Spalten / übergebenen Werten.
@@ -929,15 +930,14 @@ def _resolve_prompt_version(prompt_key: str, raw: str) -> str:
     if raw in _KNOWN_HASHES:
         return _KNOWN_HASHES[raw]
 
-    logger.debug(
-        "prompt_version_hash '%s' für %s unbekannt → 'legacy'", raw[:16], prompt_key
-    )
+    logger.debug("prompt_version_hash '%s' für %s unbekannt → 'legacy'", raw[:16], prompt_key)
     return f"{prompt_key}-legacy"
 
 
 # ---------------------------------------------------------------------------
 # to_canonical: v2-DB-Row → kanonisches Louis-JSON
 # ---------------------------------------------------------------------------
+
 
 def to_canonical(prompt_key: str, v2_payload: dict, meta: dict) -> dict:
     """Übersetzt einen v2-DB-Payload in das kanonische Louis-Format.
@@ -958,8 +958,7 @@ def to_canonical(prompt_key: str, v2_payload: dict, meta: dict) -> dict:
     key = prompt_key.lower()
     if key not in _MAPPING_TABLES:
         raise KeyError(
-            f"Unbekannter prompt_key '{prompt_key}'. "
-            f"Unterstützt: {sorted(_MAPPING_TABLES)}"
+            f"Unbekannter prompt_key '{prompt_key}'. " f"Unterstützt: {sorted(_MAPPING_TABLES)}"
         )
 
     luecken: list[str] = []
@@ -1009,9 +1008,7 @@ def _to_canonical_p01(v2: dict, luecken: list[str]) -> dict:
     # werte (array) → positionierung.werte_schwerpunkt (string)
     werte = v2.get("werte")
     if isinstance(werte, list) and werte:
-        result["positionierung"]["werte_schwerpunkt"] = ", ".join(
-            str(w) for w in werte if w
-        )
+        result["positionierung"]["werte_schwerpunkt"] = ", ".join(str(w) for w in werte if w)
     elif isinstance(werte, str):
         result["positionierung"]["werte_schwerpunkt"] = werte
     else:
@@ -1042,9 +1039,7 @@ def _to_canonical_p01(v2: dict, luecken: list[str]) -> dict:
     )
 
     # v2 hat keine Felder für: markt, sprache, content_reservoir
-    luecken.append(
-        "markt/sprache/content_reservoir: keine v2-Quellfelder vorhanden → leer"
-    )
+    luecken.append("markt/sprache/content_reservoir: keine v2-Quellfelder vorhanden → leer")
 
     # wunschzustand / innenwelt: P01-Vertrag → immer null
     result["zielkunde"]["wunschzustand"] = None
@@ -1104,9 +1099,7 @@ def _to_canonical_p03(v2: dict, luecken: list[str]) -> dict:
     mapped_wortschatz = _map_wortschatz_p03(wortschatz)
     result["wortschatz"].update(mapped_wortschatz)
     if not result["wortschatz"].get("signalwoerter"):
-        luecken.append(
-            "wortschatz.signalwoerter (Pflicht): nicht aus v2.wortschatz befüllbar"
-        )
+        luecken.append("wortschatz.signalwoerter (Pflicht): nicht aus v2.wortschatz befüllbar")
         result["wortschatz"]["signalwoerter"] = []
     if "verbotene_woerter" not in result["wortschatz"]:
         result["wortschatz"]["verbotene_woerter"] = []
@@ -1130,9 +1123,7 @@ def _to_canonical_p03(v2: dict, luecken: list[str]) -> dict:
         ("zielgruppen_sprachfilter", "leser_profil/sprachbarrieren"),
         ("referenz_saetze", "original(minItems:5)/adaptiert(minItems:3)"),
     ]:
-        luecken.append(
-            f"{feld}.{hinweis}: kein v2-Quellfeld vorhanden → Re-Run P03 empfohlen"
-        )
+        luecken.append(f"{feld}.{hinweis}: kein v2-Quellfeld vorhanden → Re-Run P03 empfohlen")
 
     # Pflicht-Felder auf Minimalwerte setzen damit Struktur vorhanden
     result["erzaehlmuster"] = {"story_einstieg": None, "argumentation": None, "perspektive": None}
@@ -1150,7 +1141,9 @@ def _to_canonical_p03(v2: dict, luecken: list[str]) -> dict:
     else:
         result["vermeidungsprofil"]["nie_sagen"] = []
         if not vermeidungsregeln:
-            luecken.append("vermeidungsprofil.nie_sagen (Pflicht, minItems:1): v2.vermeidungsregeln leer")
+            luecken.append(
+                "vermeidungsprofil.nie_sagen (Pflicht, minItems:1): v2.vermeidungsregeln leer"
+            )
 
     return result
 
@@ -1242,6 +1235,7 @@ def _to_canonical_p04(v2: dict, luecken: list[str]) -> dict:
 # from_canonical: kanonisches Louis-JSON → v2-DB-Payload
 # ---------------------------------------------------------------------------
 
+
 def from_canonical(prompt_key: str, canonical: dict) -> dict:
     """Übersetzt ein kanonisches Louis-Dokument zurück in ein v2-kompatibles Payload-Dict.
 
@@ -1266,8 +1260,7 @@ def from_canonical(prompt_key: str, canonical: dict) -> dict:
     key = prompt_key.lower()
     if key not in _MAPPING_TABLES:
         raise KeyError(
-            f"Unbekannter prompt_key '{prompt_key}'. "
-            f"Unterstützt: {sorted(_MAPPING_TABLES)}"
+            f"Unbekannter prompt_key '{prompt_key}'. " f"Unterstützt: {sorted(_MAPPING_TABLES)}"
         )
 
     if key == "p01":
@@ -1295,9 +1288,9 @@ def _from_canonical_p01(canonical: dict) -> dict:
         "kernbotschaft": angebot.get("elevator_pitch"),
         # zielkunde → zielgruppe (lossy: Sub-Felder werden als dict übernommen)
         "zielgruppe": {
-            k: v for k, v in zielkunde.items()
-            if k not in ("wunschzustand", "innenwelt")
-        } or None,
+            k: v for k, v in zielkunde.items() if k not in ("wunschzustand", "innenwelt")
+        }
+        or None,
         # vertrauen → expertise (lossy)
         "expertise": vertrauen or None,
         # positionierung.werte_schwerpunkt (string) → werte (array of strings, lossy)
@@ -1377,7 +1370,9 @@ def _from_canonical_p04(canonical: dict) -> dict:
     }
 
     # einwaende: blockaden.glaubenssaetze + denkfehler zusammenführen
-    einwaende = list(blockaden.get("glaubenssaetze") or []) + list(blockaden.get("denkfehler") or [])
+    einwaende = list(blockaden.get("glaubenssaetze") or []) + list(
+        blockaden.get("denkfehler") or []
+    )
 
     # kaufmotive: aus ausloesemoment.trigger_events
     kaufmotive = ausloesemoment.get("trigger_events") or []
@@ -1426,14 +1421,14 @@ def build_canonical_meta(
     tenant_id: str,
     model: str,
     generated_at: str,
-    tenant_name: Optional[str] = None,
-    tenant_slug: Optional[str] = None,
-    agentur_id: Optional[str] = None,
-    prompt_version: Optional[str] = None,
-    row_id: Optional[str] = None,
-    token_usage: Optional[dict] = None,
-    luecken: Optional[list] = None,
-    llm_meta: Optional[dict] = None,
+    tenant_name: str | None = None,
+    tenant_slug: str | None = None,
+    agentur_id: str | None = None,
+    prompt_version: str | None = None,
+    row_id: str | None = None,
+    token_usage: dict | None = None,
+    luecken: list | None = None,
+    llm_meta: dict | None = None,
 ) -> dict:
     """Baut das autoritative kanonische ``_meta`` für einen Pipeline-Output.
 
@@ -1524,7 +1519,8 @@ def finalize_canonical(prompt_key: str, parsed: dict, *, meta: dict) -> tuple[di
         doc["_meta"] = final_meta
         logger.warning(
             "finalize_canonical(%s): %d Schema-Lücke(n) dokumentiert (kein Hard-Fail)",
-            key, len(errors),
+            key,
+            len(errors),
         )
 
     return doc, errors

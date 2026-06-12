@@ -13,13 +13,13 @@ Abgedeckt:
 - HTTP 500 → Retry mit Backoff (Sleep-Aufruf wird mitgezählt)
 - resolve_tier mit unbekanntem Tier → ValueError
 """
+
 import os
 import sys
 import types
-import json
-import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Minimale Stubs für Imports, die ohne echte Services nicht verfügbar sind
@@ -32,9 +32,13 @@ if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
 
+_STUBBED_BY_THIS_MODULE = []
+
+
 def _stub(name):
     mod = types.ModuleType(name)
     sys.modules[name] = mod
+    _STUBBED_BY_THIS_MODULE.append(name)
     return mod
 
 
@@ -45,6 +49,7 @@ if "google.generativeai" not in sys.modules:
     _stub("google.generativeai")
 if "anthropic" not in sys.modules:
     from unittest.mock import MagicMock
+
     _anthropic_stub = _stub("anthropic")
     _anthropic_stub.Anthropic = MagicMock
     _anthropic_stub.AsyncAnthropic = MagicMock
@@ -55,10 +60,13 @@ if "anthropic" not in sys.modules:
 # services.llm: nur BudgetExceededError + RateLimitExceededError benötigt
 if "services.llm" not in sys.modules:
     _llm = _stub("services.llm")
+
     class _BudgetExceededError(Exception):
         pass
+
     class _RateLimitExceededError(Exception):
         pass
+
     _llm.BudgetExceededError = _BudgetExceededError
     _llm.RateLimitExceededError = _RateLimitExceededError
     _llm.llm_service = MagicMock() if "MagicMock" in dir() else None
@@ -66,7 +74,10 @@ if "services.llm" not in sys.modules:
 # services.throttle (wird von services.llm importiert)
 if "services.throttle" not in sys.modules:
     _throttle = _stub("services.throttle")
-    class _RateLimit(Exception): pass
+
+    class _RateLimit(Exception):
+        pass
+
     _throttle.RateLimitExceededError = _RateLimit
 
 # services.nextcloud
@@ -90,9 +101,17 @@ if "services.provider_resolver" not in sys.modules:
     _pr.get_active_provider = lambda task=None: None
 
 # Stub für models.base, models.llm_provider (werden nicht benötigt)
-for _name in ["models", "models.base", "models.llm_provider", "cryptography",
-              "cryptography.fernet", "sqlalchemy", "sqlalchemy.orm",
-              "sqlalchemy.ext", "sqlalchemy.ext.asyncio"]:
+for _name in [
+    "models",
+    "models.base",
+    "models.llm_provider",
+    "cryptography",
+    "cryptography.fernet",
+    "sqlalchemy",
+    "sqlalchemy.orm",
+    "sqlalchemy.ext",
+    "sqlalchemy.ext.asyncio",
+]:
     if _name not in sys.modules:
         _stub(_name)
 
@@ -101,24 +120,32 @@ for _name in ["models", "models.base", "models.llm_provider", "cryptography",
 # Imports nach Stub-Setup
 # ---------------------------------------------------------------------------
 
-import importlib
 import services.pipeline_llm as pipeline_llm
+from services.llm import BudgetExceededError
 from services.pipeline_llm import (
-    resolve_tier,
-    estimate_tier_cost,
-    call_pipeline_llm,
-    PipelineLLMResult,
-    TIER_MODELS,
     MODEL_PER_PROMPT,
     PROMPT_MAX_TOKENS,
+    TIER_MODELS,
     TIER_PRICING,
+    call_pipeline_llm,
+    estimate_tier_cost,
+    resolve_tier,
 )
-from services.llm import BudgetExceededError
+
+# sys.modules-Pollution verhindern: die oben gesetzten Stubs (services.*, config,
+# models, sqlalchemy ...) wurden nur gebraucht, um services.pipeline_llm OHNE
+# services/__init__-Schwergewicht zu importieren. Jetzt, da pipeline_llm gebunden
+# ist, die Stubs SOFORT wieder entfernen (sie wurden bei Collection gesetzt, also
+# vor dem Lauf aller anderen Test-Module). Sonst erben spaetere Tests die kaputten
+# Stubs (z.B. services.provider_resolver ohne _GLOBAL_CAP_USD/track_cost).
+for _name in [*_STUBBED_BY_THIS_MODULE, "services.pipeline_llm"]:
+    sys.modules.pop(_name, None)
 
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
+
 
 def _make_openai_response(
     text="Test-Antwort",
@@ -149,6 +176,7 @@ def _make_mock_response(data: dict, status_code: int = 200):
     mock_resp.json.return_value = data
     if status_code >= 400:
         import httpx
+
         mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
             f"HTTP {status_code}", request=MagicMock(), response=mock_resp
         )
@@ -160,6 +188,7 @@ def _make_mock_response(data: dict, status_code: int = 200):
 # ---------------------------------------------------------------------------
 # Tests: resolve_tier
 # ---------------------------------------------------------------------------
+
 
 class TestResolveTier:
     """Tests für die Tier-Auflösungs-Kette."""
@@ -236,6 +265,7 @@ class TestResolveTier:
 # Tests: estimate_tier_cost
 # ---------------------------------------------------------------------------
 
+
 class TestEstimateTierCost:
     """Tests für die Kosten-Schätzfunktion."""
 
@@ -269,13 +299,17 @@ class TestEstimateTierCost:
 # Tests: call_pipeline_llm
 # ---------------------------------------------------------------------------
 
+
 class TestCallPipelineLlm:
     """Tests für den Haupt-Seam."""
 
-    def _patch_provider(self, monkeypatch, base_url="https://router.requesty.ai/v1", api_key="test-key"):
+    def _patch_provider(
+        self, monkeypatch, base_url="https://router.requesty.ai/v1", api_key="test-key"
+    ):
         """Patcht _resolve_provider so dass kein DB-Zugriff erfolgt."""
         monkeypatch.setattr(
-            pipeline_llm, "_resolve_provider",
+            pipeline_llm,
+            "_resolve_provider",
             lambda: (base_url, api_key, True),
         )
 
@@ -347,9 +381,7 @@ class TestCallPipelineLlm:
         with patch("httpx.Client") as MockClient:
             instance = MockClient.return_value.__enter__.return_value
             instance.post.side_effect = capture_post
-            call_pipeline_llm(
-                prompt_key="P01", system_prompt="S", user_content="U", tenant_id="t1"
-            )
+            call_pipeline_llm(prompt_key="P01", system_prompt="S", user_content="U", tenant_id="t1")
 
         assert "extra_body" in captured_bodies[0]
         assert captured_bodies[0]["extra_body"]["requesty"]["auto_cache"] is True
@@ -357,15 +389,14 @@ class TestCallPipelineLlm:
         # Nicht-Requesty-URL → kein extra_body
         captured_bodies.clear()
         monkeypatch.setattr(
-            pipeline_llm, "_resolve_provider",
+            pipeline_llm,
+            "_resolve_provider",
             lambda: ("https://my-litellm.example.com/v1", "key", True),
         )
         with patch("httpx.Client") as MockClient:
             instance = MockClient.return_value.__enter__.return_value
             instance.post.side_effect = capture_post
-            call_pipeline_llm(
-                prompt_key="P01", system_prompt="S", user_content="U", tenant_id="t1"
-            )
+            call_pipeline_llm(prompt_key="P01", system_prompt="S", user_content="U", tenant_id="t1")
 
         assert "extra_body" not in captured_bodies[0]
 
@@ -401,6 +432,7 @@ class TestCallPipelineLlm:
     def test_5xx_retries_max_retries_times(self, monkeypatch):
         """HTTP 500 → wird max_retries mal versucht, dann Exception."""
         import httpx as _httpx
+
         self._patch_provider(monkeypatch)
         call_count = 0
 
@@ -475,7 +507,9 @@ class TestCallPipelineLlm:
                 tenant_id="t1",
             )
 
-        expected_cost = (2000 * TIER_PRICING["S6"]["input"] + 1000 * TIER_PRICING["S6"]["output"]) / 1_000_000
+        expected_cost = (
+            2000 * TIER_PRICING["S6"]["input"] + 1000 * TIER_PRICING["S6"]["output"]
+        ) / 1_000_000
         assert abs(result.cost_usd - expected_cost) < 1e-9
 
     def test_no_router_config_raises_runtime_error(self, monkeypatch):
@@ -484,10 +518,13 @@ class TestCallPipelineLlm:
         monkeypatch.setattr(pipeline_llm, "_resolve_provider", pipeline_llm._resolve_provider)
         # Aber _resolve_env_provider soll RuntimeError werfen
         monkeypatch.setattr(
-            pipeline_llm, "_resolve_env_provider",
-            lambda: (_ for _ in ()).throw(RuntimeError("Keine Router-Konfiguration"))
+            pipeline_llm,
+            "_resolve_env_provider",
+            lambda: (_ for _ in ()).throw(RuntimeError("Keine Router-Konfiguration")),
         )
-        monkeypatch.setattr(pipeline_llm, "_resolve_provider", lambda: pipeline_llm._resolve_env_provider())
+        monkeypatch.setattr(
+            pipeline_llm, "_resolve_provider", lambda: pipeline_llm._resolve_env_provider()
+        )
 
         with pytest.raises(RuntimeError, match="Keine Router-Konfiguration"):
             call_pipeline_llm(
@@ -650,8 +687,8 @@ class TestCallPipelineLlm:
 # Tests: resolve_model / describe_pipeline_models (Modell-Hoheit, SOLL-IST §5)
 # ---------------------------------------------------------------------------
 
-from services.pipeline_llm import resolve_model, describe_pipeline_models
 import services.model_policy as model_policy
+from services.pipeline_llm import describe_pipeline_models, resolve_model
 
 
 class TestResolveModel:

@@ -7,11 +7,13 @@ POST   /api/brand-voice/wizard/{session_id}/answer      — Antwort speichern
 POST   /api/brand-voice/wizard/{session_id}/synthesize-phase — Phase synthetisieren (LLM)
 POST   /api/brand-voice/wizard/{session_id}/finalize    — Wizard abschliessen, Pipeline starten
 """
+
 import html
 import json
 import logging
 import uuid
-from typing import Any, Optional
+from datetime import UTC
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -19,7 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant_id
-from services.cost_cap import CostCapMiddleware, CostCapExceeded, estimate_anthropic_cost
+from services.cost_cap import CostCapExceeded, CostCapMiddleware, estimate_anthropic_cost
 from services.llm import llm_service, set_llm_tenant
 
 logger = logging.getLogger(__name__)
@@ -238,7 +240,9 @@ WIZARD_PHASES = [
             {
                 "id": "q5_4",
                 "text": "Zeig mir 2–3 Posts oder Texte — von dir oder anderen — die du richtig gut findest. Was genau gefällt dir daran?",
-                "hints": ["Falls nicht sofort zur Hand: Links oder Screenshots nach dem Wizard zusenden."],
+                "hints": [
+                    "Falls nicht sofort zur Hand: Links oder Screenshots nach dem Wizard zusenden."
+                ],
                 "required": False,
             },
             {
@@ -289,31 +293,63 @@ WIZARD_PHASES = [
 
 # Backward-Compat: alte question IDs (vor 2026-05-03) weiterhin akzeptieren
 _LEGACY_QUESTION_IDS: set[str] = {
-    "q1_1", "q1_2", "q1_3",
-    "q2_1", "q2_2", "q2_3", "q2_4",
-    "q3_1", "q3_2", "q3_3", "q3_4",
-    "q4_1", "q4_2", "q4_3", "q4_4",
-    "q5_1", "q5_2", "q5_3", "q5_4", "q5_linkedin_posts",
-    "q6_1", "q6_2", "q6_3",
+    "q1_1",
+    "q1_2",
+    "q1_3",
+    "q2_1",
+    "q2_2",
+    "q2_3",
+    "q2_4",
+    "q3_1",
+    "q3_2",
+    "q3_3",
+    "q3_4",
+    "q4_1",
+    "q4_2",
+    "q4_3",
+    "q4_4",
+    "q5_1",
+    "q5_2",
+    "q5_3",
+    "q5_4",
+    "q5_linkedin_posts",
+    "q6_1",
+    "q6_2",
+    "q6_3",
     # auch alte frontend IDs
-    "p1_q1", "p1_q2", "p1_q3",
-    "p2_q1", "p2_q2", "p2_q3", "p2_q4",
-    "p3_q1", "p3_q2", "p3_q3", "p3_q4",
-    "p4_q1", "p4_q2", "p4_q3", "p4_q4",
-    "p5_q1", "p5_q2", "p5_q3", "p5_q4",
-    "p6_q1", "p6_q2", "p6_q3",
+    "p1_q1",
+    "p1_q2",
+    "p1_q3",
+    "p2_q1",
+    "p2_q2",
+    "p2_q3",
+    "p2_q4",
+    "p3_q1",
+    "p3_q2",
+    "p3_q3",
+    "p3_q4",
+    "p4_q1",
+    "p4_q2",
+    "p4_q3",
+    "p4_q4",
+    "p5_q1",
+    "p5_q2",
+    "p5_q3",
+    "p5_q4",
+    "p6_q1",
+    "p6_q2",
+    "p6_q3",
 }
 
 # Hilfsdicts fuer schnellen Lookup
 _PHASE_BY_NUM: dict[int, dict] = {p["phase"]: p for p in WIZARD_PHASES}
-_ALL_QUESTION_IDS: set[str] = {
-    q["id"] for p in WIZARD_PHASES for q in p["questions"]
-}
+_ALL_QUESTION_IDS: set[str] = {q["id"] for p in WIZARD_PHASES for q in p["questions"]}
 
 
 # ---------------------------------------------------------------------------
 # Inline-Hints (regelbasiert, kein LLM)
 # ---------------------------------------------------------------------------
+
 
 def compute_inline_hints(
     current_phase: int, current_question_id: str, all_answers: dict
@@ -323,16 +359,24 @@ def compute_inline_hints(
     prev_texts = " ".join(str(v) for v in all_answers.values()).lower()
 
     if current_phase >= 3 and "werkstatt" in prev_texts:
-        hints.append("Du hast vorhin 'Werkstatt' erwähnt — denkst du an Werkleiter oder Produktionsleiter?")
+        hints.append(
+            "Du hast vorhin 'Werkstatt' erwähnt — denkst du an Werkleiter oder Produktionsleiter?"
+        )
     if current_phase >= 3 and any(w in prev_texts for w in ["berater", "consultant", "coaching"]):
-        hints.append("Als Berater/Coach: Dein idealer Kunde könnte Entscheider im Mittelstand sein.")
+        hints.append(
+            "Als Berater/Coach: Dein idealer Kunde könnte Entscheider im Mittelstand sein."
+        )
     if current_phase >= 4 and current_question_id == "q4_3":
         for qid, ans in all_answers.items():
             if qid == "q3_2" and ans:
-                hints.append(f"Du hast als Hauptproblem erwähnt: '{str(ans)[:80]}' — das könnte hier als Kontrast dienen.")
+                hints.append(
+                    f"Du hast als Hauptproblem erwähnt: '{str(ans)[:80]}' — das könnte hier als Kontrast dienen."
+                )
                 break
     if current_phase >= 5 and current_question_id in ("q5_1", "q5_2"):
-        hints.append("Tipp: Schau dir an, welche Wörter du in Phase 2 benutzt hast — das ist oft schon deine natürliche Sprache.")
+        hints.append(
+            "Tipp: Schau dir an, welche Wörter du in Phase 2 benutzt hast — das ist oft schon deine natürliche Sprache."
+        )
     if current_phase == 6 and "q5_3" in all_answers:
         hints.append("Dein LinkedIn-Satz aus Phase 5 kann hier als Aufhänger dienen.")
 
@@ -342,6 +386,7 @@ def compute_inline_hints(
 # ---------------------------------------------------------------------------
 # Pseudo-Transkript fuer finalize
 # ---------------------------------------------------------------------------
+
 
 def _wizard_to_pseudo_transcript(answers: dict, phase_syntheses: dict) -> str:
     parts = ["# Wizard-Session Zusammenfassung\n"]
@@ -365,6 +410,7 @@ def _wizard_to_pseudo_transcript(answers: dict, phase_syntheses: dict) -> str:
 # Hilfsfunktion: naechste Frage in einer Phase oder Phase-uebergreifend
 # ---------------------------------------------------------------------------
 
+
 def _next_question(current_phase: int, answered_ids: set[str]) -> dict | None:
     """Gibt die naechste unbeantwortete Frage zurueck, phasenuebergreifend."""
     for phase_data in WIZARD_PHASES:
@@ -387,6 +433,7 @@ def _phase_complete(phase_num: int, answered_ids: set[str]) -> bool:
 # Request-Modelle
 # ---------------------------------------------------------------------------
 
+
 class AnswerRequest(BaseModel):
     phase: int
     question_id: str
@@ -407,7 +454,7 @@ _STALE_SESSION_DAYS = 7  # sessions older than this are flagged stale
 @router.post("/brand-voice/wizard/start", status_code=201)
 async def wizard_start(
     force_new: bool = False,
-    project_id: Optional[uuid.UUID] = None,
+    project_id: uuid.UUID | None = None,
     tenant_id: uuid.UUID = Depends(get_tenant_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -421,30 +468,34 @@ async def wizard_start(
     project_id: wenn gesetzt, wird nur nach Sessions dieses Projekts gesucht
     (und neue Sessions für dieses Projekt angelegt). Ohne project_id: globaler Slot.
     """
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta
 
     if not force_new:
         # Prüfen ob eine offene Session für diesen Tenant (+ Projekt) existiert
         if project_id is not None:
-            existing = (await db.execute(
-                text(
-                    "SELECT id, current_phase, answers, updated_at "
-                    "FROM wizard_session "
-                    "WHERE tenant_id=:t AND project_id=:pid AND status='in_progress' "
-                    "ORDER BY updated_at DESC LIMIT 1"
-                ),
-                {"t": str(tenant_id), "pid": str(project_id)},
-            )).fetchone()
+            existing = (
+                await db.execute(
+                    text(
+                        "SELECT id, current_phase, answers, updated_at "
+                        "FROM wizard_session "
+                        "WHERE tenant_id=:t AND project_id=:pid AND status='in_progress' "
+                        "ORDER BY updated_at DESC LIMIT 1"
+                    ),
+                    {"t": str(tenant_id), "pid": str(project_id)},
+                )
+            ).fetchone()
         else:
-            existing = (await db.execute(
-                text(
-                    "SELECT id, current_phase, answers, updated_at "
-                    "FROM wizard_session "
-                    "WHERE tenant_id=:t AND project_id IS NULL AND status='in_progress' "
-                    "ORDER BY updated_at DESC LIMIT 1"
-                ),
-                {"t": str(tenant_id)},
-            )).fetchone()
+            existing = (
+                await db.execute(
+                    text(
+                        "SELECT id, current_phase, answers, updated_at "
+                        "FROM wizard_session "
+                        "WHERE tenant_id=:t AND project_id IS NULL AND status='in_progress' "
+                        "ORDER BY updated_at DESC LIMIT 1"
+                    ),
+                    {"t": str(tenant_id)},
+                )
+            ).fetchone()
 
         if existing:
             session_id = str(existing.id)
@@ -454,7 +505,7 @@ async def wizard_start(
             # Stale-Flag: session >7 days old (UX hint — not a hard block)
             stale = False
             if existing.updated_at:
-                age = datetime.now(timezone.utc) - existing.updated_at.replace(tzinfo=timezone.utc)
+                age = datetime.now(UTC) - existing.updated_at.replace(tzinfo=UTC)
                 stale = age > timedelta(days=_STALE_SESSION_DAYS)
             return {
                 "session_id": session_id,
@@ -502,29 +553,33 @@ async def wizard_start(
 # GET /brand-voice/wizard/questions
 # ---------------------------------------------------------------------------
 
+
 @router.get("/brand-voice/wizard/questions")
 async def wizard_get_questions():
     """Gibt alle Wizard-Phasen mit Fragen zurück (Single-Source-of-Truth)."""
     phases = []
     for p in WIZARD_PHASES:
-        phases.append({
-            "id": p["phase"],
-            "name": p["title"],
-            "goal": p["goal"],
-            "questions": [
-                {
-                    **q,
-                    "nachhaken": q.get("hints", []),
-                }
-                for q in p["questions"]
-            ],
-        })
+        phases.append(
+            {
+                "id": p["phase"],
+                "name": p["title"],
+                "goal": p["goal"],
+                "questions": [
+                    {
+                        **q,
+                        "nachhaken": q.get("hints", []),
+                    }
+                    for q in p["questions"]
+                ],
+            }
+        )
     return {"phases": phases}
 
 
 # ---------------------------------------------------------------------------
 # GET /brand-voice/wizard/{session_id}
 # ---------------------------------------------------------------------------
+
 
 @router.get("/brand-voice/wizard/{session_id}")
 async def wizard_get(
@@ -570,6 +625,7 @@ async def wizard_get(
 # ---------------------------------------------------------------------------
 # POST /brand-voice/wizard/{session_id}/answer
 # ---------------------------------------------------------------------------
+
 
 @router.post("/brand-voice/wizard/{session_id}/answer")
 async def wizard_answer(
@@ -657,6 +713,7 @@ async def wizard_answer(
 # ---------------------------------------------------------------------------
 # POST /brand-voice/wizard/{session_id}/synthesize-phase
 # ---------------------------------------------------------------------------
+
 
 @router.post("/brand-voice/wizard/{session_id}/synthesize-phase")
 async def wizard_synthesize_phase(
@@ -780,6 +837,7 @@ async def wizard_synthesize_phase(
 # POST /brand-voice/wizard/{session_id}/finalize
 # ---------------------------------------------------------------------------
 
+
 @router.post("/brand-voice/wizard/{session_id}/finalize", status_code=202)
 async def wizard_finalize(
     session_id: str,
@@ -841,9 +899,10 @@ async def wizard_finalize(
 # Celery Beat-Task: abandoned sessions aufraemen
 # ---------------------------------------------------------------------------
 
-from tasks.celery_app import celery_app
-from models.base import sync_session_factory
 from sqlalchemy import text as sa_text
+
+from models.base import sync_session_factory
+from tasks.celery_app import celery_app
 
 
 @celery_app.task(name="tasks.wizard_cleanup.cleanup_abandoned_sessions")

@@ -1,7 +1,6 @@
 """Research-Findings-API (Phase 6.1, Issue #141)."""
-from __future__ import annotations
 
-from typing import Optional
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
@@ -16,7 +15,7 @@ router = APIRouter(prefix="/research", tags=["research"])
 @router.get("/findings")
 async def list_research_findings(
     status_filter: str = Query("active", regex="^(active|dismissed|used|all)$"),
-    category: Optional[str] = Query(None),
+    category: str | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
@@ -87,13 +86,15 @@ async def use_finding_as_idea(
     db: AsyncSession = Depends(get_db),
 ):
     """Erstellt eine ContentIdea aus dem Befund + dem gewählten Hook."""
-    finding = (await db.execute(
-        text(
-            "SELECT source_item_id, title, summary, hooks "
-            "FROM research_findings WHERE id = CAST(:id AS uuid) AND tenant_id = :tid"
-        ),
-        {"id": finding_id, "tid": tenant.id},
-    )).fetchone()
+    finding = (
+        await db.execute(
+            text(
+                "SELECT source_item_id, title, summary, hooks "
+                "FROM research_findings WHERE id = CAST(:id AS uuid) AND tenant_id = :tid"
+            ),
+            {"id": finding_id, "tid": tenant.id},
+        )
+    ).fetchone()
     if not finding:
         raise HTTPException(404, "Befund nicht gefunden")
     if not finding.source_item_id:
@@ -101,22 +102,24 @@ async def use_finding_as_idea(
     hooks = list(finding.hooks or [])
     chosen_hook = hooks[hook_index] if hook_index < len(hooks) else (hooks[0] if hooks else None)
 
-    new_idea_id = (await db.execute(
-        text(
-            "INSERT INTO content_ideas "
-            "(source_item_id, tenant_id, title, description, angle, hook_suggestion, "
-            " relevance_score, priority, status) "
-            "VALUES (:sid, :tid, :title, :desc, 'research', :hook, 8.0, '1', 'new') "
-            "RETURNING id"
-        ),
-        {
-            "sid": finding.source_item_id,
-            "tid": tenant.id,
-            "title": finding.title[:500],
-            "desc": (finding.summary or "")[:1000],
-            "hook": chosen_hook,
-        },
-    )).fetchone()
+    new_idea_id = (
+        await db.execute(
+            text(
+                "INSERT INTO content_ideas "
+                "(source_item_id, tenant_id, title, description, angle, hook_suggestion, "
+                " relevance_score, priority, status) "
+                "VALUES (:sid, :tid, :title, :desc, 'research', :hook, 8.0, '1', 'new') "
+                "RETURNING id"
+            ),
+            {
+                "sid": finding.source_item_id,
+                "tid": tenant.id,
+                "title": finding.title[:500],
+                "desc": (finding.summary or "")[:1000],
+                "hook": chosen_hook,
+            },
+        )
+    ).fetchone()
 
     await db.execute(
         text("UPDATE research_findings SET status='used' WHERE id = CAST(:id AS uuid)"),
@@ -129,9 +132,10 @@ async def use_finding_as_idea(
     variants_queued = False
     try:
         from tasks.p12_variants_task import generate_variants
+
         generate_variants.apply_async(args=[new_idea_str])
         variants_queued = True
-    except Exception:  # noqa: BLE001 — nicht-blockend
+    except Exception:
         pass
 
     return {

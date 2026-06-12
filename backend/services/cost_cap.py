@@ -1,8 +1,8 @@
 import logging
 import os
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
-from typing import Optional, Protocol
+from datetime import UTC, date, datetime
+from typing import Protocol
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 # ── Exception ────────────────────────────────────────────────────────────────
+
 
 class CostCapExceeded(Exception):
     def __init__(self, tenant_id: str, current_cost: float, cap: float):
@@ -24,6 +25,7 @@ class CostCapExceeded(Exception):
 
 # ── Notifier Protocol + Stub ─────────────────────────────────────────────────
 
+
 class CostNotifier(Protocol):
     def notify_cap_reached(self, tenant_id: str, cost: float, date: date) -> None: ...
 
@@ -31,8 +33,10 @@ class CostNotifier(Protocol):
 class TelegramNotifyStub:
     def notify_cap_reached(self, tenant_id: str, cost: float, date: date) -> None:
         logger.warning(
-            "COST_CAP_REACHED tenant=%s date=%s cost_usd=%.4f message=\"Tenant über Tageslimit\"",
-            tenant_id, date.isoformat(), cost
+            'COST_CAP_REACHED tenant=%s date=%s cost_usd=%.4f message="Tenant über Tageslimit"',
+            tenant_id,
+            date.isoformat(),
+            cost,
         )
 
 
@@ -83,6 +87,7 @@ def estimate_vertex_cost(model_id: str, input_tokens: int, output_tokens: int) -
 
 # ── Result Dataclass ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class CostCheckResult:
     allowed: bool
@@ -121,6 +126,7 @@ _update_notified_sql = text("""
 
 # ── Middleware ───────────────────────────────────────────────────────────────
 
+
 class CostCapMiddleware:
     """Daily cost cap enforcer per tenant.
 
@@ -134,18 +140,22 @@ class CostCapMiddleware:
     def __init__(
         self,
         db_session: AsyncSession,
-        notifier: Optional[CostNotifier] = None,
-        cost_cap_usd: Optional[float] = None,
+        notifier: CostNotifier | None = None,
+        cost_cap_usd: float | None = None,
     ):
         self.db = db_session
         self.notifier = notifier or TelegramNotifyStub()
-        self.cost_cap = cost_cap_usd if cost_cap_usd is not None else float(os.getenv("COST_CAP_USD_PER_DAY", "5.0"))
+        self.cost_cap = (
+            cost_cap_usd
+            if cost_cap_usd is not None
+            else float(os.getenv("COST_CAP_USD_PER_DAY", "5.0"))
+        )
 
     async def check_and_record(
         self,
         tenant_id: str,
         estimated_cost_usd: float,
-        actual_cost_usd: Optional[float] = None,
+        actual_cost_usd: float | None = None,
     ) -> CostCheckResult:
         """Check the daily cost cap and optionally record actual cost.
 
@@ -156,7 +166,7 @@ class CostCapMiddleware:
         3. If under cap and actual_cost_usd is provided: records the actual cost.
         4. Returns CostCheckResult with allowed=True when under cap.
         """
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         params = {"tenant_id": tenant_id, "date": today}
 
         # Ensure row exists, then lock it

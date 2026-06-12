@@ -1,6 +1,6 @@
 """Carousel API — Generate and download LinkedIn document posts."""
+
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -9,19 +9,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
-from models.tenant import Tenant
-from models.content_piece import ContentPiece
 from models.carousel import CarouselTemplate
+from models.content_piece import ContentPiece
+from models.tenant import Tenant
 from services.carousel_generator import generate_carousel_pdf, split_text_into_slides
 
 router = APIRouter(prefix="/carousels", tags=["carousels"])
 
 
 class GenerateRequest(BaseModel):
-    content_text: Optional[str] = None
-    content_piece_id: Optional[str] = None
-    slides: Optional[list[dict]] = None
-    brand_colors: Optional[dict] = None
+    content_text: str | None = None
+    content_piece_id: str | None = None
+    slides: list[dict] | None = None
+    brand_colors: dict | None = None
     title: str = "LinkedIn Carousel"
 
 
@@ -87,9 +87,9 @@ async def list_templates(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(CarouselTemplate).where(
-            (CarouselTemplate.tenant_id == tenant.id) | (CarouselTemplate.tenant_id == None)
-        ).order_by(CarouselTemplate.is_default.desc())
+        select(CarouselTemplate)
+        .where((CarouselTemplate.tenant_id == tenant.id) | (CarouselTemplate.tenant_id is None))
+        .order_by(CarouselTemplate.is_default.desc())
     )
     templates = result.scalars().all()
     return [
@@ -106,12 +106,13 @@ async def list_templates(
 
 # ── Branding CRUD ─────────────────────────────────────────────────────────────
 
+
 class BrandingUpdate(BaseModel):
-    primary_color: Optional[str] = None
-    secondary_color: Optional[str] = None
-    font_family: Optional[str] = None
-    logo_url: Optional[str] = None
-    watermark_text: Optional[str] = None
+    primary_color: str | None = None
+    secondary_color: str | None = None
+    font_family: str | None = None
+    logo_url: str | None = None
+    watermark_text: str | None = None
 
 
 @router.get("/branding")
@@ -121,12 +122,23 @@ async def get_branding(
 ):
     """Get tenant branding settings."""
     from sqlalchemy import text as _text
-    row = (await db.execute(
-        _text("SELECT primary_color, secondary_color, font_family, logo_url, watermark_text FROM tenant_branding WHERE tenant_id = :tid"),
-        {"tid": str(tenant.id)}
-    )).fetchone()
+
+    row = (
+        await db.execute(
+            _text(
+                "SELECT primary_color, secondary_color, font_family, logo_url, watermark_text FROM tenant_branding WHERE tenant_id = :tid"
+            ),
+            {"tid": str(tenant.id)},
+        )
+    ).fetchone()
     if not row:
-        return {"primary_color": "#0F766E", "secondary_color": "#F59E0B", "font_family": "Helvetica", "logo_url": None, "watermark_text": None}
+        return {
+            "primary_color": "#0F766E",
+            "secondary_color": "#F59E0B",
+            "font_family": "Helvetica",
+            "logo_url": None,
+            "watermark_text": None,
+        }
     return dict(row._mapping)
 
 
@@ -138,7 +150,9 @@ async def update_branding(
 ):
     """Upsert tenant branding settings."""
     import re as _re
+
     from sqlalchemy import text as _text
+
     fields = data.model_dump(exclude_unset=True)
     if not fields:
         raise HTTPException(400, "Keine Felder zum Aktualisieren")
@@ -146,8 +160,10 @@ async def update_branding(
     # Validate hex colors
     for color_field in ("primary_color", "secondary_color"):
         if color_field in fields:
-            if not _re.match(r'^#[0-9A-Fa-f]{6}$', fields[color_field]):
-                raise HTTPException(400, f"{color_field} muss ein 6-stelliger HEX-Code sein (z.B. #0F766E)")
+            if not _re.match(r"^#[0-9A-Fa-f]{6}$", fields[color_field]):
+                raise HTTPException(
+                    400, f"{color_field} muss ein 6-stelliger HEX-Code sein (z.B. #0F766E)"
+                )
 
     # Upsert: use defaults for INSERT to avoid NOT NULL violations on partial updates
     await db.execute(
@@ -171,7 +187,7 @@ async def update_branding(
             "ff": fields.get("font_family"),
             "lu": fields.get("logo_url"),
             "wt": fields.get("watermark_text"),
-        }
+        },
     )
     await db.commit()
     return {"status": "ok"}
@@ -179,9 +195,10 @@ async def update_branding(
 
 # ── AI-Carousel Generation ────────────────────────────────────────────────────
 
+
 class GenerateAIRequest(BaseModel):
-    content_piece_id: Optional[str] = None
-    post_text: Optional[str] = None
+    content_piece_id: str | None = None
+    post_text: str | None = None
     voice_hint: str = ""
     slide_count: int = 6
     async_mode: bool = False  # True = return task_id, False = block
@@ -195,6 +212,7 @@ async def generate_ai_carousel(
 ):
     """Generate AI-structured carousel using P12c task."""
     import base64 as _base64
+
     text_to_use = data.post_text
     if not text_to_use and data.content_piece_id:
         piece = await db.get(ContentPiece, uuid.UUID(data.content_piece_id))
@@ -206,6 +224,7 @@ async def generate_ai_carousel(
         raise HTTPException(400, "post_text oder content_piece_id erforderlich")
 
     from tasks.p12c_task import run_p12c
+
     if data.async_mode:
         task = run_p12c.apply_async(
             args=[str(tenant.id), text_to_use, data.voice_hint, data.content_piece_id],

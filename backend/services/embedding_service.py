@@ -23,11 +23,12 @@ Issue #150: Embedding-Versionierung.
 - ACTIVE_EMBEDDING_MODEL steuert Default; Canary-Tasks können abweichendes
   model_id übergeben.
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import httpx
 from sqlalchemy import text
@@ -44,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 EMBEDDING_MODELS: dict[str, dict] = {
     "gemini-embedding-001-1536d": {
-        "provider": "requesty",          # geroutet via Requesty wie bisheriges Modell
+        "provider": "requesty",  # geroutet via Requesty wie bisheriges Modell
         "model_name": "openai/text-embedding-3-small",  # Requesty-Alias (768-dim erzwungen via dim param)
         "dim": 1536,
         "active": True,
@@ -78,10 +79,10 @@ class EmbeddingError(Exception):
 
 async def embed(
     text_input: str,
-    model_id: Optional[str] = None,
+    model_id: str | None = None,
     *,
     timeout: float = 15.0,
-) -> tuple[Optional[list[float]], str]:
+) -> tuple[list[float] | None, str]:
     """Versioniertes Embedding — gibt immer (vector_or_None, model_id) zurück.
 
     Caller MUSS den zurückgegebenen model_id mit-persistieren (Issue #150).
@@ -147,12 +148,12 @@ async def embed(
     except (httpx.TimeoutException, httpx.RequestError) as exc:
         logger.warning("embed: Network-Error: %s", exc)
         return None, resolved_model_id
-    except Exception as exc:  # noqa: BLE001 — defensive
+    except Exception as exc:
         logger.warning("embed: Unknown-Error: %s", exc)
         return None, resolved_model_id
 
 
-async def embed_text(text_input: str, *, timeout: float = 15.0) -> Optional[list[float]]:
+async def embed_text(text_input: str, *, timeout: float = 15.0) -> list[float] | None:
     """Legacy-Wrapper — gibt nur den Vektor zurück (ohne model_id).
 
     Für neuen Code: embed() verwenden, das model_id mit zurückgibt.
@@ -161,7 +162,7 @@ async def embed_text(text_input: str, *, timeout: float = 15.0) -> Optional[list
     return vector
 
 
-async def classify_chunk(content: str) -> Optional[str]:
+async def classify_chunk(content: str) -> str | None:
     """Klassifiziert einen Chunk in werte/stories/konflikte via LLM.
 
     Returns None wenn Drift, Fehler oder zu wenig Inhalt.
@@ -173,7 +174,7 @@ async def classify_chunk(content: str) -> Optional[str]:
         "- 'werte' — Werte, Überzeugungen, Prinzipien, das was dem Unternehmer wichtig ist\n"
         "- 'stories' — Geschichten, Anekdoten, konkrete Vorher-Nachher-Erlebnisse\n"
         "- 'konflikte' — Spannungen, Reibung, Probleme, was nicht klappt\n\n"
-        "Antworte AUSSCHLIESSLICH mit JSON: {\"classification\": \"werte\"|\"stories\"|\"konflikte\"}"
+        'Antworte AUSSCHLIESSLICH mit JSON: {"classification": "werte"|"stories"|"konflikte"}'
     )
     try:
         result = await llm_service.complete_json(
@@ -187,7 +188,7 @@ async def classify_chunk(content: str) -> Optional[str]:
             if cls in ALLOWED_CLASSIFICATIONS:
                 return cls
         return None
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.info("Classify skipped: %s", exc)
         return None
 
@@ -203,8 +204,8 @@ async def store_chunk(
     tenant_id: str,
     source_type: str,
     content_text: str,
-    source_ref: Optional[str] = None,
-    metadata: Optional[dict] = None,
+    source_ref: str | None = None,
+    metadata: dict | None = None,
     classify: bool = True,
 ) -> str:
     """Persistiert einen Chunk mit Embedding + (optional) Klassifikation.
@@ -268,9 +269,9 @@ async def store_chunks_multi(
     *,
     tenant_id: str,
     source_type: str,
-    chunks: "list",  # list[chunker.Chunk] — lazy import um Zirkel zu vermeiden
-    source_ref: Optional[str] = None,
-    base_metadata: Optional[dict] = None,
+    chunks: list,  # list[chunker.Chunk] — lazy import um Zirkel zu vermeiden
+    source_ref: str | None = None,
+    base_metadata: dict | None = None,
     classify: bool = True,
 ) -> list[str]:
     """Persistiert mehrere Chunks (aus chunker.chunk_text) mit prev/next-Links.
@@ -325,7 +326,7 @@ async def store_chunks_multi(
     link_chunks_with_ids(chunks, db_ids)
 
     # Schritt 3: prev/next-IDs via UPDATE eintragen
-    for chunk, chunk_id in zip(chunks, db_ids):
+    for chunk, chunk_id in zip(chunks, db_ids, strict=False):
         prev_id = chunk.prev_chunk_id
         next_id = chunk.next_chunk_id
         if prev_id is None and next_id is None:
@@ -340,10 +341,13 @@ async def store_chunks_multi(
             patch["prev_chunk_id"] = prev_id
         if next_id is not None:
             patch["next_chunk_id"] = next_id
-        await db.execute(update_sql, {
-            "patch": json.dumps(patch),
-            "cid": chunk_id,
-        })
+        await db.execute(
+            update_sql,
+            {
+                "patch": json.dumps(patch),
+                "cid": chunk_id,
+            },
+        )
 
     await db.commit()
     logger.info(
@@ -362,8 +366,8 @@ async def search_similar(
     query_text: str,
     limit: int = 10,
     min_similarity: float = 0.0,
-    classification: Optional[str] = None,
-    source_types: Optional[Sequence[str]] = None,
+    classification: str | None = None,
+    source_types: Sequence[str] | None = None,
 ) -> list[dict]:
     """Semantische Suche im Tenant-Gedächtnis via cosine-Distance."""
     query_emb = await embed_text(query_text)
@@ -399,14 +403,16 @@ async def search_similar(
         sim = float(r.similarity or 0)
         if sim < min_similarity:
             continue
-        out.append({
-            "id": str(r.id),
-            "source_type": r.source_type,
-            "source_ref": r.source_ref,
-            "content_text": r.content_text,
-            "classification": r.classification,
-            "metadata": dict(r.metadata or {}),
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-            "similarity": sim,
-        })
+        out.append(
+            {
+                "id": str(r.id),
+                "source_type": r.source_type,
+                "source_ref": r.source_ref,
+                "content_text": r.content_text,
+                "classification": r.classification,
+                "metadata": dict(r.metadata or {}),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "similarity": sim,
+            }
+        )
     return out

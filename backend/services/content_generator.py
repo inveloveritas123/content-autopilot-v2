@@ -8,11 +8,11 @@ WICHTIG: Zwei Modi:
 Der Dialog-Mode ist der Kern des Kunden-Konzepts:
 "Ein KI-System, das dem Unternehmer nicht das Denken abnimmt — sondern die Arbeit."
 """
-import logging
-from typing import Optional
 
-from services.llm import llm_service, BudgetExceededError
+import logging
+
 from services.brand_voice import format_voice_for_prompt
+from services.llm import BudgetExceededError, llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +47,9 @@ async def generate_linkedin_post_from_dialog(
     idea: dict,
     answers: list[dict],
     analysis: dict,
-    voice_profile: dict = None,
+    voice_profile: dict | None = None,
     variants: int = 2,
-) -> Optional[list[str]]:
+) -> list[str] | None:
     """Generiere LinkedIn-Post-Varianten aus Unternehmer-Antworten.
 
     Dies ist der KERN des dialogischen Workflows.
@@ -57,7 +57,9 @@ async def generate_linkedin_post_from_dialog(
     # Brand Voice Kontext aufbauen
     voice_context = ""
     if voice_profile:
-        voice_context = f"\n\nBRAND VOICE DES UNTERNEHMERS:\n{format_voice_for_prompt(voice_profile)}"
+        voice_context = (
+            f"\n\nBRAND VOICE DES UNTERNEHMERS:\n{format_voice_for_prompt(voice_profile)}"
+        )
 
     # Antworten formatieren
     qa_block = "\n".join(
@@ -104,13 +106,14 @@ Jede Variante ist ein komplett eigenstaendiger Post."""
 
 # ── QUICK MODE: Direkt aus Analyse (bestehende Funktionalitaet) ─────────────
 
+
 async def generate_linkedin_post(
     analysis: dict,
     title: str,
     tone: str = "professionell, informativ, mit persoenlicher Note",
-    voice_profile: dict = None,
-    routing_override: Optional[dict] = None,
-) -> Optional[str]:
+    voice_profile: dict | None = None,
+    routing_override: dict | None = None,
+) -> str | None:
     """Generate a LinkedIn post from video analysis (Quick Mode)."""
     voice_context = ""
     if voice_profile:
@@ -132,7 +135,12 @@ Sprache: Deutsch
 Schreibe NUR den fertigen Post, keine Erklaerungen."""
 
     try:
-        return await llm_service.complete(prompt, model="gemini-flash", purpose="post_generation", routing_override=routing_override)
+        return await llm_service.complete(
+            prompt,
+            model="gemini-flash",
+            purpose="post_generation",
+            routing_override=routing_override,
+        )
     except BudgetExceededError:
         raise
     except Exception as e:
@@ -145,8 +153,8 @@ async def generate_blog_draft(
     title: str,
     transcript_text: str = "",
     tone: str = "professionell, informativ",
-    voice_profile: dict = None,
-) -> Optional[str]:
+    voice_profile: dict | None = None,
+) -> str | None:
     """Generate a blog article draft from video analysis."""
     voice_context = ""
     if voice_profile:
@@ -184,7 +192,7 @@ async def generate_newsletter_snippet(
     analysis: dict,
     title: str,
     video_url: str = "",
-) -> Optional[str]:
+) -> str | None:
     """Generate a newsletter snippet from video analysis."""
     prompt = f"""Erstelle einen Newsletter-Abschnitt fuer einen woechentlichen Branchen-Newsletter.
 
@@ -213,11 +221,13 @@ async def generate_all_content(
     transcript_text: str = "",
     video_url: str = "",
     tone: str = "professionell, informativ, mit persoenlicher Note",
-    voice_profile: dict = None,
-    routing_override: Optional[dict] = None,
-) -> dict[str, Optional[str]]:
+    voice_profile: dict | None = None,
+    routing_override: dict | None = None,
+) -> dict[str, str | None]:
     """Generate content for all channels (Quick Mode)."""
-    linkedin = await generate_linkedin_post(analysis, title, tone, voice_profile, routing_override=routing_override)
+    linkedin = await generate_linkedin_post(
+        analysis, title, tone, voice_profile, routing_override=routing_override
+    )
     blog = await generate_blog_draft(analysis, title, transcript_text, tone, voice_profile)
     newsletter = await generate_newsletter_snippet(analysis, title, video_url)
 

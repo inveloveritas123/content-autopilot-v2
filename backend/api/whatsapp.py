@@ -20,19 +20,20 @@ Inbound-Pfad analog Telegram:
 - Voice/Photo/Text → telegram_message_log mit channel='whatsapp'
 - Celery-Task process_telegram_update verarbeitet beide Channels
 """
+
 from __future__ import annotations
 
 import hashlib
 import hmac
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Header, Query, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
+from sqlalchemy import text
 
 from config import settings
 from models.base import sync_session_factory
-from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -43,9 +44,9 @@ router = APIRouter()
 
 @router.get("/whatsapp/webhook")
 async def whatsapp_verify(
-    hub_mode: Optional[str] = Query(default=None, alias="hub.mode"),
-    hub_verify_token: Optional[str] = Query(default=None, alias="hub.verify_token"),
-    hub_challenge: Optional[str] = Query(default=None, alias="hub.challenge"),
+    hub_mode: str | None = Query(default=None, alias="hub.mode"),
+    hub_verify_token: str | None = Query(default=None, alias="hub.verify_token"),
+    hub_challenge: str | None = Query(default=None, alias="hub.challenge"),
 ):
     """Meta-Webhook-Verify: GET mit hub.mode=subscribe + hub.verify_token.
 
@@ -60,13 +61,14 @@ async def whatsapp_verify(
         raise HTTPException(status_code=403, detail="Verify-Token-Mismatch")
     # Meta erwartet die Challenge als rohen String
     from fastapi.responses import PlainTextResponse
+
     return PlainTextResponse(content=hub_challenge or "", status_code=200)
 
 
 # ── Webhook-Inbound (POST) ──────────────────────────────────────────
 
 
-def _verify_signature(raw_body: bytes, signature_header: Optional[str]) -> bool:
+def _verify_signature(raw_body: bytes, signature_header: str | None) -> bool:
     """Verifiziert X-Hub-Signature-256 gegen WHATSAPP_APP_SECRET."""
     secret = settings.whatsapp_app_secret
     if not secret:
@@ -79,7 +81,7 @@ def _verify_signature(raw_body: bytes, signature_header: Optional[str]) -> bool:
     return hmac.compare_digest(f"sha256={expected}", signature_header)
 
 
-def _resolve_tenant_for_wa_user(wa_user_id: str) -> Optional[str]:
+def _resolve_tenant_for_wa_user(wa_user_id: str) -> str | None:
     """Findet tenant_id über tenant_telegram_link.channel='whatsapp'.
 
     Migration 040 hat die channel-Spalte hinzugefügt. WhatsApp-User-IDs
@@ -102,12 +104,12 @@ def _resolve_tenant_for_wa_user(wa_user_id: str) -> Optional[str]:
             ).fetchone()
             if row:
                 return str(row[0])
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("WA-tenant-resolve failed: %s", exc)
     return None
 
 
-def _store_wa_message(tenant_id: str, message: dict, message_type: str) -> Optional[str]:
+def _store_wa_message(tenant_id: str, message: dict, message_type: str) -> str | None:
     """Insert in telegram_message_log + Celery-Dispatch.
 
     Verwendet bewusst dieselbe Tabelle, channel='whatsapp' im payload.
@@ -134,8 +136,9 @@ def _store_wa_message(tenant_id: str, message: dict, message_type: str) -> Optio
         log_id = str(row[0])
     try:
         from tasks.telegram_task import process_telegram_update
+
         process_telegram_update.apply_async(args=[log_id])
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("WA Celery-Dispatch skipped: %s", exc)
     return log_id
 
@@ -143,7 +146,7 @@ def _store_wa_message(tenant_id: str, message: dict, message_type: str) -> Optio
 @router.post("/whatsapp/webhook")
 async def whatsapp_webhook(
     request: Request,
-    x_hub_signature_256: Optional[str] = Header(default=None, alias="X-Hub-Signature-256"),
+    x_hub_signature_256: str | None = Header(default=None, alias="X-Hub-Signature-256"),
 ):
     """Empfängt WhatsApp Business Cloud Webhook-Events.
 
@@ -187,7 +190,7 @@ async def whatsapp_webhook(
                 try:
                     _store_wa_message(tenant_id, message, message_type)
                     processed += 1
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     logger.warning("WA-Store-Error: %s", exc)
 
     return {"status": "ok", "processed": processed}

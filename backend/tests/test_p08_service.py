@@ -1,12 +1,12 @@
 """Tests fuer P08 Conversation Service (Issue #65)."""
-import json
-import pytest
-from unittest.mock import MagicMock, patch, call
 
+import json
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_anthropic_response(message: str, next_action: str = "vertiefen", quality: str = "gold"):
     """Build a fake Anthropic response object."""
@@ -27,7 +27,14 @@ def _make_db_session_row(
 ):
     """Build a fake DB row tuple matching the SELECT in p08_response."""
     if messages is None:
-        messages = [{"bot": "Erste Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        messages = [
+            {
+                "bot": "Erste Frage?",
+                "user_features_summary": None,
+                "category": "targeted",
+                "question_index": 1,
+            }
+        ]
     row = MagicMock()
     row.__getitem__ = lambda self, i: (tenant_id, mode, messages, current_question_index, status)[i]
     row.__iter__ = lambda self: iter((tenant_id, mode, messages, current_question_index, status))
@@ -38,12 +45,14 @@ def _make_db_session_row(
 # Tests
 # ---------------------------------------------------------------------------
 
-class TestP08Opener:
 
+class TestP08Opener:
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.anthropic.Anthropic")
     @patch("services.p08_service._load_p08_prompt")
-    def test_opener_targeted_mode_creates_session(self, mock_load_prompt, mock_anthropic_cls, mock_db_factory):
+    def test_opener_targeted_mode_creates_session(
+        self, mock_load_prompt, mock_anthropic_cls, mock_db_factory
+    ):
         """p08_opener in 'targeted' mode creates a bot_session row and returns OpenerResult."""
         # Setup prompt mock
         prompt = MagicMock()
@@ -57,7 +66,9 @@ class TestP08Opener:
 
         # Setup Anthropic mock
         mock_client = MagicMock()
-        mock_client.messages.create.return_value = _make_anthropic_response("Was war dein erster Schritt?")
+        mock_client.messages.create.return_value = _make_anthropic_response(
+            "Was war dein erster Schritt?"
+        )
         mock_anthropic_cls.return_value = mock_client
 
         # Setup DB mock — three separate context managers:
@@ -84,10 +95,11 @@ class TestP08Opener:
         mock_db_factory.side_effect = [
             make_session_ctx(idea_row),  # content_ideas
             make_session_ctx(voice_row),  # brand_voice
-            insert_ctx,                   # INSERT bot_session
+            insert_ctx,  # INSERT bot_session
         ]
 
         from services.p08_service import p08_opener
+
         result = p08_opener(tenant_id="t1", mode="targeted", topic_idea_id="idea-uuid-123")
 
         assert result.session_id is not None
@@ -118,7 +130,9 @@ class TestP08Opener:
         mock_load_prompt.return_value = prompt
 
         mock_client = MagicMock()
-        mock_client.messages.create.return_value = _make_anthropic_response("Erzähl mir von deinem ersten Fehler.")
+        mock_client.messages.create.return_value = _make_anthropic_response(
+            "Erzähl mir von deinem ersten Fehler."
+        )
         mock_anthropic_cls.return_value = mock_client
 
         # brand_voice + INSERT
@@ -134,6 +148,7 @@ class TestP08Opener:
         mock_db_factory.side_effect = [voice_ctx, insert_ctx]
 
         from services.p08_service import p08_opener
+
         result = p08_opener(tenant_id="t1", mode="random_smart")
 
         mock_select_cat.assert_called_once_with("t1")
@@ -142,7 +157,6 @@ class TestP08Opener:
 
 
 class TestP08Response:
-
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.anthropic.Anthropic")
     @patch("services.p08_service._load_p08_prompt")
@@ -163,10 +177,19 @@ class TestP08Response:
         mock_load_prompt.return_value = prompt
 
         mock_client = MagicMock()
-        mock_client.messages.create.return_value = _make_anthropic_response("Welches Produkt hat am meisten überrascht?")
+        mock_client.messages.create.return_value = _make_anthropic_response(
+            "Welches Produkt hat am meisten überrascht?"
+        )
         mock_anthropic_cls.return_value = mock_client
 
-        messages = [{"bot": "Erste Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        messages = [
+            {
+                "bot": "Erste Frage?",
+                "user_features_summary": None,
+                "category": "targeted",
+                "question_index": 1,
+            }
+        ]
 
         def make_ctx(fetchone_val=None):
             ctx = MagicMock()
@@ -177,13 +200,14 @@ class TestP08Response:
 
         session_row = _make_db_session_row(messages=messages)
         mock_db_factory.side_effect = [
-            make_ctx(session_row),   # SELECT bot_session
-            make_ctx(None),          # SELECT brand_voice
-            make_ctx(None),          # UPDATE bot_session
-            make_ctx(None),          # UPDATE status = closed (via _close_session_db if triggered)
+            make_ctx(session_row),  # SELECT bot_session
+            make_ctx(None),  # SELECT brand_voice
+            make_ctx(None),  # UPDATE bot_session
+            make_ctx(None),  # UPDATE status = closed (via _close_session_db if triggered)
         ]
 
         from services.p08_service import p08_response
+
         p08_response(session_id="sess-1", features=features)
 
         # Inspect what was sent to Anthropic
@@ -199,10 +223,21 @@ class TestP08Response:
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.anthropic.Anthropic")
     @patch("services.p08_service._load_p08_prompt")
-    def test_response_closes_on_max_questions(self, mock_load_prompt, mock_anthropic_cls, mock_db_factory):
+    def test_response_closes_on_max_questions(
+        self, mock_load_prompt, mock_anthropic_cls, mock_db_factory
+    ):
         """When current_question_index >= max, session is closed without LLM call."""
-        messages = [{"bot": "Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
-        session_row = _make_db_session_row(mode="targeted", messages=messages, current_question_index=5)
+        messages = [
+            {
+                "bot": "Frage?",
+                "user_features_summary": None,
+                "category": "targeted",
+                "question_index": 1,
+            }
+        ]
+        session_row = _make_db_session_row(
+            mode="targeted", messages=messages, current_question_index=5
+        )
 
         ctx = MagicMock()
         ctx.__enter__ = MagicMock(return_value=ctx)
@@ -220,6 +255,7 @@ class TestP08Response:
         mock_db_factory.side_effect = [ctx, update_ctx, p10_ctx]
 
         from services.p08_service import p08_response
+
         result = p08_response(session_id="sess-max", features={"x": 1})
 
         assert result.is_closed is True
@@ -229,7 +265,9 @@ class TestP08Response:
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.anthropic.Anthropic")
     @patch("services.p08_service._load_p08_prompt")
-    def test_response_closes_on_leer_quality(self, mock_load_prompt, mock_anthropic_cls, mock_db_factory):
+    def test_response_closes_on_leer_quality(
+        self, mock_load_prompt, mock_anthropic_cls, mock_db_factory
+    ):
         """When LLM returns quality='leer', is_closed must be True."""
         prompt = MagicMock()
         prompt.system_prompt = "system"
@@ -246,7 +284,14 @@ class TestP08Response:
         )
         mock_anthropic_cls.return_value = mock_client
 
-        messages = [{"bot": "Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        messages = [
+            {
+                "bot": "Frage?",
+                "user_features_summary": None,
+                "category": "targeted",
+                "question_index": 1,
+            }
+        ]
         session_row = _make_db_session_row(messages=messages, current_question_index=1)
 
         def make_ctx(fetchone_val=None):
@@ -258,13 +303,14 @@ class TestP08Response:
 
         mock_db_factory.side_effect = [
             make_ctx(session_row),  # SELECT
-            make_ctx(None),          # brand_voice
-            make_ctx(None),          # UPDATE
-            make_ctx(None),          # _close_session_db UPDATE
-            make_ctx(None),          # P10 insert (fail-open)
+            make_ctx(None),  # brand_voice
+            make_ctx(None),  # UPDATE
+            make_ctx(None),  # _close_session_db UPDATE
+            make_ctx(None),  # P10 insert (fail-open)
         ]
 
         from services.p08_service import p08_response
+
         result = p08_response(session_id="sess-leer", features={"emotion": "bored"})
 
         assert result.is_closed is True
@@ -273,7 +319,9 @@ class TestP08Response:
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.anthropic.Anthropic")
     @patch("services.p08_service._load_p08_prompt")
-    def test_response_continues_on_gold_quality(self, mock_load_prompt, mock_anthropic_cls, mock_db_factory):
+    def test_response_continues_on_gold_quality(
+        self, mock_load_prompt, mock_anthropic_cls, mock_db_factory
+    ):
         """When LLM returns quality='gold' and next_action='vertiefen', session stays active."""
         prompt = MagicMock()
         prompt.system_prompt = "system"
@@ -290,7 +338,14 @@ class TestP08Response:
         )
         mock_anthropic_cls.return_value = mock_client
 
-        messages = [{"bot": "Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        messages = [
+            {
+                "bot": "Frage?",
+                "user_features_summary": None,
+                "category": "targeted",
+                "question_index": 1,
+            }
+        ]
         session_row = _make_db_session_row(messages=messages, current_question_index=1)
 
         def make_ctx(fetchone_val=None):
@@ -302,11 +357,12 @@ class TestP08Response:
 
         mock_db_factory.side_effect = [
             make_ctx(session_row),  # SELECT
-            make_ctx(None),          # brand_voice
-            make_ctx(None),          # UPDATE
+            make_ctx(None),  # brand_voice
+            make_ctx(None),  # UPDATE
         ]
 
         from services.p08_service import p08_response
+
         result = p08_response(session_id="sess-gold", features={"insight": "Wachstum von 40%"})
 
         assert result.is_closed is False
@@ -326,6 +382,7 @@ class TestP08Response:
         mock_db_factory.return_value = ctx
 
         from services.p08_service import p08_response
+
         result = p08_response(session_id="closed-sess", features={"x": 1})
 
         assert result.is_closed is True
@@ -333,7 +390,6 @@ class TestP08Response:
 
 
 class TestP08Close:
-
     @patch("services.p08_service.sync_session_factory")
     def test_close_sets_session_status_to_closed(self, mock_db_factory):
         """p08_close updates session status to 'closed' in DB."""
@@ -356,6 +412,7 @@ class TestP08Close:
         mock_db_factory.side_effect = [select_ctx, update_ctx, p10_ctx]
 
         from services.p08_service import p08_close
+
         p08_close(session_id="sess-to-close")
 
         # The UPDATE statement should have been called on update_ctx
@@ -367,11 +424,12 @@ class TestP08Close:
 
 
 class TestP08OpenerVoiceProfile:
-
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.anthropic.Anthropic")
     @patch("services.p08_service._load_p08_prompt")
-    def test_opener_voice_profile_loaded_from_db(self, mock_load_prompt, mock_anthropic_cls, mock_db_factory):
+    def test_opener_voice_profile_loaded_from_db(
+        self, mock_load_prompt, mock_anthropic_cls, mock_db_factory
+    ):
         """Voice profile from brand_voice table is passed to LLM prompt."""
         VOICE = "analytisch, präzise, direkt"
 
@@ -407,6 +465,7 @@ class TestP08OpenerVoiceProfile:
         mock_db_factory.side_effect = [make_ctx(voice_row), insert_ctx]
 
         from services.p08_service import p08_opener
+
         with patch("services.p08_service._select_random_category", return_value="erster_fehler"):
             p08_opener(tenant_id="t2", mode="random_smart")
 
@@ -416,11 +475,12 @@ class TestP08OpenerVoiceProfile:
 
 
 class TestP08DbFailure:
-
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.anthropic.Anthropic")
     @patch("services.p08_service._load_p08_prompt")
-    def test_response_db_failure_handled_gracefully(self, mock_load_prompt, mock_anthropic_cls, mock_db_factory):
+    def test_response_db_failure_handled_gracefully(
+        self, mock_load_prompt, mock_anthropic_cls, mock_db_factory
+    ):
         """If DB call for brand_voice fails, p08_response continues with empty voice_profile."""
         prompt = MagicMock()
         prompt.system_prompt = "sys"
@@ -432,10 +492,19 @@ class TestP08DbFailure:
         mock_load_prompt.return_value = prompt
 
         mock_client = MagicMock()
-        mock_client.messages.create.return_value = _make_anthropic_response("Weiter so!", quality="silber")
+        mock_client.messages.create.return_value = _make_anthropic_response(
+            "Weiter so!", quality="silber"
+        )
         mock_anthropic_cls.return_value = mock_client
 
-        messages = [{"bot": "Hallo?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        messages = [
+            {
+                "bot": "Hallo?",
+                "user_features_summary": None,
+                "category": "targeted",
+                "question_index": 1,
+            }
+        ]
         session_row = _make_db_session_row(messages=messages, current_question_index=1)
 
         session_ctx = MagicMock()
@@ -456,6 +525,7 @@ class TestP08DbFailure:
         mock_db_factory.side_effect = [session_ctx, failing_ctx, update_ctx]
 
         from services.p08_service import p08_response
+
         # Should not raise
         result = p08_response(session_id="sess-db-fail", features={"topic": "Wachstum"})
 

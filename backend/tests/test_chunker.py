@@ -1,19 +1,18 @@
 """Tests fuer services/chunker.py (Issue #151)."""
+
 from __future__ import annotations
 
 import pytest
 
 from services.chunker import (
-    Chunk,
-    ChunkConfig,
     SOURCE_TYPE_CONFIGS,
+    ChunkConfig,
     chunk_text,
     count_tokens,
     link_chunks_with_ids,
     normalize_unicode,
     strip_boilerplate,
 )
-
 
 # ── count_tokens ─────────────────────────────────────────────────────────
 
@@ -177,7 +176,7 @@ def test_chunk_text_very_long_multiple_chunks():
     # voice_telegram: max_tokens=400; 800 Woerter * 1.3 = 1040 → mind. 2 Chunks
     words = [f"W{i}" for i in range(800)]
     # Saetze bauen damit der Splitter Grenzen findet
-    sentences = ". ".join(" ".join(words[i:i+20]) for i in range(0, 800, 20)) + "."
+    sentences = ". ".join(" ".join(words[i : i + 20]) for i in range(0, 800, 20)) + "."
     result = chunk_text(sentences, "voice_telegram")
     assert len(result) >= 2
 
@@ -186,7 +185,7 @@ def test_chunk_text_prev_next_links_correct():
     """Bei 2 Chunks: prev/next-Indizes korrekt verknuepft."""
     # Langen Text erzeugen (800 Woerter)
     words = [f"W{i}" for i in range(800)]
-    sentences = ". ".join(" ".join(words[i:i+20]) for i in range(0, 800, 20)) + "."
+    sentences = ". ".join(" ".join(words[i : i + 20]) for i in range(0, 800, 20)) + "."
     result = chunk_text(sentences, "voice_telegram")
 
     assert len(result) >= 2
@@ -236,7 +235,7 @@ def test_chunk_text_unknown_source_type_uses_defaults():
 
 def test_link_chunks_with_ids_two_chunks():
     words = [f"W{i}" for i in range(800)]
-    sentences = ". ".join(" ".join(words[i:i+20]) for i in range(0, 800, 20)) + "."
+    sentences = ". ".join(" ".join(words[i : i + 20]) for i in range(0, 800, 20)) + "."
     chunks = chunk_text(sentences, "voice_telegram")
     assert len(chunks) >= 2
 
@@ -273,7 +272,7 @@ def test_voice_note_3min_single_or_two_chunks():
     """Voice-Note ~3 Min (~400 Token) → max 2 Chunks (eher 1)."""
     # Typische 3-Min Sprache: ca. 300-400 Woerter
     words = [f"W{i}" for i in range(300)]
-    text = ". ".join(" ".join(words[i:i+30]) for i in range(0, 300, 30)) + "."
+    text = ". ".join(" ".join(words[i : i + 30]) for i in range(0, 300, 30)) + "."
     result = chunk_text(text, "voice_telegram")
     # 300 Woerter * 1.3 = 390 Token <= max_tokens=400 → 1 Chunk
     assert len(result) <= 2
@@ -282,7 +281,7 @@ def test_voice_note_3min_single_or_two_chunks():
 def test_voice_note_short_1_chunk_no_artificial_split():
     """Kurze Voice-Note (200 Token) → exakt 1 Chunk."""
     words = [f"W{i}" for i in range(200)]
-    text = ". ".join(" ".join(words[i:i+20]) for i in range(0, 200, 20)) + "."
+    text = ". ".join(" ".join(words[i : i + 20]) for i in range(0, 200, 20)) + "."
     # 200 Woerter * 1.3 = 260 < 400 → 1 Chunk, kein Split
     result = chunk_text(text, "voice_telegram")
     # Entweder 1 Chunk (Short-Single-Chunk-Pfad) oder wenige Chunks

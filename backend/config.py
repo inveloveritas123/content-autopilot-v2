@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -13,9 +12,9 @@ class Settings(BaseSettings):
     # LLM APIs
     gemini_api_key: str = ""
     anthropic_api_key: str = ""
-    litellm_base_url: Optional[str] = None
-    litellm_api_key: Optional[str] = None
-    requesty_api_key: Optional[str] = None
+    litellm_base_url: str | None = None
+    litellm_api_key: str | None = None
+    requesty_api_key: str | None = None
 
     # Nextcloud
     nextcloud_url: str = ""
@@ -33,7 +32,9 @@ class Settings(BaseSettings):
 
     # Storage paths (Nextcloud)
     brand_voice_nc_base_path: str = "/content-autopilot/v2/Kunde/"
-    prompt_nc_base_path: str = "/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/"
+    prompt_nc_base_path: str = (
+        "/zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/"
+    )
 
     # Storage-Backend: "localfs" (Standard) oder "nc" (Nextcloud, deprecated)
     prompt_storage_backend: str = "localfs"
@@ -44,28 +45,28 @@ class Settings(BaseSettings):
     content_truth_overlay_path: str = "/app/data/prompts-custom"
 
     # VoiceScriptor
-    voicescriptor_bot_token: Optional[str] = None
-    voicescriptor_chat_id: Optional[str] = None
+    voicescriptor_bot_token: str | None = None
+    voicescriptor_chat_id: str | None = None
 
     # Pipeline Throttle (#156)
     max_calls_per_tenant_per_hour: int = 200
     max_calls_global_per_hour: int = 1000
 
     # Telegram Bot (Content-Autopilot)
-    telegram_bot_token: Optional[str] = None
-    telegram_admin_chat_id: Optional[str] = None  # TELEGRAM_ADMIN_CHAT_ID env var
-    telegram_webhook_secret: Optional[str] = None
-    telegram_bot_username: Optional[str] = "content_autopilot_bot"
+    telegram_bot_token: str | None = None
+    telegram_admin_chat_id: str | None = None  # TELEGRAM_ADMIN_CHAT_ID env var
+    telegram_webhook_secret: str | None = None
+    telegram_bot_username: str | None = "content_autopilot_bot"
 
     # WhatsApp Business Cloud API (Phase 8.1, #140)
     # Setup: Meta-Developer-Account → WhatsApp-Business-App → Phone-Number-ID
     # WHATSAPP_ACCESS_TOKEN: Long-lived Access Token vom Meta-Dashboard
     # WHATSAPP_PHONE_NUMBER_ID: Phone Number ID des verbundenen Bots
     # WHATSAPP_VERIFY_TOKEN: selbstgewählt für Webhook-Verifikation
-    whatsapp_access_token: Optional[str] = None
-    whatsapp_phone_number_id: Optional[str] = None
-    whatsapp_verify_token: Optional[str] = None
-    whatsapp_app_secret: Optional[str] = None  # für X-Hub-Signature-256-Verifikation
+    whatsapp_access_token: str | None = None
+    whatsapp_phone_number_id: str | None = None
+    whatsapp_verify_token: str | None = None
+    whatsapp_app_secret: str | None = None  # für X-Hub-Signature-256-Verifikation
 
     class Config:
         env_file = ".env"

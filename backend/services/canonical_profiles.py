@@ -12,24 +12,24 @@ Stelle mit:
 Der Resolver-Kern (is_canonical / pick_active) ist dep-frei und unit-testbar;
 nur der DB-Zugriff (load_active_profiles) importiert sqlalchemy/models lazy.
 """
+
 import json
 import logging
 import re
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 # Profil-Typ → DB-Tabelle
 TABLE_MAP = {
     "customer_context": "tenant_customer_context",  # P01
-    "voice_profile": "tenant_voice_profile",         # P03
-    "audience_avatar": "tenant_audience_avatar",      # P04
+    "voice_profile": "tenant_voice_profile",  # P03
+    "audience_avatar": "tenant_audience_avatar",  # P04
 }
 
 _PROMPT_VERSION_RE = re.compile(r"^p0[0-9]+-v[0-9]+\.[0-9]+$")
 
 
-def is_canonical(payload: Optional[dict]) -> bool:
+def is_canonical(payload: dict | None) -> bool:
     """True, wenn der Payload kanonisch ist (gültige `_meta.prompt_version`).
 
     Alt-v2-Rows haben kein konformes `_meta.prompt_version` → False
@@ -44,7 +44,7 @@ def is_canonical(payload: Optional[dict]) -> bool:
     return isinstance(pv, str) and bool(_PROMPT_VERSION_RE.match(pv))
 
 
-def pick_active(rows: list, project_id: Optional[str] = None) -> Optional[dict]:
+def pick_active(rows: list, project_id: str | None = None) -> dict | None:
     """Wählt deterministisch die aktive Row aus Kandidaten.
 
     rows: Liste von Dicts mit Schlüsseln 'project_id', 'version', 'payload'
@@ -86,7 +86,7 @@ def _coerce_payload(raw) -> dict:
     return {}
 
 
-def load_active_profile(profile_type: str, tenant_id: str, project_id: Optional[str] = None):
+def load_active_profile(profile_type: str, tenant_id: str, project_id: str | None = None):
     """Lädt das aktive Profil eines Typs als (payload, is_canonical_flag).
 
     profile_type: 'customer_context' | 'voice_profile' | 'audience_avatar'.
@@ -97,6 +97,7 @@ def load_active_profile(profile_type: str, tenant_id: str, project_id: Optional[
 
     # Lazy-Import: hält den Resolver-Kern dep-frei/testbar.
     from sqlalchemy import text
+
     from models.base import sync_session_factory
 
     table = TABLE_MAP[profile_type]
@@ -120,7 +121,7 @@ def load_active_profile(profile_type: str, tenant_id: str, project_id: Optional[
     return payload, is_canonical(payload)
 
 
-def load_active_profiles(tenant_id: str, project_id: Optional[str] = None) -> dict:
+def load_active_profiles(tenant_id: str, project_id: str | None = None) -> dict:
     """Lädt alle drei aktiven Profile auf einmal.
 
     Returns:

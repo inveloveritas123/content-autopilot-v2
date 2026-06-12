@@ -8,18 +8,27 @@ Wird genutzt von:
 Keine schweren Abhaengigkeiten: stdlib only + services.prompt_loader
 fuer _extract_section.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Literal
 
 # ---------------------------------------------------------------------------
 # Prompts die einen User-Prompt ERWARTEN (d.h. issues wenn leer)
 # ---------------------------------------------------------------------------
 
 _EXPECTS_USER_PROMPT = {
-    "P01", "P03", "P04", "P09", "P12", "P12b", "P12c",
-    "P13", "P15", "P16",
+    "P01",
+    "P03",
+    "P04",
+    "P09",
+    "P12",
+    "P12b",
+    "P12c",
+    "P13",
+    "P15",
+    "P16",
 }
 
 # Prompts fuer die kein System-Prompt erwartet wird
@@ -29,9 +38,11 @@ _NO_SYSTEM_EXPECTED = {"fragenkatalog", "hookmaster"}
 # Ergebnis-Datenklasse
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PromptHealthResult:
     """Ergebnis eines Health-Checks fuer eine Prompt-Datei."""
+
     status: Literal["ok", "weird"]
     system_chars: int
     user_chars: int
@@ -43,15 +54,13 @@ class PromptHealthResult:
 # Fence-Balance-Pruefung
 # ---------------------------------------------------------------------------
 
+
 def _fences_balanced(text: str) -> bool:
     """Prueft ob alle ``` Code-Fences im Text balanciert sind.
 
     Einfache Heuristik: gerade Anzahl von ```-Zeilen = balanciert.
     """
-    fence_lines = [
-        line for line in text.splitlines()
-        if line.strip().startswith("```")
-    ]
+    fence_lines = [line for line in text.splitlines() if line.strip().startswith("```")]
     return len(fence_lines) % 2 == 0
 
 
@@ -59,10 +68,11 @@ def _fences_balanced(text: str) -> bool:
 # Haupt-Prueffunktion
 # ---------------------------------------------------------------------------
 
+
 def check_prompt_content(
     content: str,
     *,
-    prompt_key: Optional[str] = None,
+    prompt_key: str | None = None,
 ) -> PromptHealthResult:
     """Prueft den Inhalt einer Prompt/Rule-Datei (.md) auf Gesundheit.
 

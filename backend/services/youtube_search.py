@@ -1,6 +1,4 @@
 import logging
-import re
-from typing import Optional
 
 import httpx
 
@@ -63,15 +61,17 @@ async def search_youtube_channels(query: str, max_results: int = 10) -> list[dic
                     if thumbnail.startswith("//"):
                         thumbnail = "https:" + thumbnail
 
-                channels.append({
-                    "channel_id": channel_id,
-                    "name": title,
-                    "description": description[:200] if description else "",
-                    "subscribers": sub_text,
-                    "video_count": subscriber_text,
-                    "thumbnail": thumbnail,
-                    "url": f"https://www.youtube.com/channel/{channel_id}",
-                })
+                channels.append(
+                    {
+                        "channel_id": channel_id,
+                        "name": title,
+                        "description": description[:200] if description else "",
+                        "subscribers": sub_text,
+                        "video_count": subscriber_text,
+                        "thumbnail": thumbnail,
+                        "url": f"https://www.youtube.com/channel/{channel_id}",
+                    }
+                )
 
                 if len(channels) >= max_results:
                     break
@@ -133,16 +133,18 @@ async def search_youtube_videos(query: str, max_results: int = 20) -> list[dict]
                 if thumbs:
                     thumbnail = thumbs[-1].get("url", "")
 
-                videos.append({
-                    "video_id": video_id,
-                    "title": title,
-                    "channel_name": channel,
-                    "duration": duration,
-                    "view_count": views,
-                    "published": published,
-                    "thumbnail": thumbnail,
-                    "url": f"https://www.youtube.com/watch?v={video_id}",
-                })
+                videos.append(
+                    {
+                        "video_id": video_id,
+                        "title": title,
+                        "channel_name": channel,
+                        "duration": duration,
+                        "view_count": views,
+                        "published": published,
+                        "thumbnail": thumbnail,
+                        "url": f"https://www.youtube.com/watch?v={video_id}",
+                    }
+                )
 
                 if len(videos) >= max_results:
                     break

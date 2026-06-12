@@ -9,11 +9,9 @@ The mock session supports:
 
 Pre-configured to return fake voice, customer context, and avatar payloads.
 """
-import json
-from contextlib import contextmanager
-from typing import Any, Optional
-from unittest.mock import MagicMock
 
+from contextlib import contextmanager
+from typing import Any
 
 _FAKE_VOICE_PAYLOAD = {
     "tonalitaet": {
@@ -74,7 +72,7 @@ class MockResult:
     def __init__(self, rows: list):
         self._rows = rows
 
-    def fetchone(self) -> Optional[MockRow]:
+    def fetchone(self) -> MockRow | None:
         if self._rows:
             return self._rows[0]
         return None

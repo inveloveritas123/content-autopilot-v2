@@ -15,13 +15,13 @@ Nutzung:
   python backend/eval/run_quality_gate_eval.py --thresholds 40,50,60,70,80,90
   python backend/eval/run_quality_gate_eval.py --min-f1 0.75  # CI-Gate
 """
+
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +57,7 @@ ROC_THRESHOLDS = [40, 50, 60, 70, 80, 90]
 # Corpus helpers
 # ---------------------------------------------------------------------------
 
+
 def load_labeled_posts(branche: str) -> list[dict[str, Any]]:
     """Laedt labeled_posts.yaml fuer eine Branche. Gibt [] zurueck wenn nicht vorhanden."""
     corpus_file = _CORPUS_ROOT / branche / "labeled_posts.yaml"
@@ -70,6 +71,7 @@ def load_labeled_posts(branche: str) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Classification helpers
 # ---------------------------------------------------------------------------
+
 
 def classify_outcome(label: str, passed: bool) -> str:
     """Ordnet Label + Gate-Ergebnis einer Confusion-Matrix-Klasse zu.
@@ -93,11 +95,7 @@ def compute_metrics(tp: int, fp: int, tn: int, fn: int) -> dict[str, float]:
     """Berechnet Precision, Recall, F1, Accuracy aus CM-Werten."""
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    f1 = (
-        2 * precision * recall / (precision + recall)
-        if (precision + recall) > 0
-        else 0.0
-    )
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
     total = tp + fp + tn + fn
     accuracy = (tp + tn) / total if total > 0 else 0.0
     return {
@@ -111,6 +109,7 @@ def compute_metrics(tp: int, fp: int, tn: int, fn: int) -> dict[str, float]:
 # ---------------------------------------------------------------------------
 # ROC / AUC helpers
 # ---------------------------------------------------------------------------
+
 
 def compute_roc_points(
     posts: list[dict[str, Any]], branche: str, thresholds: list[int]
@@ -141,13 +140,18 @@ def compute_roc_points(
         tpr = tp / (tp + fn) if (tp + fn) > 0 else 0.0
         fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
         metrics = compute_metrics(tp, fp, tn, fn)
-        roc_points.append({
-            "threshold": threshold,
-            "tpr": round(tpr, 4),
-            "fpr": round(fpr, 4),
-            "tp": tp, "fp": fp, "tn": tn, "fn": fn,
-            **metrics,
-        })
+        roc_points.append(
+            {
+                "threshold": threshold,
+                "tpr": round(tpr, 4),
+                "fpr": round(fpr, 4),
+                "tp": tp,
+                "fp": fp,
+                "tn": tn,
+                "fn": fn,
+                **metrics,
+            }
+        )
 
     return roc_points
 
@@ -171,6 +175,7 @@ def find_optimal_threshold(roc_points: list[dict]) -> dict:
 # ---------------------------------------------------------------------------
 # Per-Branche Eval
 # ---------------------------------------------------------------------------
+
 
 def eval_branche(branche: str, thresholds: list[int]) -> dict[str, Any]:
     """Vollstaendige Eval-Rechnung fuer eine Branche."""
@@ -202,14 +207,16 @@ def eval_branche(branche: str, thresholds: list[int]) -> dict[str, Any]:
             tn += 1
         else:
             fn += 1
-        per_post_results.append({
-            "id": post.get("id"),
-            "label": post["label"],
-            "passed": result["passed"],
-            "score": result["score"],
-            "violations": result["violations"],
-            "outcome": outcome,
-        })
+        per_post_results.append(
+            {
+                "id": post.get("id"),
+                "label": post["label"],
+                "passed": result["passed"],
+                "score": result["score"],
+                "violations": result["violations"],
+                "outcome": outcome,
+            }
+        )
 
     metrics = compute_metrics(tp, fp, tn, fn)
     roc_points = compute_roc_points(posts, branche, thresholds)
@@ -232,12 +239,18 @@ def eval_branche(branche: str, thresholds: list[int]) -> dict[str, Any]:
 # Aggregate
 # ---------------------------------------------------------------------------
 
+
 def aggregate_results(per_branche: dict[str, dict]) -> dict[str, Any]:
     """Gewichtetes Aggregat aller Branchen-Ergebnisse (gewichtet nach post_count)."""
     total_posts = sum(v["post_count"] for v in per_branche.values())
     if total_posts == 0:
-        return {"weighted_f1": 0.0, "weighted_precision": 0.0, "weighted_recall": 0.0,
-                "weighted_accuracy": 0.0, "total_posts": 0}
+        return {
+            "weighted_f1": 0.0,
+            "weighted_precision": 0.0,
+            "weighted_recall": 0.0,
+            "weighted_accuracy": 0.0,
+            "total_posts": 0,
+        }
 
     def wavg(metric_key: str) -> float:
         total = sum(
@@ -261,6 +274,7 @@ def aggregate_results(per_branche: dict[str, dict]) -> dict[str, Any]:
 # Report writers
 # ---------------------------------------------------------------------------
 
+
 def cm_table(cm: dict) -> str:
     """Markdown-Tabelle fuer Confusion-Matrix."""
     tp, fp = cm["tp"], cm["fp"]
@@ -277,23 +291,23 @@ def write_markdown_report(results: dict, path: Path) -> None:
     ts = results["timestamp"]
     agg = results["aggregate"]
     lines = [
-        f"# Quality-Gate Eval Report",
-        f"",
+        "# Quality-Gate Eval Report",
+        "",
         f"**Timestamp:** {ts}",
-        f"**Stub:** quality_gate_stub.py (Production-Implementation: Issue #146)",
-        f"",
-        f"## Aggregate",
-        f"",
-        f"| Metrik | Wert |",
-        f"|---|---|",
+        "**Stub:** quality_gate_stub.py (Production-Implementation: Issue #146)",
+        "",
+        "## Aggregate",
+        "",
+        "| Metrik | Wert |",
+        "|---|---|",
         f"| Weighted F1 | {agg['weighted_f1']:.4f} |",
         f"| Weighted Precision | {agg['weighted_precision']:.4f} |",
         f"| Weighted Recall | {agg['weighted_recall']:.4f} |",
         f"| Weighted Accuracy | {agg['weighted_accuracy']:.4f} |",
         f"| Posts gesamt | {agg['total_posts']} |",
-        f"",
-        f"## Per-Branche",
-        f"",
+        "",
+        "## Per-Branche",
+        "",
     ]
 
     for branche, data in results["per_branche"].items():
@@ -301,20 +315,20 @@ def write_markdown_report(results: dict, path: Path) -> None:
         opt = data.get("optimal_threshold") or {}
         lines += [
             f"### {branche}",
-            f"",
+            "",
             f"Posts: {data['post_count']}  |  AUC: {data['auc']:.4f}  "
             f"|  Optimaler Threshold: {opt.get('threshold', 'n/a')} (F1={opt.get('f1', 0):.4f})",
-            f"",
+            "",
             cm_table(data["confusion_matrix"]),
-            f"",
-            f"| Precision | Recall | F1 | Accuracy |",
-            f"|---|---|---|---|",
+            "",
+            "| Precision | Recall | F1 | Accuracy |",
+            "|---|---|---|---|",
             f"| {m['precision']:.4f} | {m['recall']:.4f} | {m['f1']:.4f} | {m['accuracy']:.4f} |",
-            f"",
-            f"#### ROC-Punkte",
-            f"",
-            f"| Threshold | TPR | FPR | F1 |",
-            f"|---|---|---|---|",
+            "",
+            "#### ROC-Punkte",
+            "",
+            "| Threshold | TPR | FPR | F1 |",
+            "|---|---|---|---|",
         ]
         for pt in data["roc_points"]:
             lines.append(
@@ -328,6 +342,7 @@ def write_markdown_report(results: dict, path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def run_eval(
     branchen: list[str] | None = None,
@@ -347,7 +362,7 @@ def run_eval(
     branchen = branchen or BRANCHEN
     thresholds = thresholds or ROC_THRESHOLDS
 
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
     per_branche: dict[str, dict] = {}
     for branche in branchen:
@@ -357,9 +372,7 @@ def run_eval(
 
     results: dict[str, Any] = {
         "timestamp": ts,
-        "stub_warning": (
-            "STUB: quality_gate_stub.py — Production-Implementation in Issue #146."
-        ),
+        "stub_warning": ("STUB: quality_gate_stub.py — Production-Implementation in Issue #146."),
         "aggregate": agg,
         "per_branche": per_branche,
     }
@@ -375,7 +388,7 @@ def run_eval(
     print(f"Results written: {json_path}")
     print(f"Report written:  {md_path}")
     print()
-    print(f"=== Aggregate ===")
+    print("=== Aggregate ===")
     print(f"  Weighted F1:        {agg['weighted_f1']:.4f}")
     print(f"  Weighted Precision: {agg['weighted_precision']:.4f}")
     print(f"  Weighted Recall:    {agg['weighted_recall']:.4f}")
@@ -402,9 +415,7 @@ def run_eval(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Quality-Gate Eval Runner (Issue #152)"
-    )
+    parser = argparse.ArgumentParser(description="Quality-Gate Eval Runner (Issue #152)")
     parser.add_argument(
         "--branchen",
         type=str,
@@ -425,11 +436,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    branchen = (
-        [b.strip() for b in args.branchen.split(",") if b.strip()]
-        if args.branchen
-        else None
-    )
+    branchen = [b.strip() for b in args.branchen.split(",") if b.strip()] if args.branchen else None
     thresholds = (
         [int(t.strip()) for t in args.thresholds.split(",") if t.strip()]
         if args.thresholds

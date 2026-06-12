@@ -1,12 +1,13 @@
 """
 Wizard-Cleanup-Task: löscht abandoned Wizard-Sessions (>24h ohne Aktivität).
 """
+
 import logging
 
 from sqlalchemy import text
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 

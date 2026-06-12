@@ -1,9 +1,10 @@
 """Cookie validation and freshness check."""
+
 import logging
 import os
 import time
+from datetime import datetime
 from pathlib import Path
-from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -25,19 +26,25 @@ def check_cookies() -> dict:
     }
 
     ap = result["autopilot_cookies"]
-    vs = result["voicescriptor_cookies"]
+    result["voicescriptor_cookies"]
 
     if not ap["exists"]:
         result["needs_refresh"] = True
         result["message"] = "Keine Cookies vorhanden. Bitte YouTube Cookies exportieren."
     elif ap["age_hours"] > MAX_COOKIE_AGE_HOURS:
         result["needs_refresh"] = True
-        result["message"] = f"Cookies sind {ap['age_hours']:.0f}h alt. Bitte neue Cookies exportieren (max {MAX_COOKIE_AGE_HOURS}h)."
+        result["message"] = (
+            f"Cookies sind {ap['age_hours']:.0f}h alt. Bitte neue Cookies exportieren (max {MAX_COOKIE_AGE_HOURS}h)."
+        )
     elif ap["secure_count"] < 5:
         result["needs_refresh"] = True
-        result["message"] = "Cookies unvollstaendig. Bitte bei YouTube einloggen und erneut exportieren."
+        result["message"] = (
+            "Cookies unvollstaendig. Bitte bei YouTube einloggen und erneut exportieren."
+        )
     else:
-        result["message"] = f"Cookies OK ({ap['age_hours']:.0f}h alt, {ap['entry_count']} Eintraege)"
+        result["message"] = (
+            f"Cookies OK ({ap['age_hours']:.0f}h alt, {ap['entry_count']} Eintraege)"
+        )
 
     return result
 
@@ -73,6 +80,7 @@ def sync_cookies_to_voicescriptor() -> bool:
 
     try:
         import shutil
+
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(src), str(dst))
         # Fix permissions
@@ -84,6 +92,7 @@ def sync_cookies_to_voicescriptor() -> bool:
         # Try with sudo
         try:
             import subprocess
+
             subprocess.run(["sudo", "cp", str(src), str(dst)], check=True)
             subprocess.run(["sudo", "chmod", "644", str(dst)], check=True)
             return True

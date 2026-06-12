@@ -1,4 +1,5 @@
 """#155 Cost-Monitoring: stündliche Alert-Checks (Cache-Hit-Rate + Runaway-Detection)."""
+
 import logging
 import uuid as _uuid
 from datetime import datetime, timedelta
@@ -17,7 +18,6 @@ def check_cost_alerts():
     """
     try:
         from models.base import sync_session_factory
-        from sqlalchemy import text
 
         with sync_session_factory() as session:
             _check_cache_hit_rate(session)
@@ -38,10 +38,13 @@ def _get_active_tenant_ids(session) -> list:
     return [row[0] for row in rows]
 
 
-def _insert_throttle_event(session, tenant_id, scope: str, count_at_throttle: int, limit_value: int, task_name: str) -> None:
+def _insert_throttle_event(
+    session, tenant_id, scope: str, count_at_throttle: int, limit_value: int, task_name: str
+) -> None:
     """Schreibt Audit-Eintrag in throttle_events (bestehende Tabelle aus #156)."""
     try:
         from sqlalchemy import text
+
         session.execute(
             text(
                 "INSERT INTO throttle_events "

@@ -15,6 +15,7 @@ Workflow:
 11. Reviewer-Queue-Eintrag bei loop_break
 12. Return dict
 """
+
 """
 Umgestellt: 2026-06-11 (P5-anthropic-provider.md)
   - anthropic-SDK-Bypass entfernt (ANTHROPIC_MODEL_ID / ANTHROPIC_PRICING_KEY entfernt)
@@ -29,15 +30,18 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Optional
 
 import jsonschema
 from sqlalchemy import text
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
+from services.pipeline_llm import (
+    call_pipeline_llm,
+    estimate_tier_cost,
+    resolve_tier,
+)
 from services.prompt_loader import get_default_prompt_loader
-from services.pipeline_llm import call_pipeline_llm, resolve_tier, estimate_tier_cost, BudgetExceededError
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +52,11 @@ _SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "..", "schemas", "p12b_ou
 # Input-Dataclasses (Trennschnitt-Enforcement)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class P12Input:
     """Strikt begrenzte Inputs für P12b — kein Zugriff auf Ideen/Antworten/Voll-Profile."""
+
     post: str
     alternative_opener: list
     design_notizen: str
@@ -61,7 +67,8 @@ class P12Input:
 @dataclass
 class P12bContext:
     """Gekürzter Voice+Avatar-Kontext für Lektor."""
-    voice_pruned: dict   # nur stilistische Felder
+
+    voice_pruned: dict  # nur stilistische Felder
     avatar_pruned: dict  # nur Zielgruppen-Sprache
 
 
@@ -70,18 +77,26 @@ class P12bContext:
 # ---------------------------------------------------------------------------
 
 # Zentral + kanonisch-korrekt (Wortschatz-Bugfix 2026-06-12):
-from tasks.p12_pruning import VOICE_KEYS_FOR_P12B, AVATAR_KEYS_FOR_P12B, prune as _prune_keys
+from tasks.p12_pruning import AVATAR_KEYS_FOR_P12B, VOICE_KEYS_FOR_P12B
+from tasks.p12_pruning import prune as _prune_keys
 
 # Pflichtfelder im P12-Output
-_P12_REQUIRED_FIELDS = {"post", "alternative_opener", "design_notizen", "ki_signal_check", "potenzielle_schwaechen"}
+_P12_REQUIRED_FIELDS = {
+    "post",
+    "alternative_opener",
+    "design_notizen",
+    "ki_signal_check",
+    "potenzielle_schwaechen",
+}
 
 
 # ---------------------------------------------------------------------------
 # Schema
 # ---------------------------------------------------------------------------
 
+
 def _load_schema() -> dict:
-    with open(os.path.normpath(_SCHEMA_PATH), "r", encoding="utf-8") as f:
+    with open(os.path.normpath(_SCHEMA_PATH), encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -91,6 +106,7 @@ _P12B_SCHEMA = _load_schema()
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
+
 
 def _parse_json_from_text(raw: str) -> dict:
     """Extrahiert JSON aus dem LLM-Output — entfernt Markdown-Fencing falls vorhanden."""
@@ -116,6 +132,7 @@ async def _run_cost_check(tenant_id: str, estimated_cost: float) -> None:
     """Async Cost-Cap-Check — via asyncio.run() aus Celery aufgerufen."""
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker as async_sm
+
     from config import settings
     from services.cost_cap import CostCapMiddleware
 
@@ -133,6 +150,7 @@ async def _record_actual_cost(tenant_id: str, actual_cost: float) -> None:
     """Schreibt die tatsächlichen Kosten nach erfolgreichem Anthropic-Call."""
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker as async_sm
+
     from config import settings
     from services.cost_cap import CostCapMiddleware
 
@@ -177,13 +195,14 @@ def _insert_reviewer_queue(tenant_id: str, p12_output: dict) -> None:
 # Celery Task
 # ---------------------------------------------------------------------------
 
+
 @celery_app.task(name="tasks.p12b_task.run_p12b", bind=True, max_retries=1)
 def run_p12b(
     self,
     tenant_id: str,
-    p12_output: dict,        # muss P12Input-Felder enthalten
-    voice_payload: dict,     # MUSS bereits geprunt sein (Caller-Verantwortung)
-    avatar_payload: dict,    # MUSS bereits geprunt sein
+    p12_output: dict,  # muss P12Input-Felder enthalten
+    voice_payload: dict,  # MUSS bereits geprunt sein (Caller-Verantwortung)
+    avatar_payload: dict,  # MUSS bereits geprunt sein
     loop_iteration: int = 0,
 ) -> dict:
     """P12b Lektor-Pass: prüft P12-Output mit frischen Augen und optimiert oder weist zurück.
@@ -199,7 +218,8 @@ def run_p12b(
     Returns:
         {"status": "done"|"needs_revision"|"loop_break"|"paused_for_cost"|"failed", ...}
     """
-    from services.kill_switch import check_kill_switch, KillSwitchTriggered
+    from services.kill_switch import KillSwitchTriggered, check_kill_switch
+
     try:
         check_kill_switch(tenant_id)
     except KillSwitchTriggered:
@@ -212,7 +232,11 @@ def run_p12b(
     missing = _P12_REQUIRED_FIELDS - set(p12_output.keys())
     if missing:
         logger.error("p12b run_id=%s: ungültiger P12-Output, fehlende Felder: %s", run_id, missing)
-        return {"status": "failed", "error": "Ungültiger P12-Output", "missing_fields": list(missing)}
+        return {
+            "status": "failed",
+            "error": "Ungültiger P12-Output",
+            "missing_fields": list(missing),
+        }
 
     # ------------------------------------------------------------------
     # Setup-Pipeline-Run anlegen
@@ -398,15 +422,16 @@ def run_p12b(
         try:
             asyncio.run(_record_actual_cost(tenant_id, actual_cost))
         except Exception as cost_err:
-            logger.warning("p12b run_id=%s: actual-cost recording fehlgeschlagen: %s", run_id, cost_err)
+            logger.warning(
+                "p12b run_id=%s: actual-cost recording fehlgeschlagen: %s", run_id, cost_err
+            )
 
         # ------------------------------------------------------------------
         # 11. Audit-Update und Return
         # ------------------------------------------------------------------
         import hashlib
-        output_hash = hashlib.sha256(
-            json.dumps(output_json, sort_keys=True).encode()
-        ).hexdigest()
+
+        output_hash = hashlib.sha256(json.dumps(output_json, sort_keys=True).encode()).hexdigest()
 
         # ------------------------------------------------------------------
         # Quote-Validation gegen Reservoir (#86) — Pflicht-Schritt
@@ -417,12 +442,15 @@ def run_p12b(
             final_post_candidate = output_json.get("optimierter_post", p12_output["post"])
             try:
                 from services.quote_validator import validate_post_quotes
+
                 content_texts: list = []
                 extracted_quotes_lists: list = []
                 with sync_session_factory() as _res_session:
                     _rows = _res_session.execute(
-                        text("SELECT content_text, extracted_quotes FROM tenant_reservoir WHERE tenant_id = :tid"),
-                        {"tid": tenant_id}
+                        text(
+                            "SELECT content_text, extracted_quotes FROM tenant_reservoir WHERE tenant_id = :tid"
+                        ),
+                        {"tid": tenant_id},
                     ).fetchall()
                     # Materialize inside session scope to avoid detached-row issues
                     content_texts = [r[0] for r in _rows]
@@ -440,11 +468,14 @@ def run_p12b(
                             # Hallucination found — force back to P12 with hint
                             logger.warning(
                                 "p12b run_id=%s: Quote-Halluzination gefunden: %s",
-                                run_id, val_result.hallucinated_quotes
+                                run_id,
+                                val_result.hallucinated_quotes,
                             )
                             _finalize_run(
-                                run_id=run_id, t_start=t_start,
-                                input_tokens=input_tokens, output_tokens=output_tokens,
+                                run_id=run_id,
+                                t_start=t_start,
+                                input_tokens=input_tokens,
+                                output_tokens=output_tokens,
                                 actual_cost=actual_cost,
                                 prompt_version_hash=prompt_version_hash,
                                 output_hash=output_hash,
@@ -462,10 +493,13 @@ def run_p12b(
                             # Loop-Schutz: bei Iteration >= 1 nicht erneut zurückweisen
                             logger.warning(
                                 "p12b run_id=%s: Quote-Halluzination in Iteration %d — Loop-Schutz aktiv, Post wird durchgereicht",
-                                run_id, loop_iteration
+                                run_id,
+                                loop_iteration,
                             )
             except Exception as ve:
-                logger.warning("p12b run_id=%s: Quote-Validierung fehlgeschlagen (ignoriert): %s", run_id, ve)
+                logger.warning(
+                    "p12b run_id=%s: Quote-Validierung fehlgeschlagen (ignoriert): %s", run_id, ve
+                )
                 # Fail-open: wenn Reservoir nicht erreichbar, trotzdem weiter
 
         _finalize_run(
@@ -510,10 +544,14 @@ def run_p12b(
             "loop_iteration": loop_iteration,
         }
 
-    except BudgetExceededError as exc:
+    except BudgetExceededError:
         # BUG-1-Fix: Router-Budget überschritten (HTTP 412) → paused_for_cost, kein Retry
         duration_ms = int((time.monotonic() - t_start) * 1000)
-        logger.warning("p12b run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id)
+        logger.warning(
+            "p12b run_id=%s tenant=%s: Router-Budget überschritten (412), pausing",
+            run_id,
+            tenant_id,
+        )
         try:
             with sync_session_factory() as session:
                 session.execute(
@@ -527,7 +565,11 @@ def run_p12b(
                 )
                 session.commit()
         except Exception as audit_exc:
-            logger.error("p12b run_id=%s: audit update (paused_for_cost) fehlgeschlagen: %s", run_id, audit_exc)
+            logger.error(
+                "p12b run_id=%s: audit update (paused_for_cost) fehlgeschlagen: %s",
+                run_id,
+                audit_exc,
+            )
         return {"run_id": run_id, "status": "paused_for_cost"}
 
     except Exception as exc:
@@ -565,6 +607,7 @@ def run_p12b(
 # ---------------------------------------------------------------------------
 # Interner Helfer: Audit-Update auf 'done'
 # ---------------------------------------------------------------------------
+
 
 def _finalize_run(
     run_id: str,

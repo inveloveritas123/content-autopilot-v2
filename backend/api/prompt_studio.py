@@ -16,14 +16,15 @@ Endpunkte:
   PUT    /api/prompt-studio/files/{file_path}
   DELETE /api/prompt-studio/files/{file_path}/overlay
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
 import re
-from datetime import datetime, timezone
-from typing import Literal, Optional
+from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -39,9 +40,7 @@ router = APIRouter(prefix="/prompt-studio")
 # Sicherheit: Pfad-Whitelist
 # ---------------------------------------------------------------------------
 
-_ALLOWED_PATH = re.compile(
-    r"^(prompts|rules|schemas)/[A-Za-z0-9._\-]+\.(md|json)$"
-)
+_ALLOWED_PATH = re.compile(r"^(prompts|rules|schemas)/[A-Za-z0-9._\-]+\.(md|json)$")
 
 # Maximale Dateigroesse (512 KB)
 _MAX_SIZE = 512_000
@@ -72,9 +71,11 @@ def _kind_from_path(file_path: str) -> Literal["prompt", "rule", "schema"]:
 # Reverse-Lookup: Pfad → Prompt-Key
 # ---------------------------------------------------------------------------
 
+
 def _build_reverse_map() -> dict[str, str]:
     """Baut eine Reverse-Map PROMPT_PATHS: Pfad → Schluessel."""
     from services.prompt_loader import PROMPT_PATHS
+
     return {v: k for k, v in PROMPT_PATHS.items()}
 
 
@@ -82,14 +83,16 @@ def _build_reverse_map() -> dict[str, str]:
 # Adapter-Factory (wird im Test ueberschrieben)
 # ---------------------------------------------------------------------------
 
+
 def get_studio_adapter():
     """Liefert den konfigurierten LayeredStorageAdapter.
 
     Wird als separate Funktion bereitgestellt damit der Test die Factory
     einfach per dependency_overrides austauschen kann.
     """
-    from services.local_fs_storage import LocalFsStorageAdapter
     from services.layered_storage import LayeredStorageAdapter
+    from services.local_fs_storage import LocalFsStorageAdapter
+
     base_dir = getattr(settings, "content_truth_base_path", "/app/content-truth")
     overlay_dir = getattr(settings, "content_truth_overlay_path", "/app/data/prompts-custom")
     return LayeredStorageAdapter(
@@ -108,6 +111,7 @@ Source = Literal["base", "overlay"]
 
 class PromptHealth(BaseModel):
     """Health-Ergebnis fuer eine Prompt/Rule-Datei."""
+
     status: Literal["ok", "weird"]
     system_chars: int
     user_chars: int
@@ -117,71 +121,79 @@ class PromptHealth(BaseModel):
 
 class PromptFileInfo(BaseModel):
     """Metadaten einer einzelnen Datei in der Liste."""
-    path: str                          # "prompts/P12-post-generierung.md"
-    name: str                          # "P12-post-generierung.md"
-    kind: Kind                         # aus Top-Level-Verzeichnis
-    prompt_key: Optional[str]          # Reverse-Lookup in PROMPT_PATHS ("P12"), None fuer Schemas
-    source: Source                     # effektiver Lese-Layer
+
+    path: str  # "prompts/P12-post-generierung.md"
+    name: str  # "P12-post-generierung.md"
+    kind: Kind  # aus Top-Level-Verzeichnis
+    prompt_key: str | None  # Reverse-Lookup in PROMPT_PATHS ("P12"), None fuer Schemas
+    source: Source  # effektiver Lese-Layer
     has_overlay: bool
     size: int
-    mtime: datetime                    # des effektiven Layers
-    base_mtime: Optional[datetime]     # immer Base-mtime (fuer "Base neuer als Overlay"-Warnung)
+    mtime: datetime  # des effektiven Layers
+    base_mtime: datetime | None  # immer Base-mtime (fuer "Base neuer als Overlay"-Warnung)
 
 
 class PromptFileListResponse(BaseModel):
     """Antwort fuer GET /files."""
+
     files: list[PromptFileInfo]
-    overlay_path: str                  # informativ: settings.content_truth_overlay_path
+    overlay_path: str  # informativ: settings.content_truth_overlay_path
 
 
 class PromptFileContentResponse(BaseModel):
     """Antwort fuer GET /files/{path}."""
+
     path: str
     kind: Kind
-    prompt_key: Optional[str]
+    prompt_key: str | None
     source: Source
     has_overlay: bool
-    content: str                       # raw UTF-8
-    sha256: str                        # hex, fuer optimistisches Locking
+    content: str  # raw UTF-8
+    sha256: str  # hex, fuer optimistisches Locking
     mtime: datetime
-    base_mtime: Optional[datetime]
-    system_prompt: Optional[str]       # via _extract_section; None bei .json
-    user_prompt: Optional[str]         # via _extract_section; None bei .json
-    health: Optional[PromptHealth]     # nur fuer .md; None bei .json / Schemas
+    base_mtime: datetime | None
+    system_prompt: str | None  # via _extract_section; None bei .json
+    user_prompt: str | None  # via _extract_section; None bei .json
+    health: PromptHealth | None  # nur fuer .md; None bei .json / Schemas
 
 
 class ValidateRequest(BaseModel):
     """Anfrage fuer POST /validate."""
+
     content: str
 
 
 class ValidateResponse(BaseModel):
     """Antwort fuer POST /validate (immer 200, auch bei valid=false)."""
+
     valid: bool
     kind: Kind
-    health: Optional[PromptHealth]     # .md: prompt_health-Checks
-    schema_errors: list[str]           # .json: Fehler aus json.loads + check_schema
+    health: PromptHealth | None  # .md: prompt_health-Checks
+    schema_errors: list[str]  # .json: Fehler aus json.loads + check_schema
 
 
 class SaveRequest(BaseModel):
     """Anfrage fuer PUT /files/{path}."""
+
     content: str
-    base_sha256: Optional[str] = None  # sha256 des Stands, den der Client geladen hat
+    base_sha256: str | None = None  # sha256 des Stands, den der Client geladen hat
 
 
 class SaveResponse(BaseModel):
     """Antwort fuer PUT /files/{path}."""
+
     path: str
     source: Literal["overlay"]
     sha256: str
     mtime: datetime
-    validation: ValidateResponse       # Save validiert immer mit
+    validation: ValidateResponse  # Save validiert immer mit
 
 
 class RevertResponse(BaseModel):
     """Antwort fuer DELETE /files/{path}/overlay."""
+
     path: str
-    reverted: bool                     # False wenn kein Overlay existierte (idempotent)
+    reverted: bool  # False wenn kein Overlay existierte (idempotent)
     source: Literal["base"]
 
 
@@ -189,14 +201,16 @@ class RevertResponse(BaseModel):
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
 
+
 def _compute_sha256(data: bytes) -> str:
     """Berechnet den SHA-256-Hash als Hex-String."""
     return hashlib.sha256(data).hexdigest()
 
 
-def _run_health(content: str, prompt_key: Optional[str]) -> Optional[PromptHealth]:
+def _run_health(content: str, prompt_key: str | None) -> PromptHealth | None:
     """Fuehrt den Health-Check aus und gibt ein PromptHealth-Modell zurueck."""
     from services.prompt_health_core import check_prompt_content
+
     result = check_prompt_content(content, prompt_key=prompt_key)
     return PromptHealth(
         status=result.status,
@@ -207,9 +221,7 @@ def _run_health(content: str, prompt_key: Optional[str]) -> Optional[PromptHealt
     )
 
 
-def _validate_content(
-    content: str, kind: Kind, prompt_key: Optional[str]
-) -> ValidateResponse:
+def _validate_content(content: str, kind: Kind, prompt_key: str | None) -> ValidateResponse:
     """Validiert Dateiinhalt je nach Kind.
 
     - schema:  JSON parsen + Draft2020-12-Meta-Schema-Pruefung
@@ -226,6 +238,7 @@ def _validate_content(
         if parsed is not None:
             try:
                 import jsonschema
+
                 jsonschema.Draft202012Validator.check_schema(parsed)
             except jsonschema.SchemaError as exc:
                 schema_errors.append(f"JSON-Schema-Fehler: {exc.message}")
@@ -249,7 +262,7 @@ def _validate_content(
     )
 
 
-def _invalidate_loader_cache(prompt_key: Optional[str]) -> None:
+def _invalidate_loader_cache(prompt_key: str | None) -> None:
     """Invalidiert den PromptLoader-Cache des API-Prozesses.
 
     Bei unbekanntem Key oder fehlschlagender Loader-Instanziierung wird
@@ -257,6 +270,7 @@ def _invalidate_loader_cache(prompt_key: Optional[str]) -> None:
     """
     try:
         from services.prompt_loader import get_default_prompt_loader
+
         loader = get_default_prompt_loader()
         if prompt_key:
             loader.invalidate(prompt_key)
@@ -265,14 +279,13 @@ def _invalidate_loader_cache(prompt_key: Optional[str]) -> None:
             loader.invalidate_all()
             logger.debug("prompt_studio: gesamter cache invalidiert")
     except Exception as exc:
-        logger.warning(
-            "prompt_studio: cache-invalidierung fehlgeschlagen: %s", exc
-        )
+        logger.warning("prompt_studio: cache-invalidierung fehlgeschlagen: %s", exc)
 
 
 # ---------------------------------------------------------------------------
 # Endpunkte
 # ---------------------------------------------------------------------------
+
 
 @router.get("/files", response_model=PromptFileListResponse)
 async def list_files(_tenant=Depends(get_tenant)):
@@ -301,23 +314,25 @@ async def list_files(_tenant=Depends(get_tenant)):
 
             kind = _kind_from_path(raw_path)
             prompt_key = reverse_map.get(raw_path)
-            has_overlay = (source == "overlay")
+            has_overlay = source == "overlay"
 
             # Base-mtime fuer "Base neuer als Overlay"-Warnung
             base_stat = adapter.stat_base(raw_path)
             base_mtime = base_stat.mtime if base_stat else None
 
-            files.append(PromptFileInfo(
-                path=raw_path,
-                name=entry.name,
-                kind=kind,
-                prompt_key=prompt_key,
-                source=source,
-                has_overlay=has_overlay,
-                size=stat.size,
-                mtime=stat.mtime,
-                base_mtime=base_mtime,
-            ))
+            files.append(
+                PromptFileInfo(
+                    path=raw_path,
+                    name=entry.name,
+                    kind=kind,
+                    prompt_key=prompt_key,
+                    source=source,
+                    has_overlay=has_overlay,
+                    size=stat.size,
+                    mtime=stat.mtime,
+                    base_mtime=base_mtime,
+                )
+            )
 
     return PromptFileListResponse(files=files, overlay_path=overlay_path)
 
@@ -346,7 +361,7 @@ async def get_file(file_path: str, _tenant=Depends(get_tenant)):
     sha = _compute_sha256(raw)
     stat = adapter.stat(file_path)
     source = adapter.source_of(file_path) or "base"
-    has_overlay = (source == "overlay")
+    has_overlay = source == "overlay"
     kind = _kind_from_path(file_path)
     prompt_key = reverse_map.get(file_path)
 
@@ -354,12 +369,13 @@ async def get_file(file_path: str, _tenant=Depends(get_tenant)):
     base_mtime = base_stat.mtime if base_stat else None
 
     # Sektionen und Health nur fuer .md-Dateien
-    system_prompt: Optional[str] = None
-    user_prompt: Optional[str] = None
-    health: Optional[PromptHealth] = None
+    system_prompt: str | None = None
+    user_prompt: str | None = None
+    health: PromptHealth | None = None
 
     if file_path.endswith(".md"):
         from services.prompt_loader import _extract_section
+
         system_prompt = _extract_section(content, "System-Prompt")
         user_prompt = _extract_section(content, "User-Prompt")
         health = _run_health(content, prompt_key)
@@ -481,7 +497,7 @@ async def save_file(
     except StorageError:
         new_stat = None
     new_sha = _compute_sha256(content_bytes)
-    mtime = new_stat.mtime if new_stat else datetime.now(timezone.utc)
+    mtime = new_stat.mtime if new_stat else datetime.now(UTC)
 
     # sha256 des vorherigen Stands fuer das Audit-Log
     sha_before = body.base_sha256 or "(unbekannt)"

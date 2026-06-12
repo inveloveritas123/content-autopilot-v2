@@ -7,6 +7,7 @@ from config import settings
 # Initialize Sentry early (before any tasks are registered)
 try:
     import sentry_config
+
     sentry_config.init_sentry()
 except Exception:
     pass
@@ -106,14 +107,16 @@ celery_app.conf.beat_schedule = {
     },
 }
 
+
 # ---------------------------------------------------------------------------
 # Logging context — contextvars are NOT inherited across process boundaries.
 # Set correlation_id from task_id and clear tenant_id for every task run.
 # ---------------------------------------------------------------------------
 @task_prerun.connect
-def _setup_logging_context(task_id: str = "", **kwargs) -> None:  # noqa: ANN001
+def _setup_logging_context(task_id: str = "", **kwargs) -> None:
     try:
         from logging_config import correlation_id_var, tenant_id_var
+
         correlation_id_var.set(task_id or "")
         tenant_id_var.set("")
     except Exception:  # pragma: no cover — never crash a task over logging

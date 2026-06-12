@@ -1,4 +1,6 @@
-from fastapi import Header, HTTPException, Depends
+import uuid
+
+from fastapi import Depends, Header, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,14 +30,15 @@ async def get_tenant(x_api_key: str = Header(...), db: AsyncSession = Depends(ge
                 "error": "tenant_disabled",
                 "reason": tenant.disabled_reason or "Tenant ist deaktiviert",
                 "since": tenant.disabled_at.isoformat() if tenant.disabled_at else None,
-            }
+            },
         )
     set_llm_tenant(str(tenant.id))
     return tenant
 
-import uuid
 
-async def get_tenant_id(x_api_key: str = Header(...), db: AsyncSession = Depends(get_db)) -> uuid.UUID:
+async def get_tenant_id(
+    x_api_key: str = Header(...), db: AsyncSession = Depends(get_db)
+) -> uuid.UUID:
     result = await db.execute(
         select(Tenant).where(
             (Tenant.api_key == x_api_key) | (Tenant.api_key_secondary == x_api_key)
@@ -51,7 +54,7 @@ async def get_tenant_id(x_api_key: str = Header(...), db: AsyncSession = Depends
                 "error": "tenant_disabled",
                 "reason": tenant.disabled_reason or "Tenant ist deaktiviert",
                 "since": tenant.disabled_at.isoformat() if tenant.disabled_at else None,
-            }
+            },
         )
     set_llm_tenant(str(tenant.id))
     return tenant.id

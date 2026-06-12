@@ -21,10 +21,12 @@ Exemptions (CSRF not checked):
         without CORS pre-flight, all authenticated endpoints are already
         CSRF-safe by design. This middleware adds explicit defence-in-depth.
 """
+
 import hashlib
 import hmac
 import secrets
 import time
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -38,6 +40,7 @@ TOKEN_TTL = 86400
 
 # Secret for signing tokens (derived from ADMIN_TOKEN env, stable across restarts)
 import os as _os
+
 _CSRF_SECRET = hashlib.sha256(
     (_os.environ.get("ADMIN_TOKEN", "admin_backtest_2026") + "-csrf").encode()
 ).hexdigest()

@@ -12,18 +12,18 @@ Deckt ab:
 Import-Strategie: Heavy-Dependencies werden per importlib-Direktlader
 umgangen (kein services/__init__.py, kein google/sqlalchemy/celery).
 """
+
 import importlib.util
 import os
 import sys
 import tempfile
 import types
 import unittest
-from datetime import timezone
-from unittest.mock import MagicMock
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen fuer Modul-Direktlader
 # ---------------------------------------------------------------------------
+
 
 def _load_module_from_file(module_name: str, file_path: str) -> types.ModuleType:
     spec = importlib.util.spec_from_file_location(module_name, file_path)
@@ -80,18 +80,16 @@ _load_module_from_file(
 # ---------------------------------------------------------------------------
 # Importe nach dem Laden
 # ---------------------------------------------------------------------------
-from services.local_fs_storage import LocalFsStorageAdapter   # noqa: E402
-from services.layered_storage import LayeredStorageAdapter     # noqa: E402
-from services.brand_voice_storage import StorageError          # noqa: E402
-
+from services.brand_voice_storage import StorageError
+from services.layered_storage import LayeredStorageAdapter
+from services.local_fs_storage import LocalFsStorageAdapter
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen fuer die Tests
 # ---------------------------------------------------------------------------
 
-def _make_adapter(
-    base_dir: str, overlay_dir: str
-) -> LayeredStorageAdapter:
+
+def _make_adapter(base_dir: str, overlay_dir: str) -> LayeredStorageAdapter:
     return LayeredStorageAdapter(
         overlay=LocalFsStorageAdapter(base_dir=overlay_dir),
         base=LocalFsStorageAdapter(base_dir=base_dir),
@@ -110,6 +108,7 @@ class TestLayeredStorageRead(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def _adapter(self):
@@ -201,6 +200,7 @@ class TestLayeredStorageWrite(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def _write_base(self, path: str, content: bytes):
@@ -252,6 +252,7 @@ class TestLayeredStorageList(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def _write_base(self, path: str, content: bytes = b"x"):
@@ -310,6 +311,7 @@ class TestLayeredStorageList(unittest.TestCase):
     def test_list_without_overlay_dir_returns_base_only(self):
         """Wenn das Overlay-Verzeichnis nicht existiert → kein Fehler, nur Base."""
         import shutil
+
         shutil.rmtree(self._overlay)  # Overlay-Verzeichnis komplett entfernen
         self._write_base("prompts/base.md")
         adapter = _make_adapter(self._base, self._overlay)
@@ -319,6 +321,7 @@ class TestLayeredStorageList(unittest.TestCase):
     def test_list_with_source_missing_overlay_dir(self):
         """list_with_source() ohne Overlay-Dir → alle Base, kein Fehler."""
         import shutil
+
         shutil.rmtree(self._overlay)
         self._write_base("prompts/a.md")
         adapter = _make_adapter(self._base, self._overlay)
@@ -338,6 +341,7 @@ class TestLayeredStorageDeleteOverlay(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def _write_base(self, path: str, content: bytes = b"base"):
@@ -359,13 +363,9 @@ class TestLayeredStorageDeleteOverlay(unittest.TestCase):
         result = adapter.delete_overlay("prompts/test.md")
         self.assertTrue(result)
         # Overlay-Datei ist weg
-        self.assertFalse(os.path.exists(
-            os.path.join(self._overlay, "prompts", "test.md")
-        ))
+        self.assertFalse(os.path.exists(os.path.join(self._overlay, "prompts", "test.md")))
         # Base-Datei ist unveraendert
-        self.assertTrue(os.path.exists(
-            os.path.join(self._base, "prompts", "test.md")
-        ))
+        self.assertTrue(os.path.exists(os.path.join(self._base, "prompts", "test.md")))
 
     def test_delete_overlay_base_not_modified(self):
         """Inhalt der Base-Datei muss nach delete_overlay unveraendert sein."""
@@ -404,6 +404,7 @@ class TestLayeredStorageSourceOf(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def _write_base(self, path: str, content: bytes = b"base"):
@@ -459,6 +460,7 @@ class TestLayeredStorageMissingOverlayDir(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def _write_base(self, path: str, content: bytes = b"base"):
@@ -510,11 +512,13 @@ class TestLayeredStoragePromptLoaderIntegration(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def test_overlay_save_triggers_cache_refresh(self):
         """Nach Write ins Overlay liefert PromptLoader den neuen Inhalt."""
         from services.prompt_loader import PromptLoader
+
         adapter = _make_adapter(self._base, self._overlay)
 
         loader = PromptLoader(
@@ -524,6 +528,7 @@ class TestLayeredStoragePromptLoaderIntegration(unittest.TestCase):
 
         # Erstes Laden (Base-Inhalt)
         import time
+
         time.sleep(0.01)  # kleine Pause damit mtime verschieden ist
         p1 = loader.load("P12")
         self.assertIn("Original-System", p1.system_prompt)
@@ -539,8 +544,9 @@ class TestLayeredStoragePromptLoaderIntegration(unittest.TestCase):
 
     def test_revert_with_invalidate_loads_base(self):
         """Nach delete_overlay + invalidate liefert PromptLoader den Base-Inhalt."""
-        from services.prompt_loader import PromptLoader
         import time
+
+        from services.prompt_loader import PromptLoader
 
         adapter = _make_adapter(self._base, self._overlay)
         loader = PromptLoader(storage_adapter=adapter, cache_ttl_seconds=3600)

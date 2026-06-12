@@ -4,10 +4,11 @@ Quote-Extraktor (Issue #86) — Deterministisch, kein LLM.
 Extrahiert charakteristische Zitate aus Texten für das Reservoir.
 Kriterien: >= 5 Wörter, enthält Verb, nicht generisch.
 """
+
 from __future__ import annotations
-import re
+
 import logging
-from typing import NamedTuple
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -22,13 +23,13 @@ _GENERIC_RE = [re.compile(p, re.IGNORECASE) for p in _GENERIC_PATTERNS]
 _VERB_PATTERNS = [
     r"\b(ist|sind|war|waren|wird|werden|wurde|wurden|hat|haben|hatte|hatten)\b",
     r"\b(kann|können|muss|müssen|soll|sollen|will|wollen|darf|dürfen)\b",
-    r"\b\w+(en|ern|eln|ieren)\b",   # Infinitive: machen, entwickeln, analysieren
-    r"\b\w+(t|st|te|ten|end)\b",    # Konjugierte Formen: macht, machst, machte
+    r"\b\w+(en|ern|eln|ieren)\b",  # Infinitive: machen, entwickeln, analysieren
+    r"\b\w+(t|st|te|ten|end)\b",  # Konjugierte Formen: macht, machst, machte
 ]
 _VERB_RE = [re.compile(p, re.IGNORECASE) for p in _VERB_PATTERNS]
 
 # Satz-Trennzeichen (auch bei Aufzählungen mit Zeilenumbrüchen)
-_SENTENCE_SPLIT_RE = re.compile(r'(?<=[.!?;])\s+|\n+')
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?;])\s+|\n+")
 
 
 def _has_verb(sentence: str) -> bool:
@@ -62,7 +63,7 @@ def extract_quotes(text: str, min_words: int = 5, max_quotes: int = 50) -> list[
         return []
 
     # Normalisiere Whitespace
-    normalized = re.sub(r'\s+', ' ', text).strip()
+    normalized = re.sub(r"\s+", " ", text).strip()
 
     # Splitte in Sätze
     sentences = _SENTENCE_SPLIT_RE.split(normalized)
@@ -83,7 +84,7 @@ def extract_quotes(text: str, min_words: int = 5, max_quotes: int = 50) -> list[
             continue
 
         # Normalize for deduplication (lowercase, collapse whitespace)
-        key = re.sub(r'\s+', ' ', sentence.lower()).strip()
+        key = re.sub(r"\s+", " ", sentence.lower()).strip()
         if key in seen:
             continue
         seen.add(key)

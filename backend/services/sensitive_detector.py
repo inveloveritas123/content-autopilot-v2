@@ -7,16 +7,19 @@ Zwei-Schicht-Architektur:
 
 KEYWORD-LISTEN SIND KONSTANTEN — Änderungen erfordern Code-Review.
 """
+
 from __future__ import annotations
+
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 from typing import Literal
 
 logger = logging.getLogger(__name__)
 
-Category = Literal["politics", "religion", "hate", "health_claims", "financial_advice", "legal_advice"]
+Category = Literal[
+    "politics", "religion", "hate", "health_claims", "financial_advice", "legal_advice"
+]
 
 # ============================================================
 # KEYWORD-LISTEN (Code-Review-Pflicht bei Änderungen)
@@ -25,118 +28,292 @@ Category = Literal["politics", "religion", "hate", "health_claims", "financial_a
 KEYWORDS: dict[str, list[str]] = {
     "politics": [
         # Parteien
-        "AfD", "CDU", "CSU", "SPD", "Grüne", "FDP", "Linke", "BSW", "NPD", "Pegida",
+        "AfD",
+        "CDU",
+        "CSU",
+        "SPD",
+        "Grüne",
+        "FDP",
+        "Linke",
+        "BSW",
+        "NPD",
+        "Pegida",
         # Ämter & Institutionen
-        "Bundeskanzler", "Bundestag", "Bundesrat", "Bundesregierung", "Bundesminister",
-        "Landtag", "Stadtrat", "Bürgermeister", "Abgeordneter", "Abgeordnete",
-        "die Regierung", "Regierung vertuscht", "Regierung lügt",
+        "Bundeskanzler",
+        "Bundestag",
+        "Bundesrat",
+        "Bundesregierung",
+        "Bundesminister",
+        "Landtag",
+        "Stadtrat",
+        "Bürgermeister",
+        "Abgeordneter",
+        "Abgeordnete",
+        "die Regierung",
+        "Regierung vertuscht",
+        "Regierung lügt",
         # Wahlbegriffe
-        "Bundestagswahl", "Landtagswahl", "Kommunalwahl", "Volksabstimmung", "Wähler",
-        "Wahlkampf", "Stimmzettel", "Wahlrecht", "Demokratie", "Opposition",
+        "Bundestagswahl",
+        "Landtagswahl",
+        "Kommunalwahl",
+        "Volksabstimmung",
+        "Wähler",
+        "Wahlkampf",
+        "Stimmzettel",
+        "Wahlrecht",
+        "Demokratie",
+        "Opposition",
         # Politische Konzepte
-        "Koalition", "Regierungspartei", "Rechtsextrem", "Linksextrem",
-        "Nationalismus", "Faschismus", "Kommunismus", "Sozialismus", "Neoliberalismus",
+        "Koalition",
+        "Regierungspartei",
+        "Rechtsextrem",
+        "Linksextrem",
+        "Nationalismus",
+        "Faschismus",
+        "Kommunismus",
+        "Sozialismus",
+        "Neoliberalismus",
         # Internationale Politik
-        "Nato", "EU-Parlament", "Sanktionen", "Militäreinsatz", "Kriegsverbrechen",
-        "Putsch", "Diktator", "Oligarch", "geopolitisch", "Staatsfeind",
+        "Nato",
+        "EU-Parlament",
+        "Sanktionen",
+        "Militäreinsatz",
+        "Kriegsverbrechen",
+        "Putsch",
+        "Diktator",
+        "Oligarch",
+        "geopolitisch",
+        "Staatsfeind",
         # Weitere
-        "politische Meinung", "Parteinahme", "Ideologie", "Systemkritik",
-        "Staatsversagen", "politischer Skandal", "Korruptionsaffäre",
-        "Lobbyismus", "Parteifinanzierung", "Wahlbetrug",
-        "Deep State", "Verschwörung", "Umsturz",
+        "politische Meinung",
+        "Parteinahme",
+        "Ideologie",
+        "Systemkritik",
+        "Staatsversagen",
+        "politischer Skandal",
+        "Korruptionsaffäre",
+        "Lobbyismus",
+        "Parteifinanzierung",
+        "Wahlbetrug",
+        "Deep State",
+        "Verschwörung",
+        "Umsturz",
     ],
     "religion": [
         # Christentum
-        "Jesus", "Christus", "Bibel", "Gott sei Dank", "Halleluja", "Ostern religiös",
-        "Weihnachten religiös", "Papst", "Priester", "Kirche", "evangelisch", "katholisch",
-        "Protestantismus", "Kreuzigung", "Auferstehung", "Sünde", "Sünder",
+        "Jesus",
+        "Christus",
+        "Bibel",
+        "Gott sei Dank",
+        "Halleluja",
+        "Ostern religiös",
+        "Weihnachten religiös",
+        "Papst",
+        "Priester",
+        "Kirche",
+        "evangelisch",
+        "katholisch",
+        "Protestantismus",
+        "Kreuzigung",
+        "Auferstehung",
+        "Sünde",
+        "Sünder",
         # Islam
-        "Allah", "Mohammed", "Koran", "Moschee", "Imam", "Ramadan", "Dschihad",
-        "Scharia", "Muslimbruderschaft", "Islamist", "Islamophobie",
+        "Allah",
+        "Mohammed",
+        "Koran",
+        "Moschee",
+        "Imam",
+        "Ramadan",
+        "Dschihad",
+        "Scharia",
+        "Muslimbruderschaft",
+        "Islamist",
+        "Islamophobie",
         # Judentum
-        "Torah", "Talmud", "Synagoge", "Rabbiner", "Antisemitismus", "antisemitisch",
-        "Holocaust leugnen", "Juden", "Judentum",
+        "Torah",
+        "Talmud",
+        "Synagoge",
+        "Rabbiner",
+        "Antisemitismus",
+        "antisemitisch",
+        "Holocaust leugnen",
+        "Juden",
+        "Judentum",
         # Sonstige Religionen
-        "Hindu", "Hinduismus", "Buddha", "Buddhismus", "Nirwana",
-        "Scientology", "Sekte", "Kult", "Okkultismus", "Satanismus",
-        "Zeugen Jehovas", "Mormonen", "Abtreibung religiös",
+        "Hindu",
+        "Hinduismus",
+        "Buddha",
+        "Buddhismus",
+        "Nirwana",
+        "Scientology",
+        "Sekte",
+        "Kult",
+        "Okkultismus",
+        "Satanismus",
+        "Zeugen Jehovas",
+        "Mormonen",
+        "Abtreibung religiös",
         # Religiöser Konflikt
-        "Gotteslästerung", "Blasphemie", "Kreuzzug", "Glaubenskrieg",
-        "religiöse Verfolgung", "Inquisition", "Fundamentalismus",
+        "Gotteslästerung",
+        "Blasphemie",
+        "Kreuzzug",
+        "Glaubenskrieg",
+        "religiöse Verfolgung",
+        "Inquisition",
+        "Fundamentalismus",
     ],
     "hate": [
         # Diskriminierung (umschrieben, keine direkte Wiedergabe von Slurs)
-        "Rassismus", "rassistisch", "Diskriminierung", "Fremdenfeindlichkeit",
-        "Ausländerhass", "Islamphobie", "Homophobie", "homophob", "Transphobie",
-        "Antisemitismus", "antisemitisch", "Frauenfeindlichkeit", "misogyn",
+        "Rassismus",
+        "rassistisch",
+        "Diskriminierung",
+        "Fremdenfeindlichkeit",
+        "Ausländerhass",
+        "Islamphobie",
+        "Homophobie",
+        "homophob",
+        "Transphobie",
+        "Antisemitismus",
+        "antisemitisch",
+        "Frauenfeindlichkeit",
+        "misogyn",
         # Hate-Vokabular (direkte Flags)
-        "Volksverräter", "Lügenpresse", "Überfremdung", "Umvolkung",
-        "Rassenmischung", "Untermenschen", "entartet", "lebensunwertes Leben",
-        "Kulturmarxismus", "Gleichschaltung politisch",
+        "Volksverräter",
+        "Lügenpresse",
+        "Überfremdung",
+        "Umvolkung",
+        "Rassenmischung",
+        "Untermenschen",
+        "entartet",
+        "lebensunwertes Leben",
+        "Kulturmarxismus",
+        "Gleichschaltung politisch",
         # Gewaltandrohung
-        "sollte eliminiert werden", "gehört ausgerottet", "Tod den", "Mörder an die",
+        "sollte eliminiert werden",
+        "gehört ausgerottet",
+        "Tod den",
+        "Mörder an die",
         # Body-Shaming + Hate
-        "Fette", "Behinderte als Schimpfwort", "Geistig Zurückgebliebene",
+        "Fette",
+        "Behinderte als Schimpfwort",
+        "Geistig Zurückgebliebene",
         # Sexismus
-        "Schlampe", "Hure politisch", "gehört ans Herd", "Weiber sollen",
+        "Schlampe",
+        "Hure politisch",
+        "gehört ans Herd",
+        "Weiber sollen",
     ],
     "health_claims": [
         # Heilsversprechen
-        "heilt Krebs", "heilend", "Wunderheilung", "Wundermittel",
-        "100% geheilt", "vollständig geheilt", "kuriert", "Heilmittel gegen",
+        "heilt Krebs",
+        "heilend",
+        "Wunderheilung",
+        "Wundermittel",
+        "100% geheilt",
+        "vollständig geheilt",
+        "kuriert",
+        "Heilmittel gegen",
         # Medizinische Fehlinformationen
-        "Impfschaden", "Impfung verursacht", "5G Krankheit", "Chemtrails krank",
-        "Mikrowellen gesundheitsschädlich", "Fluorid giftig",
-        "Homöopathie heilt", "bewiesen heilend", "klinisch bewiesen ohne Quelle",
+        "Impfschaden",
+        "Impfung verursacht",
+        "5G Krankheit",
+        "Chemtrails krank",
+        "Mikrowellen gesundheitsschädlich",
+        "Fluorid giftig",
+        "Homöopathie heilt",
+        "bewiesen heilend",
+        "klinisch bewiesen ohne Quelle",
         # Diagnosen ohne Kontext
-        "Du hast Krebs", "Du leidest an", "Diagnose stellen ohne",
-        "Symptome von HIV", "Sie sind krank weil",
+        "Du hast Krebs",
+        "Du leidest an",
+        "Diagnose stellen ohne",
+        "Symptome von HIV",
+        "Sie sind krank weil",
         # Verbotene Gesundheitsbehauptungen (DSGVO/HWG)
-        "lindert Beschwerden garantiert", "beseitigt Krankheiten",
-        "schützt vor Viren garantiert", "stärkt Immunsystem klinisch",
-        "anti-aging klinisch bewiesen", "verjüngt nachweislich",
-        "Alzheimer verhindern durch", "Diabetes heilen durch",
-        "Blutdruck senken garantiert", "Herzinfarkt verhindern mit",
+        "lindert Beschwerden garantiert",
+        "beseitigt Krankheiten",
+        "schützt vor Viren garantiert",
+        "stärkt Immunsystem klinisch",
+        "anti-aging klinisch bewiesen",
+        "verjüngt nachweislich",
+        "Alzheimer verhindern durch",
+        "Diabetes heilen durch",
+        "Blutdruck senken garantiert",
+        "Herzinfarkt verhindern mit",
         # Nahrungsergänzung
-        "Supplements heilen", "Vitamine heilen Krebs", "CBD heilt",
+        "Supplements heilen",
+        "Vitamine heilen Krebs",
+        "CBD heilt",
     ],
     "financial_advice": [
         # Konkrete Anlageempfehlungen
-        "Kaufen Sie jetzt", "kaufe sofort Aktien", "investiere in", "sichere Rendite",
-        "garantierte Rendite", "risikofreie Anlage", "100% Gewinn",
-        "kann nicht verlieren", "sicheres Investment", "Geheimtipp Aktie",
+        "Kaufen Sie jetzt",
+        "kaufe sofort Aktien",
+        "investiere in",
+        "sichere Rendite",
+        "garantierte Rendite",
+        "risikofreie Anlage",
+        "100% Gewinn",
+        "kann nicht verlieren",
+        "sicheres Investment",
+        "Geheimtipp Aktie",
         # Spezifische Wertpapiere mit Empfehlung
-        "Bitcoin kaufen jetzt", "Ethereum kaufen", "Krypto-Tipp", "Pump and Dump",
-        "meine Aktienempfehlung", "Insiderwissen Börse",
+        "Bitcoin kaufen jetzt",
+        "Ethereum kaufen",
+        "Krypto-Tipp",
+        "Pump and Dump",
+        "meine Aktienempfehlung",
+        "Insiderwissen Börse",
         # Finanzversprechen
-        "reich werden schnell", "passives Einkommen garantiert",
-        "finanzielle Freiheit sofort", "in 30 Tagen Millionär",
-        "Altersvorsorge optimal", "steuerfreies Einkommen legal",
+        "reich werden schnell",
+        "passives Einkommen garantiert",
+        "finanzielle Freiheit sofort",
+        "in 30 Tagen Millionär",
+        "Altersvorsorge optimal",
+        "steuerfreies Einkommen legal",
         # Schuldentipps
-        "umgehe Steuer legal", "Steuern vermeiden so", "Steuern vermeiden legal",
-        "Schwarzgeld legal", "Kapitalflucht",
+        "umgehe Steuer legal",
+        "Steuern vermeiden so",
+        "Steuern vermeiden legal",
+        "Schwarzgeld legal",
+        "Kapitalflucht",
         # Versicherungen
         "unnötige Versicherung kündigen alle",
-        "Versicherungsbetrug", "Schadensfall manipulieren",
+        "Versicherungsbetrug",
+        "Schadensfall manipulieren",
     ],
     "legal_advice": [
         # Konkrete Rechtsberatung
-        "Sie haben Anspruch auf", "Sie haben rechtlichen Anspruch",
-        "klagen Sie ohne Anwalt", "rechtlich durchsetzen ohne Anwalt",
-        "klagen Sie jetzt", "Klage einreichen einfach", "Anwalt unnötig",
-        "Gericht gewinnen so", "Richter beeinflussen",
+        "Sie haben Anspruch auf",
+        "Sie haben rechtlichen Anspruch",
+        "klagen Sie ohne Anwalt",
+        "rechtlich durchsetzen ohne Anwalt",
+        "klagen Sie jetzt",
+        "Klage einreichen einfach",
+        "Anwalt unnötig",
+        "Gericht gewinnen so",
+        "Richter beeinflussen",
         # Vertragsrecht
-        "Vertrag brechen legal", "Kündigung anfechten so",
-        "Mietrecht: kündigen ohne Grund", "Arbeitsrecht umgehen",
+        "Vertrag brechen legal",
+        "Kündigung anfechten so",
+        "Mietrecht: kündigen ohne Grund",
+        "Arbeitsrecht umgehen",
         # Strafrecht
-        "illegal aber legal wenn", "Straftat verjährt automatisch",
-        "Polizei muss nicht", "Hausdurchsuchung ablehnen so",
-        "Strafanzeige erstatten gegen alle", "einstweilige Verfügung",
+        "illegal aber legal wenn",
+        "Straftat verjährt automatisch",
+        "Polizei muss nicht",
+        "Hausdurchsuchung ablehnen so",
+        "Strafanzeige erstatten gegen alle",
+        "einstweilige Verfügung",
         # Marken/IP
-        "Marke anmelden ohne Anwalt garantiert", "Copyright umgehen legal",
-        "Patent stehlen legal", "geistiges Eigentum übertragen so",
+        "Marke anmelden ohne Anwalt garantiert",
+        "Copyright umgehen legal",
+        "Patent stehlen legal",
+        "geistiges Eigentum übertragen so",
         # Datenschutz
-        "DSGVO umgehen", "Datenschutz ignorieren legal",
+        "DSGVO umgehen",
+        "Datenschutz ignorieren legal",
         "Nutzer ohne Einwilligung tracken",
     ],
 }
@@ -174,7 +351,7 @@ def _pattern_check(text: str) -> tuple[list[str], list[FlaggedPhrase], float]:
             kw_lower = kw.lower()
             # For single words: use word boundary matching
             # For multi-word phrases: use substring matching (phrases are specific enough)
-            if ' ' in kw_lower:
+            if " " in kw_lower:
                 matched = kw_lower in text_lower
             else:
                 # \b doesn't work well with German umlauts in re, use manual approach:
@@ -204,8 +381,9 @@ def _pattern_check(text: str) -> tuple[list[str], list[FlaggedPhrase], float]:
 
 def _llm_check(text: str) -> tuple[list[str], list[FlaggedPhrase], float]:
     """Schicht B: LLM-Klassifikator mit Haiku (nur bei Schicht-A-Trigger)."""
-    import anthropic
     import os
+
+    import anthropic
 
     LLM_MODEL = os.environ.get("BACKTEST_MODEL_OVERRIDE", "claude-haiku-4-5-20251001")
 
@@ -240,7 +418,9 @@ Post:
             if raw.startswith("json"):
                 raw = raw[4:]
         data = json.loads(raw)
-        phrases = [FlaggedPhrase(p["phrase"], p["category"]) for p in data.get("flagged_phrases", [])]
+        phrases = [
+            FlaggedPhrase(p["phrase"], p["category"]) for p in data.get("flagged_phrases", [])
+        ]
         return data.get("categories", []), phrases, float(data.get("confidence", 0.5))
     except Exception as e:
         logger.warning(f"[SensitiveDetector] LLM check failed: {e}")

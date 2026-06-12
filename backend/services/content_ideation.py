@@ -12,10 +12,10 @@ Pipeline:
 
 Philosophie: "Nicht das Denken abnehmen — die Arbeit."
 """
-import logging
-from typing import Optional
 
-from services.llm import llm_service, BudgetExceededError
+import logging
+
+from services.llm import BudgetExceededError, llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -55,17 +55,21 @@ async def generate_content_ideas(
     transcript_excerpt: str = "",
     industry_context: str = "",
     brand_context: str = "",
-) -> Optional[list[dict]]:
+) -> list[dict] | None:
     """Generiere Content-Ideen aus einer Transkript-Analyse."""
     context_parts = []
     if industry_context:
         context_parts.append(industry_context)
     if brand_context:
         context_parts.append(f"Brand Voice:\n{brand_context}")
-    industry_block = f"""
+    industry_block = (
+        f"""
 UNTERNEHMER-KONTEXT (PFLICHT — alle Ideen MUESSEN dazu passen):
 {chr(10).join(context_parts)}
-""" if context_parts else ""
+"""
+        if context_parts
+        else ""
+    )
 
     prompt = f"""Analysiere folgendes Video und generiere Content-Ideen fuer LinkedIn.
 {industry_block}
@@ -98,14 +102,16 @@ Stelle sicher dass ALLE Ideen zur Branche/Zielgruppe des Unternehmers passen."""
         # Validierung und Defaults
         validated = []
         for i, idea in enumerate(ideas):
-            validated.append({
-                "title": idea.get("title", f"Idee {i+1}"),
-                "description": idea.get("description", ""),
-                "angle": idea.get("angle", "meinung"),
-                "hook_suggestion": idea.get("hook_suggestion", ""),
-                "relevance_score": min(10, max(1, float(idea.get("relevance_score", 5)))),
-                "source_quotes": idea.get("source_quotes", []),
-            })
+            validated.append(
+                {
+                    "title": idea.get("title", f"Idee {i+1}"),
+                    "description": idea.get("description", ""),
+                    "angle": idea.get("angle", "meinung"),
+                    "hook_suggestion": idea.get("hook_suggestion", ""),
+                    "relevance_score": min(10, max(1, float(idea.get("relevance_score", 5)))),
+                    "source_quotes": idea.get("source_quotes", []),
+                }
+            )
 
         # Nach Relevanz sortieren
         validated.sort(key=lambda x: x["relevance_score"], reverse=True)
@@ -144,7 +150,7 @@ Antworte NUR als JSON-Array. Kein Markdown, keine Erklaerung."""
 async def generate_entrepreneur_questions(
     idea: dict,
     brand_context: str = "",
-) -> Optional[list[dict]]:
+) -> list[dict] | None:
     """Generiere gezielte Fragen fuer den Unternehmer zu einer Content-Idee."""
     prompt = f"""Formuliere 2-3 gezielte Fragen fuer einen Unternehmer zu dieser Content-Idee:
 
@@ -178,11 +184,13 @@ Antworte als JSON-Array."""
         # Validierung
         validated = []
         for q in questions[:3]:  # Max 3 Fragen
-            validated.append({
-                "question": q.get("question", ""),
-                "purpose": q.get("purpose", ""),
-                "example_answer": q.get("example_answer", ""),
-            })
+            validated.append(
+                {
+                    "question": q.get("question", ""),
+                    "purpose": q.get("purpose", ""),
+                    "example_answer": q.get("example_answer", ""),
+                }
+            )
 
         logger.info(f"Generated {len(validated)} questions for idea '{idea.get('title', '')}'")
         return validated
@@ -196,13 +204,14 @@ Antworte als JSON-Array."""
 
 # ── Schritt 3: Kompletter Ideation-Pipeline-Lauf ────────────────────────────
 
+
 async def run_ideation_pipeline(
     analysis: dict,
     title: str,
     transcript_excerpt: str = "",
     industry_context: str = "",
     brand_context: str = "",
-) -> Optional[list[dict]]:
+) -> list[dict] | None:
     """Fuehre die komplette Ideation-Pipeline aus:
     Analyse → Ideen → Fragen pro Idee.
 

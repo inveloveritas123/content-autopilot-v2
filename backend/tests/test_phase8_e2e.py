@@ -4,10 +4,10 @@ Läuft pytest auf dem laufenden Backend (HTTP-Layer).
 Verifiziert: Company-Profile-CRUD, MD-Import, Provenance, Pending-Review,
 Data-Deletion (alle 4 Modi + Recovery), Memory-Viz-Endpoint.
 """
+
 from __future__ import annotations
 
 import os
-import time
 
 import pytest
 import requests
@@ -51,8 +51,9 @@ def test_company_profile_get(headers):
 
 
 def test_company_profile_put_and_provenance(headers):
-    r = _put("/api/me/company-profile", headers,
-             {"contact_role": "E2E-Test-Rolle", "region": "Berlin"})
+    r = _put(
+        "/api/me/company-profile", headers, {"contact_role": "E2E-Test-Rolle", "region": "Berlin"}
+    )
     assert r.status_code == 200
     assert "updated" in r.json()
     assert "contact_role" in r.json()["updated"]
@@ -64,8 +65,10 @@ def test_company_profile_put_and_provenance(headers):
     assert "trust_hierarchy" in d
     assert d["auto_apply_threshold"] == 0.85
     assert "contact_role" in d["fields"]
-    assert any(e["source"] == "manual_input" and e["value"] == "E2E-Test-Rolle"
-               for e in d["fields"]["contact_role"])
+    assert any(
+        e["source"] == "manual_input" and e["value"] == "E2E-Test-Rolle"
+        for e in d["fields"]["contact_role"]
+    )
 
 
 def test_company_profile_md_import_pending(headers):
@@ -83,8 +86,7 @@ def test_company_profile_md_import_pending(headers):
 ## USP
 Automatisierte End-to-End-Verifikation in <60 Sekunden.
 """
-    r = _post("/api/me/company-profile/import-md", headers,
-              {"content": md, "auto_apply": False})
+    r = _post("/api/me/company-profile/import-md", headers, {"content": md, "auto_apply": False})
     assert r.status_code == 200
     d = r.json()
     assert d["parsed"] >= 5
@@ -93,27 +95,31 @@ Automatisierte End-to-End-Verifikation in <60 Sekunden.
 
     pend = _get("/api/me/company-profile/pending", headers).json()
     assert isinstance(pend["pending"], list)
-    e2e_items = [p for p in pend["pending"]
-                 if p["source"] == "md_upload" and "E2E" in (p["value"] or "")]
+    e2e_items = [
+        p for p in pend["pending"] if p["source"] == "md_upload" and "E2E" in (p["value"] or "")
+    ]
     assert len(e2e_items) >= 1, f"E2E pending should exist, got: {pend['pending'][:3]}"
 
 
 def test_company_profile_review_reject(headers):
     pend = _get("/api/me/company-profile/pending", headers).json()
-    cand = next((p for p in pend["pending"]
-                 if p["source"] == "md_upload" and "E2E" in (p["value"] or "")), None)
+    cand = next(
+        (p for p in pend["pending"] if p["source"] == "md_upload" and "E2E" in (p["value"] or "")),
+        None,
+    )
     if cand is None:
         pytest.skip("no md_upload pending found, skip")
-    r = _post(f"/api/me/company-profile/review/{cand['id']}", headers,
-              {"action": "reject"})
+    r = _post(f"/api/me/company-profile/review/{cand['id']}", headers, {"action": "reject"})
     assert r.status_code == 200
     assert r.json()["action"] == "reject"
 
 
 def test_data_deletion_memory_selective_and_recover(headers):
-    r = _post("/api/me/data-deletion", headers,
-              {"mode": "memory_selective", "older_than_days": 0,
-               "notes": "E2E-Test memory_selective"})
+    r = _post(
+        "/api/me/data-deletion",
+        headers,
+        {"mode": "memory_selective", "older_than_days": 0, "notes": "E2E-Test memory_selective"},
+    )
     assert r.status_code == 201
     d = r.json()
     assert d["status"] == "soft_deleted"
@@ -131,8 +137,7 @@ def test_data_deletion_memory_selective_and_recover(headers):
 
 
 def test_data_deletion_modes_validate(headers):
-    r = _post("/api/me/data-deletion", headers,
-              {"mode": "INVALID_MODE"})
+    r = _post("/api/me/data-deletion", headers, {"mode": "INVALID_MODE"})
     assert r.status_code in (400, 422)
 
 

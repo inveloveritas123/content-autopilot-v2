@@ -20,14 +20,13 @@ Das Modul wird via importlib direkt geladen um den services/__init__.py-Import
 
 import importlib.util
 import json
-import os
-import sys
 import unittest
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Modul direkt laden — umgeht services/__init__.py (google.generativeai)
 # ---------------------------------------------------------------------------
+
 
 def _load_transformer_module():
     """Lädt schema_transformer.py direkt via importlib ohne Package-__init__."""
@@ -254,6 +253,7 @@ META_DICT = {
 # Test-Klassen
 # ---------------------------------------------------------------------------
 
+
 class TestLoadCanonicalSchema(unittest.TestCase):
     """Testet load_canonical_schema() — Schema-Laden aus content-truth/schemas/."""
 
@@ -317,52 +317,34 @@ class TestValidateCanonical(unittest.TestCase):
     def test_valid_p01_payload(self):
         """Ein valider kanonischer P01-Payload → keine Fehler."""
         errors = validate_canonical("p01", CANONICAL_P01_VALID)
-        self.assertEqual(
-            errors, [],
-            f"Erwartete keine Fehler, aber erhalten: {errors}"
-        )
+        self.assertEqual(errors, [], f"Erwartete keine Fehler, aber erhalten: {errors}")
 
     def test_valid_p03_payload(self):
         """Ein valider kanonischer P03-Payload → keine Fehler."""
         errors = validate_canonical("p03", CANONICAL_P03_VALID)
-        self.assertEqual(
-            errors, [],
-            f"Erwartete keine Fehler, aber erhalten: {errors}"
-        )
+        self.assertEqual(errors, [], f"Erwartete keine Fehler, aber erhalten: {errors}")
 
     def test_invalid_missing_meta(self):
         """Payload ohne _meta → Fehler in Liste."""
         bad = {k: v for k, v in CANONICAL_P01_VALID.items() if k != "_meta"}
         errors = validate_canonical("p01", bad)
-        self.assertTrue(
-            len(errors) > 0,
-            "Payload ohne _meta sollte Validierungsfehler erzeugen"
-        )
+        self.assertTrue(len(errors) > 0, "Payload ohne _meta sollte Validierungsfehler erzeugen")
         # Mindestens einer der Fehler sollte _meta erwähnen
-        self.assertTrue(
-            any("_meta" in e for e in errors),
-            f"Kein _meta-Fehler in: {errors}"
-        )
+        self.assertTrue(any("_meta" in e for e in errors), f"Kein _meta-Fehler in: {errors}")
 
     def test_invalid_wrong_prompt_version_pattern(self):
         """_meta.prompt_version mit falschem Muster → Fehler."""
         bad = json.loads(json.dumps(CANONICAL_P01_VALID))
         bad["_meta"]["prompt_version"] = "FALSCHES-FORMAT"
         errors = validate_canonical("p01", bad)
-        self.assertTrue(
-            len(errors) > 0,
-            "Falsches prompt_version-Muster sollte Fehler erzeugen"
-        )
+        self.assertTrue(len(errors) > 0, "Falsches prompt_version-Muster sollte Fehler erzeugen")
 
     def test_invalid_agentur_id_pattern(self):
         """agentur_id mit Großbuchstaben → Fehler (Pattern: ^[a-z0-9-]+$)."""
         bad = json.loads(json.dumps(CANONICAL_P01_VALID))
         bad["_meta"]["agentur_id"] = "ZB-GROSS"
         errors = validate_canonical("p01", bad)
-        self.assertTrue(
-            len(errors) > 0,
-            "agentur_id mit Großbuchstaben sollte Fehler erzeugen"
-        )
+        self.assertTrue(len(errors) > 0, "agentur_id mit Großbuchstaben sollte Fehler erzeugen")
 
     def test_empty_dict_fails(self):
         """Leeres Dict ist kein valider P01-Payload."""
@@ -381,8 +363,7 @@ class TestValidateCanonical(unittest.TestCase):
         bad["referenz_saetze"]["original"] = ["Satz 1", "Satz 2"]
         errors = validate_canonical("p03", bad)
         self.assertTrue(
-            len(errors) > 0,
-            "referenz_saetze.original mit <5 Items sollte Fehler erzeugen"
+            len(errors) > 0, "referenz_saetze.original mit <5 Items sollte Fehler erzeugen"
         )
 
 
@@ -409,10 +390,7 @@ class TestToCanonicalP01(unittest.TestCase):
 
     def test_meta_model(self):
         """_meta.model kommt aus meta['model_id']."""
-        self.assertEqual(
-            self.result["_meta"]["model"],
-            "anthropic/claude-sonnet-4-6"
-        )
+        self.assertEqual(self.result["_meta"]["model"], "anthropic/claude-sonnet-4-6")
 
     def test_meta_generation_id(self):
         """_meta.generation_id wird aus row_id erzeugt."""
@@ -449,15 +427,20 @@ class TestToCanonicalP01(unittest.TestCase):
     def test_luecken_set(self):
         """Lossy-Mappings erzeugen Lücken in _meta.luecken."""
         luecken = self.result["_meta"].get("luecken", [])
-        self.assertTrue(
-            len(luecken) > 0,
-            "Lossy-Mappings sollten Lücken erzeugen"
-        )
+        self.assertTrue(len(luecken) > 0, "Lossy-Mappings sollten Lücken erzeugen")
 
     def test_required_canonical_keys_present(self):
         """Alle kanonisch erforderlichen Top-Level-Keys sind vorhanden."""
-        for key in ["person", "zielkunde", "angebot", "positionierung",
-                    "markt", "vertrauen", "sprache", "content_reservoir"]:
+        for key in [
+            "person",
+            "zielkunde",
+            "angebot",
+            "positionierung",
+            "markt",
+            "vertrauen",
+            "sprache",
+            "content_reservoir",
+        ]:
             self.assertIn(key, self.result, f"Fehlendes kanonisches Feld: {key}")
 
     def test_zielgruppe_beschreibung_mapped(self):
@@ -516,7 +499,7 @@ class TestToCanonicalP03(unittest.TestCase):
         luecken = self.result["_meta"].get("luecken", [])
         self.assertTrue(
             any("kernthemen" in l for l in luecken),
-            f"kernthemen sollte als Lücke markiert sein. Lücken: {luecken}"
+            f"kernthemen sollte als Lücke markiert sein. Lücken: {luecken}",
         )
 
     def test_referenz_saetze_empty_from_v2(self):
@@ -527,7 +510,7 @@ class TestToCanonicalP03(unittest.TestCase):
         luecken = self.result["_meta"].get("luecken", [])
         self.assertTrue(
             any("referenz_saetze" in l for l in luecken),
-            "referenz_saetze sollte als Lücke markiert sein"
+            "referenz_saetze sollte als Lücke markiert sein",
         )
 
     def test_satzarchitektur_laenge_from_stilprinzipien(self):
@@ -599,7 +582,7 @@ class TestToCanonicalP04(unittest.TestCase):
         luecken = self.result["_meta"].get("luecken", [])
         self.assertTrue(
             any("content_trigger" in l for l in luecken),
-            "content_trigger sollte als Lücke markiert sein"
+            "content_trigger sollte als Lücke markiert sein",
         )
 
     def test_alltagsszenen_empty_with_luecke(self):
@@ -609,7 +592,7 @@ class TestToCanonicalP04(unittest.TestCase):
         luecken = self.result["_meta"].get("luecken", [])
         self.assertTrue(
             any("alltagsszenen" in l for l in luecken),
-            "alltagsszenen sollte als Lücke markiert sein"
+            "alltagsszenen sollte als Lücke markiert sein",
         )
 
 
@@ -629,8 +612,7 @@ class TestFromCanonical(unittest.TestCase):
         """angebot.elevator_pitch → kernbotschaft."""
         result = from_canonical("p01", CANONICAL_P01_VALID)
         self.assertEqual(
-            result.get("kernbotschaft"),
-            CANONICAL_P01_VALID["angebot"]["elevator_pitch"]
+            result.get("kernbotschaft"), CANONICAL_P01_VALID["angebot"]["elevator_pitch"]
         )
 
     def test_p01_gruendungsgeschichte_back(self):
@@ -638,7 +620,7 @@ class TestFromCanonical(unittest.TestCase):
         result = from_canonical("p01", CANONICAL_P01_VALID)
         self.assertEqual(
             result.get("unternehmensgeschichte"),
-            CANONICAL_P01_VALID["person"]["gruendungsgeschichte"]
+            CANONICAL_P01_VALID["person"]["gruendungsgeschichte"],
         )
 
     def test_p01_werte_schwerpunkt_split_back(self):
@@ -678,18 +660,39 @@ class TestFromCanonical(unittest.TestCase):
         self.assertEqual(result.get("kernthemen"), [])
 
     def test_p04_from_canonical_returns_dict(self):
-        result = from_canonical("p04", {
-            "_meta": {"agentur_id": "zb", "kunde_id": "x", "prompt_version": "p04-v1.0",
-                      "model": "m", "generated_at": "2026-01-01T00:00:00Z"},
-            "identitaet": {"rolle_und_alltag": "Manager", "selbstbild": "Stark"},
-            "innenwelt": {"innerer_monolog": ["A", "B", "C"], "unausgesprochene_angst": "Versagen"},
-            "wunschbild": {"wunschzustand": "Ruhig", "wunschidentitaet": "Inspirierend"},
-            "content_trigger": {"scroll_stopper": ["S1"], "resonanz_saetze": ["R1", "R2", "R3", "R4", "R5"], "abstoss_trigger": ["A1", "A2"]},
-            "sprache_der_zielgruppe": {"redewendungen": ["Am Ende"], "ansprache": "Du"},
-            "alltagsszenen": {"szenen": ["S1", "S2", "S3", "S4", "S5"], "wiederkehrende_muster": ["M1", "M2", "M3"]},
-            "blockaden": {"glaubenssaetze": ["G1", "G2", "G3"], "denkfehler": ["D1", "D2"]},
-            "ausloesemoment": {"trigger_events": ["T1", "T2", "T3"], "emotional_tipping_point": "Krise"},
-        })
+        result = from_canonical(
+            "p04",
+            {
+                "_meta": {
+                    "agentur_id": "zb",
+                    "kunde_id": "x",
+                    "prompt_version": "p04-v1.0",
+                    "model": "m",
+                    "generated_at": "2026-01-01T00:00:00Z",
+                },
+                "identitaet": {"rolle_und_alltag": "Manager", "selbstbild": "Stark"},
+                "innenwelt": {
+                    "innerer_monolog": ["A", "B", "C"],
+                    "unausgesprochene_angst": "Versagen",
+                },
+                "wunschbild": {"wunschzustand": "Ruhig", "wunschidentitaet": "Inspirierend"},
+                "content_trigger": {
+                    "scroll_stopper": ["S1"],
+                    "resonanz_saetze": ["R1", "R2", "R3", "R4", "R5"],
+                    "abstoss_trigger": ["A1", "A2"],
+                },
+                "sprache_der_zielgruppe": {"redewendungen": ["Am Ende"], "ansprache": "Du"},
+                "alltagsszenen": {
+                    "szenen": ["S1", "S2", "S3", "S4", "S5"],
+                    "wiederkehrende_muster": ["M1", "M2", "M3"],
+                },
+                "blockaden": {"glaubenssaetze": ["G1", "G2", "G3"], "denkfehler": ["D1", "D2"]},
+                "ausloesemoment": {
+                    "trigger_events": ["T1", "T2", "T3"],
+                    "emotional_tipping_point": "Krise",
+                },
+            },
+        )
         self.assertIsInstance(result, dict)
         self.assertNotIn("_meta", result)
 
@@ -714,7 +717,7 @@ class TestRoundTrip(unittest.TestCase):
         self.assertEqual(
             v2_back.get("kernbotschaft"),
             V2_P01_MINIMAL["kernbotschaft"],
-            "kernbotschaft sollte Round-Trip verlustfrei sein"
+            "kernbotschaft sollte Round-Trip verlustfrei sein",
         )
 
     def test_p01_roundtrip_unternehmensgeschichte(self):
@@ -734,8 +737,9 @@ class TestRoundTrip(unittest.TestCase):
         werte_back = set(v2_back.get("werte") or [])
         # Inhalt sollte trotz Typ-Konversion erhalten sein
         self.assertEqual(
-            werte_original, werte_back,
-            "werte-Inhalt sollte Round-Trip überstehen (auch wenn lossy)"
+            werte_original,
+            werte_back,
+            "werte-Inhalt sollte Round-Trip überstehen (auch wenn lossy)",
         )
 
     def test_p03_roundtrip_wortschatz_signalwoerter(self):
@@ -802,7 +806,7 @@ class TestLueckenMarkierung(unittest.TestCase):
         luecken = result["_meta"].get("luecken", [])
         self.assertTrue(
             any("referenz_saetze" in l for l in luecken),
-            f"referenz_saetze-Lücke erwartet. Lücken: {luecken}"
+            f"referenz_saetze-Lücke erwartet. Lücken: {luecken}",
         )
 
     def test_p04_alltagsszenen_luecke(self):
@@ -819,7 +823,7 @@ class TestLueckenMarkierung(unittest.TestCase):
         luecken = result["_meta"].get("luecken", [])
         self.assertTrue(
             any("person.name" in l or "person." in l for l in luecken),
-            f"person-Felder-Lücke erwartet. Lücken: {luecken}"
+            f"person-Felder-Lücke erwartet. Lücken: {luecken}",
         )
 
     def test_luecken_are_strings(self):
@@ -851,7 +855,11 @@ class TestMetaRehydrierung(unittest.TestCase):
 
     def test_tenant_id_last_fallback(self):
         """Ohne tenant_slug und tenant_name wird tenant_id slugged."""
-        meta = {"tenant_id": "UUID-1234", "model_id": "model-x", "created_at": "2026-01-01T00:00:00Z"}
+        meta = {
+            "tenant_id": "UUID-1234",
+            "model_id": "model-x",
+            "created_at": "2026-01-01T00:00:00Z",
+        }
         result = to_canonical("p01", V2_P01_MINIMAL, meta)
         # UUID-1234 → uuid-1234 (Großbuchstaben → klein)
         self.assertIn("uuid", result["_meta"]["kunde_id"])

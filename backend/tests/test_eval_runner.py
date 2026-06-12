@@ -9,14 +9,13 @@ Abdeckung:
 - run_eval() mit Mock-Quality-Gate deterministisch
 - Edge Cases: alle TP, alle FP, gemischt
 """
+
 from __future__ import annotations
 
-import json
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -29,16 +28,15 @@ from eval.run_quality_gate_eval import (
     classify_outcome,
     compute_auc,
     compute_metrics,
-    compute_roc_points,
     eval_branche,
     run_eval,
     write_markdown_report,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixture: deterministisches Mock-Quality-Gate
 # ---------------------------------------------------------------------------
+
 
 def mock_quality_gate_always_pass(text: str, branche: str) -> dict[str, Any]:
     """Stub: immer passed=True, score=80."""
@@ -47,7 +45,13 @@ def mock_quality_gate_always_pass(text: str, branche: str) -> dict[str, Any]:
 
 def mock_quality_gate_always_fail(text: str, branche: str) -> dict[str, Any]:
     """Stub: immer passed=False, score=20."""
-    return {"passed": False, "score": 20.0, "violations": ["too_short"], "threshold": 60.0, "branche": branche}
+    return {
+        "passed": False,
+        "score": 20.0,
+        "violations": ["too_short"],
+        "threshold": 60.0,
+        "branche": branche,
+    }
 
 
 def mock_quality_gate_by_length(text: str, branche: str) -> dict[str, Any]:
@@ -55,12 +59,19 @@ def mock_quality_gate_by_length(text: str, branche: str) -> dict[str, Any]:
     score = min(100.0, len(text) / 10.0)
     passed = score > 60.0
     violations = [] if passed else ["too_short"]
-    return {"passed": passed, "score": score, "violations": violations, "threshold": 60.0, "branche": branche}
+    return {
+        "passed": passed,
+        "score": score,
+        "violations": violations,
+        "threshold": 60.0,
+        "branche": branche,
+    }
 
 
 # ---------------------------------------------------------------------------
 # Tests: classify_outcome
 # ---------------------------------------------------------------------------
+
 
 class TestClassifyOutcome:
     def test_tp(self):
@@ -79,6 +90,7 @@ class TestClassifyOutcome:
 # ---------------------------------------------------------------------------
 # Tests: compute_metrics
 # ---------------------------------------------------------------------------
+
 
 class TestComputeMetrics:
     def test_perfect_classifier(self):
@@ -123,12 +135,21 @@ class TestComputeMetrics:
 # Tests: compute_auc
 # ---------------------------------------------------------------------------
 
+
 class TestComputeAuc:
     def test_perfect_auc(self):
         """Perfekter Classifier: AUC = 1.0 (TPR=1, FPR=0 immer)."""
         roc_points = [
-            {"threshold": t, "tpr": 1.0, "fpr": 0.0, "f1": 1.0,
-             "tp": 10, "fp": 0, "tn": 10, "fn": 0}
+            {
+                "threshold": t,
+                "tpr": 1.0,
+                "fpr": 0.0,
+                "f1": 1.0,
+                "tp": 10,
+                "fp": 0,
+                "tn": 10,
+                "fn": 0,
+            }
             for t in [40, 60, 80]
         ]
         # Gleiche FPR -> AUC ~0 (keine Flaeche), aber kein Crash
@@ -139,12 +160,36 @@ class TestComputeAuc:
     def test_random_classifier(self):
         """Zufaelliger Classifier: AUC ~ 0.5 (Diagonale)."""
         roc_points = [
-            {"threshold": 90, "tpr": 0.1, "fpr": 0.1, "f1": 0.1,
-             "tp": 1, "fp": 1, "tn": 9, "fn": 9},
-            {"threshold": 50, "tpr": 0.5, "fpr": 0.5, "f1": 0.5,
-             "tp": 5, "fp": 5, "tn": 5, "fn": 5},
-            {"threshold": 10, "tpr": 0.9, "fpr": 0.9, "f1": 0.5,
-             "tp": 9, "fp": 9, "tn": 1, "fn": 1},
+            {
+                "threshold": 90,
+                "tpr": 0.1,
+                "fpr": 0.1,
+                "f1": 0.1,
+                "tp": 1,
+                "fp": 1,
+                "tn": 9,
+                "fn": 9,
+            },
+            {
+                "threshold": 50,
+                "tpr": 0.5,
+                "fpr": 0.5,
+                "f1": 0.5,
+                "tp": 5,
+                "fp": 5,
+                "tn": 5,
+                "fn": 5,
+            },
+            {
+                "threshold": 10,
+                "tpr": 0.9,
+                "fpr": 0.9,
+                "f1": 0.5,
+                "tp": 9,
+                "fp": 9,
+                "tn": 1,
+                "fn": 1,
+            },
         ]
         auc = compute_auc(roc_points)
         # Trapez-AUC der Diagonale ist ~0.4 (diskret), akzeptiere Bereich
@@ -160,12 +205,11 @@ class TestComputeAuc:
 # Tests: eval_branche mit Mock
 # ---------------------------------------------------------------------------
 
+
 class TestEvalBranche:
     def test_empty_corpus_no_crash(self):
         """Leeres Korpus: gibt leeres Ergebnis zurueck, kein Crash."""
-        with patch(
-            "eval.run_quality_gate_eval.load_labeled_posts", return_value=[]
-        ):
+        with patch("eval.run_quality_gate_eval.load_labeled_posts", return_value=[]):
             result = eval_branche("_generic", [50, 60, 70])
 
         assert result["post_count"] == 0
@@ -179,11 +223,12 @@ class TestEvalBranche:
             {"id": f"t_{i}", "text": "x" * 300, "label": "good", "ground_truth_violations": []}
             for i in range(5)
         ]
-        with patch(
-            "eval.run_quality_gate_eval.load_labeled_posts", return_value=posts
-        ), patch(
-            "eval.run_quality_gate_eval.quality_gate_check",
-            side_effect=mock_quality_gate_always_pass,
+        with (
+            patch("eval.run_quality_gate_eval.load_labeled_posts", return_value=posts),
+            patch(
+                "eval.run_quality_gate_eval.quality_gate_check",
+                side_effect=mock_quality_gate_always_pass,
+            ),
         ):
             result = eval_branche("handwerk", [50, 60])
 
@@ -202,11 +247,12 @@ class TestEvalBranche:
             {"id": f"b_{i}", "text": "x", "label": "bad", "ground_truth_violations": ["too_short"]}
             for i in range(4)
         ]
-        with patch(
-            "eval.run_quality_gate_eval.load_labeled_posts", return_value=posts
-        ), patch(
-            "eval.run_quality_gate_eval.quality_gate_check",
-            side_effect=mock_quality_gate_always_fail,
+        with (
+            patch("eval.run_quality_gate_eval.load_labeled_posts", return_value=posts),
+            patch(
+                "eval.run_quality_gate_eval.quality_gate_check",
+                side_effect=mock_quality_gate_always_fail,
+            ),
         ):
             result = eval_branche("recht", [50, 60])
 
@@ -220,16 +266,17 @@ class TestEvalBranche:
         """2 good (1 TP, 1 FN) + 2 bad (1 TN, 1 FP) -> CM korrekt."""
         # Gate: passed wenn text lang (>600 Zeichen)
         posts = [
-            {"id": "g1", "text": "x" * 700, "label": "good"},   # TP (score=70>60, passed)
-            {"id": "g2", "text": "x" * 100, "label": "good"},   # FN (score=10<60, not passed)
-            {"id": "b1", "text": "x" * 50,  "label": "bad"},    # TN (score=5<60, not passed)
-            {"id": "b2", "text": "x" * 800, "label": "bad"},    # FP (score=80>60, passed)
+            {"id": "g1", "text": "x" * 700, "label": "good"},  # TP (score=70>60, passed)
+            {"id": "g2", "text": "x" * 100, "label": "good"},  # FN (score=10<60, not passed)
+            {"id": "b1", "text": "x" * 50, "label": "bad"},  # TN (score=5<60, not passed)
+            {"id": "b2", "text": "x" * 800, "label": "bad"},  # FP (score=80>60, passed)
         ]
-        with patch(
-            "eval.run_quality_gate_eval.load_labeled_posts", return_value=posts
-        ), patch(
-            "eval.run_quality_gate_eval.quality_gate_check",
-            side_effect=mock_quality_gate_by_length,
+        with (
+            patch("eval.run_quality_gate_eval.load_labeled_posts", return_value=posts),
+            patch(
+                "eval.run_quality_gate_eval.quality_gate_check",
+                side_effect=mock_quality_gate_by_length,
+            ),
         ):
             result = eval_branche("finanzen", [50, 60, 70])
 
@@ -244,6 +291,7 @@ class TestEvalBranche:
 # Tests: run_eval (Integration, mit temp dir)
 # ---------------------------------------------------------------------------
 
+
 class TestRunEval:
     def test_run_eval_writes_files(self, tmp_path: Path):
         """run_eval() schreibt JSON + MD in eval_results/."""
@@ -252,13 +300,13 @@ class TestRunEval:
             {"id": "b1", "text": "x" * 50, "label": "bad"},
         ]
 
-        with patch(
-            "eval.run_quality_gate_eval.load_labeled_posts", return_value=posts
-        ), patch(
-            "eval.run_quality_gate_eval.quality_gate_check",
-            side_effect=mock_quality_gate_by_length,
-        ), patch(
-            "eval.run_quality_gate_eval._RESULTS_DIR", tmp_path
+        with (
+            patch("eval.run_quality_gate_eval.load_labeled_posts", return_value=posts),
+            patch(
+                "eval.run_quality_gate_eval.quality_gate_check",
+                side_effect=mock_quality_gate_by_length,
+            ),
+            patch("eval.run_quality_gate_eval._RESULTS_DIR", tmp_path),
         ):
             results = run_eval(branchen=["handwerk"], thresholds=[50, 60])
 
@@ -279,10 +327,14 @@ class TestRunEval:
     def test_ci_gate_passes(self, tmp_path: Path):
         """min_f1=0.0 -> kein SystemExit."""
         posts = [{"id": "g1", "text": "x" * 700, "label": "good"}]
-        with patch("eval.run_quality_gate_eval.load_labeled_posts", return_value=posts), \
-             patch("eval.run_quality_gate_eval.quality_gate_check",
-                   side_effect=mock_quality_gate_always_pass), \
-             patch("eval.run_quality_gate_eval._RESULTS_DIR", tmp_path):
+        with (
+            patch("eval.run_quality_gate_eval.load_labeled_posts", return_value=posts),
+            patch(
+                "eval.run_quality_gate_eval.quality_gate_check",
+                side_effect=mock_quality_gate_always_pass,
+            ),
+            patch("eval.run_quality_gate_eval._RESULTS_DIR", tmp_path),
+        ):
             # Kein SystemExit erwartet
             results = run_eval(branchen=["handwerk"], thresholds=[60], min_f1=0.0)
         assert results is not None
@@ -290,18 +342,24 @@ class TestRunEval:
     def test_ci_gate_blocks(self, tmp_path: Path):
         """min_f1=1.0 mit schlechtem Gate -> SystemExit(1)."""
         posts = [{"id": "b1", "text": "x", "label": "good"}]  # wird FN da zu kurz
-        with patch("eval.run_quality_gate_eval.load_labeled_posts", return_value=posts), \
-             patch("eval.run_quality_gate_eval.quality_gate_check",
-                   side_effect=mock_quality_gate_always_fail), \
-             patch("eval.run_quality_gate_eval._RESULTS_DIR", tmp_path):
+        with (
+            patch("eval.run_quality_gate_eval.load_labeled_posts", return_value=posts),
+            patch(
+                "eval.run_quality_gate_eval.quality_gate_check",
+                side_effect=mock_quality_gate_always_fail,
+            ),
+            patch("eval.run_quality_gate_eval._RESULTS_DIR", tmp_path),
+        ):
             with pytest.raises(SystemExit) as exc_info:
                 run_eval(branchen=["handwerk"], thresholds=[60], min_f1=1.0)
         assert exc_info.value.code == 1
 
     def test_empty_all_branchen_no_crash(self, tmp_path: Path):
         """Alle Branchen leer -> kein Crash, Aggregat mit total_posts=0."""
-        with patch("eval.run_quality_gate_eval.load_labeled_posts", return_value=[]), \
-             patch("eval.run_quality_gate_eval._RESULTS_DIR", tmp_path):
+        with (
+            patch("eval.run_quality_gate_eval.load_labeled_posts", return_value=[]),
+            patch("eval.run_quality_gate_eval._RESULTS_DIR", tmp_path),
+        ):
             results = run_eval(branchen=["handwerk", "recht"], thresholds=[60])
 
         assert results["aggregate"]["total_posts"] == 0
@@ -311,6 +369,7 @@ class TestRunEval:
 # ---------------------------------------------------------------------------
 # Tests: Markdown-Report
 # ---------------------------------------------------------------------------
+
 
 class TestMarkdownReport:
     def test_report_contains_key_sections(self, tmp_path: Path):
@@ -332,8 +391,16 @@ class TestMarkdownReport:
                     "confusion_matrix": {"tp": 5, "fp": 1, "tn": 3, "fn": 1},
                     "metrics": {"precision": 0.83, "recall": 0.83, "f1": 0.83, "accuracy": 0.8},
                     "roc_points": [
-                        {"threshold": 60, "tpr": 0.8, "fpr": 0.2, "f1": 0.83,
-                         "tp": 5, "fp": 1, "tn": 3, "fn": 1}
+                        {
+                            "threshold": 60,
+                            "tpr": 0.8,
+                            "fpr": 0.2,
+                            "f1": 0.83,
+                            "tp": 5,
+                            "fp": 1,
+                            "tn": 3,
+                            "fn": 1,
+                        }
                     ],
                     "optimal_threshold": {"threshold": 60, "f1": 0.83},
                 }

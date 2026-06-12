@@ -19,7 +19,6 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 import httpx
 
@@ -36,38 +35,38 @@ TIER_MODELS: dict[str, str] = {
     "S2": "mistral/mistral-small-latest",
     "S3": "mistral/devstral-small-latest",
     "S4": "mistral/mistral-large-latest",
-    "S5": "mistral/devstral-latest",       # CONFIRM-pflichtig
-    "S6": "anthropic/claude-sonnet-4-6",   # CONFIRM-pflichtig — Freigabe Robert (P5, 2026-06-11)
+    "S5": "mistral/devstral-latest",  # CONFIRM-pflichtig
+    "S6": "anthropic/claude-sonnet-4-6",  # CONFIRM-pflichtig — Freigabe Robert (P5, 2026-06-11)
 }
 
 # Pricing pro Tier ($/1M Tokens) — für Kosten-Schätzung und Actual-Cost.
 # S6 entspricht cost_cap._ANTHROPIC_PRICING["claude-sonnet-4-6"] ($3/$15).
 TIER_PRICING: dict[str, dict[str, float]] = {
     "S1": {"input": 0.075, "output": 0.30},
-    "S2": {"input": 0.10,  "output": 0.30},
-    "S3": {"input": 0.10,  "output": 0.30},
-    "S4": {"input": 2.00,  "output": 6.00},
-    "S5": {"input": 0.40,  "output": 2.00},
-    "S6": {"input": 3.00,  "output": 15.00},
+    "S2": {"input": 0.10, "output": 0.30},
+    "S3": {"input": 0.10, "output": 0.30},
+    "S4": {"input": 2.00, "output": 6.00},
+    "S5": {"input": 0.40, "output": 2.00},
+    "S6": {"input": 3.00, "output": 15.00},
 }
 
 # Per-Prompt-Default-Tier — portiert von ADR-0008 (Qualität > Kosten
 # für einmalige Setup-Calls pro Kunde).
 MODEL_PER_PROMPT: dict[str, str] = {
-    "P01":  "S6",
-    "P03":  "S6",
-    "P04":  "S6",
-    "P12":  "S6",
+    "P01": "S6",
+    "P03": "S6",
+    "P04": "S6",
+    "P12": "S6",
     "P12B": "S6",
     "P12C": "S6",
 }
 
 # Per-Prompt max_tokens — übernommen aus den bisherigen Task-Konstanten.
 PROMPT_MAX_TOKENS: dict[str, int] = {
-    "P01":  2048,
-    "P03":  2000,
-    "P04":  2048,
-    "P12":  2000,
+    "P01": 2048,
+    "P03": 2000,
+    "P04": 2048,
+    "P12": 2000,
     "P12B": 2000,
     "P12C": 1024,
 }
@@ -77,7 +76,8 @@ PROMPT_MAX_TOKENS: dict[str, int] = {
 # Hilfs-Funktionen: Tier-Auflösung und Kosten-Schätzung
 # ---------------------------------------------------------------------------
 
-def resolve_tier(prompt_key: str, override: Optional[str] = None) -> tuple[str, str]:
+
+def resolve_tier(prompt_key: str, override: str | None = None) -> tuple[str, str]:
     """Löst den Tier-Namen und die Router-Modell-ID für einen Prompt-Key auf.
 
     Auflösungsreihenfolge (ADR-0008-Portierung):
@@ -125,11 +125,17 @@ def resolve_tier(prompt_key: str, override: Optional[str] = None) -> tuple[str, 
         )
 
     model_id = TIER_MODELS[tier]
-    logger.debug("resolve_tier: prompt=%s override=%s → tier=%s model=%s", prompt_key, override, tier, model_id)
+    logger.debug(
+        "resolve_tier: prompt=%s override=%s → tier=%s model=%s",
+        prompt_key,
+        override,
+        tier,
+        model_id,
+    )
     return tier, model_id
 
 
-def _tier_for_model(model_id: str) -> Optional[str]:
+def _tier_for_model(model_id: str) -> str | None:
     """Reverse-Lookup: bekannte Router-Modell-ID → Tier-Name (für Pricing/Label)."""
     for tier, mid in TIER_MODELS.items():
         if mid == model_id:
@@ -139,8 +145,8 @@ def _tier_for_model(model_id: str) -> Optional[str]:
 
 def resolve_model(
     prompt_key: str,
-    tier_override: Optional[str] = None,
-    model_override: Optional[str] = None,
+    tier_override: str | None = None,
+    model_override: str | None = None,
 ) -> dict:
     """Löst das EFFEKTIVE Modell für eine Phase auf — inkl. globaler Test-Policy.
 
@@ -164,6 +170,7 @@ def resolve_model(
     if not override:
         try:
             from services.model_policy import get_override
+
             override = get_override(key)
             if override:
                 source = "policy"
@@ -199,11 +206,13 @@ def describe_pipeline_models() -> list:
     for phase in MODEL_PER_PROMPT:
         res = resolve_model(phase)
         env_tier = os.environ.get(f"MODEL_TIER_{phase}") or None
-        out.append({
-            **res,
-            "max_tokens": PROMPT_MAX_TOKENS.get(phase),
-            "env_tier_override": env_tier,
-        })
+        out.append(
+            {
+                **res,
+                "max_tokens": PROMPT_MAX_TOKENS.get(phase),
+                "env_tier_override": env_tier,
+            }
+        )
     return out
 
 
@@ -222,7 +231,9 @@ def estimate_tier_cost(tier: str, input_tokens: int, output_tokens: int) -> floa
     """
     pricing = TIER_PRICING.get(tier.upper())
     if pricing is None:
-        logger.warning("estimate_tier_cost: Unbekannter Tier '%s', nutze konservativen Fallback", tier)
+        logger.warning(
+            "estimate_tier_cost: Unbekannter Tier '%s', nutze konservativen Fallback", tier
+        )
         return (input_tokens * 5.0 + output_tokens * 20.0) / 1_000_000
     return (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
 
@@ -230,6 +241,7 @@ def estimate_tier_cost(tier: str, input_tokens: int, output_tokens: int) -> floa
 # ---------------------------------------------------------------------------
 # Result-Dataclass
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class PipelineLLMResult:
@@ -245,6 +257,7 @@ class PipelineLLMResult:
         cache_write_tokens: Cache-Write-Tokens (0 wenn kein Cache-Write).
         cost_usd:           Berechnete Kosten aus TIER_PRICING (konservativ, ohne Cache-Rabatt).
     """
+
     text: str
     model_id: str
     tier: str
@@ -262,11 +275,12 @@ class PipelineLLMResult:
 # BudgetExceededError aus services.llm re-exportieren, damit Task-Code
 # nur dieses Modul importieren muss.
 try:
-    from services.llm import BudgetExceededError  # noqa: F401
+    from services.llm import BudgetExceededError
 except Exception:
     # Fallback-Definition falls llm.py noch nicht importierbar ist
     class BudgetExceededError(Exception):  # type: ignore[no-redef]
         """Raised wenn der Requesty/LiteLLM-Router HTTP 412 zurückgibt."""
+
         pass
 
 
@@ -274,14 +288,15 @@ except Exception:
 # Haupt-Seam-Funktion
 # ---------------------------------------------------------------------------
 
+
 def call_pipeline_llm(
     *,
     prompt_key: str,
     system_prompt: str,
     user_content: str,
     tenant_id: str,
-    max_tokens: Optional[int] = None,
-    tier_override: Optional[str] = None,
+    max_tokens: int | None = None,
+    tier_override: str | None = None,
     max_retries: int = 3,
 ) -> PipelineLLMResult:
     """Synchroner LLM-Call für alle Setup-Pipeline-Tasks über den Router.
@@ -316,7 +331,10 @@ def call_pipeline_llm(
     if _resolution["source"] != "default":
         logger.info(
             "call_pipeline_llm: %s Test-Override aktiv (%s) → model=%s (Default war %s)",
-            prompt_key, _resolution["source"], model_id, _resolution["default_model"],
+            prompt_key,
+            _resolution["source"],
+            model_id,
+            _resolution["default_model"],
         )
 
     # 2. max_tokens festlegen
@@ -346,11 +364,15 @@ def call_pipeline_llm(
 
     logger.info(
         "call_pipeline_llm: prompt=%s tier=%s model=%s tenant=%s max_tokens=%d",
-        prompt_key, tier, model_id, tenant_id, max_tokens,
+        prompt_key,
+        tier,
+        model_id,
+        tenant_id,
+        max_tokens,
     )
 
     # 5. HTTP-Call mit Retry-Logik
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
     for attempt in range(max_retries):
         try:
             with httpx.Client(timeout=120) as client:
@@ -404,19 +426,26 @@ def call_pipeline_llm(
                 # 4xx (ausser 429 Throttle) nicht retrien
                 raise
             last_error = exc
-            wait = 2 ** attempt
+            wait = 2**attempt
             logger.warning(
                 "call_pipeline_llm: HTTP %d, Versuch %d/%d, warte %ds (prompt=%s)",
-                status, attempt + 1, max_retries, wait, prompt_key,
+                status,
+                attempt + 1,
+                max_retries,
+                wait,
+                prompt_key,
             )
             if attempt < max_retries - 1:
                 time.sleep(wait)
         except Exception as exc:
             last_error = exc
-            wait = 2 ** attempt
+            wait = 2**attempt
             logger.warning(
                 "call_pipeline_llm: Fehler Versuch %d/%d, warte %ds: %s",
-                attempt + 1, max_retries, wait, exc,
+                attempt + 1,
+                max_retries,
+                wait,
+                exc,
             )
             if attempt < max_retries - 1:
                 time.sleep(wait)
@@ -429,6 +458,7 @@ def call_pipeline_llm(
 # Interne Hilfsfunktionen
 # ---------------------------------------------------------------------------
 
+
 def _resolve_provider() -> tuple[str, str, bool]:
     """Liefert (base_url, api_key, auto_cache) aus DB-Provider oder Env-Fallback.
 
@@ -437,6 +467,7 @@ def _resolve_provider() -> tuple[str, str, bool]:
     """
     try:
         from services.provider_resolver import get_active_provider
+
         provider = get_active_provider(task="setup_pipeline")
         if provider:
             return provider["base_url"], provider["api_key"], bool(provider.get("auto_cache", True))
@@ -452,6 +483,7 @@ def _resolve_env_provider() -> tuple[str, str, bool]:
     Wirft RuntimeError wenn LITELLM_BASE_URL nicht gesetzt ist.
     """
     from config import settings
+
     base_url = settings.litellm_base_url
     if not base_url:
         raise RuntimeError(
@@ -499,17 +531,11 @@ def _parse_response(data: dict, model_id: str, tier: str) -> PipelineLLMResult:
     output_tokens = int(usage.get("completion_tokens", 0))
 
     # Cache-Telemetrie: Requesty verwendet abweichende Feldnamen
-    cache_read = int(
-        usage.get("cache_read_input_tokens", 0)
-        or usage.get("cached_tokens", 0)
-        or 0
-    )
+    cache_read = int(usage.get("cache_read_input_tokens", 0) or usage.get("cached_tokens", 0) or 0)
     cache_write = int(usage.get("cache_creation_input_tokens", 0) or 0)
 
     if cache_read > 0:
-        logger.info(
-            "call_pipeline_llm: Cache-HIT %d Tokens (model=%s)", cache_read, model_id
-        )
+        logger.info("call_pipeline_llm: Cache-HIT %d Tokens (model=%s)", cache_read, model_id)
 
     # Kosten konservativ ohne Cache-Rabatt rechnen
     cost_usd = estimate_tier_cost(tier, input_tokens, output_tokens)
@@ -517,7 +543,12 @@ def _parse_response(data: dict, model_id: str, tier: str) -> PipelineLLMResult:
     logger.info(
         "call_pipeline_llm: done — tier=%s model=%s input=%d output=%d "
         "cache_read=%d cost=%.6f USD",
-        tier, model_id, input_tokens, output_tokens, cache_read, cost_usd,
+        tier,
+        model_id,
+        input_tokens,
+        output_tokens,
+        cache_read,
+        cost_usd,
     )
 
     return PipelineLLMResult(

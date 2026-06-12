@@ -1,7 +1,6 @@
 """Tests for final approval constraint (#85)."""
-import pytest
+
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
 
 
@@ -82,9 +81,8 @@ def test_put_bypass_guard_blocks_unapproved_publish():
     update_data = {"status": "published"}
 
     # Simulates the guard added in update_content endpoint
-    would_raise = (
-        update_data.get("status") == "published"
-        and (piece.status != "approved" or not piece.approved_by)
+    would_raise = update_data.get("status") == "published" and (
+        piece.status != "approved" or not piece.approved_by
     )
     assert would_raise, "PUT with status=published on unapproved piece should raise 409"
 
@@ -94,8 +92,7 @@ def test_put_bypass_guard_allows_approved_publish():
     piece = make_piece(status="approved", approved_by="web_ui")
     update_data = {"status": "published"}
 
-    would_raise = (
-        update_data.get("status") == "published"
-        and (piece.status != "approved" or not piece.approved_by)
+    would_raise = update_data.get("status") == "published" and (
+        piece.status != "approved" or not piece.approved_by
     )
     assert not would_raise, "PUT with status=published on approved piece should be allowed"

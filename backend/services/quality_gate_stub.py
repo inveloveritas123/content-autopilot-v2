@@ -13,6 +13,7 @@ Stub-Logik (deterministisch, $0):
 - passed wenn score > threshold (default 60)
 - violations: Heuristik-basiert (Caps-Ratio, Laenge)
 """
+
 from __future__ import annotations
 
 import re

@@ -3,9 +3,11 @@ Telegram Webhook Receiver + One-Time-Token Auth Flow (Issue #61).
 
 POST /api/telegram/webhook  — receives Telegram Updates (open, secret-header auth)
 """
+
 import hmac
 import logging
 import time
+from datetime import UTC
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -23,8 +25,8 @@ router = APIRouter(prefix="/telegram", tags=["Telegram"])
 # ---------------------------------------------------------------------------
 
 _bad_attempts: dict[str, list[float]] = {}
-_BAD_ATTEMPT_WINDOW = 60.0   # seconds
-_BAD_ATTEMPT_MAX = 10        # max invalid attempts per IP per window
+_BAD_ATTEMPT_WINDOW = 60.0  # seconds
+_BAD_ATTEMPT_MAX = 10  # max invalid attempts per IP per window
 
 
 def _is_rate_limited(ip: str) -> bool:
@@ -49,6 +51,7 @@ def _record_bad_attempt(ip: str) -> None:
 # Telegram API helper
 # ---------------------------------------------------------------------------
 
+
 def _send_telegram_message(chat_id: int, text_msg: str) -> None:
     """Fire-and-forget: send a message via Telegram Bot API."""
     if not settings.telegram_bot_token:
@@ -56,6 +59,7 @@ def _send_telegram_message(chat_id: int, text_msg: str) -> None:
         return
     try:
         import httpx
+
         url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
         httpx.post(url, json={"chat_id": chat_id, "text": text_msg}, timeout=5)
     except Exception as e:
@@ -66,9 +70,10 @@ def _send_telegram_message(chat_id: int, text_msg: str) -> None:
 # Internal: handle /start <token>
 # ---------------------------------------------------------------------------
 
+
 def _handle_start_command(message: dict, token: str) -> None:
     """Verify one-time token, activate tenant_telegram_link."""
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta
 
     chat_id: int = message.get("chat", {}).get("id", 0)
     user_id: int = message.get("from", {}).get("id", 0)
@@ -89,9 +94,9 @@ def _handle_start_command(message: dict, token: str) -> None:
         tenant_id, linked_at = row[0], row[1]
 
         # Ensure linked_at is timezone-aware for comparison
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if linked_at.tzinfo is None:
-            linked_at = linked_at.replace(tzinfo=timezone.utc)
+            linked_at = linked_at.replace(tzinfo=UTC)
 
         if now - linked_at > timedelta(minutes=30):
             _send_telegram_message(
@@ -141,6 +146,7 @@ def _handle_start_command(message: dict, token: str) -> None:
 # Internal: store + dispatch for known tenants
 # ---------------------------------------------------------------------------
 
+
 def _store_and_dispatch(tenant_id: str, message: dict, message_type: str) -> None:
     """Insert telegram_message_log row and enqueue Celery task."""
     import json as _json
@@ -171,6 +177,7 @@ def _store_and_dispatch(tenant_id: str, message: dict, message_type: str) -> Non
 
     try:
         from tasks.telegram_task import process_telegram_update
+
         process_telegram_update.apply_async(args=[log_id])
     except Exception as e:
         logger.warning(f"Celery dispatch skipped (task not yet implemented?): {e}")
@@ -180,10 +187,13 @@ def _store_and_dispatch(tenant_id: str, message: dict, message_type: str) -> Non
 # Webhook endpoint
 # ---------------------------------------------------------------------------
 
+
 @router.post("/webhook")
 async def telegram_webhook(
     request: Request,
-    x_telegram_bot_api_secret_token: str = Header(default=None, alias="X-Telegram-Bot-Api-Secret-Token"),
+    x_telegram_bot_api_secret_token: str = Header(
+        default=None, alias="X-Telegram-Bot-Api-Secret-Token"
+    ),
 ) -> dict:
     """
     Receives Telegram Update objects. Auth via secret header only (no API key).
@@ -202,8 +212,10 @@ async def telegram_webhook(
 
     # Secret token verification — constant-time compare to prevent timing attacks
     expected = settings.telegram_webhook_secret
-    if not expected or not x_telegram_bot_api_secret_token or not hmac.compare_digest(
-        x_telegram_bot_api_secret_token, expected
+    if (
+        not expected
+        or not x_telegram_bot_api_secret_token
+        or not hmac.compare_digest(x_telegram_bot_api_secret_token, expected)
     ):
         _record_bad_attempt(client_ip)
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -231,7 +243,7 @@ async def telegram_webhook(
 
     # Handle /start <token>
     if text_content.startswith("/start "):
-        token_arg = text_content[len("/start "):].strip()
+        token_arg = text_content[len("/start ") :].strip()
         if token_arg:
             try:
                 _handle_start_command(message, token_arg)
@@ -302,7 +314,7 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
             return True
         try:
             results = _memory_search_sync(tenant_id, arg, limit=5)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("/such failed: %s", exc)
             _send_telegram_message(chat_id, f"Suche fehlgeschlagen: {exc}")
             return True
@@ -313,19 +325,23 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
         for r in results:
             sim = r.get("similarity") or 0
             preview = (r.get("content_text") or "")[:200]
-            tag = (r.get("classification") or "—")
+            tag = r.get("classification") or "—"
             lines.append(f"\n• {sim*100:.0f}% [{tag}] {preview}")
         _send_telegram_message(chat_id, "\n".join(lines)[:4000])
         return True
 
     if cmd in ("/notiz", "/note"):
         if not arg or len(arg) < 5:
-            _send_telegram_message(chat_id, "Bitte Notiz-Text angeben — z.B. /notiz Wertschätzung ist mir wichtig")
+            _send_telegram_message(
+                chat_id, "Bitte Notiz-Text angeben — z.B. /notiz Wertschätzung ist mir wichtig"
+            )
             return True
         try:
             chunk_id = _memory_note_sync(tenant_id, arg)
-            _send_telegram_message(chat_id, f"✓ Notiz gespeichert (id: {chunk_id[:8]}…). Frag später mit /such danach.")
-        except Exception as exc:  # noqa: BLE001
+            _send_telegram_message(
+                chat_id, f"✓ Notiz gespeichert (id: {chunk_id[:8]}…). Frag später mit /such danach."
+            )
+        except Exception as exc:
             logger.warning("/notiz failed: %s", exc)
             _send_telegram_message(chat_id, f"Notiz konnte nicht gespeichert werden: {exc}")
         return True
@@ -349,10 +365,12 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
 def _memory_search_sync(tenant_id: str, query: str, limit: int = 5) -> list[dict]:
     """Synchrone Search-Wrapper für Telegram-Bot-Pfad."""
     import asyncio
+
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker as _sm
-    from services.embedding_service import search_similar
+
     from config import settings as _s
+    from services.embedding_service import search_similar
 
     async def _run():
         engine = create_async_engine(_s.database_url, pool_pre_ping=True)
@@ -364,16 +382,19 @@ def _memory_search_sync(tenant_id: str, query: str, limit: int = 5) -> list[dict
                 )
         finally:
             await engine.dispose()
+
     return asyncio.run(_run())
 
 
 def _memory_note_sync(tenant_id: str, text_input: str) -> str:
     """Synchrone Note-Wrapper."""
     import asyncio
+
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker as _sm
-    from services.embedding_service import store_chunk
+
     from config import settings as _s
+    from services.embedding_service import store_chunk
 
     async def _run():
         engine = create_async_engine(_s.database_url, pool_pre_ping=True)
@@ -390,4 +411,5 @@ def _memory_note_sync(tenant_id: str, text_input: str) -> str:
                 )
         finally:
             await engine.dispose()
+
     return asyncio.run(_run())

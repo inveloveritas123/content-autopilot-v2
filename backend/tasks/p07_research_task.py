@@ -16,13 +16,13 @@ Master-MD-Constraints respektiert:
 
 Cron: Dienstag + Freitag 06:30 Europe/Berlin (~2× pro Woche).
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -50,9 +50,7 @@ MIN_TEXT_CHARS = 200
 
 def _system_prompt(voice_profile_excerpt: str = "") -> str:
     voice_part = (
-        f"\nBrand-Voice-Hinweise: {voice_profile_excerpt[:600]}"
-        if voice_profile_excerpt
-        else ""
+        f"\nBrand-Voice-Hinweise: {voice_profile_excerpt[:600]}" if voice_profile_excerpt else ""
     )
     return (
         "Du bist Research-Analyst. Klassifiziere die News-Quelle in EINE der "
@@ -77,7 +75,7 @@ async def _process_item_async(
     tenant_id: str,
     item_row,
     voice_profile_excerpt: str,
-) -> Optional[str]:
+) -> str | None:
     """Verarbeitet ein source_item zu einem research_findings-Eintrag."""
     from services.llm import llm_service, set_llm_tenant
 
@@ -103,7 +101,7 @@ async def _process_item_async(
             model="gemini-flash",
             purpose="analysis",
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.info("p07 LLM-Call skipped (%s): %s", item_row.id, str(exc)[:80])
         return None
 
@@ -127,40 +125,44 @@ async def _process_item_async(
     impact_justification = (result.get("impact_justification") or "")[:500]
 
     # Idempotent: Skip wenn schon ein finding für dieses item existiert
-    existing = (await db.execute(
-        text(
-            "SELECT id FROM research_findings "
-            "WHERE source_item_id = :sid AND tenant_id = CAST(:tid AS uuid) "
-            "LIMIT 1"
-        ),
-        {"sid": item_row.id, "tid": tenant_id},
-    )).fetchone()
+    existing = (
+        await db.execute(
+            text(
+                "SELECT id FROM research_findings "
+                "WHERE source_item_id = :sid AND tenant_id = CAST(:tid AS uuid) "
+                "LIMIT 1"
+            ),
+            {"sid": item_row.id, "tid": tenant_id},
+        )
+    ).fetchone()
     if existing:
         return None
 
-    finding = (await db.execute(
-        text(
-            "INSERT INTO research_findings "
-            "(tenant_id, source_item_id, category, title, summary, source_url, "
-            " source_publisher, source_date, impact_rating, impact_justification, hooks) "
-            "VALUES (CAST(:tid AS uuid), :sid, :cat, :title, :summary, :url, "
-            "        :pub, :pdate, :impact, :imp_just, CAST(:hooks AS jsonb)) "
-            "RETURNING id"
-        ),
-        {
-            "tid": tenant_id,
-            "sid": item_row.id,
-            "cat": cat,
-            "title": title,
-            "summary": summary,
-            "url": (item_row.url or "")[:2000] or None,
-            "pub": (item_row.source_name or "")[:200] or None,
-            "pdate": item_row.published_at,
-            "impact": impact,
-            "imp_just": impact_justification,
-            "hooks": json.dumps(hooks, ensure_ascii=False),
-        },
-    )).fetchone()
+    finding = (
+        await db.execute(
+            text(
+                "INSERT INTO research_findings "
+                "(tenant_id, source_item_id, category, title, summary, source_url, "
+                " source_publisher, source_date, impact_rating, impact_justification, hooks) "
+                "VALUES (CAST(:tid AS uuid), :sid, :cat, :title, :summary, :url, "
+                "        :pub, :pdate, :impact, :imp_just, CAST(:hooks AS jsonb)) "
+                "RETURNING id"
+            ),
+            {
+                "tid": tenant_id,
+                "sid": item_row.id,
+                "cat": cat,
+                "title": title,
+                "summary": summary,
+                "url": (item_row.url or "")[:2000] or None,
+                "pub": (item_row.source_name or "")[:200] or None,
+                "pdate": item_row.published_at,
+                "impact": impact,
+                "imp_just": impact_justification,
+                "hooks": json.dumps(hooks, ensure_ascii=False),
+            },
+        )
+    ).fetchone()
     await db.commit()
     return str(finding.id) if finding else None
 
@@ -177,35 +179,44 @@ async def _run_for_tenant_async(tenant_id: str) -> dict:
             voice_excerpt = ""
             try:
                 async with db.begin_nested():
-                    vp = (await db.execute(
-                        text(
-                            "SELECT payload FROM voice_profile_versions "
-                            "WHERE tenant_id = CAST(:tid AS uuid) AND is_active = true "
-                            "ORDER BY version DESC LIMIT 1"
-                        ),
-                        {"tid": tenant_id},
-                    )).fetchone()
+                    vp = (
+                        await db.execute(
+                            text(
+                                "SELECT payload FROM voice_profile_versions "
+                                "WHERE tenant_id = CAST(:tid AS uuid) AND is_active = true "
+                                "ORDER BY version DESC LIMIT 1"
+                            ),
+                            {"tid": tenant_id},
+                        )
+                    ).fetchone()
                     if vp and vp.payload:
                         voice_excerpt = json.dumps(vp.payload, ensure_ascii=False)[:800]
             except Exception:
                 pass
 
             # source_items aus den letzten 7 Tagen, mit Transkript/Beschreibung
-            rows = (await db.execute(
-                text(
-                    "SELECT si.id, si.title, si.url, si.transcript_text, si.description, "
-                    "       si.published_at, s.name AS source_name "
-                    "FROM source_items si "
-                    "LEFT JOIN sources s ON s.id = si.source_id "
-                    "WHERE si.tenant_id = CAST(:tid AS uuid) "
-                    "  AND si.published_at >= :cut "
-                    "  AND (LENGTH(COALESCE(si.transcript_text, '')) >= :minc "
-                    "       OR LENGTH(COALESCE(si.description, '')) >= :minc) "
-                    "ORDER BY si.published_at DESC "
-                    "LIMIT :lim"
-                ),
-                {"tid": tenant_id, "cut": cutoff, "minc": MIN_TEXT_CHARS, "lim": MAX_ITEMS_PER_TENANT},
-            )).fetchall()
+            rows = (
+                await db.execute(
+                    text(
+                        "SELECT si.id, si.title, si.url, si.transcript_text, si.description, "
+                        "       si.published_at, s.name AS source_name "
+                        "FROM source_items si "
+                        "LEFT JOIN sources s ON s.id = si.source_id "
+                        "WHERE si.tenant_id = CAST(:tid AS uuid) "
+                        "  AND si.published_at >= :cut "
+                        "  AND (LENGTH(COALESCE(si.transcript_text, '')) >= :minc "
+                        "       OR LENGTH(COALESCE(si.description, '')) >= :minc) "
+                        "ORDER BY si.published_at DESC "
+                        "LIMIT :lim"
+                    ),
+                    {
+                        "tid": tenant_id,
+                        "cut": cutoff,
+                        "minc": MIN_TEXT_CHARS,
+                        "lim": MAX_ITEMS_PER_TENANT,
+                    },
+                )
+            ).fetchall()
 
             for r in rows:
                 fid = await _process_item_async(db, tenant_id, r, voice_excerpt)
@@ -222,7 +233,7 @@ async def _run_for_tenant_async(tenant_id: str) -> dict:
 def run_research_for_tenant(self, tenant_id: str) -> dict:
     try:
         return asyncio.run(_run_for_tenant_async(tenant_id))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("p07 top-level fail %s: %s", tenant_id, exc)
         return {"status": "error", "reason": str(exc)[:200]}
 
@@ -231,15 +242,18 @@ def run_research_for_tenant(self, tenant_id: str) -> dict:
 def run_research_all_tenants(self) -> dict:
     """Cron-Task: läuft 2× pro Woche, dispatcht pro aktiver Tenant."""
     from models.base import sync_session_factory
+
     with sync_session_factory() as db:
         rows = db.execute(
-            text("SELECT id FROM tenants WHERE settings->>'research_enabled' IS DISTINCT FROM 'false'")
+            text(
+                "SELECT id FROM tenants WHERE settings->>'research_enabled' IS DISTINCT FROM 'false'"
+            )
         ).fetchall()
     dispatched = 0
     for r in rows:
         try:
             run_research_for_tenant.apply_async(args=[str(r[0])])
             dispatched += 1
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("p07 dispatch %s failed: %s", r[0], exc)
     return {"dispatched": dispatched}

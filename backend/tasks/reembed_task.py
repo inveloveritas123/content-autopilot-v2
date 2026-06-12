@@ -11,14 +11,12 @@ Workflow:
 Annahme: der Task läuft in einer Umgebung mit PostgreSQL + pgvector.
 LLM-Calls via Requesty (kein direkter API-Zugriff, Constraint #1).
 """
+
 from __future__ import annotations
 
 import asyncio
 import hashlib
 import logging
-import random
-import uuid as _uuid
-from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -33,6 +31,7 @@ logger = logging.getLogger(__name__)
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
 
+
 def _tenant_hash_fraction(tenant_id: str, seed: str = "canary-v1") -> float:
     """Deterministischer Wert 0..1 für einen Tenant (sticky per tenant_id).
 
@@ -43,20 +42,24 @@ def _tenant_hash_fraction(tenant_id: str, seed: str = "canary-v1") -> float:
 
 
 async def _get_all_tenant_ids(db: AsyncSession) -> list[str]:
-    rows = (await db.execute(
-        text("SELECT DISTINCT tenant_id FROM memory_chunks WHERE deleted_at IS NULL")
-    )).fetchall()
+    rows = (
+        await db.execute(
+            text("SELECT DISTINCT tenant_id FROM memory_chunks WHERE deleted_at IS NULL")
+        )
+    ).fetchall()
     return [str(r[0]) for r in rows]
 
 
 async def _count_chunks_for_tenant(db: AsyncSession, tenant_id: str) -> int:
-    row = (await db.execute(
-        text(
-            "SELECT COUNT(*) FROM memory_chunks "
-            "WHERE tenant_id = CAST(:tid AS uuid) AND deleted_at IS NULL"
-        ),
-        {"tid": tenant_id},
-    )).scalar()
+    row = (
+        await db.execute(
+            text(
+                "SELECT COUNT(*) FROM memory_chunks "
+                "WHERE tenant_id = CAST(:tid AS uuid) AND deleted_at IS NULL"
+            ),
+            {"tid": tenant_id},
+        )
+    ).scalar()
     return int(row or 0)
 
 
@@ -71,18 +74,20 @@ async def _get_canary_chunk_ids(
     (TABLESAMPLE ist nicht deterministisch per Tenant).
     """
     threshold = percent / 100.0
-    rows = (await db.execute(
-        text(
-            "SELECT id FROM memory_chunks "
-            "WHERE tenant_id = CAST(:tid AS uuid) "
-            "  AND deleted_at IS NULL "
-            "  AND embedding IS NOT NULL "
-            "  AND ('x' || md5(id::text))::bit(32)::int / 4294967295.0 < :threshold "
-            "ORDER BY id "
-            "LIMIT 5000"  # Sicherheits-Cap
-        ),
-        {"tid": tenant_id, "threshold": threshold},
-    )).fetchall()
+    rows = (
+        await db.execute(
+            text(
+                "SELECT id FROM memory_chunks "
+                "WHERE tenant_id = CAST(:tid AS uuid) "
+                "  AND deleted_at IS NULL "
+                "  AND embedding IS NOT NULL "
+                "  AND ('x' || md5(id::text))::bit(32)::int / 4294967295.0 < :threshold "
+                "ORDER BY id "
+                "LIMIT 5000"  # Sicherheits-Cap
+            ),
+            {"tid": tenant_id, "threshold": threshold},
+        )
+    ).fetchall()
     return [str(r[0]) for r in rows]
 
 
@@ -96,16 +101,18 @@ async def _embed_canary_chunk(
     Idempotent: überspringt Chunks die bereits embedding_canary gesetzt haben.
     Returns True wenn embedding gesetzt wurde, False wenn übersprungen/Fehler.
     """
-    from services.embedding_service import embed, _embedding_to_pg
+    from services.embedding_service import _embedding_to_pg, embed
 
     # Idempotenz-Check
-    row = (await db.execute(
-        text(
-            "SELECT content_text, embedding_canary FROM memory_chunks "
-            "WHERE id = CAST(:id AS uuid)"
-        ),
-        {"id": chunk_id},
-    )).fetchone()
+    row = (
+        await db.execute(
+            text(
+                "SELECT content_text, embedding_canary FROM memory_chunks "
+                "WHERE id = CAST(:id AS uuid)"
+            ),
+            {"id": chunk_id},
+        )
+    ).fetchone()
     if row is None:
         return False
     if row.embedding_canary is not None:
@@ -146,22 +153,23 @@ async def _compute_recall_at_k(
     use_canary=True  → verwendet embedding_canary als Suchspalte
     use_canary=False → verwendet embedding (aktuelle Produktion)
     """
-    from services.embedding_service import _embedding_to_pg
 
     emb_col = "embedding_canary" if use_canary else "embedding"
 
     # Zufällige Query-Chunks holen (mit Embedding in der jeweiligen Spalte)
-    rows = (await db.execute(
-        text(
-            f"SELECT id, {emb_col} AS qemb "
-            f"FROM memory_chunks "
-            f"WHERE tenant_id = CAST(:tid AS uuid) "
-            f"  AND deleted_at IS NULL "
-            f"  AND {emb_col} IS NOT NULL "
-            f"ORDER BY random() LIMIT :n"
-        ),
-        {"tid": tenant_id, "n": n_queries},
-    )).fetchall()
+    rows = (
+        await db.execute(
+            text(
+                f"SELECT id, {emb_col} AS qemb "
+                f"FROM memory_chunks "
+                f"WHERE tenant_id = CAST(:tid AS uuid) "
+                f"  AND deleted_at IS NULL "
+                f"  AND {emb_col} IS NOT NULL "
+                f"ORDER BY random() LIMIT :n"
+            ),
+            {"tid": tenant_id, "n": n_queries},
+        )
+    ).fetchall()
 
     if not rows:
         return 0.0
@@ -175,17 +183,19 @@ async def _compute_recall_at_k(
             continue
 
         # Top-k Nachbarn per cosine distance
-        neighbors = (await db.execute(
-            text(
-                f"SELECT id FROM memory_chunks "
-                f"WHERE tenant_id = CAST(:tid AS uuid) "
-                f"  AND deleted_at IS NULL "
-                f"  AND {emb_col} IS NOT NULL "
-                f"ORDER BY {emb_col} <=> CAST(:qemb AS vector) "
-                f"LIMIT :k"
-            ),
-            {"tid": tenant_id, "qemb": str(qemb_str), "k": k},
-        )).fetchall()
+        neighbors = (
+            await db.execute(
+                text(
+                    f"SELECT id FROM memory_chunks "
+                    f"WHERE tenant_id = CAST(:tid AS uuid) "
+                    f"  AND deleted_at IS NULL "
+                    f"  AND {emb_col} IS NOT NULL "
+                    f"ORDER BY {emb_col} <=> CAST(:qemb AS vector) "
+                    f"LIMIT :k"
+                ),
+                {"tid": tenant_id, "qemb": str(qemb_str), "k": k},
+            )
+        ).fetchall()
 
         neighbor_ids = {str(r[0]) for r in neighbors}
         if query_id in neighbor_ids:
@@ -223,6 +233,7 @@ async def _roll_canary_to_production(
 # Celery-Task
 # ---------------------------------------------------------------------------
 
+
 @celery_app.task(
     name="tasks.reembed_task.reembed_chunks_with_canary",
     bind=True,
@@ -245,14 +256,12 @@ def reembed_chunks_with_canary(
     from services.embedding_service import EMBEDDING_MODELS
 
     if new_model_id not in EMBEDDING_MODELS:
-        logger.error(
-            "reembed_chunks_with_canary: unbekanntes model_id=%s — abbruch", new_model_id
-        )
+        logger.error("reembed_chunks_with_canary: unbekanntes model_id=%s — abbruch", new_model_id)
         return {"status": "error", "reason": f"unknown model_id: {new_model_id}"}
 
     try:
         result = asyncio.run(_reembed_async(new_model_id, percent))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("reembed_chunks_with_canary: FAILED — %s", exc)
         return {"status": "error", "reason": str(exc)[:200]}
 
@@ -284,7 +293,9 @@ async def _reembed_async(new_model_id: str, percent: int) -> dict:
 
                 logger.info(
                     "reembed: tenant=%s — %d Canary-Chunks (%.0f%%)",
-                    tenant_id, len(canary_ids), percent,
+                    tenant_id,
+                    len(canary_ids),
+                    percent,
                 )
 
                 # 2) Re-embed in embedding_canary (idempotent)
@@ -300,7 +311,9 @@ async def _reembed_async(new_model_id: str, percent: int) -> dict:
                 await db.commit()
                 logger.info(
                     "reembed: tenant=%s — embedded=%d skipped=%d",
-                    tenant_id, embedded, skipped,
+                    tenant_id,
+                    embedded,
+                    skipped,
                 )
 
                 if embedded == 0 and skipped == len(canary_ids):
@@ -313,14 +326,18 @@ async def _reembed_async(new_model_id: str, percent: int) -> dict:
 
                 logger.info(
                     "reembed: tenant=%s — recall_old=%.3f recall_new=%.3f",
-                    tenant_id, recall_old, recall_new,
+                    tenant_id,
+                    recall_old,
+                    recall_new,
                 )
 
                 # 4) Qualitäts-Gate
                 if recall_new < recall_old:
                     logger.warning(
                         "reembed: tenant=%s — Recall-Drop (%.3f → %.3f) — STOP, kein Roll",
-                        tenant_id, recall_old, recall_new,
+                        tenant_id,
+                        recall_old,
+                        recall_new,
                     )
                     tenant_results[tenant_id] = {
                         "status": "stopped_recall_drop",
@@ -335,7 +352,9 @@ async def _reembed_async(new_model_id: str, percent: int) -> dict:
                 await db.commit()
                 logger.info(
                     "reembed: tenant=%s — %d Rows gerollt auf model_id=%s",
-                    tenant_id, rolled, new_model_id,
+                    tenant_id,
+                    rolled,
+                    new_model_id,
                 )
                 tenant_results[tenant_id] = {
                     "status": "rolled",

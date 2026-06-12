@@ -1,15 +1,14 @@
 """YouTube view count + metadata via oembed API and page scraping."""
+
 import logging
 import re
-from typing import Optional
-from datetime import datetime
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
 
-async def scrape_video_metadata(video_id: str) -> Optional[dict]:
+async def scrape_video_metadata(video_id: str) -> dict | None:
     """Get video metadata using oembed (reliable) + page scraping (views)."""
     result = {}
 
@@ -78,7 +77,7 @@ async def scrape_video_metadata(video_id: str) -> Optional[dict]:
     return result if result else None
 
 
-async def scrape_view_count(video_id: str) -> Optional[int]:
+async def scrape_view_count(video_id: str) -> int | None:
     """Get just the view count for a video."""
     meta = await scrape_video_metadata(video_id)
     return meta.get("view_count") if meta else None

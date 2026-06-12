@@ -9,6 +9,7 @@ angelegt; get_studio_adapter() wird auf diese Verzeichnisse umgebogen.
 
 Fuer pytest ist PYTHONPATH=backend und CONTENT_TRUTH_BASE_PATH gesetzt.
 """
+
 import importlib.util
 import json
 import os
@@ -22,10 +23,14 @@ from unittest.mock import MagicMock
 # Modul-Direktlader (umgehen services/__init__.py)
 # ---------------------------------------------------------------------------
 
+_POLLUTED_NAMES = []
+
+
 def _load_module_from_file(module_name: str, file_path: str) -> types.ModuleType:
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = mod
+    _POLLUTED_NAMES.append(module_name)
     spec.loader.exec_module(mod)
     return mod
 
@@ -44,8 +49,10 @@ for _pkg in ("google", "google.generativeai", "anthropic"):
 # Fake Tenant-Klasse und get_tenant-Dependency-Override
 # ---------------------------------------------------------------------------
 
+
 class _FakeTenant:
     """Minimaler Tenant-Stub fuer den Auth-Override."""
+
     id = "00000000-0000-0000-0000-000000000001"
     enabled = True
     disabled_reason = None
@@ -68,6 +75,7 @@ _deps_stub.get_tenant = _fake_get_tenant
 _deps_stub.get_db = MagicMock()
 _deps_stub.get_tenant_id = MagicMock()
 sys.modules["dependencies"] = _deps_stub
+_POLLUTED_NAMES.append("dependencies")
 
 # ---------------------------------------------------------------------------
 # Alle relevanten Service-Module direkt laden
@@ -104,9 +112,18 @@ _load_module_from_file(
 # ---------------------------------------------------------------------------
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
 import api.prompt_studio as ps_module
-from services.local_fs_storage import LocalFsStorageAdapter
 from services.layered_storage import LayeredStorageAdapter
+from services.local_fs_storage import LocalFsStorageAdapter
+
+# sys.modules-Pollution verhindern: die oben (bei Collection) unter ECHTEN Namen
+# registrierten Direktlader-Module + der `dependencies`-Stub wuerden sonst in
+# nachfolgenden Test-Modulen die echten Module ersetzen (z.B. tenant_init bekommt
+# sonst den dependencies-Stub -> 500 statt 422). Die hier benoetigten Objekte sind
+# bereits gebunden (ps_module, Adapter, dependency_overrides), daher Stubs entfernen.
+for _name in _POLLUTED_NAMES:
+    sys.modules.pop(_name, None)
 
 # ---------------------------------------------------------------------------
 # Minimal-App fuer Tests (kein main.py-Lifespan/DB)
@@ -131,28 +148,30 @@ _GOOD_PROMPT = (
     "Bitte hilf mir.\n"
 )
 
-_NO_SYSTEM_PROMPT = (
-    "# Nur ein Titel\n"
-    "Kein System-Prompt-Abschnitt hier.\n"
-)
+_NO_SYSTEM_PROMPT = "# Nur ein Titel\n" "Kein System-Prompt-Abschnitt hier.\n"
 
-_GOOD_SCHEMA = json.dumps({
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": "object",
-    "properties": {"name": {"type": "string"}},
-})
+_GOOD_SCHEMA = json.dumps(
+    {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {"name": {"type": "string"}},
+    }
+)
 
 _BAD_JSON = "{ ungueltig json {{{ }"
 
-_BAD_SCHEMA = json.dumps({
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "type": 123,  # type muss string sein
-})
+_BAD_SCHEMA = json.dumps(
+    {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": 123,  # type muss string sein
+    }
+)
 
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
+
 
 def _make_temp_dirs():
     """Erstellt temporaere base/overlay-Verzeichnisse und gibt sie zurueck."""
@@ -178,17 +197,20 @@ def _write_file(directory, path, content):
 
 def _patch_adapter(base_dir: str, overlay_dir: str):
     """Ueberschreibt get_studio_adapter() im Modul fuer einen Test."""
+
     def _factory():
         return LayeredStorageAdapter(
             overlay=LocalFsStorageAdapter(base_dir=overlay_dir),
             base=LocalFsStorageAdapter(base_dir=base_dir),
         )
+
     ps_module.get_studio_adapter = _factory
 
 
 # ---------------------------------------------------------------------------
 # Test-Klassen
 # ---------------------------------------------------------------------------
+
 
 class TestListFiles(unittest.TestCase):
     """GET /api/prompt-studio/files"""
@@ -201,6 +223,7 @@ class TestListFiles(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def test_list_returns_200(self):
@@ -217,9 +240,7 @@ class TestListFiles(unittest.TestCase):
     def test_list_source_is_base_without_overlay(self):
         resp = client.get("/api/prompt-studio/files")
         data = resp.json()
-        entry = next(
-            f for f in data["files"] if f["path"] == "prompts/P12-post-generierung.md"
-        )
+        entry = next(f for f in data["files"] if f["path"] == "prompts/P12-post-generierung.md")
         self.assertEqual(entry["source"], "base")
         self.assertFalse(entry["has_overlay"])
 
@@ -228,18 +249,14 @@ class TestListFiles(unittest.TestCase):
         _write_file(self._overlay, "prompts/P12-post-generierung.md", "## System-Prompt\nOverlay\n")
         resp = client.get("/api/prompt-studio/files")
         data = resp.json()
-        entry = next(
-            f for f in data["files"] if f["path"] == "prompts/P12-post-generierung.md"
-        )
+        entry = next(f for f in data["files"] if f["path"] == "prompts/P12-post-generierung.md")
         self.assertEqual(entry["source"], "overlay")
         self.assertTrue(entry["has_overlay"])
 
     def test_list_base_mtime_is_set(self):
         resp = client.get("/api/prompt-studio/files")
         data = resp.json()
-        entry = next(
-            f for f in data["files"] if f["path"] == "prompts/P12-post-generierung.md"
-        )
+        entry = next(f for f in data["files"] if f["path"] == "prompts/P12-post-generierung.md")
         self.assertIsNotNone(entry["base_mtime"])
 
 
@@ -254,6 +271,7 @@ class TestGetFile(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def test_get_returns_200(self):
@@ -269,6 +287,7 @@ class TestGetFile(unittest.TestCase):
         resp = client.get("/api/prompt-studio/files/prompts/P12-post-generierung.md")
         data = resp.json()
         import hashlib
+
         expected = hashlib.sha256(_GOOD_PROMPT.encode("utf-8")).hexdigest()
         self.assertEqual(data["sha256"], expected)
 
@@ -321,6 +340,7 @@ class TestValidate(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def test_validate_good_md_returns_ok(self):
@@ -393,10 +413,12 @@ class TestSave(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def _sha256(self, content: str) -> str:
         import hashlib
+
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
     def test_save_creates_overlay_file(self):
@@ -407,11 +429,9 @@ class TestSave(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         # Overlay-Datei physisch pruefen
-        overlay_file = os.path.join(
-            self._overlay, "prompts", "P12-post-generierung.md"
-        )
+        overlay_file = os.path.join(self._overlay, "prompts", "P12-post-generierung.md")
         self.assertTrue(os.path.isfile(overlay_file))
-        with open(overlay_file, "r", encoding="utf-8") as fh:
+        with open(overlay_file, encoding="utf-8") as fh:
             self.assertIn("geaendert", fh.read())
 
     def test_save_response_source_is_overlay(self):
@@ -511,6 +531,7 @@ class TestRevert(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def test_revert_removes_overlay(self):
@@ -519,15 +540,11 @@ class TestRevert(unittest.TestCase):
             "/api/prompt-studio/files/prompts/P12-post-generierung.md",
             json={"content": _GOOD_PROMPT + "\n<!-- overlay -->"},
         )
-        overlay_file = os.path.join(
-            self._overlay, "prompts", "P12-post-generierung.md"
-        )
+        overlay_file = os.path.join(self._overlay, "prompts", "P12-post-generierung.md")
         self.assertTrue(os.path.isfile(overlay_file))
 
         # Revert
-        resp = client.delete(
-            "/api/prompt-studio/files/prompts/P12-post-generierung.md/overlay"
-        )
+        resp = client.delete("/api/prompt-studio/files/prompts/P12-post-generierung.md/overlay")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertTrue(data["reverted"])
@@ -541,30 +558,22 @@ class TestRevert(unittest.TestCase):
             json={"content": "## System-Prompt\nOverlay\n"},
         )
         # Revert
-        client.delete(
-            "/api/prompt-studio/files/prompts/P12-post-generierung.md/overlay"
-        )
+        client.delete("/api/prompt-studio/files/prompts/P12-post-generierung.md/overlay")
         # GET muss Base-Inhalt zeigen
-        resp = client.get(
-            "/api/prompt-studio/files/prompts/P12-post-generierung.md"
-        )
+        resp = client.get("/api/prompt-studio/files/prompts/P12-post-generierung.md")
         data = resp.json()
         self.assertIn("hilfreicher Assistent", data["content"])
         self.assertEqual(data["source"], "base")
 
     def test_revert_idempotent(self):
         """Zweiter Revert-Aufruf → reverted=false, trotzdem 200."""
-        resp = client.delete(
-            "/api/prompt-studio/files/prompts/P12-post-generierung.md/overlay"
-        )
+        resp = client.delete("/api/prompt-studio/files/prompts/P12-post-generierung.md/overlay")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertFalse(data["reverted"])
 
     def test_revert_response_source_is_base(self):
-        resp = client.delete(
-            "/api/prompt-studio/files/prompts/P12-post-generierung.md/overlay"
-        )
+        resp = client.delete("/api/prompt-studio/files/prompts/P12-post-generierung.md/overlay")
         data = resp.json()
         self.assertEqual(data["source"], "base")
 

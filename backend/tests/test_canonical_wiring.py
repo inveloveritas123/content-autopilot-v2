@@ -41,10 +41,15 @@ resolve_canonical_prompt_version = st.resolve_canonical_prompt_version
 # das setzt der Server). Decken die Pflicht-minItems der Schemas ab.
 # ---------------------------------------------------------------------------
 
+
 def _valid_p01() -> dict:
     return {
         "person": {"name": "Test Person", "rolle": "Coach"},
-        "zielkunde": {"beschreibung": "Solo-Selbstständige", "wunschzustand": None, "innenwelt": None},
+        "zielkunde": {
+            "beschreibung": "Solo-Selbstständige",
+            "wunschzustand": None,
+            "innenwelt": None,
+        },
         "angebot": {"elevator_pitch": "Ich helfe X bei Y"},
         "positionierung": {"werte_schwerpunkt": "Ehrlichkeit"},
         "markt": {"mitbewerber": "viele"},
@@ -56,15 +61,27 @@ def _valid_p01() -> dict:
 
 def _valid_p03() -> dict:
     return {
-        "grundton": {"charakterisierung": "direkt", "spektrum": "warm", "linkedin_kalibrierung": "mittel"},
+        "grundton": {
+            "charakterisierung": "direkt",
+            "spektrum": "warm",
+            "linkedin_kalibrierung": "mittel",
+        },
         "satzarchitektur": {
             "laenge": "kurz",
             "typische_satzanfaenge": ["Ich", "Wir", "Stell dir vor"],
             "verbindungen": "und, aber",
             "beispiele": ["Kurz und klar."],
         },
-        "wortschatz": {"signalwoerter": ["konkret"], "fuellwoerter": ["halt"], "verbotene_woerter": ["Synergie"]},
-        "erzaehlmuster": {"perspektive": "ich", "story_einstieg": "in medias res", "argumentation": "induktiv"},
+        "wortschatz": {
+            "signalwoerter": ["konkret"],
+            "fuellwoerter": ["halt"],
+            "verbotene_woerter": ["Synergie"],
+        },
+        "erzaehlmuster": {
+            "perspektive": "ich",
+            "story_einstieg": "in medias res",
+            "argumentation": "induktiv",
+        },
         "emotionaler_ausdruck": {"spektrum": "breit", "humor_typ": "trocken"},
         "persoenlichkeits_stance": {"archetyp": "Mentor", "stance_in_aktion": ["ermutigt"]},
         "emotionaler_subtext": {"subtext": "Zuversicht"},
@@ -94,15 +111,18 @@ def _valid_p04() -> dict:
             "wiederkehrende_muster": ["m1", "m2", "m3"],
         },
         "blockaden": {"glaubenssaetze": ["b1", "b2", "b3"], "denkfehler": ["d1", "d2"]},
-        "ausloesemoment": {"trigger_events": ["e1", "e2", "e3"], "emotional_tipping_point": "jetzt"},
+        "ausloesemoment": {
+            "trigger_events": ["e1", "e2", "e3"],
+            "emotional_tipping_point": "jetzt",
+        },
     }
 
 
-_META_BASE = dict(
-    tenant_id="11111111-2222-3333-4444-555555555555",
-    model="anthropic/claude-sonnet-4-6",
-    generated_at="2026-06-12T10:00:00+00:00",
-)
+_META_BASE = {
+    "tenant_id": "11111111-2222-3333-4444-555555555555",
+    "model": "anthropic/claude-sonnet-4-6",
+    "generated_at": "2026-06-12T10:00:00+00:00",
+}
 
 
 class TestBuildCanonicalMeta(unittest.TestCase):
@@ -125,7 +145,6 @@ class TestBuildCanonicalMeta(unittest.TestCase):
     def test_kunde_id_fallback_is_pattern_valid(self):
         # Ohne Name → Slug aus tenant_id (UUID), muss ^[a-z0-9-]+$ erfüllen
         meta = build_canonical_meta("p01", **_META_BASE)
-        import re
         self.assertRegex(meta["kunde_id"], r"^[a-z0-9-]+$")
 
     def test_agentur_id_default_zb(self):
@@ -134,10 +153,10 @@ class TestBuildCanonicalMeta(unittest.TestCase):
 
     def test_llm_meta_extras_merged_but_authoritative_protected(self):
         llm_meta = {
-            "agentur_id": "HACKED",            # autoritativ → muss ignoriert werden
-            "prompt_version": "garbage",        # autoritativ → muss ignoriert werden
-            "p04_aufgaben": ["leite X ab"],     # harmlos → übernehmen
-            "transkript_qualitaet": "gut",      # harmlos → übernehmen
+            "agentur_id": "HACKED",  # autoritativ → muss ignoriert werden
+            "prompt_version": "garbage",  # autoritativ → muss ignoriert werden
+            "p04_aufgaben": ["leite X ab"],  # harmlos → übernehmen
+            "transkript_qualitaet": "gut",  # harmlos → übernehmen
         }
         meta = build_canonical_meta("p01", llm_meta=llm_meta, **_META_BASE)
         self.assertEqual(meta["agentur_id"], "zb")
@@ -191,7 +210,9 @@ class TestFinalizeCanonicalSoftFail(unittest.TestCase):
         self.assertEqual(doc["_meta"]["agentur_id"], "zb")  # _meta trotzdem korrekt
 
     def test_luecken_are_deduped(self):
-        meta = build_canonical_meta("p04", luecken=["schema: alltagsszenen.szenen: x"], **_META_BASE)
+        meta = build_canonical_meta(
+            "p04", luecken=["schema: alltagsszenen.szenen: x"], **_META_BASE
+        )
         broken = _valid_p04()
         broken["alltagsszenen"]["szenen"] = []
         doc, errors = finalize_canonical("p04", broken, meta=meta)

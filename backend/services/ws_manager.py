@@ -3,6 +3,7 @@ WebSocket ConnectionManager für Content-Autopilot v2 (Issue #58).
 
 Tenant-isolierte Channels: "tenant:{slug}:setup"
 """
+
 import logging
 from collections import defaultdict
 
@@ -23,7 +24,9 @@ class ConnectionManager:
 
     def disconnect(self, channel: str, ws: WebSocket):
         self._connections[channel] = [c for c in self._connections[channel] if c is not ws]
-        logger.info("WS disconnect: channel=%s, remaining=%d", channel, len(self._connections[channel]))
+        logger.info(
+            "WS disconnect: channel=%s, remaining=%d", channel, len(self._connections[channel])
+        )
 
     async def broadcast(self, channel: str, message: dict) -> int:
         """Broadcast JSON to all connections on a channel. Returns number of clients reached."""

@@ -3,10 +3,10 @@
 Verifies that the LLMService respects the auto_cache flag from the
 provider config when building the Requesty request body.
 """
+
 from __future__ import annotations
 
-import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 
 class _FakeResp:
@@ -48,9 +48,11 @@ async def _run_with_provider(provider_dict):
             )
 
     svc = LLMService()
-    with patch("services.provider_resolver.get_active_provider", return_value=provider_dict), \
-         patch("services.provider_resolver.track_cost"), \
-         patch("services.llm.httpx.AsyncClient", _MockClient):
+    with (
+        patch("services.provider_resolver.get_active_provider", return_value=provider_dict),
+        patch("services.provider_resolver.track_cost"),
+        patch("services.llm.httpx.AsyncClient", _MockClient),
+    ):
         await svc._litellm("user message", system="sys", model="gemini-flash", purpose="analysis")
 
     return captured
@@ -59,50 +61,70 @@ async def _run_with_provider(provider_dict):
 class TestAutoCacheToggle:
     def test_auto_cache_true_sends_extra_body(self):
         import asyncio
-        captured = asyncio.run(_run_with_provider({
-            "base_url": "https://router.requesty.ai/v1",
-            "api_key": "test",
-            "model_name": "vertex/gemini-2.5-flash-lite@europe-central2",
-            "provider_id": "p1",
-            "provider_name": "Test",
-            "auto_cache": True,
-        }))
+
+        captured = asyncio.run(
+            _run_with_provider(
+                {
+                    "base_url": "https://router.requesty.ai/v1",
+                    "api_key": "test",
+                    "model_name": "vertex/gemini-2.5-flash-lite@europe-central2",
+                    "provider_id": "p1",
+                    "provider_name": "Test",
+                    "auto_cache": True,
+                }
+            )
+        )
         assert captured["body"].get("extra_body") == {"requesty": {"auto_cache": True}}
 
     def test_auto_cache_false_omits_extra_body(self):
         import asyncio
-        captured = asyncio.run(_run_with_provider({
-            "base_url": "https://router.requesty.ai/v1",
-            "api_key": "test",
-            "model_name": "vertex/gemini-2.5-flash-lite@europe-central2",
-            "provider_id": "p1",
-            "provider_name": "Test",
-            "auto_cache": False,
-        }))
+
+        captured = asyncio.run(
+            _run_with_provider(
+                {
+                    "base_url": "https://router.requesty.ai/v1",
+                    "api_key": "test",
+                    "model_name": "vertex/gemini-2.5-flash-lite@europe-central2",
+                    "provider_id": "p1",
+                    "provider_name": "Test",
+                    "auto_cache": False,
+                }
+            )
+        )
         assert "extra_body" not in captured["body"]
 
     def test_non_requesty_never_sends_extra_body(self):
         """Selbst bei auto_cache=True wird extra_body nur für Requesty-URLs gesetzt."""
         import asyncio
-        captured = asyncio.run(_run_with_provider({
-            "base_url": "https://api.openai.com/v1",
-            "api_key": "test",
-            "model_name": "gpt-4o-mini",
-            "provider_id": "p1",
-            "provider_name": "Direct OpenAI",
-            "auto_cache": True,
-        }))
+
+        captured = asyncio.run(
+            _run_with_provider(
+                {
+                    "base_url": "https://api.openai.com/v1",
+                    "api_key": "test",
+                    "model_name": "gpt-4o-mini",
+                    "provider_id": "p1",
+                    "provider_name": "Direct OpenAI",
+                    "auto_cache": True,
+                }
+            )
+        )
         assert "extra_body" not in captured["body"]
 
     def test_provider_without_auto_cache_key_defaults_true(self):
         """Backwards-compat: alte provider_resolver-Returns ohne auto_cache → default True."""
         import asyncio
-        captured = asyncio.run(_run_with_provider({
-            "base_url": "https://router.requesty.ai/v1",
-            "api_key": "test",
-            "model_name": "vertex/gemini-2.5-flash-lite@europe-central2",
-            "provider_id": "p1",
-            "provider_name": "Legacy",
-            # auto_cache key absent
-        }))
+
+        captured = asyncio.run(
+            _run_with_provider(
+                {
+                    "base_url": "https://router.requesty.ai/v1",
+                    "api_key": "test",
+                    "model_name": "vertex/gemini-2.5-flash-lite@europe-central2",
+                    "provider_id": "p1",
+                    "provider_name": "Legacy",
+                    # auto_cache key absent
+                }
+            )
+        )
         assert captured["body"].get("extra_body") == {"requesty": {"auto_cache": True}}

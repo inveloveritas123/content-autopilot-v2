@@ -19,6 +19,7 @@ Umgestellt: 2026-06-11 (P5-anthropic-provider.md)
   - Modell-ID kommt jetzt aus PipelineLLMResult.model_id
   - Kosten-Schätzung über estimate_tier_cost statt estimate_anthropic_cost
 """
+
 import hashlib
 import json
 import logging
@@ -28,12 +29,16 @@ import uuid
 
 from sqlalchemy import text
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
+from services.pipeline_llm import (
+    call_pipeline_llm,
+    estimate_tier_cost,
+    resolve_tier,
+)
 from services.prompt_loader import get_default_prompt_loader
-from services.pipeline_llm import call_pipeline_llm, resolve_tier, estimate_tier_cost, BudgetExceededError
 from services.schema_transformer import build_canonical_meta, finalize_canonical
 from tasks.canonical_wiring import fetch_tenant_meta, now_iso
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +46,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
+
 
 def _parse_json_from_text(raw: str) -> dict:
     """Extrahiert JSON aus dem LLM-Output.
@@ -116,11 +122,13 @@ _MAX_CHARS_PER_POST = 3000
 
 # Injection-Schutz: Patterns die auf Prompt-Injection hindeuten
 _INJECTION_PATTERNS = [
-    re.compile(r'\b(ignore (all )?previous instructions?|vergiss (alle )?anweisungen)\b', re.IGNORECASE),
-    re.compile(r'\b(system prompt|system-prompt|<\|im_start\|>|<\|im_end\|>)\b', re.IGNORECASE),
-    re.compile(r'(##+ System|##+ Assistant|##+ User)\b', re.IGNORECASE),
-    re.compile(r'<(script|iframe|object|embed)[^>]*>', re.IGNORECASE),
-    re.compile(r'\{\{.*?\}\}', re.DOTALL),   # template injection
+    re.compile(
+        r"\b(ignore (all )?previous instructions?|vergiss (alle )?anweisungen)\b", re.IGNORECASE
+    ),
+    re.compile(r"\b(system prompt|system-prompt|<\|im_start\|>|<\|im_end\|>)\b", re.IGNORECASE),
+    re.compile(r"(##+ System|##+ Assistant|##+ User)\b", re.IGNORECASE),
+    re.compile(r"<(script|iframe|object|embed)[^>]*>", re.IGNORECASE),
+    re.compile(r"\{\{.*?\}\}", re.DOTALL),  # template injection
 ]
 
 
@@ -133,7 +141,7 @@ def _filter_linkedin_posts(posts: list) -> list:
     - Entfernt XML-Tags und normalisiert Whitespace
     """
     clean: list = []
-    for raw in (posts or []):
+    for raw in posts or []:
         if not isinstance(raw, str):
             continue
         post = raw.strip()
@@ -142,7 +150,9 @@ def _filter_linkedin_posts(posts: list) -> list:
 
         # Injection check: verwerfe den Post wenn Muster gefunden
         if any(p.search(post) for p in _INJECTION_PATTERNS):
-            logger.warning("[P03] LinkedIn-Post mit Injection-Muster verworfen (Länge=%d)", len(post))
+            logger.warning(
+                "[P03] LinkedIn-Post mit Injection-Muster verworfen (Länge=%d)", len(post)
+            )
             continue
 
         # Längen-Limit
@@ -150,10 +160,10 @@ def _filter_linkedin_posts(posts: list) -> list:
             post = post[:_MAX_CHARS_PER_POST] + "…"
 
         # Entferne XML-Tags (verhindert Prompt-Injection via <transkript> etc.)
-        post = re.sub(r'<[^>]+>', '', post)
+        post = re.sub(r"<[^>]+>", "", post)
 
         # Normalisiere Whitespace
-        post = re.sub(r'\n{3,}', '\n\n', post).strip()
+        post = re.sub(r"\n{3,}", "\n\n", post).strip()
 
         if post:
             clean.append(post)
@@ -168,15 +178,16 @@ def _filter_linkedin_posts(posts: list) -> list:
 # Celery Task
 # ---------------------------------------------------------------------------
 
+
 @celery_app.task(name="tasks.p03_task.run_p03", bind=True, max_retries=2)
 def run_p03(
     self,
     tenant_id: str,
     transcript: str,
-    written_texts: list = None,
-    linkedin_posts: list = None,
+    written_texts: list | None = None,
+    linkedin_posts: list | None = None,
     bypass_with_existing_json: bool = False,
-    existing_json: dict = None,
+    existing_json: dict | None = None,
     project_id: str | None = None,
 ) -> dict:
     """P03 Voice-Profile Extraktion.
@@ -191,7 +202,8 @@ def run_p03(
     Returns:
         dict mit run_id, status und optionalem voice_profile_id.
     """
-    from services.kill_switch import check_kill_switch, KillSwitchTriggered
+    from services.kill_switch import KillSwitchTriggered, check_kill_switch
+
     try:
         check_kill_switch(tenant_id)
     except KillSwitchTriggered:
@@ -203,7 +215,9 @@ def run_p03(
         # Kanonisch absichern statt hartem v2-ValidationError: _meta server-seitig,
         # Schema-Verstoesse als _meta.luecken dokumentieren (kein Hard-Fail).
         tenant_name, agentur_id = fetch_tenant_meta(tenant_id)
-        llm_meta = existing_json.get("_meta") if isinstance(existing_json.get("_meta"), dict) else None
+        llm_meta = (
+            existing_json.get("_meta") if isinstance(existing_json.get("_meta"), dict) else None
+        )
         canonical_meta = build_canonical_meta(
             "p03",
             tenant_id=tenant_id,
@@ -213,11 +227,14 @@ def run_p03(
             agentur_id=agentur_id,
             llm_meta=llm_meta,
         )
-        bypass_payload, schema_errors = finalize_canonical("p03", existing_json, meta=canonical_meta)
+        bypass_payload, schema_errors = finalize_canonical(
+            "p03", existing_json, meta=canonical_meta
+        )
         if schema_errors:
             logger.warning(
                 "P03 bypass tenant=%s: %d kanonische Schema-Luecke(n) in _meta.luecken dokumentiert",
-                tenant_id, len(schema_errors),
+                tenant_id,
+                len(schema_errors),
             )
 
         with sync_session_factory() as session:
@@ -269,11 +286,13 @@ def run_p03(
         est = estimate_tier_cost(_tier, 3000, 1500)
         logger.info("P03 estimated cost=%.6f USD for tenant=%s", est, tenant_id)
         try:
+            import asyncio as _asyncio
+
             from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
             from sqlalchemy.orm import sessionmaker as _sm
-            from services.cost_cap import CostCapMiddleware
+
             from config import settings as _s
-            import asyncio as _asyncio
+            from services.cost_cap import CostCapMiddleware
 
             async def _p03_cap_check():
                 _engine = create_async_engine(_s.database_url, pool_pre_ping=True)
@@ -286,10 +305,14 @@ def run_p03(
 
             _asyncio.run(_p03_cap_check())
         except (CostCapExceeded, BudgetExceededError):
-            logger.warning("P03 run_id=%s tenant=%s: daily cost cap exceeded, pausing", run_id, tenant_id)
+            logger.warning(
+                "P03 run_id=%s tenant=%s: daily cost cap exceeded, pausing", run_id, tenant_id
+            )
             with sync_session_factory() as session:
                 session.execute(
-                    text("UPDATE setup_pipeline_run SET status='paused_for_cost', finished_at=now() WHERE id=:id"),
+                    text(
+                        "UPDATE setup_pipeline_run SET status='paused_for_cost', finished_at=now() WHERE id=:id"
+                    ),
                     {"id": run_id},
                 )
                 session.commit()
@@ -316,7 +339,8 @@ def run_p03(
             user_content += "</linkedin_history>"
             logger.info(
                 "P03 run_id=%s: %d LinkedIn-Posts als Voice-Quelle hinzugefügt",
-                run_id, len(filtered_posts)
+                run_id,
+                len(filtered_posts),
             )
 
         # 5. LLM-Call über den Seam (kein direkter SDK-Aufruf)
@@ -334,7 +358,10 @@ def run_p03(
         model_id = res.model_id
         logger.info(
             "P03 usage: input=%d output=%d cache_read=%d tenant=%s",
-            input_tokens, output_tokens, res.cache_read_tokens, tenant_id,
+            input_tokens,
+            output_tokens,
+            res.cache_read_tokens,
+            tenant_id,
         )
 
         # 6. JSON-Parsing + kanonische Validierung (Soft-Fail mit _meta.luecken)
@@ -356,7 +383,8 @@ def run_p03(
         if schema_errors:
             logger.warning(
                 "P03 run_id=%s: %d kanonische Schema-Luecke(n) in _meta.luecken dokumentiert",
-                run_id, len(schema_errors),
+                run_id,
+                len(schema_errors),
             )
 
         # 7. DB-Insert in tenant_voice_profile (kanonischer Payload inkl. _meta)
@@ -406,11 +434,13 @@ def run_p03(
 
         # 8. Actual-Cost in daily_cost_tenant schreiben
         try:
+            import asyncio as _asyncio2
+
             from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
             from sqlalchemy.orm import sessionmaker as _sm2
-            from services.cost_cap import CostCapMiddleware
+
             from config import settings as _s2
-            import asyncio as _asyncio2
+            from services.cost_cap import CostCapMiddleware
 
             async def _p03_record_cost():
                 _engine = create_async_engine(_s2.database_url, pool_pre_ping=True)
@@ -425,11 +455,17 @@ def run_p03(
 
             _asyncio2.run(_p03_record_cost())
         except Exception as cost_err:
-            logger.warning("P03 run_id=%s: actual-cost recording fehlgeschlagen: %s", run_id, cost_err)
+            logger.warning(
+                "P03 run_id=%s: actual-cost recording fehlgeschlagen: %s", run_id, cost_err
+            )
 
         logger.info(
             "P03 done tenant=%s run_id=%s voice_profile_id=%s cost=%.6f USD duration=%dms",
-            tenant_id, run_id, voice_profile_id, actual_cost, duration_ms,
+            tenant_id,
+            run_id,
+            voice_profile_id,
+            actual_cost,
+            duration_ms,
         )
 
         return {
@@ -442,10 +478,12 @@ def run_p03(
             "duration_ms": duration_ms,
         }
 
-    except BudgetExceededError as exc:
+    except BudgetExceededError:
         # BUG-1-Fix: Router-Budget überschritten (HTTP 412) → paused_for_cost, kein Retry
         duration_ms = int((time.monotonic() - t_start) * 1000)
-        logger.warning("P03 run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id)
+        logger.warning(
+            "P03 run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id
+        )
         try:
             with sync_session_factory() as session:
                 session.execute(

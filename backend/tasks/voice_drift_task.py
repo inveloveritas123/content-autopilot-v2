@@ -6,19 +6,19 @@ Workflow:
 2. run_voice_drift: lädt aktives Voice-Profil + letzte 10 Posts, ruft Anthropic,
    schreibt voice_drift_observation, sendet WS-Push
 """
+
 import asyncio
 import json
 import logging
 import uuid
 import uuid as uuid_module
-from typing import Optional
 
 import httpx
 from sqlalchemy import text
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from services.prompt_loader import get_default_prompt_loader
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,7 @@ _ESTIMATED_OUTPUT_TOKENS = 512
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
+
 
 def _safe_uuid_list(ids: list) -> list:
     """Validiert alle Elemente als UUIDs — wirft ValueError bei ungültigem Format."""
@@ -61,6 +62,7 @@ async def _run_cost_check(tenant_id: str, estimated_cost: float) -> None:
     """Async Cost-Cap-Check — via asyncio.run() aus Celery aufgerufen."""
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker as async_sm
+
     from config import settings
     from services.cost_cap import CostCapMiddleware
 
@@ -92,9 +94,7 @@ def _has_pending_observation(session, tenant_id: str) -> bool:
 def _get_all_tenant_ids(session) -> list:
     """Alle Tenant-IDs mit aktivem Voice-Profil laden."""
     rows = session.execute(
-        text(
-            "SELECT DISTINCT tenant_id FROM tenant_voice_profile WHERE is_active = true"
-        )
+        text("SELECT DISTINCT tenant_id FROM tenant_voice_profile WHERE is_active = true")
     ).fetchall()
     return [str(row[0]) for row in rows]
 
@@ -117,6 +117,7 @@ def _count_todays_approved_posts(session, tenant_id: str) -> int:
 # Beat-Job: Trigger-Check
 # ---------------------------------------------------------------------------
 
+
 @celery_app.task(name="tasks.voice_drift_task.check_drift_triggers")
 def check_drift_triggers():
     """Beat-Job: prüft alle Tenants auf Drift-Trigger (10er-Post-Schwelle)."""
@@ -134,20 +135,20 @@ def check_drift_triggers():
                 if _has_pending_observation(session, tenant_id):
                     logger.info(
                         "check_drift_triggers: tenant=%s count=%d — bereits pending, übersprungen",
-                        tenant_id, count,
+                        tenant_id,
+                        count,
                     )
                     skipped += 1
                     continue
                 run_voice_drift.delay(tenant_id, trigger_type="post_threshold")
                 logger.info(
                     "check_drift_triggers: tenant=%s count=%d — Drift-Task angestoßen",
-                    tenant_id, count,
+                    tenant_id,
+                    count,
                 )
                 triggered += 1
 
-    logger.info(
-        "check_drift_triggers: triggered=%d skipped=%d", triggered, skipped
-    )
+    logger.info("check_drift_triggers: triggered=%d skipped=%d", triggered, skipped)
     return {"triggered": triggered, "skipped": skipped}
 
 
@@ -155,13 +156,14 @@ def check_drift_triggers():
 # Haupt-Task: Voice-Drift-Analyse
 # ---------------------------------------------------------------------------
 
+
 @celery_app.task(name="tasks.voice_drift_task.run_voice_drift", bind=True)
 def run_voice_drift(
     self,
     tenant_id: str,
     trigger_type: str = "post_threshold",
-    trigger_post_ids: Optional[list] = None,
-    voice_feedback_ids: Optional[list] = None,
+    trigger_post_ids: list | None = None,
+    voice_feedback_ids: list | None = None,
 ) -> dict:
     """Voice-Drift-Analyse für einen Tenant.
 
@@ -174,23 +176,20 @@ def run_voice_drift(
     Returns:
         {"status": "done"|"skipped"|"paused_for_cost"|"failed", ...}
     """
-    from services.kill_switch import check_kill_switch, KillSwitchTriggered
+    from services.kill_switch import KillSwitchTriggered, check_kill_switch
+
     try:
         check_kill_switch(tenant_id)
     except KillSwitchTriggered:
         return {"status": "aborted", "reason": "tenant_disabled"}
-    logger.info(
-        "run_voice_drift: tenant=%s trigger_type=%s", tenant_id, trigger_type
-    )
+    logger.info("run_voice_drift: tenant=%s trigger_type=%s", tenant_id, trigger_type)
 
     # ------------------------------------------------------------------
     # 1. Doppel-Trigger-Guard
     # ------------------------------------------------------------------
     with sync_session_factory() as session:
         if _has_pending_observation(session, tenant_id):
-            logger.info(
-                "run_voice_drift: tenant=%s — bereits pending, übersprungen", tenant_id
-            )
+            logger.info("run_voice_drift: tenant=%s — bereits pending, übersprungen", tenant_id)
             return {"status": "skipped", "reason": "already_pending"}
 
     try:
@@ -259,10 +258,7 @@ def run_voice_drift(
                 {"t": tenant_id},
             ).fetchall()
 
-        recent_posts = [
-            {"id": str(row[0]), "content": (row[1] or "")[:2000]}
-            for row in post_rows
-        ]
+        recent_posts = [{"id": str(row[0]), "content": (row[1] or "")[:2000]} for row in post_rows]
         post_ids_for_trigger = trigger_post_ids or [str(row[0]) for row in post_rows]
 
         # ------------------------------------------------------------------
@@ -280,24 +276,17 @@ def run_voice_drift(
                     {"t": tenant_id},
                 ).fetchall()
         except Exception as fb_err:
-            logger.debug(
-                "run_voice_drift: voice_feedback nicht verfügbar (Issue #77): %s", fb_err
-            )
+            logger.debug("run_voice_drift: voice_feedback nicht verfügbar (Issue #77): %s", fb_err)
             feedback_rows = []
 
-        user_feedback = [
-            {"text": row[1] or "", "field": row[2] or ""}
-            for row in feedback_rows
-        ]
+        user_feedback = [{"text": row[1] or "", "field": row[2] or ""} for row in feedback_rows]
 
         # ------------------------------------------------------------------
         # 6. Prompt laden
         # ------------------------------------------------------------------
         loader = get_default_prompt_loader()
         loaded = loader.load("VOICE_DRIFT")
-        logger.debug(
-            "run_voice_drift: prompt sha=%s geladen", loaded.sha[:12]
-        )
+        logger.debug("run_voice_drift: prompt sha=%s geladen", loaded.sha[:12])
         if "{context_json}" not in loaded.user_prompt_template:
             raise ValueError(
                 "VOICE_DRIFT User-Prompt-Template hat keinen {context_json}-Placeholder"
@@ -319,6 +308,7 @@ def run_voice_drift(
         # 8. Anthropic-Call mit cache_control: ephemeral auf System-Prompt
         # ------------------------------------------------------------------
         import anthropic
+
         from config import settings
 
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -333,15 +323,14 @@ def run_voice_drift(
                     "cache_control": {"type": "ephemeral"},
                 }
             ],
-            messages=[
-                {"role": "user", "content": user_prompt}
-            ],
+            messages=[{"role": "user", "content": user_prompt}],
         )
 
         raw_text = response.content[0].text
         logger.debug(
             "run_voice_drift: tenant=%s Anthropic-Antwort erhalten (%d Zeichen)",
-            tenant_id, len(raw_text),
+            tenant_id,
+            len(raw_text),
         )
 
         # Token-Nutzung (best-effort)
@@ -352,7 +341,10 @@ def run_voice_drift(
             cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
             logger.info(
                 "run_voice_drift: tenant=%s input=%d output=%d cache_read=%d",
-                tenant_id, input_tokens, output_tokens, cache_read,
+                tenant_id,
+                input_tokens,
+                output_tokens,
+                cache_read,
             )
         except Exception:
             input_tokens, output_tokens = _ESTIMATED_INPUT_TOKENS, _ESTIMATED_OUTPUT_TOKENS
@@ -366,7 +358,8 @@ def run_voice_drift(
         except json.JSONDecodeError as parse_err:
             logger.warning(
                 "run_voice_drift: tenant=%s — JSON-Parsing fehlgeschlagen: %s",
-                tenant_id, parse_err,
+                tenant_id,
+                parse_err,
             )
             output_json = {"proposals": [], "summary": raw_text[:500], "confidence": 0.0}
 
@@ -408,7 +401,10 @@ def run_voice_drift(
 
         logger.info(
             "run_voice_drift: tenant=%s obs_id=%s proposals=%d confidence=%.2f",
-            tenant_id, obs_id, len(proposals), confidence,
+            tenant_id,
+            obs_id,
+            len(proposals),
+            confidence,
         )
 
         # ------------------------------------------------------------------
@@ -430,7 +426,8 @@ def run_voice_drift(
             clients_reached = resp.json().get("sent", 0) if resp.is_success else 0
             logger.info(
                 "run_voice_drift: WS push tenant=%s clients_reached=%d",
-                tenant_id, clients_reached,
+                tenant_id,
+                clients_reached,
             )
         except Exception as ws_err:
             logger.warning("run_voice_drift: WS push fehlgeschlagen: %s", ws_err)
@@ -445,7 +442,5 @@ def run_voice_drift(
         }
 
     except Exception as exc:
-        logger.exception(
-            "run_voice_drift: tenant=%s FAILED — %s", tenant_id, exc
-        )
+        logger.exception("run_voice_drift: tenant=%s FAILED — %s", tenant_id, exc)
         return {"status": "failed", "error": str(exc)}

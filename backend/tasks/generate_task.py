@@ -1,23 +1,22 @@
-import logging
 import asyncio
-import uuid
+import json as _json
+import logging
 
-from tasks.celery_app import celery_app
+from sqlalchemy import select
+from sqlalchemy import text as _text
+
 from models.base import sync_session_factory
-from models.source_item import SourceItem
-from models.source import Source
-from models.content_piece import ContentPiece
 from models.campaign import Campaign
+from models.content_piece import ContentPiece
+from models.source import Source
+from models.source_item import SourceItem
 from models.tenant import Tenant
 from services.analyzer import analyze_transcript
-from services.content_generator import generate_all_content
 from services.campaign_matcher import match_item_to_campaigns
+from services.content_generator import generate_all_content
 from services.fact_checker import check_facts
 from services.llm import BudgetExceededError, set_llm_tenant
-
-import json as _json
-
-from sqlalchemy import select, text as _text
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,9 @@ def analyze_item(item_id: str):
         # RSS items often have no full transcript — use title as minimal content
         if not item.transcript_text:
             if item.transcript_source == "rss_feed" and item.title:
-                logger.info(f"Item {item_id}: RSS item has no transcript, using title as content stub")
+                logger.info(
+                    f"Item {item_id}: RSS item has no transcript, using title as content stub"
+                )
                 item.transcript_text = item.title
                 session.commit()
             else:
@@ -66,9 +67,7 @@ def analyze_item(item_id: str):
 
             if analysis:
                 # Fact check top claims
-                fact_results = asyncio.run(
-                    check_facts(analysis.get("key_points", []))
-                )
+                fact_results = asyncio.run(check_facts(analysis.get("key_points", [])))
                 if fact_results:
                     analysis["fact_check"] = fact_results
 
@@ -76,16 +75,19 @@ def analyze_item(item_id: str):
                 item.status = "analyzed"
 
                 # Campaign matching
-                campaigns = session.execute(
-                    select(Campaign).where(
-                        Campaign.tenant_id == item.tenant_id,
-                        Campaign.is_active == True,
+                campaigns = (
+                    session.execute(
+                        select(Campaign).where(
+                            Campaign.tenant_id == item.tenant_id,
+                            Campaign.is_active is True,
+                        )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
 
                 campaign_dicts = [
-                    {"id": c.id, "keywords": c.keywords, "name": c.name}
-                    for c in campaigns
+                    {"id": c.id, "keywords": c.keywords, "name": c.name} for c in campaigns
                 ]
                 match_id = match_item_to_campaigns(analysis, campaign_dicts)
                 if match_id:
@@ -93,9 +95,10 @@ def analyze_item(item_id: str):
 
                 # Auto-score analysis quality
                 try:
-                    from services.quality_scorer import score_analysis
                     from models.quality_metric import QualityMetric
-                    from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+                    from services.llm import PURPOSE_MODEL_MAP, REQUESTY_MODELS
+                    from services.quality_scorer import score_analysis
+
                     scores = score_analysis(analysis)
                     model_key = PURPOSE_MODEL_MAP.get("analysis", "gemini-flash")
                     qm = QualityMetric(
@@ -118,10 +121,12 @@ def analyze_item(item_id: str):
 
                 # ═══ AUTO-CHAIN: Ideen + Fragen generieren (Dialog-Mode) ═══
                 from tasks.ideation_task import auto_generate_ideas
+
                 auto_generate_ideas.delay(item_id)
 
                 # ═══ AUTO-CHAIN: Smarte Fragen für Dialogue-Workflow ═══
                 from tasks.questions_task import generate_smart_questions_task
+
                 generate_smart_questions_task.delay(item_id)
 
             else:
@@ -136,11 +141,15 @@ def analyze_item(item_id: str):
             # Circuit breaker: if budget exceeded, set a Redis flag to pause pipeline
             if "BudgetExceededError" in type(e).__name__ or "412" in str(e):
                 try:
-                    import redis as redis_lib
                     import os
+
+                    import redis as redis_lib
+
                     r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://redis-v2:6379/1"))
                     r.set("llm:budget_exceeded", "1")  # persists until manual reset via dashboard
-                    logger.warning("Budget exceeded — pipeline paused (llm:budget_exceeded set, no TTL — reset manually via dashboard)")
+                    logger.warning(
+                        "Budget exceeded — pipeline paused (llm:budget_exceeded set, no TTL — reset manually via dashboard)"
+                    )
                 except Exception:
                     pass
 
@@ -181,9 +190,7 @@ def generate_content(item_id: str):
             ).fetchone()
             if vp_row and vp_row[0]:
                 wizard_profile = (
-                    vp_row[0]
-                    if isinstance(vp_row[0], dict)
-                    else _json.loads(vp_row[0])
+                    vp_row[0] if isinstance(vp_row[0], dict) else _json.loads(vp_row[0])
                 )
                 if wizard_profile:
                     voice_profile = wizard_profile
@@ -223,9 +230,10 @@ def generate_content(item_id: str):
 
                     # Auto-score post quality (rule-based, no LLM cost)
                     try:
-                        from services.quality_scorer import score_post_generation
                         from models.quality_metric import QualityMetric
-                        from services.llm import REQUESTY_MODELS, PURPOSE_MODEL_MAP
+                        from services.llm import PURPOSE_MODEL_MAP, REQUESTY_MODELS
+                        from services.quality_scorer import score_post_generation
+
                         scores = score_post_generation(text)
                         model_key = PURPOSE_MODEL_MAP.get("post_generation", "claude-sonnet")
                         qm = QualityMetric(
@@ -250,11 +258,15 @@ def generate_content(item_id: str):
             item.status = "analyzed"
             session.commit()
             try:
-                import redis as redis_lib
                 import os
+
+                import redis as redis_lib
+
                 r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://redis-v2:6379/1"))
                 r.set("llm:budget_exceeded", "1")  # persists until manual reset
-                logger.warning("Budget exceeded in generate_content — pipeline paused for 20 minutes")
+                logger.warning(
+                    "Budget exceeded in generate_content — pipeline paused for 20 minutes"
+                )
             except Exception:
                 pass
         except Exception as e:

@@ -10,6 +10,7 @@ Workflow:
 7. carousel_pdf_path in content_pieces speichern (optional)
 8. Return dict: {slides, pdf_bytes (base64), slide_count}
 """
+
 """
 Umgestellt: 2026-06-11 (P5-anthropic-provider.md)
   - anthropic-SDK-Bypass entfernt (ANTHROPIC_MODEL_ID / ANTHROPIC_PRICING_KEY entfernt)
@@ -24,16 +25,22 @@ import logging
 import os
 import time
 import uuid
+from datetime import UTC
 
 from sqlalchemy import text
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from services.cost_cap import (
     CostCapExceeded,
     CostCapMiddleware,
 )
-from services.pipeline_llm import call_pipeline_llm, resolve_tier, estimate_tier_cost, BudgetExceededError
+from services.pipeline_llm import (
+    BudgetExceededError,
+    call_pipeline_llm,
+    estimate_tier_cost,
+    resolve_tier,
+)
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +48,9 @@ logger = logging.getLogger(__name__)
 _FALLBACK_SYSTEM = """Du bist ein LinkedIn-Content-Stratege. Wandle den Post in 5-7 Slides um.
 Antworte NUR mit JSON: {"slides": [{"type": "cover"|"point"|"quote"|"cta", "title": "...", "body": "..."}], "slide_count": N}"""
 
-_FALLBACK_USER_TEMPLATE = """Post:\n---\n{post_text}\n---\nErstelle {slide_count} Slides. Voice-Hint: {voice_hint}"""
+_FALLBACK_USER_TEMPLATE = (
+    """Post:\n---\n{post_text}\n---\nErstelle {slide_count} Slides. Voice-Hint: {voice_hint}"""
+)
 
 MAX_SLIDES = 8
 MIN_SLIDES = 5
@@ -51,6 +60,7 @@ def _load_prompt():
     """Load P12c prompt from NC via PromptLoader, fallback to local file, then hardcoded."""
     try:
         from services.prompt_loader import get_default_prompt_loader
+
         loader = get_default_prompt_loader()
         return loader.load("P12c")
     except Exception as e:
@@ -62,32 +72,38 @@ def _load_prompt():
     )
     if os.path.exists(local_path):
         try:
-            with open(local_path, "r", encoding="utf-8") as f:
+            with open(local_path, encoding="utf-8") as f:
                 content = f.read()
+            from datetime import datetime
+
             from services.prompt_loader import LoadedPrompt, _extract_section
-            from datetime import datetime, timezone
+
             sha = hashlib.sha256(content.encode()).hexdigest()
             return LoadedPrompt(
                 content=content,
                 system_prompt=_extract_section(content, "System-Prompt"),
                 user_prompt_template=_extract_section(content, "User-Prompt"),
                 sha=sha,
-                loaded_at=datetime.now(timezone.utc),
+                loaded_at=datetime.now(UTC),
                 source_path=local_path,
             )
         except Exception as le:
             logger.warning(f"[P12c] Lokaler Fallback fehlgeschlagen: {le}")
 
     # Hardcoded fallback
+    from datetime import datetime
+
     from services.prompt_loader import LoadedPrompt
-    from datetime import datetime, timezone
-    fallback_content = f"## System-Prompt\n{_FALLBACK_SYSTEM}\n\n## User-Prompt\n{_FALLBACK_USER_TEMPLATE}"
+
+    fallback_content = (
+        f"## System-Prompt\n{_FALLBACK_SYSTEM}\n\n## User-Prompt\n{_FALLBACK_USER_TEMPLATE}"
+    )
     return LoadedPrompt(
         content=fallback_content,
         system_prompt=_FALLBACK_SYSTEM,
         user_prompt_template=_FALLBACK_USER_TEMPLATE,
         sha="fallback",
-        loaded_at=datetime.now(timezone.utc),
+        loaded_at=datetime.now(UTC),
         source_path="hardcoded",
     )
 
@@ -95,6 +111,7 @@ def _load_prompt():
 def _parse_slides(raw: str) -> list[dict]:
     """Parse LLM output into slides list."""
     import html
+
     text = raw.strip()
     if text.startswith("```"):
         parts = text.split("```")
@@ -116,7 +133,7 @@ def _parse_slides(raw: str) -> list[dict]:
 
     # Map P12c types → carousel_generator types
     TYPE_MAP = {
-        "cover": "title",    # P12c "cover" → generator "title" (full-color slide)
+        "cover": "title",  # P12c "cover" → generator "title" (full-color slide)
         "point": "content",  # P12c "point" → generator "content" (content slide)
         "transition": "content",
         "quote": "quote",
@@ -128,12 +145,16 @@ def _parse_slides(raw: str) -> list[dict]:
     for s in slides:
         raw_type = s.get("type", "point")
         slide_type = TYPE_MAP.get(raw_type, "content")
-        clean.append({
-            "type": slide_type,
-            "title": html.escape(str(s.get("title", s.get("heading", "")))),
-            "body": html.escape(str(s.get("body", ""))),
-            "heading": html.escape(str(s.get("title", s.get("heading", "")))),  # alias for generator
-        })
+        clean.append(
+            {
+                "type": slide_type,
+                "title": html.escape(str(s.get("title", s.get("heading", "")))),
+                "body": html.escape(str(s.get("body", ""))),
+                "heading": html.escape(
+                    str(s.get("title", s.get("heading", "")))
+                ),  # alias for generator
+            }
+        )
     return clean
 
 
@@ -143,8 +164,8 @@ def run_p12c(
     tenant_id: str,
     post_text: str,
     voice_hint: str = "",
-    content_piece_id: str = None,
-    brand_colors: dict = None,
+    content_piece_id: str | None = None,
+    brand_colors: dict | None = None,
     slide_count: int = 6,
 ) -> dict:
     """P12c: Generate carousel slides + PDF from a LinkedIn post text.
@@ -152,7 +173,8 @@ def run_p12c(
     Returns:
         {status, slides, pdf_b64, slide_count, carousel_pdf_path or None}
     """
-    from services.kill_switch import check_kill_switch, KillSwitchTriggered
+    from services.kill_switch import KillSwitchTriggered, check_kill_switch
+
     try:
         check_kill_switch(tenant_id)
     except KillSwitchTriggered:
@@ -166,10 +188,12 @@ def run_p12c(
     est_cost = estimate_tier_cost(_tier, 4000, 1500)
     logger.info("P12c estimated cost=%.6f USD for tenant=%s", est_cost, tenant_id)
     try:
+        import asyncio as _asyncio
+
         from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
         from sqlalchemy.orm import sessionmaker as _sm
+
         from config import settings as _s
-        import asyncio as _asyncio
 
         async def _p12c_cap_check():
             _engine = create_async_engine(_s.database_url, pool_pre_ping=True)
@@ -182,7 +206,9 @@ def run_p12c(
 
         _asyncio.run(_p12c_cap_check())
     except CostCapExceeded:
-        logger.warning("P12c run_id=%s tenant=%s: daily cost cap exceeded, abort", run_id, tenant_id)
+        logger.warning(
+            "P12c run_id=%s tenant=%s: daily cost cap exceeded, abort", run_id, tenant_id
+        )
         return {"status": "paused_for_cost", "reason": "daily_cost_cap_exceeded"}
     except Exception as cap_err:
         logger.warning("P12c cost-cap check failed (fail-open): %s", cap_err)
@@ -192,8 +218,10 @@ def run_p12c(
         try:
             with sync_session_factory() as session:
                 row = session.execute(
-                    text("SELECT primary_color, secondary_color FROM tenant_branding WHERE tenant_id = :tid"),
-                    {"tid": tenant_id}
+                    text(
+                        "SELECT primary_color, secondary_color FROM tenant_branding WHERE tenant_id = :tid"
+                    ),
+                    {"tid": tenant_id},
                 ).fetchone()
                 if row:
                     brand_colors = {"primary": row[0], "accent": row[1]}
@@ -220,9 +248,13 @@ def run_p12c(
             tenant_id=tenant_id,
         )
         raw_output = res.text.strip()
-    except BudgetExceededError as budget_err:
+    except BudgetExceededError:
         # BUG-1-Fix: Router-Budget überschritten (HTTP 412) → paused_for_cost, kein Retry
-        logger.warning("[P12c] run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id)
+        logger.warning(
+            "[P12c] run_id=%s tenant=%s: Router-Budget überschritten (412), pausing",
+            run_id,
+            tenant_id,
+        )
         return {"run_id": run_id, "status": "paused_for_cost"}
     except Exception as api_err:
         logger.error(f"[P12c] LLM-Call fehlgeschlagen: {api_err}")
@@ -236,6 +268,7 @@ def run_p12c(
     # Generate PDF
     try:
         from services.carousel_generator import generate_carousel_pdf
+
         pdf_bytes = generate_carousel_pdf(
             slides=slides,
             brand_colors=brand_colors,
@@ -243,7 +276,9 @@ def run_p12c(
         )
         # Enforce LinkedIn 5 MB limit
         if len(pdf_bytes) > 5 * 1024 * 1024:
-            logger.warning(f"[P12c] PDF zu gross ({len(pdf_bytes)} bytes > 5MB), wird nicht gespeichert")
+            logger.warning(
+                f"[P12c] PDF zu gross ({len(pdf_bytes)} bytes > 5MB), wird nicht gespeichert"
+            )
             pdf_bytes = None
             pdf_b64 = None
         else:
@@ -260,8 +295,10 @@ def run_p12c(
             carousel_pdf_path = f"carousel/{tenant_id}/{content_piece_id}/{run_id}.pdf"
             with sync_session_factory() as session:
                 session.execute(
-                    text("UPDATE content_pieces SET carousel_pdf_path = :path WHERE id = :id AND tenant_id = :tid"),
-                    {"path": carousel_pdf_path, "id": content_piece_id, "tid": tenant_id}
+                    text(
+                        "UPDATE content_pieces SET carousel_pdf_path = :path WHERE id = :id AND tenant_id = :tid"
+                    ),
+                    {"path": carousel_pdf_path, "id": content_piece_id, "tid": tenant_id},
                 )
                 session.commit()
         except Exception as db_err:

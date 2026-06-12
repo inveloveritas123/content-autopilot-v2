@@ -1,4 +1,5 @@
 """Tests für services/voice_transcription.py — alle externen Calls gemockt."""
+
 import sys
 from dataclasses import fields
 from unittest.mock import MagicMock, patch
@@ -16,6 +17,7 @@ _FAKE_OGG = b"OggS" + b"\x00" * 200
 # ---------------------------------------------------------------------------
 # Test: TranscriptionResult dataclass fields
 # ---------------------------------------------------------------------------
+
 
 def test_transcription_result_fields():
     from services.voice_transcription import TranscriptionResult
@@ -40,6 +42,7 @@ def test_transcription_result_fields():
 # ---------------------------------------------------------------------------
 # Test: Gemini adapter success
 # ---------------------------------------------------------------------------
+
 
 def test_gemini_adapter_success():
     from services.voice_transcription import TranscriptionResult, transcribe_with_gemini
@@ -70,12 +73,14 @@ def test_gemini_adapter_success():
 # Test: Whisper not installed → TranscriptionError
 # ---------------------------------------------------------------------------
 
+
 def test_whisper_not_installed_raises():
     from services.voice_transcription import TranscriptionError, transcribe_with_whisper
 
     with patch.dict(sys.modules, {"faster_whisper": None}):
         # Ensure the import inside the function will raise ImportError
         import builtins
+
         real_import = builtins.__import__
 
         def mock_import(name, *args, **kwargs):
@@ -92,6 +97,7 @@ def test_whisper_not_installed_raises():
 # Test: Length limit enforced
 # ---------------------------------------------------------------------------
 
+
 def test_length_limit_enforced():
     from services.voice_transcription import TranscriptionError, transcribe_voice
 
@@ -104,6 +110,7 @@ def test_length_limit_enforced():
 # Test: Unknown MIME type rejected
 # ---------------------------------------------------------------------------
 
+
 def test_unknown_mime_type_rejected():
     from services.voice_transcription import TranscriptionError, transcribe_voice
 
@@ -114,6 +121,7 @@ def test_unknown_mime_type_rejected():
 # ---------------------------------------------------------------------------
 # Test: Fallback to Whisper on low Gemini confidence
 # ---------------------------------------------------------------------------
+
 
 def test_fallback_to_whisper_on_low_confidence():
     from services.voice_transcription import TranscriptionResult, transcribe_voice
@@ -133,10 +141,14 @@ def test_fallback_to_whisper_on_low_confidence():
         duration_sec=5.0,
     )
 
-    with patch("services.voice_transcription._get_ogg_duration", return_value=10.0):
-        with patch("services.voice_transcription.transcribe_with_gemini", return_value=gemini_result):
-            with patch("services.voice_transcription.transcribe_with_whisper", return_value=whisper_result) as mock_whisper:
-                result = transcribe_voice(_FAKE_OGG)
+    with (
+        patch("services.voice_transcription._get_ogg_duration", return_value=10.0),
+        patch("services.voice_transcription.transcribe_with_gemini", return_value=gemini_result),
+        patch(
+            "services.voice_transcription.transcribe_with_whisper", return_value=whisper_result
+        ) as mock_whisper,
+    ):
+        result = transcribe_voice(_FAKE_OGG)
 
     mock_whisper.assert_called_once()
     assert result.text == "sicher transkribiert"
@@ -147,8 +159,13 @@ def test_fallback_to_whisper_on_low_confidence():
 # Test: Fallback to Whisper when Gemini raises exception
 # ---------------------------------------------------------------------------
 
+
 def test_fallback_to_whisper_on_gemini_failure():
-    from services.voice_transcription import TranscriptionError, TranscriptionResult, transcribe_voice
+    from services.voice_transcription import (
+        TranscriptionError,
+        TranscriptionResult,
+        transcribe_voice,
+    )
 
     whisper_result = TranscriptionResult(
         text="Whisper hat es",
@@ -158,10 +175,17 @@ def test_fallback_to_whisper_on_gemini_failure():
         duration_sec=5.0,
     )
 
-    with patch("services.voice_transcription._get_ogg_duration", return_value=10.0):
-        with patch("services.voice_transcription.transcribe_with_gemini", side_effect=TranscriptionError("Gemini down")):
-            with patch("services.voice_transcription.transcribe_with_whisper", return_value=whisper_result) as mock_whisper:
-                result = transcribe_voice(_FAKE_OGG)
+    with (
+        patch("services.voice_transcription._get_ogg_duration", return_value=10.0),
+        patch(
+            "services.voice_transcription.transcribe_with_gemini",
+            side_effect=TranscriptionError("Gemini down"),
+        ),
+        patch(
+            "services.voice_transcription.transcribe_with_whisper", return_value=whisper_result
+        ) as mock_whisper,
+    ):
+        result = transcribe_voice(_FAKE_OGG)
 
     mock_whisper.assert_called_once()
     assert result.text == "Whisper hat es"
@@ -171,11 +195,20 @@ def test_fallback_to_whisper_on_gemini_failure():
 # Test: Both providers fail → TranscriptionError("Alle")
 # ---------------------------------------------------------------------------
 
+
 def test_both_fail_raises():
     from services.voice_transcription import TranscriptionError, transcribe_voice
 
-    with patch("services.voice_transcription._get_ogg_duration", return_value=10.0):
-        with patch("services.voice_transcription.transcribe_with_gemini", side_effect=TranscriptionError("Gemini down")):
-            with patch("services.voice_transcription.transcribe_with_whisper", side_effect=TranscriptionError("Whisper down")):
-                with pytest.raises(TranscriptionError, match="Alle"):
-                    transcribe_voice(_FAKE_OGG)
+    with (
+        patch("services.voice_transcription._get_ogg_duration", return_value=10.0),
+        patch(
+            "services.voice_transcription.transcribe_with_gemini",
+            side_effect=TranscriptionError("Gemini down"),
+        ),
+        patch(
+            "services.voice_transcription.transcribe_with_whisper",
+            side_effect=TranscriptionError("Whisper down"),
+        ),
+        pytest.raises(TranscriptionError, match="Alle"),
+    ):
+        transcribe_voice(_FAKE_OGG)

@@ -11,15 +11,13 @@ Designentscheidungen:
 - Bei Vision-Fehler: nur OCR-Text als content_text (besser als nichts)
 - Confidence < MIN_OCR_CHARS von Tesseract → OCR-Text wird verworfen
 """
+
 from __future__ import annotations
 
-import asyncio
 import base64
-import io
 import logging
 import shutil
 import subprocess
-from typing import Optional
 
 import httpx
 
@@ -71,7 +69,7 @@ def ocr_image(image_bytes: bytes, lang: str = TESSERACT_LANG, timeout: float = 3
     except subprocess.TimeoutExpired:
         logger.warning("tesseract timeout nach %.0fs", timeout)
         return ""
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("OCR-Fehler: %s", exc)
         return ""
 
@@ -89,7 +87,7 @@ def _detect_mime(image_bytes: bytes) -> str:
     return "image/jpeg"  # Default für Telegram-Photos
 
 
-async def _vision_call(image_bytes: bytes, hint: Optional[str], model: str) -> Optional[str]:
+async def _vision_call(image_bytes: bytes, hint: str | None, model: str) -> str | None:
     """Eine Runde Vision-LLM-Call via Requesty data:-URL."""
     base_url = (settings.litellm_base_url or "").rstrip("/")
     api_key = settings.litellm_api_key or ""
@@ -107,13 +105,15 @@ async def _vision_call(image_bytes: bytes, hint: Optional[str], model: str) -> O
 
     payload = {
         "model": model,
-        "messages": [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt_text},
-                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
-            ],
-        }],
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt_text},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                ],
+            }
+        ],
         "max_tokens": 200,
     }
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -133,12 +133,12 @@ async def _vision_call(image_bytes: bytes, hint: Optional[str], model: str) -> O
     except (httpx.TimeoutException, httpx.RequestError) as exc:
         logger.warning("vision network: %s", exc)
         return None
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("vision unknown: %s", exc)
         return None
 
 
-async def describe_image(image_bytes: bytes, hint: Optional[str] = None) -> Optional[str]:
+async def describe_image(image_bytes: bytes, hint: str | None = None) -> str | None:
     """Liefert eine kurze deutsche Bildbeschreibung (1-2 Sätze) via Vision-LLM.
 
     Versucht VISION_MODEL_PRIMARY (Vertex Gemini EU), fallback
@@ -157,9 +157,7 @@ async def describe_image(image_bytes: bytes, hint: Optional[str] = None) -> Opti
     return desc
 
 
-async def process_photo(
-    image_bytes: bytes, hint: Optional[str] = None
-) -> dict:
+async def process_photo(image_bytes: bytes, hint: str | None = None) -> dict:
     """Verarbeitet ein Photo zu content_text + metadata.
 
     Returns:

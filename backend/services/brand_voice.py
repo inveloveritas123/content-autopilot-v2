@@ -9,8 +9,8 @@ Drei Lernquellen:
 Das Brand-Voice-Profil wird als JSONB im Tenant gespeichert und bei jeder
 Content-Generierung als Kontext mitgegeben.
 """
+
 import logging
-from typing import Optional
 
 from services.llm import llm_service
 
@@ -38,7 +38,7 @@ Extrahiere:
 Antworte NUR als JSON. Kein Markdown, keine Erklaerung."""
 
 
-async def analyze_voice_from_texts(texts: list[str]) -> Optional[dict]:
+async def analyze_voice_from_texts(texts: list[str]) -> dict | None:
     """Analysiere Brand Voice aus einer Liste bestehender Texte."""
     if not texts:
         return None
@@ -145,6 +145,7 @@ call_to_action_style, authenticity_markers."""
 
 # ── Brand Voice fortlaufend lernen ──────────────────────────────────────────
 
+
 async def update_voice_from_answer(
     current_profile: dict,
     answer_text: str,
@@ -178,10 +179,8 @@ neue authenticity_markers."""
             for key, value in updates.items():
                 if isinstance(value, list) and isinstance(current_profile.get(key), list):
                     # Deduplizierte Ergaenzung
-                    existing = set(str(x) for x in current_profile[key])
-                    current_profile[key].extend(
-                        x for x in value if str(x) not in existing
-                    )
+                    existing = {str(x) for x in current_profile[key]}
+                    current_profile[key].extend(x for x in value if str(x) not in existing)
                 else:
                     current_profile[key] = value
             logger.info(f"Voice profile updated with {len(updates)} changes")
@@ -192,6 +191,7 @@ neue authenticity_markers."""
 
 
 # ── Voice-Profil als Prompt-Kontext formatieren ─────────────────────────────
+
 
 def format_voice_for_prompt(profile: dict) -> str:
     """Formatiere das Brand-Voice-Profil als Kontext fuer Content-Generierung.
@@ -269,7 +269,9 @@ def format_voice_for_prompt(profile: dict) -> str:
             if ws.get("bevorzugt"):
                 bevorzugt = ws["bevorzugt"]
                 if isinstance(bevorzugt, list):
-                    parts.append(f"Typische Redewendungen: {', '.join(str(w) for w in bevorzugt[:8])}")
+                    parts.append(
+                        f"Typische Redewendungen: {', '.join(str(w) for w in bevorzugt[:8])}"
+                    )
                 else:
                     parts.append(f"Typische Redewendungen: {bevorzugt}")
             if ws.get("vermieden"):

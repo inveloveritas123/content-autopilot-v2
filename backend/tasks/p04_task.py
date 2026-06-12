@@ -16,6 +16,7 @@ Umgestellt: 2026-06-11 (P5-anthropic-provider.md)
   - Modell-ID kommt jetzt aus PipelineLLMResult.model_id
   - Kosten-Schätzung über estimate_tier_cost statt estimate_anthropic_cost
 """
+
 import asyncio
 import hashlib
 import json
@@ -25,12 +26,16 @@ import uuid
 
 from sqlalchemy import text
 
-from tasks.celery_app import celery_app
 from models.base import sync_session_factory
+from services.pipeline_llm import (
+    call_pipeline_llm,
+    estimate_tier_cost,
+    resolve_tier,
+)
 from services.prompt_loader import get_default_prompt_loader
-from services.pipeline_llm import call_pipeline_llm, resolve_tier, estimate_tier_cost, BudgetExceededError
 from services.schema_transformer import build_canonical_meta, finalize_canonical
 from tasks.canonical_wiring import fetch_tenant_meta, now_iso
+from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +43,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
+
 
 def _extract_json_from_text(raw: str) -> dict:
     """JSON aus dem LLM-Output parsen — entfernt Markdown-Code-Zaun falls vorhanden."""
@@ -55,6 +61,7 @@ async def _run_cost_check(tenant_id: str, estimated_cost: float) -> None:
     """Async Cost-Cap-Check — soll via asyncio.run() aus Celery aufgerufen werden."""
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker as async_sm
+
     from config import settings
     from services.cost_cap import CostCapMiddleware
 
@@ -72,6 +79,7 @@ async def _record_actual_cost(tenant_id: str, actual_cost: float) -> None:
     """Actual-Cost nach erfolgreichem LLM-Call ins daily_cost_tenant schreiben."""
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker as async_sm
+
     from config import settings
     from services.cost_cap import CostCapMiddleware
 
@@ -90,8 +98,15 @@ async def _record_actual_cost(tenant_id: str, actual_cost: float) -> None:
 # Celery Task
 # ---------------------------------------------------------------------------
 
+
 @celery_app.task(name="tasks.p04_task.run_p04", bind=True, max_retries=2)
-def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, project_id: str | None = None) -> dict:
+def run_p04(
+    self,
+    tenant_id: str,
+    p01_payload: dict,
+    transcript: str | None = None,
+    project_id: str | None = None,
+) -> dict:
     """P04-Avatar-Vertiefung: Psychologisches Audience-Avatar aus P01-Kontext.
 
     Args:
@@ -102,7 +117,8 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
     Returns:
         {"run_id": str, "status": "done"|"paused_for_cost"|"failed", "error": str|None}
     """
-    from services.kill_switch import check_kill_switch, KillSwitchTriggered
+    from services.kill_switch import KillSwitchTriggered, check_kill_switch
+
     try:
         check_kill_switch(tenant_id)
     except KillSwitchTriggered:
@@ -145,14 +161,12 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
         except (CostCapExceeded, BudgetExceededError):
             logger.warning(
                 "p04 run_id=%s tenant=%s: daily cost cap exceeded, pausing",
-                run_id, tenant_id,
+                run_id,
+                tenant_id,
             )
             with sync_session_factory() as session:
                 session.execute(
-                    text(
-                        "UPDATE setup_pipeline_run SET status='paused_for_cost' "
-                        "WHERE id=:id"
-                    ),
+                    text("UPDATE setup_pipeline_run SET status='paused_for_cost' " "WHERE id=:id"),
                     {"id": run_id},
                 )
                 session.commit()
@@ -164,9 +178,7 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
         loader = get_default_prompt_loader()
         loaded = loader.load("P04")
         prompt_version_hash = loaded.sha
-        logger.debug(
-            "p04 run_id=%s: prompt sha=%s geladen", run_id, prompt_version_hash[:12]
-        )
+        logger.debug("p04 run_id=%s: prompt sha=%s geladen", run_id, prompt_version_hash[:12])
 
         # ------------------------------------------------------------------
         # 4. LLM-Call über den Seam (kein direkter SDK-Aufruf)
@@ -204,7 +216,8 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
         except json.JSONDecodeError as first_err:
             logger.warning(
                 "p04 run_id=%s: JSON-Parsing fehlgeschlagen (%s), Retry mit Schema-Reminder",
-                run_id, first_err,
+                run_id,
+                first_err,
             )
             # Felder = Louis' kanonische P04-Top-Level-Keys (content-truth/schemas/p04).
             schema_hint = (
@@ -253,15 +266,14 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
         if schema_errors:
             logger.warning(
                 "p04 run_id=%s: %d kanonische Schema-Luecke(n) in _meta.luecken dokumentiert",
-                run_id, len(schema_errors),
+                run_id,
+                len(schema_errors),
             )
 
         # ------------------------------------------------------------------
         # 7. DB-Insert: tenant_audience_avatar (kanonischer Payload inkl. _meta)
         # ------------------------------------------------------------------
-        output_hash = hashlib.sha256(
-            json.dumps(output_json, sort_keys=True).encode()
-        ).hexdigest()
+        output_hash = hashlib.sha256(json.dumps(output_json, sort_keys=True).encode()).hexdigest()
 
         with sync_session_factory() as session:
             row = session.execute(
@@ -294,7 +306,9 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
             session.commit()
         logger.info(
             "p04 run_id=%s tenant=%s: audience_avatar version=%d inserted",
-            run_id, tenant_id, next_version,
+            run_id,
+            tenant_id,
+            next_version,
         )
 
         # ------------------------------------------------------------------
@@ -303,7 +317,9 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
         try:
             asyncio.run(_record_actual_cost(tenant_id, actual_cost))
         except Exception as cost_err:
-            logger.warning("p04 run_id=%s: actual-cost recording fehlgeschlagen: %s", run_id, cost_err)
+            logger.warning(
+                "p04 run_id=%s: actual-cost recording fehlgeschlagen: %s", run_id, cost_err
+            )
 
         # ------------------------------------------------------------------
         # 7b. Audit-Update: setup_pipeline_run auf 'done' setzen
@@ -338,7 +354,10 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
             session.commit()
         logger.info(
             "p04 run_id=%s: done in %dms, cost=%.6f USD, output_hash=%s",
-            run_id, duration_ms, actual_cost, output_hash[:16],
+            run_id,
+            duration_ms,
+            actual_cost,
+            output_hash[:16],
         )
 
         # ------------------------------------------------------------------
@@ -346,9 +365,11 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
         # ------------------------------------------------------------------
         return {"run_id": run_id, "status": "done"}
 
-    except BudgetExceededError as exc:
+    except BudgetExceededError:
         # BUG-1-Fix: Router-Budget überschritten (HTTP 412) aus call_pipeline_llm → paused_for_cost
-        logger.warning("p04 run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id)
+        logger.warning(
+            "p04 run_id=%s tenant=%s: Router-Budget überschritten (412), pausing", run_id, tenant_id
+        )
         try:
             with sync_session_factory() as session:
                 session.execute(
@@ -360,7 +381,9 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
                 )
                 session.commit()
         except Exception as db_err:
-            logger.error("p04 run_id=%s: DB-Update (paused_for_cost) fehlgeschlagen: %s", run_id, db_err)
+            logger.error(
+                "p04 run_id=%s: DB-Update (paused_for_cost) fehlgeschlagen: %s", run_id, db_err
+            )
         return {"run_id": run_id, "status": "paused_for_cost"}
 
     except Exception as exc:
@@ -381,7 +404,5 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
                 )
                 session.commit()
         except Exception as db_err:
-            logger.error(
-                "p04 run_id=%s: Fehler beim DB-Update auf 'failed': %s", run_id, db_err
-            )
+            logger.error("p04 run_id=%s: Fehler beim DB-Update auf 'failed': %s", run_id, db_err)
         return {"run_id": run_id, "status": "failed", "error": str(exc)}

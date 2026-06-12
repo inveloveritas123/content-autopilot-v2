@@ -9,6 +9,7 @@ Importiert nur eine sichere Teilmenge:
 Schreibt nach jedem echten Import einen Audit-Eintrag in llm_call_logs
 mit task_type="data_import".
 """
+
 import io
 import json
 import uuid
@@ -16,8 +17,7 @@ import zipfile
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select, delete
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.content_idea import ContentIdea
@@ -99,7 +99,11 @@ class TenantImportService:
             try:
                 manifest = _read_json(zf, "manifest.json")
             except Exception as exc:
-                return {"valid": False, "errors": [f"manifest.json nicht lesbar: {exc}"], "preview": {}}
+                return {
+                    "valid": False,
+                    "errors": [f"manifest.json nicht lesbar: {exc}"],
+                    "preview": {},
+                }
 
             # 5. Schema-Version
             if manifest.get("schema_version") != _SUPPORTED_SCHEMA_VERSION:
@@ -162,7 +166,9 @@ class TenantImportService:
         with zf:
             # --- sources.json ---
             try:
-                source_rows = _read_json(zf, "sources.json") if "sources.json" in zf.namelist() else []
+                source_rows = (
+                    _read_json(zf, "sources.json") if "sources.json" in zf.namelist() else []
+                )
                 n_sources = await self._import_sources(source_rows, tenant, db, merge)
                 imported_counts["sources"] = n_sources
             except Exception as exc:
@@ -170,7 +176,11 @@ class TenantImportService:
 
             # --- content_ideas.json ---
             try:
-                idea_rows = _read_json(zf, "content_ideas.json") if "content_ideas.json" in zf.namelist() else []
+                idea_rows = (
+                    _read_json(zf, "content_ideas.json")
+                    if "content_ideas.json" in zf.namelist()
+                    else []
+                )
                 n_ideas = await self._import_content_ideas(idea_rows, tenant, db, merge)
                 imported_counts["content_ideas"] = n_ideas
             except Exception as exc:
@@ -178,7 +188,11 @@ class TenantImportService:
 
             # --- content_pieces.json ---
             try:
-                piece_rows = _read_json(zf, "content_pieces.json") if "content_pieces.json" in zf.namelist() else []
+                piece_rows = (
+                    _read_json(zf, "content_pieces.json")
+                    if "content_pieces.json" in zf.namelist()
+                    else []
+                )
                 n_pieces = await self._import_content_pieces(piece_rows, tenant, db, merge)
                 imported_counts["content_pieces"] = n_pieces
             except Exception as exc:
@@ -234,17 +248,19 @@ class TenantImportService:
                 existing.is_active = bool(row.get("is_active", True))
                 existing.keywords = row.get("keywords")
             elif not existing:
-                db.add(Source(
-                    id=row_id,
-                    tenant_id=tenant.id,
-                    name=str(row.get("name", "")),
-                    type=str(row.get("type", "unknown")),
-                    url=row.get("url"),
-                    channel_id=row.get("channel_id"),
-                    language=str(row.get("language", "de")),
-                    is_active=bool(row.get("is_active", True)),
-                    keywords=row.get("keywords"),
-                ))
+                db.add(
+                    Source(
+                        id=row_id,
+                        tenant_id=tenant.id,
+                        name=str(row.get("name", "")),
+                        type=str(row.get("type", "unknown")),
+                        url=row.get("url"),
+                        channel_id=row.get("channel_id"),
+                        language=str(row.get("language", "de")),
+                        is_active=bool(row.get("is_active", True)),
+                        keywords=row.get("keywords"),
+                    )
+                )
             count += 1
 
         await db.flush()
@@ -275,24 +291,28 @@ class TenantImportService:
                 existing.description = str(row.get("description", existing.description))
                 existing.angle = str(row.get("angle", existing.angle))
                 existing.status = str(row.get("status", existing.status))
-                existing.relevance_score = float(row.get("relevance_score", existing.relevance_score))
+                existing.relevance_score = float(
+                    row.get("relevance_score", existing.relevance_score)
+                )
                 existing.hook_suggestion = row.get("hook_suggestion")
                 existing.entrepreneur_questions = row.get("entrepreneur_questions")
             elif not existing:
-                db.add(ContentIdea(
-                    id=row_id,
-                    tenant_id=tenant.id,
-                    source_item_id=source_item_id,
-                    title=str(row.get("title", "")),
-                    description=str(row.get("description", "")),
-                    angle=str(row.get("angle", "meinung")),
-                    status=str(row.get("status", "new")),
-                    relevance_score=float(row.get("relevance_score", 0.0)),
-                    hook_suggestion=row.get("hook_suggestion"),
-                    entrepreneur_questions=row.get("entrepreneur_questions"),
-                    source_quotes=row.get("source_quotes"),
-                    source_context=row.get("source_context"),
-                ))
+                db.add(
+                    ContentIdea(
+                        id=row_id,
+                        tenant_id=tenant.id,
+                        source_item_id=source_item_id,
+                        title=str(row.get("title", "")),
+                        description=str(row.get("description", "")),
+                        angle=str(row.get("angle", "meinung")),
+                        status=str(row.get("status", "new")),
+                        relevance_score=float(row.get("relevance_score", 0.0)),
+                        hook_suggestion=row.get("hook_suggestion"),
+                        entrepreneur_questions=row.get("entrepreneur_questions"),
+                        source_quotes=row.get("source_quotes"),
+                        source_context=row.get("source_context"),
+                    )
+                )
             count += 1
 
         await db.flush()
@@ -322,21 +342,25 @@ class TenantImportService:
                 existing.channel = str(row.get("channel", existing.channel))
                 existing.content_text = str(row.get("content_text", existing.content_text))
                 existing.status = str(row.get("status", existing.status))
-                existing.content_metadata = row.get("content_metadata", existing.content_metadata) or {}
+                existing.content_metadata = (
+                    row.get("content_metadata", existing.content_metadata) or {}
+                )
             elif not existing:
-                db.add(ContentPiece(
-                    id=row_id,
-                    tenant_id=tenant.id,
-                    source_item_id=source_item_id,
-                    channel=str(row.get("channel", "linkedin")),
-                    content_text=str(row.get("content_text", "")),
-                    status=str(row.get("status", "draft")),
-                    content_metadata=row.get("content_metadata") or {},
-                    idea_id=_to_uuid_or_none(row.get("idea_id")),
-                    approved_by=row.get("approved_by"),
-                    approved_at=_to_datetime_or_none(row.get("approved_at")),
-                    approval_method=row.get("approval_method"),
-                ))
+                db.add(
+                    ContentPiece(
+                        id=row_id,
+                        tenant_id=tenant.id,
+                        source_item_id=source_item_id,
+                        channel=str(row.get("channel", "linkedin")),
+                        content_text=str(row.get("content_text", "")),
+                        status=str(row.get("status", "draft")),
+                        content_metadata=row.get("content_metadata") or {},
+                        idea_id=_to_uuid_or_none(row.get("idea_id")),
+                        approved_by=row.get("approved_by"),
+                        approved_at=_to_datetime_or_none(row.get("approved_at")),
+                        approval_method=row.get("approval_method"),
+                    )
+                )
             count += 1
 
         await db.flush()

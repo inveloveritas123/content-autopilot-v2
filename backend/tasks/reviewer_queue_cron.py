@@ -2,6 +2,7 @@
 Cron-Task: findet Einträge in telegram_message_log mit routed_to='reviewer_queue'
 und created_at > 24h → sendet Zusammenfassung per Telegram oder Email.
 """
+
 import logging
 from collections import Counter
 
@@ -43,8 +44,7 @@ def check_reviewer_queue_backlog():
     # Zusammenfassung: Anzahl pro Tenant
     tenant_counts = Counter(str(row.tenant_id) for row in rows)
     tenant_summary = "\n".join(
-        f"  • Tenant {tid}: {cnt} Eintrag/Einträge"
-        for tid, cnt in tenant_counts.most_common()
+        f"  • Tenant {tid}: {cnt} Eintrag/Einträge" for tid, cnt in tenant_counts.most_common()
     )
 
     # Ältester Eintrag
@@ -63,6 +63,7 @@ def check_reviewer_queue_backlog():
             chat_id = int(settings.voicescriptor_chat_id)
             try:
                 from api.telegram import _send_telegram_message
+
                 _send_telegram_message(chat_id, message)
             except ImportError:
                 logger.warning(

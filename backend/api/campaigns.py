@@ -1,15 +1,13 @@
-import uuid
-from typing import Optional
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
-from models.tenant import Tenant
 from models.campaign import Campaign
+from models.tenant import Tenant
 from services.nextcloud import nextcloud_client
 
 router = APIRouter()
@@ -17,11 +15,11 @@ router = APIRouter()
 
 class CampaignCreate(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     keywords: list[str] = []
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    nextcloud_folder: Optional[str] = None
+    start_date: date | None = None
+    end_date: date | None = None
+    nextcloud_folder: str | None = None
 
 
 @router.get("/campaigns")

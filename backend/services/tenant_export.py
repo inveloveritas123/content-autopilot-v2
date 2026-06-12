@@ -6,6 +6,7 @@ Sensible Felder werden REDACTED:
 - LLMProvider: api_key_encrypted
 - Allgemein: alle Felder die *password*, *token*, *secret* im Namen enthalten
 """
+
 import csv
 import io
 import json
@@ -17,7 +18,6 @@ from typing import Any
 
 from openpyxl import Workbook
 from openpyxl.styles import Font
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,9 +38,7 @@ from models.source_item import SourceItem
 from models.tenant import Tenant
 
 # Feldnamen-Pattern, die REDACTED werden
-_SENSITIVE_PATTERN = re.compile(
-    r"(api_key|password|token|secret)", re.IGNORECASE
-)
+_SENSITIVE_PATTERN = re.compile(r"(api_key|password|token|secret)", re.IGNORECASE)
 
 _EXPLICIT_REDACT = {
     # model-class → set of field names
@@ -51,9 +49,9 @@ _EXPLICIT_REDACT = {
 
 def _serialize_value(v: Any) -> Any:
     """Konvertiert nicht-JSON-serialisierbare Typen."""
-    if isinstance(v, (uuid.UUID,)):
+    if isinstance(v, uuid.UUID):
         return str(v)
-    if isinstance(v, (datetime,)):
+    if isinstance(v, datetime):
         return v.isoformat()
     if isinstance(v, date):
         return v.isoformat()
@@ -126,20 +124,82 @@ class TenantExportService:
         """Gemeinsame DB-Abfrage für alle Export-Formate."""
         tid = tenant.id
         sources = (await db.execute(select(Source).where(Source.tenant_id == tid))).scalars().all()
-        source_items = (await db.execute(select(SourceItem).where(SourceItem.tenant_id == tid))).scalars().all()
-        content_ideas = (await db.execute(select(ContentIdea).where(ContentIdea.tenant_id == tid))).scalars().all()
-        entrepreneur_answers = (await db.execute(select(EntrepreneurAnswer).where(EntrepreneurAnswer.tenant_id == tid))).scalars().all()
-        content_pieces = (await db.execute(select(ContentPiece).where(ContentPiece.tenant_id == tid))).scalars().all()
-        campaigns = (await db.execute(select(Campaign).where(Campaign.tenant_id == tid))).scalars().all()
-        carousel_templates = (await db.execute(select(CarouselTemplate).where(CarouselTemplate.tenant_id == tid))).scalars().all()
-        dialogue_questions = (await db.execute(select(DialogueQuestion).where(DialogueQuestion.tenant_id == tid))).scalars().all()
-        llm_providers = (await db.execute(select(LLMProvider).where(LLMProvider.tenant_id == tid))).scalars().all()
-        llm_call_logs = (await db.execute(select(LLMCallLog).where(LLMCallLog.tenant_id == tid))).scalars().all()
-        scheduled_posts = (await db.execute(select(ScheduledPost).where(ScheduledPost.tenant_id == tid))).scalars().all()
-        quality_metrics = (await db.execute(select(QualityMetric).where(QualityMetric.tenant_id == tid))).scalars().all()
-        content_performances = (await db.execute(select(ContentPerformance).where(ContentPerformance.tenant_id == tid))).scalars().all()
-        idea_selection_logs = (await db.execute(select(IdeaSelectionLog).where(IdeaSelectionLog.tenant_id == tid))).scalars().all()
-        content_dna_profiles = (await db.execute(select(ContentDNAProfile).where(ContentDNAProfile.tenant_id == tid))).scalars().all()
+        source_items = (
+            (await db.execute(select(SourceItem).where(SourceItem.tenant_id == tid)))
+            .scalars()
+            .all()
+        )
+        content_ideas = (
+            (await db.execute(select(ContentIdea).where(ContentIdea.tenant_id == tid)))
+            .scalars()
+            .all()
+        )
+        entrepreneur_answers = (
+            (
+                await db.execute(
+                    select(EntrepreneurAnswer).where(EntrepreneurAnswer.tenant_id == tid)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        content_pieces = (
+            (await db.execute(select(ContentPiece).where(ContentPiece.tenant_id == tid)))
+            .scalars()
+            .all()
+        )
+        campaigns = (
+            (await db.execute(select(Campaign).where(Campaign.tenant_id == tid))).scalars().all()
+        )
+        carousel_templates = (
+            (await db.execute(select(CarouselTemplate).where(CarouselTemplate.tenant_id == tid)))
+            .scalars()
+            .all()
+        )
+        dialogue_questions = (
+            (await db.execute(select(DialogueQuestion).where(DialogueQuestion.tenant_id == tid)))
+            .scalars()
+            .all()
+        )
+        llm_providers = (
+            (await db.execute(select(LLMProvider).where(LLMProvider.tenant_id == tid)))
+            .scalars()
+            .all()
+        )
+        llm_call_logs = (
+            (await db.execute(select(LLMCallLog).where(LLMCallLog.tenant_id == tid)))
+            .scalars()
+            .all()
+        )
+        scheduled_posts = (
+            (await db.execute(select(ScheduledPost).where(ScheduledPost.tenant_id == tid)))
+            .scalars()
+            .all()
+        )
+        quality_metrics = (
+            (await db.execute(select(QualityMetric).where(QualityMetric.tenant_id == tid)))
+            .scalars()
+            .all()
+        )
+        content_performances = (
+            (
+                await db.execute(
+                    select(ContentPerformance).where(ContentPerformance.tenant_id == tid)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        idea_selection_logs = (
+            (await db.execute(select(IdeaSelectionLog).where(IdeaSelectionLog.tenant_id == tid)))
+            .scalars()
+            .all()
+        )
+        content_dna_profiles = (
+            (await db.execute(select(ContentDNAProfile).where(ContentDNAProfile.tenant_id == tid)))
+            .scalars()
+            .all()
+        )
         return {
             "sources": sources,
             "source_items": source_items,
@@ -179,23 +239,49 @@ class TenantExportService:
             zf.writestr("sources.json", _rows_to_json(data["sources"], "Source"))
             zf.writestr("source_items.json", _rows_to_json(data["source_items"], "SourceItem"))
             zf.writestr("content_ideas.json", _rows_to_json(data["content_ideas"], "ContentIdea"))
-            zf.writestr("entrepreneur_answers.json", _rows_to_json(data["entrepreneur_answers"], "EntrepreneurAnswer"))
-            zf.writestr("content_pieces.json", _rows_to_json(data["content_pieces"], "ContentPiece"))
+            zf.writestr(
+                "entrepreneur_answers.json",
+                _rows_to_json(data["entrepreneur_answers"], "EntrepreneurAnswer"),
+            )
+            zf.writestr(
+                "content_pieces.json", _rows_to_json(data["content_pieces"], "ContentPiece")
+            )
             zf.writestr("campaigns.json", _rows_to_json(data["campaigns"], "Campaign"))
-            zf.writestr("carousel_templates.json", _rows_to_json(data["carousel_templates"], "CarouselTemplate"))
-            zf.writestr("dialogue_questions.json", _rows_to_json(data["dialogue_questions"], "DialogueQuestion"))
+            zf.writestr(
+                "carousel_templates.json",
+                _rows_to_json(data["carousel_templates"], "CarouselTemplate"),
+            )
+            zf.writestr(
+                "dialogue_questions.json",
+                _rows_to_json(data["dialogue_questions"], "DialogueQuestion"),
+            )
             zf.writestr("llm_providers.json", _rows_to_json(data["llm_providers"], "LLMProvider"))
             zf.writestr("llm_call_logs.json", _rows_to_json(data["llm_call_logs"], "LLMCallLog"))
-            zf.writestr("scheduled_posts.json", _rows_to_json(data["scheduled_posts"], "ScheduledPost"))
-            zf.writestr("quality_metrics.json", _rows_to_json(data["quality_metrics"], "QualityMetric"))
-            zf.writestr("content_performances.json", _rows_to_json(data["content_performances"], "ContentPerformance"))
-            zf.writestr("idea_selection_logs.json", _rows_to_json(data["idea_selection_logs"], "IdeaSelectionLog"))
-            zf.writestr("content_dna_profiles.json", _rows_to_json(data["content_dna_profiles"], "ContentDNAProfile"))
+            zf.writestr(
+                "scheduled_posts.json", _rows_to_json(data["scheduled_posts"], "ScheduledPost")
+            )
+            zf.writestr(
+                "quality_metrics.json", _rows_to_json(data["quality_metrics"], "QualityMetric")
+            )
+            zf.writestr(
+                "content_performances.json",
+                _rows_to_json(data["content_performances"], "ContentPerformance"),
+            )
+            zf.writestr(
+                "idea_selection_logs.json",
+                _rows_to_json(data["idea_selection_logs"], "IdeaSelectionLog"),
+            )
+            zf.writestr(
+                "content_dna_profiles.json",
+                _rows_to_json(data["content_dna_profiles"], "ContentDNAProfile"),
+            )
 
         buf.seek(0)
         return buf.read()
 
-    async def build_export_excel(self, tenant: Tenant, db: AsyncSession, data: dict | None = None) -> bytes:
+    async def build_export_excel(
+        self, tenant: Tenant, db: AsyncSession, data: dict | None = None
+    ) -> bytes:
         """Erstellt eine .xlsx-Datei mit je einem Sheet pro Tabelle."""
         if data is None:
             data = await self._get_all_data(tenant, db)
@@ -214,13 +300,11 @@ class TenantExportService:
                 ws.append(row)
             # Spaltenbreiten automatisch setzen (max 60)
             for col_cells in ws.columns:
-                max_len = max(
-                    (len(str(c.value)) if c.value is not None else 0) for c in col_cells
-                )
+                max_len = max((len(str(c.value)) if c.value is not None else 0) for c in col_cells)
                 ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 2, 62)
 
         def _dt(val):
-            if isinstance(val, (datetime, date)):
+            if isinstance(val, datetime | date):
                 return val.isoformat()
             return val
 
@@ -244,10 +328,7 @@ class TenantExportService:
         _add_sheet(
             "sources",
             ["id", "url", "source_type", "is_active", "created_at"],
-            [
-                [str(r.id), r.url, r.type, r.is_active, _dt(r.created_at)]
-                for r in data["sources"]
-            ],
+            [[str(r.id), r.url, r.type, r.is_active, _dt(r.created_at)] for r in data["sources"]],
         )
 
         # source_items
@@ -300,7 +381,15 @@ class TenantExportService:
         # llm_calls (llm_call_logs)
         _add_sheet(
             "llm_calls",
-            ["id", "stage", "model_name", "input_tokens", "output_tokens", "cost_usd", "created_at"],
+            [
+                "id",
+                "stage",
+                "model_name",
+                "input_tokens",
+                "output_tokens",
+                "cost_usd",
+                "created_at",
+            ],
             [
                 [
                     str(r.id),
@@ -320,13 +409,15 @@ class TenantExportService:
         out.seek(0)
         return out.read()
 
-    async def build_export_csv_zip(self, tenant: Tenant, db: AsyncSession, data: dict | None = None) -> bytes:
+    async def build_export_csv_zip(
+        self, tenant: Tenant, db: AsyncSession, data: dict | None = None
+    ) -> bytes:
         """Erstellt ein ZIP mit einer UTF-8-BOM CSV pro Tabelle."""
         if data is None:
             data = await self._get_all_data(tenant, db)
 
         def _dt(val):
-            if isinstance(val, (datetime, date)):
+            if isinstance(val, datetime | date):
                 return val.isoformat()
             return val if val is not None else ""
 
@@ -398,7 +489,15 @@ class TenantExportService:
                 ],
             ),
             "csv/llm_calls.csv": (
-                ["id", "stage", "model_name", "input_tokens", "output_tokens", "cost_usd", "created_at"],
+                [
+                    "id",
+                    "stage",
+                    "model_name",
+                    "input_tokens",
+                    "output_tokens",
+                    "cost_usd",
+                    "created_at",
+                ],
                 [
                     [
                         str(r.id),
@@ -448,19 +547,49 @@ class TenantExportService:
             zf.writestr("json/tenant.json", _rows_to_json([tenant], "Tenant"))
             zf.writestr("json/sources.json", _rows_to_json(data["sources"], "Source"))
             zf.writestr("json/source_items.json", _rows_to_json(data["source_items"], "SourceItem"))
-            zf.writestr("json/content_ideas.json", _rows_to_json(data["content_ideas"], "ContentIdea"))
-            zf.writestr("json/entrepreneur_answers.json", _rows_to_json(data["entrepreneur_answers"], "EntrepreneurAnswer"))
-            zf.writestr("json/content_pieces.json", _rows_to_json(data["content_pieces"], "ContentPiece"))
+            zf.writestr(
+                "json/content_ideas.json", _rows_to_json(data["content_ideas"], "ContentIdea")
+            )
+            zf.writestr(
+                "json/entrepreneur_answers.json",
+                _rows_to_json(data["entrepreneur_answers"], "EntrepreneurAnswer"),
+            )
+            zf.writestr(
+                "json/content_pieces.json", _rows_to_json(data["content_pieces"], "ContentPiece")
+            )
             zf.writestr("json/campaigns.json", _rows_to_json(data["campaigns"], "Campaign"))
-            zf.writestr("json/carousel_templates.json", _rows_to_json(data["carousel_templates"], "CarouselTemplate"))
-            zf.writestr("json/dialogue_questions.json", _rows_to_json(data["dialogue_questions"], "DialogueQuestion"))
-            zf.writestr("json/llm_providers.json", _rows_to_json(data["llm_providers"], "LLMProvider"))
-            zf.writestr("json/llm_call_logs.json", _rows_to_json(data["llm_call_logs"], "LLMCallLog"))
-            zf.writestr("json/scheduled_posts.json", _rows_to_json(data["scheduled_posts"], "ScheduledPost"))
-            zf.writestr("json/quality_metrics.json", _rows_to_json(data["quality_metrics"], "QualityMetric"))
-            zf.writestr("json/content_performances.json", _rows_to_json(data["content_performances"], "ContentPerformance"))
-            zf.writestr("json/idea_selection_logs.json", _rows_to_json(data["idea_selection_logs"], "IdeaSelectionLog"))
-            zf.writestr("json/content_dna_profiles.json", _rows_to_json(data["content_dna_profiles"], "ContentDNAProfile"))
+            zf.writestr(
+                "json/carousel_templates.json",
+                _rows_to_json(data["carousel_templates"], "CarouselTemplate"),
+            )
+            zf.writestr(
+                "json/dialogue_questions.json",
+                _rows_to_json(data["dialogue_questions"], "DialogueQuestion"),
+            )
+            zf.writestr(
+                "json/llm_providers.json", _rows_to_json(data["llm_providers"], "LLMProvider")
+            )
+            zf.writestr(
+                "json/llm_call_logs.json", _rows_to_json(data["llm_call_logs"], "LLMCallLog")
+            )
+            zf.writestr(
+                "json/scheduled_posts.json", _rows_to_json(data["scheduled_posts"], "ScheduledPost")
+            )
+            zf.writestr(
+                "json/quality_metrics.json", _rows_to_json(data["quality_metrics"], "QualityMetric")
+            )
+            zf.writestr(
+                "json/content_performances.json",
+                _rows_to_json(data["content_performances"], "ContentPerformance"),
+            )
+            zf.writestr(
+                "json/idea_selection_logs.json",
+                _rows_to_json(data["idea_selection_logs"], "IdeaSelectionLog"),
+            )
+            zf.writestr(
+                "json/content_dna_profiles.json",
+                _rows_to_json(data["content_dna_profiles"], "ContentDNAProfile"),
+            )
             # Excel
             zf.writestr("excel/export.xlsx", excel_bytes)
             # CSV (CSV-ZIP entpacken und Einträge übertragen)

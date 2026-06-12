@@ -13,14 +13,16 @@ Testet:
   4. set_llm_tenant() + ContextVar-Propagation: tenant_id landet in track_cost()
   5. Bei DB-Fehler im Cap-Check: fail-open (kein Block)
 """
+
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_sync_session_factory(cost_value: float):
     """Returns a mock sync_session_factory whose session reports `cost_value` USD."""
@@ -38,6 +40,7 @@ def _make_sync_session_factory(cost_value: float):
 def _make_litellm_service(base_url: str = "https://router.requesty.ai/v1"):
     """Create an LLMService instance configured to use _litellm path."""
     from unittest.mock import patch as _patch
+
     # We need to create the service with a litellm_base_url
     # Patch settings before import
     with _patch("config.settings") as mock_settings:
@@ -46,6 +49,7 @@ def _make_litellm_service(base_url: str = "https://router.requesty.ai/v1"):
         mock_settings.gemini_api_key = ""
         mock_settings.anthropic_api_key = ""
         from services.llm import LLMService
+
         svc = LLMService.__new__(LLMService)
         svc._litellm_base_url = base_url
         svc._litellm_api_key = "test-key"
@@ -57,11 +61,12 @@ def _make_litellm_service(base_url: str = "https://router.requesty.ai/v1"):
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestGlobalCapBlock:
     """Global daily cost cap triggers BudgetExceededError."""
 
     def test_global_cap_exceeded_raises(self):
-        from services.llm import LLMService, BudgetExceededError
+        from services.llm import BudgetExceededError
 
         svc = _make_litellm_service()
         # Cost in DB = 15 USD, cap = 10 USD → should block
@@ -71,15 +76,21 @@ class TestGlobalCapBlock:
             with patch("services.provider_resolver._GLOBAL_CAP_USD", 10.0):
                 with patch("services.provider_resolver._DAILY_CAP_USD", 5.0):
                     with patch("models.base.sync_session_factory", mock_factory):
-                        with pytest.raises(BudgetExceededError, match="Global daily cost cap exceeded"):
-                            asyncio.run(svc._litellm("test prompt", None, "gemini-flash", purpose="analysis"))
+                        with pytest.raises(
+                            BudgetExceededError, match="Global daily cost cap exceeded"
+                        ):
+                            asyncio.run(
+                                svc._litellm(
+                                    "test prompt", None, "gemini-flash", purpose="analysis"
+                                )
+                            )
 
 
 class TestTenantCapBlock:
     """Per-tenant daily cap triggers BudgetExceededError."""
 
     def test_tenant_cap_exceeded_raises(self):
-        from services.llm import LLMService, BudgetExceededError, set_llm_tenant
+        from services.llm import BudgetExceededError, set_llm_tenant
 
         svc = _make_litellm_service()
         # Must set tenant_id so the per-tenant cap branch (_tenant_id_ctx.get()) is entered.
@@ -109,15 +120,16 @@ class TestTenantCapBlock:
             with patch("services.provider_resolver._DAILY_CAP_USD", 5.0):
                 with patch("models.base.sync_session_factory", mock_factory):
                     with pytest.raises(BudgetExceededError, match="Tenant daily cost cap exceeded"):
-                        asyncio.run(svc._litellm("test prompt", None, "gemini-flash", purpose="analysis"))
+                        asyncio.run(
+                            svc._litellm("test prompt", None, "gemini-flash", purpose="analysis")
+                        )
 
 
 class TestProviderStatus412:
     """HTTP 412 from provider → BudgetExceededError (no retry)."""
 
     def test_412_raises_budget_exceeded(self):
-        import httpx
-        from services.llm import LLMService, BudgetExceededError
+        from services.llm import BudgetExceededError
 
         svc = _make_litellm_service()
 
@@ -146,19 +158,23 @@ class TestProviderStatus412:
         with patch("models.base.sync_session_factory", mock_factory):
             with patch("services.provider_resolver._GLOBAL_CAP_USD", 10.0):
                 with patch("services.provider_resolver._DAILY_CAP_USD", 5.0):
-                    with patch("services.provider_resolver.get_active_provider", return_value=mock_provider):
+                    with patch(
+                        "services.provider_resolver.get_active_provider", return_value=mock_provider
+                    ):
                         with patch("services.provider_resolver.track_cost"):
                             with patch("httpx.AsyncClient", return_value=mock_http_client):
                                 with pytest.raises(BudgetExceededError, match="412"):
-                                    asyncio.run(svc._litellm("test prompt", None, "gemini-flash", purpose="analysis"))
+                                    asyncio.run(
+                                        svc._litellm(
+                                            "test prompt", None, "gemini-flash", purpose="analysis"
+                                        )
+                                    )
 
 
 class TestCapCheckFailOpen:
     """If the DB is down during cap check: fail-open (call proceeds)."""
 
     def test_db_failure_does_not_block(self):
-        from services.llm import LLMService, BudgetExceededError
-
         svc = _make_litellm_service()
 
         # DB factory raises exception
@@ -168,10 +184,12 @@ class TestCapCheckFailOpen:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.raise_for_status = MagicMock()
-        mock_resp.json = MagicMock(return_value={
-            "choices": [{"message": {"content": "OK"}}],
-            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
-        })
+        mock_resp.json = MagicMock(
+            return_value={
+                "choices": [{"message": {"content": "OK"}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            }
+        )
 
         mock_provider = {
             "base_url": "https://router.requesty.ai/v1",
@@ -188,10 +206,14 @@ class TestCapCheckFailOpen:
         with patch("models.base.sync_session_factory", mock_factory):
             with patch("services.provider_resolver._GLOBAL_CAP_USD", 10.0):
                 with patch("services.provider_resolver._DAILY_CAP_USD", 5.0):
-                    with patch("services.provider_resolver.get_active_provider", return_value=mock_provider):
+                    with patch(
+                        "services.provider_resolver.get_active_provider", return_value=mock_provider
+                    ):
                         with patch("services.provider_resolver.track_cost"):
                             with patch("httpx.AsyncClient", return_value=mock_http_client):
-                                result = asyncio.run(svc._litellm("test prompt", None, "gemini-flash"))
+                                result = asyncio.run(
+                                    svc._litellm("test prompt", None, "gemini-flash")
+                                )
                                 assert result == "OK"
 
 
@@ -199,7 +221,7 @@ class TestContextVarPropagation:
     """set_llm_tenant() + ContextVar: tenant_id is passed to track_cost()."""
 
     def test_tenant_id_reaches_track_cost(self):
-        from services.llm import set_llm_tenant, LLMService
+        from services.llm import set_llm_tenant
 
         svc = _make_litellm_service()
         set_llm_tenant("tenant-abc-123")
@@ -209,10 +231,12 @@ class TestContextVarPropagation:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.raise_for_status = MagicMock()
-        mock_resp.json = MagicMock(return_value={
-            "choices": [{"message": {"content": "hello"}}],
-            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
-        })
+        mock_resp.json = MagicMock(
+            return_value={
+                "choices": [{"message": {"content": "hello"}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            }
+        )
 
         mock_provider = {
             "base_url": "https://router.requesty.ai/v1",
@@ -223,8 +247,15 @@ class TestContextVarPropagation:
 
         captured_tenant_ids = []
 
-        def _mock_track_cost(provider_id, usage, model, task_type, tenant_id=None,
-                             cache_read_tokens=0, cache_write_tokens=0):
+        def _mock_track_cost(
+            provider_id,
+            usage,
+            model,
+            task_type,
+            tenant_id=None,
+            cache_read_tokens=0,
+            cache_write_tokens=0,
+        ):
             captured_tenant_ids.append(tenant_id)
 
         mock_http_client = AsyncMock()
@@ -235,19 +266,28 @@ class TestContextVarPropagation:
         with patch("models.base.sync_session_factory", mock_factory):
             with patch("services.provider_resolver._GLOBAL_CAP_USD", 10.0):
                 with patch("services.provider_resolver._DAILY_CAP_USD", 5.0):
-                    with patch("services.provider_resolver.get_active_provider", return_value=mock_provider):
-                        with patch("services.provider_resolver.track_cost", side_effect=_mock_track_cost):
+                    with patch(
+                        "services.provider_resolver.get_active_provider", return_value=mock_provider
+                    ):
+                        with patch(
+                            "services.provider_resolver.track_cost", side_effect=_mock_track_cost
+                        ):
                             with patch("httpx.AsyncClient", return_value=mock_http_client):
-                                asyncio.run(svc._litellm("test prompt", None, "gemini-flash", purpose="analysis"))
+                                asyncio.run(
+                                    svc._litellm(
+                                        "test prompt", None, "gemini-flash", purpose="analysis"
+                                    )
+                                )
 
-        assert "tenant-abc-123" in captured_tenant_ids, (
-            f"tenant_id 'tenant-abc-123' was not passed to track_cost(). Got: {captured_tenant_ids}"
-        )
+        assert (
+            "tenant-abc-123" in captured_tenant_ids
+        ), f"tenant_id 'tenant-abc-123' was not passed to track_cost(). Got: {captured_tenant_ids}"
 
 
 # ---------------------------------------------------------------------------
 # Tests for _maybe_send_global_cap_alert (Issue #123 — 50% Vorwarnung)
 # ---------------------------------------------------------------------------
+
 
 class TestGlobalCapAlert:
     """_maybe_send_global_cap_alert: Redis NX dedup + Telegram call + fail-open."""
@@ -261,8 +301,9 @@ class TestGlobalCapAlert:
 
     def test_alert_skipped_when_no_admin_chat_id(self):
         """No telegram_admin_chat_id configured → skip silently, no Redis call."""
-        from services.llm import _maybe_send_global_cap_alert
         from datetime import date
+
+        from services.llm import _maybe_send_global_cap_alert
 
         mock_redis = self._make_redis(True)
         with patch("services.llm.settings") as mock_settings:
@@ -275,8 +316,9 @@ class TestGlobalCapAlert:
 
     def test_alert_sent_on_first_trigger(self):
         """Redis NX succeeds → Telegram message sent with spend/cap info."""
-        from services.llm import _maybe_send_global_cap_alert
         from datetime import date
+
+        from services.llm import _maybe_send_global_cap_alert
 
         mock_redis = self._make_redis(True)  # NX succeeds = first alert today
 
@@ -300,8 +342,9 @@ class TestGlobalCapAlert:
 
     def test_alert_skipped_when_already_sent_today(self):
         """Redis NX returns False (key already exists) → no Telegram call."""
-        from services.llm import _maybe_send_global_cap_alert
         from datetime import date
+
+        from services.llm import _maybe_send_global_cap_alert
 
         mock_redis = self._make_redis(False)  # NX failed = already sent today
 
@@ -317,8 +360,9 @@ class TestGlobalCapAlert:
 
     def test_alert_fail_open_on_redis_error(self):
         """Redis connection fails → exception swallowed, no crash, no Telegram."""
-        from services.llm import _maybe_send_global_cap_alert
         from datetime import date
+
+        from services.llm import _maybe_send_global_cap_alert
 
         with patch("services.llm.settings") as mock_settings:
             mock_settings.telegram_admin_chat_id = "987654321"
@@ -331,16 +375,21 @@ class TestGlobalCapAlert:
 
     def test_alert_fail_open_on_telegram_error(self):
         """Telegram send fails → exception swallowed, no crash."""
-        from services.llm import _maybe_send_global_cap_alert
         from datetime import date
+
+        from services.llm import _maybe_send_global_cap_alert
 
         mock_redis = self._make_redis(True)
 
         with patch("services.llm.settings") as mock_settings:
             mock_settings.telegram_admin_chat_id = "987654321"
             mock_settings.redis_url = "redis://localhost:6379/0"
-            with patch("redis.from_url", return_value=mock_redis):
-                with patch("api.telegram._send_telegram_message",
-                           side_effect=Exception("Telegram API down")):
-                    # Must not raise
-                    _maybe_send_global_cap_alert(11.0, 20.0, date.today())
+            with (
+                patch("redis.from_url", return_value=mock_redis),
+                patch(
+                    "api.telegram._send_telegram_message",
+                    side_effect=Exception("Telegram API down"),
+                ),
+            ):
+                # Must not raise
+                _maybe_send_global_cap_alert(11.0, 20.0, date.today())

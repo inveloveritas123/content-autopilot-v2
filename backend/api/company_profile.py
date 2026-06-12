@@ -6,11 +6,11 @@ GET    /api/me/company-profile/provenance  → Audit-Trail (alle Quellen pro Fel
 GET    /api/me/company-profile/pending     → Vorschläge < 0.85 zur Review
 POST   /api/me/company-profile/review/{id} → akzeptieren/ablehnen
 """
+
 from __future__ import annotations
 
 import datetime
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -18,40 +18,51 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
-from models.tenant import Tenant
 from models.company_profile import (
     AUTO_APPLY_THRESHOLD,
+    SOURCE_TRUST,
     CompanyProfile,
     ProfileFieldProvenance,
-    SOURCE_TRUST,
 )
+from models.tenant import Tenant
 from services.profile_md_parser import parse_onboarding_md
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 EDITABLE_FIELDS = (
-    "company_name", "industry", "contact_person_name", "contact_role",
-    "contact_email", "website", "region", "founded_year", "headcount",
-    "company_size", "legal_form", "usp", "target_audience", "values_short",
+    "company_name",
+    "industry",
+    "contact_person_name",
+    "contact_role",
+    "contact_email",
+    "website",
+    "region",
+    "founded_year",
+    "headcount",
+    "company_size",
+    "legal_form",
+    "usp",
+    "target_audience",
+    "values_short",
 )
 
 
 class CompanyProfileUpdate(BaseModel):
-    company_name: Optional[str] = Field(None, max_length=255)
-    industry: Optional[str] = Field(None, max_length=100)
-    contact_person_name: Optional[str] = Field(None, max_length=255)
-    contact_role: Optional[str] = Field(None, max_length=100)
-    contact_email: Optional[str] = Field(None, max_length=255)
-    website: Optional[str] = Field(None, max_length=500)
-    region: Optional[str] = Field(None, max_length=100)
-    founded_year: Optional[int] = Field(None, ge=1800, le=2100)
-    headcount: Optional[int] = Field(None, ge=0, le=1000000)
-    company_size: Optional[str] = Field(None, max_length=20)
-    legal_form: Optional[str] = Field(None, max_length=50)
-    usp: Optional[str] = None
-    target_audience: Optional[str] = None
-    values_short: Optional[str] = None
+    company_name: str | None = Field(None, max_length=255)
+    industry: str | None = Field(None, max_length=100)
+    contact_person_name: str | None = Field(None, max_length=255)
+    contact_role: str | None = Field(None, max_length=100)
+    contact_email: str | None = Field(None, max_length=255)
+    website: str | None = Field(None, max_length=500)
+    region: str | None = Field(None, max_length=100)
+    founded_year: int | None = Field(None, ge=1800, le=2100)
+    headcount: int | None = Field(None, ge=0, le=1000000)
+    company_size: str | None = Field(None, max_length=20)
+    legal_form: str | None = Field(None, max_length=50)
+    usp: str | None = None
+    target_audience: str | None = None
+    values_short: str | None = None
 
 
 async def _get_or_create_profile(db: AsyncSession, tenant_id) -> CompanyProfile:
@@ -107,18 +118,20 @@ async def update_company_profile(
         if field not in EDITABLE_FIELDS:
             continue
         setattr(profile, field, value)
-        db.add(ProfileFieldProvenance(
-            tenant_id=tenant.id,
-            field_name=field,
-            source="manual_input",
-            value=str(value) if value is not None else None,
-            confidence=SOURCE_TRUST["manual_input"],
-            applied=True,
-            applied_at=now,
-            reviewed_by="user",
-        ))
+        db.add(
+            ProfileFieldProvenance(
+                tenant_id=tenant.id,
+                field_name=field,
+                source="manual_input",
+                value=str(value) if value is not None else None,
+                confidence=SOURCE_TRUST["manual_input"],
+                applied=True,
+                applied_at=now,
+                reviewed_by="user",
+            )
+        )
 
-    if "industry" in changes and changes["industry"]:
+    if changes.get("industry"):
         await db.execute(
             text("UPDATE tenants SET industry = :i WHERE id = :tid"),
             {"i": changes["industry"], "tid": tenant.id},
@@ -135,29 +148,36 @@ async def get_provenance(
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    rows = (await db.execute(
-        text("""
+    rows = (
+        await db.execute(
+            text("""
             SELECT field_name, source, value, confidence, applied,
                    created_at, applied_at, reviewed_by
             FROM profile_field_provenance
             WHERE tenant_id = :tid
             ORDER BY field_name, created_at DESC
         """),
-        {"tid": tenant.id},
-    )).fetchall()
+            {"tid": tenant.id},
+        )
+    ).fetchall()
     grouped: dict = {}
     for r in rows:
-        grouped.setdefault(r.field_name, []).append({
-            "source": r.source,
-            "value": r.value,
-            "confidence": float(r.confidence),
-            "applied": r.applied,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-            "applied_at": r.applied_at.isoformat() if r.applied_at else None,
-            "reviewed_by": r.reviewed_by,
-        })
-    return {"fields": grouped, "trust_hierarchy": SOURCE_TRUST,
-            "auto_apply_threshold": AUTO_APPLY_THRESHOLD}
+        grouped.setdefault(r.field_name, []).append(
+            {
+                "source": r.source,
+                "value": r.value,
+                "confidence": float(r.confidence),
+                "applied": r.applied,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "applied_at": r.applied_at.isoformat() if r.applied_at else None,
+                "reviewed_by": r.reviewed_by,
+            }
+        )
+    return {
+        "fields": grouped,
+        "trust_hierarchy": SOURCE_TRUST,
+        "auto_apply_threshold": AUTO_APPLY_THRESHOLD,
+    }
 
 
 @router.get("/me/company-profile/pending")
@@ -165,24 +185,31 @@ async def get_pending_suggestions(
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    rows = (await db.execute(
-        text("""
+    rows = (
+        await db.execute(
+            text("""
             SELECT id, field_name, source, value, confidence, created_at
             FROM profile_field_provenance
             WHERE tenant_id = :tid AND applied = false
             ORDER BY confidence DESC, created_at DESC
             LIMIT 100
         """),
-        {"tid": tenant.id},
-    )).fetchall()
-    return {"pending": [{
-        "id": str(r.id),
-        "field_name": r.field_name,
-        "source": r.source,
-        "value": r.value,
-        "confidence": float(r.confidence),
-        "created_at": r.created_at.isoformat() if r.created_at else None,
-    } for r in rows]}
+            {"tid": tenant.id},
+        )
+    ).fetchall()
+    return {
+        "pending": [
+            {
+                "id": str(r.id),
+                "field_name": r.field_name,
+                "source": r.source,
+                "value": r.value,
+                "confidence": float(r.confidence),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+    }
 
 
 class MdImportRequest(BaseModel):
@@ -198,8 +225,12 @@ async def import_md(
 ):
     suggestions = parse_onboarding_md(payload.content)
     if not suggestions:
-        return {"parsed": 0, "applied": 0, "pending": 0,
-                "message": "Keine erkannten Profil-Sektionen — siehe Beispiel-MD."}
+        return {
+            "parsed": 0,
+            "applied": 0,
+            "pending": 0,
+            "message": "Keine erkannten Profil-Sektionen — siehe Beispiel-MD.",
+        }
 
     profile = await _get_or_create_profile(db, tenant.id)
     md_conf = SOURCE_TRUST["md_upload"]
@@ -238,9 +269,16 @@ async def import_md(
             pending_n += 1
     profile.updated_at = now
     await db.commit()
-    return {"parsed": len(suggestions), "applied": applied, "pending": pending_n,
-            "fields_applied": [s["field_name"] for s in suggestions
-                               if payload.auto_apply and s["confidence"] >= AUTO_APPLY_THRESHOLD]}
+    return {
+        "parsed": len(suggestions),
+        "applied": applied,
+        "pending": pending_n,
+        "fields_applied": [
+            s["field_name"]
+            for s in suggestions
+            if payload.auto_apply and s["confidence"] >= AUTO_APPLY_THRESHOLD
+        ],
+    }
 
 
 class ReviewDecision(BaseModel):
@@ -257,13 +295,15 @@ async def review_suggestion(
     if decision.action not in ("accept", "reject"):
         raise HTTPException(status_code=400, detail="action must be accept or reject")
 
-    row = (await db.execute(
-        text("""
+    row = (
+        await db.execute(
+            text("""
             SELECT id, field_name, value FROM profile_field_provenance
             WHERE id = :id AND tenant_id = :tid AND applied = false
         """),
-        {"id": prov_id, "tid": tenant.id},
-    )).fetchone()
+            {"id": prov_id, "tid": tenant.id},
+        )
+    ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="suggestion not found or already applied")
 
@@ -277,16 +317,22 @@ async def review_suggestion(
                 detail=f"field_name '{row.field_name}' ist nicht in EDITABLE_FIELDS",
             )
         await db.execute(
-            text(f"UPDATE company_profile SET {row.field_name} = :v, updated_at = NOW() WHERE tenant_id = :tid"),
+            text(
+                f"UPDATE company_profile SET {row.field_name} = :v, updated_at = NOW() WHERE tenant_id = :tid"
+            ),
             {"v": row.value, "tid": tenant.id},
         )
         await db.execute(
-            text("UPDATE profile_field_provenance SET applied = true, applied_at = :now, reviewed_by = 'user' WHERE id = :id"),
+            text(
+                "UPDATE profile_field_provenance SET applied = true, applied_at = :now, reviewed_by = 'user' WHERE id = :id"
+            ),
             {"now": now, "id": prov_id},
         )
     else:
         await db.execute(
-            text("UPDATE profile_field_provenance SET reviewed_by = 'user_rejected', applied_at = :now WHERE id = :id"),
+            text(
+                "UPDATE profile_field_provenance SET reviewed_by = 'user_rejected', applied_at = :now WHERE id = :id"
+            ),
             {"now": now, "id": prov_id},
         )
     await db.commit()

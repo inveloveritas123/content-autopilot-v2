@@ -16,11 +16,11 @@ hot-reload via mtime). Pfad:
 
 Dep-frei (nur json/os/pathlib) → via importlib testbar ohne services/__init__.
 """
+
 import json
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -53,20 +53,16 @@ def load_policy() -> dict:
         if not path.exists():
             return _empty()
         mtime = path.stat().st_mtime
-        if (
-            _CACHE["data"] is not None
-            and _CACHE["mtime"] == mtime
-            and _CACHE["path"] == str(path)
-        ):
+        if _CACHE["data"] is not None and _CACHE["mtime"] == mtime and _CACHE["path"] == str(path):
             return _CACHE["data"]
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
         if not isinstance(data, dict):
             data = _empty()
         ov = data.get("overrides")
-        data["overrides"] = {
-            str(k).upper(): v for k, v in ov.items() if v
-        } if isinstance(ov, dict) else {}
+        data["overrides"] = (
+            {str(k).upper(): v for k, v in ov.items() if v} if isinstance(ov, dict) else {}
+        )
         _CACHE.update(mtime=mtime, data=data, path=str(path))
         return data
     except Exception as exc:  # pragma: no cover - defensiver Fallback
@@ -74,12 +70,12 @@ def load_policy() -> dict:
         return _empty()
 
 
-def get_override(prompt_key: str) -> Optional[str]:
+def get_override(prompt_key: str) -> str | None:
     """Liefert die Test-Override-Modell-ID für eine Phase oder None."""
     return load_policy().get("overrides", {}).get(prompt_key.upper()) or None
 
 
-def set_override(prompt_key: str, model_id: Optional[str]) -> dict:
+def set_override(prompt_key: str, model_id: str | None) -> dict:
     """Setzt/entfernt den Test-Override für eine Phase. Atomarer Write.
 
     Args:
