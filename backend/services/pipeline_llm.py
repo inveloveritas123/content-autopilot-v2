@@ -62,6 +62,7 @@ MODEL_PER_PROMPT: dict[str, str] = {
     "P12": "S6",
     "P12B": "S6",
     "P12C": "S6",
+    "LAYER1": "S2",  # Strukturierte Intent/Feature-Extraktion — schnelle JSON-Klassifikation, kein Frontier nötig (Issue #15)
 }
 
 # Per-Prompt max_tokens — übernommen aus den bisherigen Task-Konstanten.
@@ -73,6 +74,7 @@ PROMPT_MAX_TOKENS: dict[str, int] = {
     "P12": 2000,
     "P12B": 2000,
     "P12C": 1024,
+    "LAYER1": 512,  # Kompaktes JSON (5 Felder) — gleiche Größenordnung wie P08
 }
 
 

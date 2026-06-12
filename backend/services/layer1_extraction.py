@@ -3,16 +3,17 @@ Schicht-1 Extraktions-Service — Intent + Feature-Extraktion aus Telegram-Nachr
 Sicherheitskritisch: Injection-Schutz via Pattern-Check vor LLM-Call.
 """
 
+from __future__ import annotations  # Python 3.9-Kompatibilität: str | None Syntax
+
 import hashlib
 import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import UTC
-
-import anthropic
+from datetime import timezone
 
 from models.base import sync_session_factory
+from services.pipeline_llm import call_pipeline_llm
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,6 @@ INJECTION_PATTERNS = [
     "new instruction",
 ]
 
-ANTHROPIC_MODEL_ID = "claude-sonnet-4-6-20251022"
 _MAX_INPUT_CHARS = 5000
 
 # Hardcoded fallback prompt fragments
@@ -175,7 +175,7 @@ def _load_prompt():
                 system_prompt=_extract_section(content, "System-Prompt"),
                 user_prompt_template=_extract_section(content, "User-Prompt"),
                 sha=sha,
-                loaded_at=datetime.now(UTC),
+                loaded_at=datetime.now(timezone.utc),
                 source_path=local_path,
             )
         except Exception as le:
@@ -194,7 +194,7 @@ def _load_prompt():
         system_prompt=_FALLBACK_SYSTEM,
         user_prompt_template=_FALLBACK_USER_TEMPLATE,
         sha="fallback",
-        loaded_at=datetime.now(UTC),
+        loaded_at=datetime.now(timezone.utc),
         source_path="hardcoded",
     )
 
@@ -280,23 +280,14 @@ def extract_intent_features(
         last_post_summary=last_post_summary or "kein vorheriger Post",
     )
 
-    # --- 6. Anthropic call ---
-    client = anthropic.Anthropic()
-    model_id = os.environ.get("BACKTEST_MODEL_OVERRIDE") or ANTHROPIC_MODEL_ID
-
-    response = client.messages.create(
-        model=model_id,
-        max_tokens=512,
-        system=[
-            {
-                "type": "text",
-                "text": prompt.system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[{"role": "user", "content": user_content}],
+    # --- 6. LLM call via Seam (kein direkter Anthropic SDK-Aufruf) ---
+    res = call_pipeline_llm(
+        prompt_key="LAYER1",
+        system_prompt=prompt.system_prompt,
+        user_content=user_content,
+        tenant_id=tenant_id,
     )
-    raw_output = response.content[0].text.strip()
+    raw_output = res.text.strip()
 
     # --- 7. Parse + validate (max 1 retry) ---
     data: dict = {}
@@ -312,19 +303,13 @@ def extract_intent_features(
                     user_content + f"\n\nFehler im ersten Versuch: {errors}. "
                     "Bitte antworte exakt gemäß dem JSON-Schema."
                 )
-                response2 = client.messages.create(
-                    model=model_id,
-                    max_tokens=512,
-                    system=[
-                        {
-                            "type": "text",
-                            "text": prompt.system_prompt,
-                            "cache_control": {"type": "ephemeral"},
-                        }
-                    ],
-                    messages=[{"role": "user", "content": retry_content}],
+                res2 = call_pipeline_llm(
+                    prompt_key="LAYER1",
+                    system_prompt=prompt.system_prompt,
+                    user_content=retry_content,
+                    tenant_id=tenant_id,
                 )
-                raw_output = response2.content[0].text.strip()
+                raw_output = res2.text.strip()
             else:
                 logger.error("[Layer1] Schema-Verletzung nach Retry: %s", errors)
                 return ExtractionResult(
