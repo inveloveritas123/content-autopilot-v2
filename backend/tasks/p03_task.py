@@ -22,29 +22,20 @@ Umgestellt: 2026-06-11 (P5-anthropic-provider.md)
 import hashlib
 import json
 import logging
-import os
 import re
 import time
 import uuid
 
-import jsonschema
 from sqlalchemy import text
 
 from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from services.prompt_loader import get_default_prompt_loader
 from services.pipeline_llm import call_pipeline_llm, resolve_tier, estimate_tier_cost, BudgetExceededError
+from services.schema_transformer import build_canonical_meta, finalize_canonical
+from tasks.canonical_wiring import fetch_tenant_meta, now_iso
 
 logger = logging.getLogger(__name__)
-
-# Schema laden — einmalig beim Modulimport
-_SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "..", "schemas", "p03_output_schema.json")
-
-def _load_schema() -> dict:
-    with open(os.path.normpath(_SCHEMA_PATH), "r", encoding="utf-8") as f:
-        return json.load(f)
-
-_P03_SCHEMA = _load_schema()
 
 
 # ---------------------------------------------------------------------------
@@ -74,11 +65,6 @@ def _parse_json_from_text(raw: str) -> dict:
                 except json.JSONDecodeError:
                     pass
     raise ValueError(f"Konnte kein JSON aus LLM-Output extrahieren. Anfang: {raw[:200]!r}")
-
-
-def _validate_schema(data: dict) -> None:
-    """Validiert das geparste JSON gegen das P03-Output-Schema."""
-    jsonschema.validate(instance=data, schema=_P03_SCHEMA)
 
 
 def _insert_voice_profile(
@@ -214,18 +200,32 @@ def run_p03(
 
     # ── Bypass-Pfad ────────────────────────────────────────────────────────────
     if bypass_with_existing_json and existing_json:
-        try:
-            _validate_schema(existing_json)
-        except jsonschema.ValidationError as exc:
-            logger.error("P03 bypass schema validation failed: %s", exc.message)
-            raise
+        # Kanonisch absichern statt hartem v2-ValidationError: _meta server-seitig,
+        # Schema-Verstoesse als _meta.luecken dokumentieren (kein Hard-Fail).
+        tenant_name, agentur_id = fetch_tenant_meta(tenant_id)
+        llm_meta = existing_json.get("_meta") if isinstance(existing_json.get("_meta"), dict) else None
+        canonical_meta = build_canonical_meta(
+            "p03",
+            tenant_id=tenant_id,
+            model="bypass",
+            generated_at=now_iso(),
+            tenant_name=tenant_name,
+            agentur_id=agentur_id,
+            llm_meta=llm_meta,
+        )
+        bypass_payload, schema_errors = finalize_canonical("p03", existing_json, meta=canonical_meta)
+        if schema_errors:
+            logger.warning(
+                "P03 bypass tenant=%s: %d kanonische Schema-Luecke(n) in _meta.luecken dokumentiert",
+                tenant_id, len(schema_errors),
+            )
 
         with sync_session_factory() as session:
             try:
                 _insert_voice_profile(
                     session=session,
                     tenant_id=tenant_id,
-                    payload=existing_json,
+                    payload=bypass_payload,
                     source="md_upload",
                     prompt_version_hash="bypass",
                     model_id="bypass",
@@ -337,11 +337,29 @@ def run_p03(
             input_tokens, output_tokens, res.cache_read_tokens, tenant_id,
         )
 
-        # 6. JSON-Parsing + Schema-Validierung
+        # 6. JSON-Parsing + kanonische Validierung (Soft-Fail mit _meta.luecken)
         parsed = _parse_json_from_text(raw_text)
-        _validate_schema(parsed)
 
-        # 7. DB-Insert in tenant_voice_profile
+        tenant_name, agentur_id = fetch_tenant_meta(tenant_id)
+        llm_meta = parsed.get("_meta") if isinstance(parsed.get("_meta"), dict) else None
+        canonical_meta = build_canonical_meta(
+            "p03",
+            tenant_id=tenant_id,
+            model=model_id,
+            generated_at=now_iso(),
+            tenant_name=tenant_name,
+            agentur_id=agentur_id,
+            token_usage={"input_tokens": input_tokens, "output_tokens": output_tokens},
+            llm_meta=llm_meta,
+        )
+        parsed, schema_errors = finalize_canonical("p03", parsed, meta=canonical_meta)
+        if schema_errors:
+            logger.warning(
+                "P03 run_id=%s: %d kanonische Schema-Luecke(n) in _meta.luecken dokumentiert",
+                run_id, len(schema_errors),
+            )
+
+        # 7. DB-Insert in tenant_voice_profile (kanonischer Payload inkl. _meta)
         output_hash = hashlib.sha256(json.dumps(parsed, sort_keys=True).encode()).hexdigest()
         duration_ms = int((time.monotonic() - t_start) * 1000)
 

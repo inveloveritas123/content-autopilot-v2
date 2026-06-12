@@ -20,31 +20,24 @@ import asyncio
 import hashlib
 import json
 import logging
-import os
 import time
 import uuid
 
-import jsonschema
 from sqlalchemy import text
 
 from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from services.prompt_loader import get_default_prompt_loader
 from services.pipeline_llm import call_pipeline_llm, resolve_tier, estimate_tier_cost, BudgetExceededError
+from services.schema_transformer import build_canonical_meta, finalize_canonical
+from tasks.canonical_wiring import fetch_tenant_meta, now_iso
 
 logger = logging.getLogger(__name__)
-
-_SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "../schemas/p04_output_schema.json")
 
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
-
-def _load_output_schema() -> dict:
-    with open(_SCHEMA_PATH, encoding="utf-8") as fh:
-        return json.load(fh)
-
 
 def _extract_json_from_text(raw: str) -> dict:
     """JSON aus dem LLM-Output parsen — entfernt Markdown-Code-Zaun falls vorhanden."""
@@ -204,11 +197,8 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
         logger.debug("p04 run_id=%s: LLM-Antwort erhalten (%d Zeichen)", run_id, len(raw_text))
 
         # ------------------------------------------------------------------
-        # 5. JSON-Parsing + Schema-Validierung
-        # [HYPOTHESE]-Strings werden NICHT gefiltert — einfach durchgereicht.
+        # 5. JSON-Parsing (mit Retry). [HYPOTHESE]-Strings werden NICHT gefiltert.
         # ------------------------------------------------------------------
-        schema = _load_output_schema()
-
         try:
             output_json = _extract_json_from_text(raw_text)
         except json.JSONDecodeError as first_err:
@@ -216,9 +206,12 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
                 "p04 run_id=%s: JSON-Parsing fehlgeschlagen (%s), Retry mit Schema-Reminder",
                 run_id, first_err,
             )
+            # Felder = Louis' kanonische P04-Top-Level-Keys (content-truth/schemas/p04).
             schema_hint = (
                 "\n\nDeine Antwort MUSS als reines JSON-Objekt ohne Markdown-Formatierung "
-                "ausgegeben werden. Pflichtfelder: hauptperson, kernschmerzen, transformation."
+                "ausgegeben werden. Pflicht-Top-Level-Felder: identitaet, innenwelt, "
+                "wunschbild, content_trigger, sprache_der_zielgruppe, alltagsszenen, "
+                "blockaden, ausloesemoment, _meta."
             )
             retry_res = call_pipeline_llm(
                 prompt_key="P04",
@@ -238,16 +231,33 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
                     f"JSON-Parsing auch nach Retry fehlgeschlagen: {retry_err}"
                 ) from retry_err
 
-        try:
-            jsonschema.validate(output_json, schema)
-        except jsonschema.ValidationError as ve:
+        # ------------------------------------------------------------------
+        # 6. Kanonisches _meta absichern + gegen Louis-Schema validieren.
+        # Soft-Fail: Schema-Verstoesse als _meta.luecken statt Hard-Fail.
+        # ------------------------------------------------------------------
+        avatar_row_id = str(uuid.uuid4())
+        tenant_name, agentur_id = fetch_tenant_meta(tenant_id)
+        llm_meta = output_json.get("_meta") if isinstance(output_json.get("_meta"), dict) else None
+        canonical_meta = build_canonical_meta(
+            "p04",
+            tenant_id=tenant_id,
+            model=model_id,
+            generated_at=now_iso(),
+            tenant_name=tenant_name,
+            agentur_id=agentur_id,
+            row_id=avatar_row_id,
+            token_usage={"input_tokens": input_tokens, "output_tokens": output_tokens},
+            llm_meta=llm_meta,
+        )
+        output_json, schema_errors = finalize_canonical("p04", output_json, meta=canonical_meta)
+        if schema_errors:
             logger.warning(
-                "p04 run_id=%s: Schema-Validierung fehlgeschlagen: %s", run_id, ve.message
+                "p04 run_id=%s: %d kanonische Schema-Luecke(n) in _meta.luecken dokumentiert",
+                run_id, len(schema_errors),
             )
-            # Weich-Fehler: Wir loggen, brechen aber nicht ab
 
         # ------------------------------------------------------------------
-        # 6. DB-Insert: tenant_audience_avatar (is_active=False)
+        # 7. DB-Insert: tenant_audience_avatar (kanonischer Payload inkl. _meta)
         # ------------------------------------------------------------------
         output_hash = hashlib.sha256(
             json.dumps(output_json, sort_keys=True).encode()
@@ -272,7 +282,7 @@ def run_p04(self, tenant_id: str, p01_payload: dict, transcript: str = None, pro
                     "CAST(:payload AS jsonb), :prompt_version_hash, :model_id, :project_id, now())"
                 ),
                 {
-                    "id": str(uuid.uuid4()),
+                    "id": avatar_row_id,
                     "tenant_id": tenant_id,
                     "version": next_version,
                     "payload": json.dumps(output_json, ensure_ascii=False),

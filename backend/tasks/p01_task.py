@@ -19,32 +19,25 @@ import asyncio
 import hashlib
 import json
 import logging
-import os
 import time
 import uuid
 from datetime import datetime, timezone
 
-import jsonschema
 from sqlalchemy import text
 
 from tasks.celery_app import celery_app
 from models.base import sync_session_factory
 from services.prompt_loader import get_default_prompt_loader
 from services.pipeline_llm import call_pipeline_llm, resolve_tier, estimate_tier_cost, BudgetExceededError
+from services.schema_transformer import build_canonical_meta, finalize_canonical
+from tasks.canonical_wiring import fetch_tenant_meta, now_iso
 
 logger = logging.getLogger(__name__)
-
-_SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "../schemas/p01_output_schema.json")
 
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
-
-def _load_output_schema() -> dict:
-    with open(_SCHEMA_PATH, encoding="utf-8") as fh:
-        return json.load(fh)
-
 
 def _extract_json_from_text(raw: str) -> dict:
     """JSON aus dem LLM-Output parsen — entfernt Markdown-Code-Zaun falls vorhanden."""
@@ -219,10 +212,8 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
         )
 
         # ------------------------------------------------------------------
-        # 5. JSON-Parsing + Schema-Validierung
+        # 5. JSON-Parsing (mit Retry bei Markdown/Format-Fehler)
         # ------------------------------------------------------------------
-        schema = _load_output_schema()
-
         try:
             output_json = _extract_json_from_text(raw_text)
         except json.JSONDecodeError as first_err:
@@ -230,11 +221,13 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
                 "p01 run_id=%s: JSON-Parsing fehlgeschlagen (%s), Retry mit Schema-Reminder",
                 run_id, first_err,
             )
-            # JSON-Retry: Schema-Hint an user_content anhängen, neuer Call
+            # JSON-Retry: Schema-Hint an user_content anhängen, neuer Call.
+            # Felder = Louis' kanonische Top-Level-Keys (content-truth/schemas/p01).
             schema_hint = (
                 "\n\nDeine Antwort MUSS als reines JSON-Objekt ohne Markdown-Formatierung "
-                "ausgegeben werden. Pflichtfelder: "
-                "unternehmensgeschichte, kernbotschaft, zielgruppe, expertise, werte."
+                "ausgegeben werden. Pflicht-Top-Level-Felder: "
+                "person, zielkunde, angebot, positionierung, markt, vertrauen, "
+                "sprache, content_reservoir, _meta."
             )
             retry_res = call_pipeline_llm(
                 prompt_key="P01",
@@ -254,22 +247,35 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
                     f"JSON-Parsing auch nach Retry fehlgeschlagen: {retry_err}"
                 ) from retry_err
 
-        try:
-            jsonschema.validate(output_json, schema)
-        except jsonschema.ValidationError as ve:
+        # ------------------------------------------------------------------
+        # 6. Kanonisches _meta absichern + gegen Louis-Schema validieren.
+        # KEINE v2-Felder mehr (kein wunschzustand/innenwelt auf Top-Level —
+        # das verletzt additionalProperties:false; Louis pflegt zielkunde.* = null).
+        # Bei Schema-Verstoss: dokumentierte _meta.luecken statt Hard-Fail.
+        # ------------------------------------------------------------------
+        context_row_id = str(uuid.uuid4())
+        tenant_name, agentur_id = fetch_tenant_meta(tenant_id)
+        llm_meta = output_json.get("_meta") if isinstance(output_json.get("_meta"), dict) else None
+        canonical_meta = build_canonical_meta(
+            "p01",
+            tenant_id=tenant_id,
+            model=model_id,
+            generated_at=now_iso(),
+            tenant_name=tenant_name,
+            agentur_id=agentur_id,
+            row_id=context_row_id,
+            token_usage={"input_tokens": input_tokens, "output_tokens": output_tokens},
+            llm_meta=llm_meta,
+        )
+        output_json, schema_errors = finalize_canonical("p01", output_json, meta=canonical_meta)
+        if schema_errors:
             logger.warning(
-                "p01 run_id=%s: Schema-Validierung fehlgeschlagen: %s", run_id, ve.message
+                "p01 run_id=%s: %d kanonische Schema-Luecke(n) in _meta.luecken dokumentiert",
+                run_id, len(schema_errors),
             )
-            # Weich-Fehler: Wir loggen, brechen aber nicht ab
 
         # ------------------------------------------------------------------
-        # 6. Wunschzustand + Innenwelt erzwingend auf null setzen
-        # ------------------------------------------------------------------
-        output_json["wunschzustand"] = None
-        output_json["innenwelt"] = None
-
-        # ------------------------------------------------------------------
-        # 7. DB-Insert: tenant_customer_context
+        # 7. DB-Insert: tenant_customer_context (kanonischer Payload inkl. _meta)
         # ------------------------------------------------------------------
         output_hash = hashlib.sha256(
             json.dumps(output_json, sort_keys=True).encode()
@@ -294,7 +300,7 @@ def run_p01(self, tenant_id: str, transcript: str, mini_form_data: dict = None, 
                     "CAST(:payload AS jsonb), :prompt_version_hash, :model_id, :project_id, now())"
                 ),
                 {
-                    "id": str(uuid.uuid4()),
+                    "id": context_row_id,
                     "tenant_id": tenant_id,
                     "version": next_version,
                     "payload": json.dumps(output_json, ensure_ascii=False),

@@ -29,7 +29,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +91,21 @@ _SCHEMA_FILE_MAP: dict[str, str] = {
     "p04": "p04.schema.json",
     "voice_profile": "voice_profile.schema.json",
 }
+
+# Semantische Default-Prompt-Version je Prompt (Pattern: ^p0X-vN.N$).
+# Louis' Prompts pinnen das Pattern NICHT zuverlässig im Output, das LLM darf
+# es also nicht bestimmen. Server-seitig setzen wir die Vertrags-Version hier.
+# Override pro Prompt via Env CANONICAL_PROMPT_VERSION_P01 etc.
+CANONICAL_PROMPT_VERSION: dict[str, str] = {
+    "p01": "p01-v1.0",
+    "p03": "p03-v1.0",
+    "p04": "p04-v1.0",
+}
+
+# Autoritative _meta-Felder: vom Server bestimmt, NIE vom LLM überschrieben.
+_AUTHORITATIVE_META_KEYS = frozenset(
+    {"agentur_id", "kunde_id", "prompt_version", "model", "generated_at"}
+)
 
 
 def load_canonical_schema(prompt_key: str) -> dict:
@@ -1379,3 +1394,137 @@ def _from_canonical_p04(canonical: dict) -> dict:
             "ansprache": sprache.get("ansprache"),
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Nativer Schreibpfad: kanonisches _meta bauen + Output finalisieren
+# ---------------------------------------------------------------------------
+# Hintergrund (SOLL-IST-2026-06-12-wiring.md §2/§3):
+#   Louis' Prompts erzeugen bereits nativ kanonische Outputs inkl. _meta.
+#   Die Tasks (P01/P03/P04) müssen daher NICHT mehr v2↔kanonisch transformieren,
+#   sondern nur (a) _meta server-seitig absichern (ADR-0002: _meta gehört dem
+#   Server, nicht dem LLM) und (b) gegen das kanonische Schema validieren.
+#   Diese beiden Funktionen kapseln genau das.
+
+
+def resolve_canonical_prompt_version(prompt_key: str) -> str:
+    """Liefert die semantische Vertrags-Version (`p0X-vN.N`) für einen Prompt.
+
+    Reihenfolge: Env ``CANONICAL_PROMPT_VERSION_<P>`` → ``CANONICAL_PROMPT_VERSION``
+    → Fallback ``<key>-v1.0``. Immer pattern-konform (``^p0X-vN.N$``).
+    """
+    key = prompt_key.lower()
+    env_val = os.environ.get(f"CANONICAL_PROMPT_VERSION_{key.upper()}", "").strip()
+    if env_val and re.match(r"^p0[0-9]+-v[0-9]+\.[0-9]+$", env_val):
+        return env_val
+    return CANONICAL_PROMPT_VERSION.get(key, f"{key}-v1.0")
+
+
+def build_canonical_meta(
+    prompt_key: str,
+    *,
+    tenant_id: str,
+    model: str,
+    generated_at: str,
+    tenant_name: Optional[str] = None,
+    tenant_slug: Optional[str] = None,
+    agentur_id: Optional[str] = None,
+    prompt_version: Optional[str] = None,
+    row_id: Optional[str] = None,
+    token_usage: Optional[dict] = None,
+    luecken: Optional[list] = None,
+    llm_meta: Optional[dict] = None,
+) -> dict:
+    """Baut das autoritative kanonische ``_meta`` für einen Pipeline-Output.
+
+    Die Pflichtfelder (agentur_id/kunde_id/prompt_version/model/generated_at)
+    bestimmt IMMER der Server. Harmlose Zusatzfelder, die das LLM in seinem
+    ``_meta`` geliefert hat (z.B. ``p04_aufgaben``, ``hypothesen``,
+    ``transkript_qualitaet``), werden übernommen — aber NIE dürfen sie ein
+    autoritatives Feld überschreiben.
+
+    Args:
+        prompt_key:   'p01' | 'p03' | 'p04'.
+        tenant_id:    Tenant-UUID (für kunde_id-Slug-Fallback).
+        model:        Router-Modell-ID (z.B. 'anthropic/claude-sonnet-4-6').
+        generated_at: ISO-8601-Zeitstempel.
+        tenant_name:  Optional Klarname → schönerer kunde_id-Slug.
+        tenant_slug:  Optional direkter Slug (höchste Prio für kunde_id).
+        agentur_id:   Optional; Default 'zb' (s. #26 / Migration 050).
+        prompt_version: Optional Override; sonst resolve_canonical_prompt_version().
+        row_id:       Optional DB-Row-ID → generation_id 'gen_<id>'.
+        token_usage:  Optional {input_tokens, output_tokens}.
+        luecken:      Optional Liste dokumentierter Lücken.
+        llm_meta:     Optional vom LLM geliefertes _meta (Zusatzfelder werden gemerged).
+
+    Returns:
+        Kanonisches _meta-Dict (alle Pflichtfelder gesetzt).
+    """
+    key = prompt_key.lower()
+    pv = prompt_version or resolve_canonical_prompt_version(key)
+
+    raw_inputs = {
+        "tenant_id": tenant_id,
+        "tenant_name": tenant_name,
+        "tenant_slug": tenant_slug,
+        "agentur_id": agentur_id,
+        "prompt_version": pv,
+        "model_id": model,
+        "created_at": generated_at,
+        "row_id": row_id,
+        "token_usage": token_usage,
+        "luecken": luecken,
+    }
+    meta = _build_meta(key, {k: v for k, v in raw_inputs.items() if v is not None})
+
+    # Harmlose LLM-_meta-Extras übernehmen (z.B. p04_aufgaben, hypothesen),
+    # ohne autoritative Felder oder bereits gesetzte Schlüssel zu überschreiben.
+    if isinstance(llm_meta, dict):
+        for k, v in llm_meta.items():
+            if k in _AUTHORITATIVE_META_KEYS:
+                continue
+            if k not in meta and v is not None:
+                meta[k] = v
+
+    return meta
+
+
+def finalize_canonical(prompt_key: str, parsed: dict, *, meta: dict) -> tuple[dict, list]:
+    """Hängt das autoritative ``_meta`` an, validiert kanonisch, dokumentiert Lücken.
+
+    Wirft NIE bei Schema-Verstoß (DoD: dokumentierte ``_meta.luecken`` statt
+    hartem Fehler/Halluzination). Schema-Fehler werden als ``schema: <pfad>: <msg>``
+    in ``_meta.luecken`` festgehalten und das Best-Effort-Dokument zurückgegeben.
+
+    Args:
+        prompt_key: 'p01' | 'p03' | 'p04'.
+        parsed:     Das vom LLM geparste Dokument (kanonische Louis-Struktur).
+        meta:       Autoritatives _meta aus build_canonical_meta().
+
+    Returns:
+        (doc, errors): ``doc`` ist das kanonische Dokument inkl. finalem ``_meta``;
+        ``errors`` ist die (ggf. leere) Liste der Schema-Validierungsfehler.
+    """
+    key = prompt_key.lower()
+    doc: dict = dict(parsed) if isinstance(parsed, dict) else {}
+    final_meta = dict(meta)
+    doc["_meta"] = final_meta
+
+    errors = validate_canonical(key, doc)
+    if errors:
+        existing = list(final_meta.get("luecken") or [])
+        gap_entries = [f"schema: {e}" for e in errors]
+        # Dedup, Reihenfolge erhalten
+        seen = set(existing)
+        for g in gap_entries:
+            if g not in seen:
+                existing.append(g)
+                seen.add(g)
+        final_meta["luecken"] = existing
+        doc["_meta"] = final_meta
+        logger.warning(
+            "finalize_canonical(%s): %d Schema-Lücke(n) dokumentiert (kein Hard-Fail)",
+            key, len(errors),
+        )
+
+    return doc, errors
