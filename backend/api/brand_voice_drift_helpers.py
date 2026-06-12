@@ -54,8 +54,7 @@ def get_entity_table(entity_type: str | None = "voice") -> str:
     """
     if entity_type not in _ENTITY_TABLE:
         raise ValueError(
-            f"Unbekannter entity_type: {entity_type!r}. "
-            f"Erlaubt: {sorted(_ENTITY_TABLE)}"
+            f"Unbekannter entity_type: {entity_type!r}. " f"Erlaubt: {sorted(_ENTITY_TABLE)}"
         )
     return _ENTITY_TABLE[entity_type]
 

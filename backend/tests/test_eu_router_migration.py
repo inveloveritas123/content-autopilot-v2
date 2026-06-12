@@ -48,12 +48,16 @@ if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
 
+_STUBBED_HERE: list = []
+
+
 def _stub(name: str):
     """Stub nur setzen, wenn noch nicht in sys.modules (Anti-Pollution)."""
     if name in sys.modules:
         return sys.modules[name]
     mod = types.ModuleType(name)
     sys.modules[name] = mod
+    _STUBBED_HERE.append(name)
     return mod
 
 
@@ -112,6 +116,8 @@ _stub("models")
 _mb = _stub("models.base")
 if not hasattr(_mb, "sync_session_factory"):
     _mb.sync_session_factory = MagicMock()
+if not hasattr(_mb, "async_session_factory"):
+    _mb.async_session_factory = MagicMock()
 _stub("models.llm_provider")
 
 # celery
@@ -174,6 +180,8 @@ if not hasattr(_throttle_stub, "RateLimitExceededError"):
 _pr_stub = _stub("services.provider_resolver")
 if not hasattr(_pr_stub, "get_active_provider"):
     _pr_stub.get_active_provider = lambda task=None: None
+if not hasattr(_pr_stub, "track_cost"):
+    _pr_stub.track_cost = MagicMock()
 
 _pl_stub = _stub("services.prompt_loader")
 if not hasattr(_pl_stub, "get_default_prompt_loader"):
@@ -308,6 +316,24 @@ _sensitive_detector = _load_module(
     "services.sensitive_detector",
     os.path.join(_BACKEND_DIR, "services", "sensitive_detector.py"),
 )
+
+# ---------------------------------------------------------------------------
+# Anti-Pollution: Stubs die NICHT mehr benötigt werden aus sys.modules entfernen.
+# Die Ziel-Module (voice_drift_task, md_converter, sensitive_detector) und
+# services.pipeline_llm bleiben erhalten — alle anderen Stubs werden entfernt,
+# damit nachfolgende Tests (test_auto_cache_toggle, test_brand_voice_patch, ...)
+# ihre Module frisch importieren können.
+# ---------------------------------------------------------------------------
+
+_KEEP_IN_SYS_MODULES = {
+    "services.pipeline_llm",
+    "tasks.voice_drift_task",
+    "services.md_converter",
+    "services.sensitive_detector",
+}
+for _sn in _STUBBED_HERE:
+    if _sn not in _KEEP_IN_SYS_MODULES:
+        sys.modules.pop(_sn, None)
 
 # ---------------------------------------------------------------------------
 # Patch-Hilfsfunktion: stellt sicher dass services.pipeline_llm in sys.modules

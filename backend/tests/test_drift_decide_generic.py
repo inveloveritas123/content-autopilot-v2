@@ -26,9 +26,7 @@ from pathlib import Path
 # Dep-freier Loader für brand_voice_drift_helpers
 # ---------------------------------------------------------------------------
 
-_HELPERS_PATH = (
-    Path(__file__).parent.parent / "api" / "brand_voice_drift_helpers.py"
-)
+_HELPERS_PATH = Path(__file__).parent.parent / "api" / "brand_voice_drift_helpers.py"
 
 
 def _load_helpers():
@@ -86,16 +84,19 @@ class TestGetEntityTable:
 
     def test_unknown_entity_raises_value_error(self):
         import pytest
+
         with pytest.raises(ValueError, match="Unbekannter entity_type"):
             h.get_entity_table("unknown_entity")
 
     def test_none_raises_value_error(self):
         import pytest
+
         with pytest.raises(ValueError, match="Unbekannter entity_type"):
             h.get_entity_table(None)
 
     def test_empty_string_raises_value_error(self):
         import pytest
+
         with pytest.raises(ValueError, match="Unbekannter entity_type"):
             h.get_entity_table("")
 
@@ -150,6 +151,7 @@ class TestApplyDriftChangesSet:
         """apply_drift_changes arbeitet auf einer Deep-Copy, nicht am Original."""
         original = self._base_payload()
         import copy
+
         original_copy = copy.deepcopy(original)
         changes = [{"field_path": "tonalitaet.grundton", "op": "set", "new_value": "neu"}]
         h.apply_drift_changes(original, changes, {})
@@ -208,6 +210,7 @@ class TestApplyDriftChangesAppend:
     def test_append_does_not_mutate_original_payload(self):
         original = self._base_payload()
         import copy
+
         original_copy = copy.deepcopy(original)
         changes = [{"field_path": "werte", "op": "append", "new_value": {"wert": "neu"}}]
         h.apply_drift_changes(original, changes, {})
@@ -237,6 +240,7 @@ class TestApplyDriftChangesAppend:
 class TestAppendOnNonList:
     def test_append_on_dict_field_raises(self):
         import pytest
+
         payload = {"tonalitaet": {"grundton": "professionell"}}
         changes = [{"field_path": "tonalitaet", "op": "append", "new_value": {"x": 1}}]
         with pytest.raises(ValueError, match="append.*keine Liste"):
@@ -244,6 +248,7 @@ class TestAppendOnNonList:
 
     def test_append_on_string_field_raises(self):
         import pytest
+
         payload = {"name": "Muster GmbH"}
         changes = [{"field_path": "name", "op": "append", "new_value": " GmbH"}]
         with pytest.raises(ValueError, match="append.*keine Liste"):
@@ -319,6 +324,7 @@ class TestTenantIsolationConcept:
     def test_sql_injection_attempt_raises(self):
         """Böswillige entity_type-Werte werden durch ValueError blockiert."""
         import pytest
+
         malicious_inputs = [
             "voice; DROP TABLE tenant_voice_profile;",
             "' OR '1'='1",

@@ -249,10 +249,7 @@ class TestPushFindingsToTelegram:
     def test_message_capped_at_telegram_max(self):
         """Nachricht wird bei _TELEGRAM_MAX_CHARS abgeschnitten."""
         # 10 Findings mit sehr langen Hooks → Nachricht wäre > 4000 Zeichen
-        many = [
-            {"id": f"f{i}", "title": f"Titel {i}", "hooks": ["X" * 200]}
-            for i in range(10)
-        ]
+        many = [{"id": f"f{i}", "title": f"Titel {i}", "hooks": ["X" * 200]} for i in range(10)]
         captured = []
 
         def capturing_send(chat_id, msg):
