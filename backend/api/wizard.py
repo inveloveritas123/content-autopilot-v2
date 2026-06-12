@@ -419,8 +419,8 @@ def compute_inline_hints(
         hints.append(
             "Tipp: Schau dir an, welche Wörter du in Phase 2 benutzt hast — das ist oft schon deine natürliche Sprache."
         )
-    if current_phase == 6 and "q5_3" in all_answers:
-        hints.append("Dein LinkedIn-Satz aus Phase 5 kann hier als Aufhänger dienen.")
+    if current_phase == 7 and "q5_3" in all_answers:
+        hints.append("Dein Lieblingswort aus Phase 7 kann hier als Aufhänger dienen.")
 
     return hints[:3]
 
