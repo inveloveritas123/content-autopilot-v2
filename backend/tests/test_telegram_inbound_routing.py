@@ -4,179 +4,26 @@ Wirft den Intent-Routing-Flow (extract_intent_features → route_telegram_intent
 p08_response) an, nachdem ein eingehender Telegram-/WhatsApp-Text bzw. eine
 Voice-Antwort als memory_chunk gespeichert wurde.
 
-Stub-Schicht (analog zu test_p08_service.py):
-  Die lokale Test-venv hat KEIN sqlalchemy/celery/google/anthropic. Daher werden
-  alle schweren Module VOR dem ersten Import von tasks.telegram_task gestubbt und
-  das Modul danach direkt via importlib geladen. Alle DB-/Celery-/Service-Seams
-  werden in den Tests gepatcht — kein realer DB-/Netzwerk-Zugriff.
+Stub-Schicht wird vollständig von tests._telegram_task_env bereitgestellt —
+keine eigene spec_from_file_location/Stub-Logik mehr. Beide Test-Dateien
+(test_telegram_inbound_routing + test_idempotency_routing) teilen so eine
+einzige Modulinstanz von tasks.telegram_task und können in beliebiger
+Reihenfolge kombiniert laufen (Issue #16, #18, #56, #57).
 """
 
-import os
 import sys
 import types
 from unittest.mock import MagicMock, patch
 
-# ---------------------------------------------------------------------------
-# Stubs — MÜSSEN vor dem ersten Import von tasks.telegram_task gesetzt sein.
-# ---------------------------------------------------------------------------
-
-_BACKEND_DIR = os.path.join(os.path.dirname(__file__), "..")
-if _BACKEND_DIR not in sys.path:
-    sys.path.insert(0, _BACKEND_DIR)
-
-_STUBBED_HERE = []
-
-
-def _stub_mod(name):
-    mod = types.ModuleType(name)
-    sys.modules[name] = mod
-    _STUBBED_HERE.append(name)
-    return mod
-
-
-# httpx — von telegram_task auf Modulebene importiert
-if "httpx" not in sys.modules:
-    _hx = _stub_mod("httpx")
-    _hx.Client = MagicMock
-    _hx.TimeoutException = type("TimeoutException", (Exception,), {})
-    _hx.RequestError = type("RequestError", (Exception,), {})
-
-# sqlalchemy + Untermodule
-if "sqlalchemy" not in sys.modules:
-    _sq = _stub_mod("sqlalchemy")
-    _sq.text = lambda q: q
-for _name in ["sqlalchemy.ext", "sqlalchemy.ext.asyncio", "sqlalchemy.orm"]:
-    if _name not in sys.modules:
-        _m = _stub_mod(_name)
-        if _name == "sqlalchemy.ext.asyncio":
-            _m.AsyncSession = MagicMock
-            _m.create_async_engine = MagicMock()
-        if _name == "sqlalchemy.orm":
-            _m.sessionmaker = MagicMock()
-
-# config.settings
-if "config" not in sys.modules:
-    _cfg = _stub_mod("config")
-    _cfg.settings = types.SimpleNamespace(
-        telegram_bot_token="test-token",
-        database_url="postgresql+asyncpg://t:t@localhost/t",
-    )
-
-# models.base — sync_session_factory wird in Tests gepatcht
-if "models" not in sys.modules:
-    _stub_mod("models")
-if "models.base" not in sys.modules:
-    _mb = _stub_mod("models.base")
-    _mb.sync_session_factory = MagicMock()
-
-# services + Voice-Transcription (von telegram_task auf Modulebene importiert)
-if "services" not in sys.modules:
-    _stub_mod("services")
-if "services.voice_transcription" not in sys.modules:
-    _vt = _stub_mod("services.voice_transcription")
-
-    class _TranscriptionError(Exception):
-        pass
-
-    class _TranscriptionResult:
-        def __init__(self, text="", model_name="whisper", confidence=0.9):
-            self.text = text
-            self.model_name = model_name
-            self.confidence = confidence
-
-    _vt.TranscriptionError = _TranscriptionError
-    _vt.TranscriptionResult = _TranscriptionResult
-    _vt.transcribe_voice = MagicMock()
-
-# Routing-/p08-Service-Stubs — lazy importiert in _route_inbound_message.
-# Attribute werden je Test via @patch ersetzt. Die Submodule MÜSSEN als Attribut
-# des services-Pakets registriert sein, damit @patch("services.<mod>.<fn>") den
-# Target über getattr(services_pkg, "<mod>") auflösen kann.
-_svc_pkg = sys.modules["services"]
-if "services.layer1_extraction" not in sys.modules:
-    _l1 = _stub_mod("services.layer1_extraction")
-    _l1.extract_intent_features = MagicMock()
-    _svc_pkg.layer1_extraction = _l1
-if "services.layer2_routing" not in sys.modules:
-    _l2 = _stub_mod("services.layer2_routing")
-    _l2.route_telegram_intent = MagicMock()
-    _svc_pkg.layer2_routing = _l2
-if "services.p08_service" not in sys.modules:
-    _p08 = _stub_mod("services.p08_service")
-    _p08.p08_response = MagicMock()
-    _svc_pkg.p08_service = _p08
-# voice_transcription ebenfalls als Attribut registrieren (Konsistenz)
-_svc_pkg.voice_transcription = sys.modules["services.voice_transcription"]
-
-# celery — telegram_task importiert tasks.celery_app.celery_app und nutzt @celery_app.task
-if "celery" not in sys.modules:
-    _cel = _stub_mod("celery")
-
-
-class _FakeCeleryApp:
-    def task(self, *a, **kw):
-        def deco(fn):
-            return fn
-
-        return deco
-
-
-if "tasks" not in sys.modules:
-    _stub_mod("tasks")
-if "tasks.celery_app" not in sys.modules:
-    _ca = _stub_mod("tasks.celery_app")
-    _ca.celery_app = _FakeCeleryApp()
-
-# ---------------------------------------------------------------------------
-# tasks.telegram_task direkt laden (bypass tasks/__init__.py-Seiteneffekte)
-# ---------------------------------------------------------------------------
-import importlib.util as _ilu  # noqa: E402
-
-_spec = _ilu.spec_from_file_location(
-    "tasks.telegram_task",
-    os.path.join(_BACKEND_DIR, "tasks", "telegram_task.py"),
+# Gemeinsame Stub-Umgebung + Modul-Instanz
+from tests._telegram_task_env import (  # noqa: E402
+    active_session,
+    make_decision,
+    make_extraction,
+    make_guard_db_mock,
+    make_p08_result,
+    tt,
 )
-_tt = _ilu.module_from_spec(_spec)
-sys.modules["tasks.telegram_task"] = _tt
-_spec.loader.exec_module(_tt)
-
-# Als Attribut des tasks-Pakets registrieren, damit @patch("tasks.telegram_task.*")
-# über getattr(tasks_pkg, "telegram_task") aufgelöst werden kann.
-sys.modules["tasks"].telegram_task = _tt
-
-
-# ---------------------------------------------------------------------------
-# Helfer
-# ---------------------------------------------------------------------------
-
-
-def _make_extraction(intent="answer_to_question"):
-    return types.SimpleNamespace(
-        intent=intent,
-        session_context="active_response",
-        extracted_features={"key_insight": "wir wachsen"},
-        flagged_for_review=False,
-        flag_reasons=[],
-        routed_to="ok",
-    )
-
-
-def _make_decision(target, payload=None):
-    return types.SimpleNamespace(target=target, payload=payload or {})
-
-
-def _make_p08_result(next_action="vertiefen"):
-    return types.SimpleNamespace(
-        next_action=next_action,
-        message="Erzähl mir mehr.",
-        quality="gold",
-        session_id="sess-1",
-        is_closed=False,
-    )
-
-
-def _active_session():
-    return types.SimpleNamespace(id="sess-1", status="active")
 
 
 # ---------------------------------------------------------------------------
@@ -201,15 +48,17 @@ class TestProcessTextRouting:
         mock_p08,
     ):
         mock_run.return_value = "chunk-123"
-        mock_load_session.return_value = _active_session()
-        mock_extract.return_value = _make_extraction("answer_to_question")
-        mock_route.return_value = _make_decision(
+        mock_load_session.return_value = active_session()
+        mock_extract.return_value = make_extraction("answer_to_question")
+        mock_route.return_value = make_decision(
             "p08_response", {"session_id": "sess-1", "features": {"k": "v"}}
         )
-        mock_p08.return_value = _make_p08_result(next_action="vertiefen")
+        mock_p08.return_value = make_p08_result(next_action="vertiefen")
 
         payload = {"text": "Das ist eine ausführliche Antwort auf deine Frage."}
-        result = _tt._process_text("log-1", "tenant-1", payload)
+        # #56: sync_session_factory wird für Guard-SELECT gebraucht → (None,) = noch nicht geroutet
+        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+            result = tt._process_text("log-1", "tenant-1", payload)
 
         assert result["status"] == "ok"
         assert result["memory_chunk_id"] == "chunk-123"
@@ -231,7 +80,8 @@ class TestProcessTextRouting:
         mock_load_session.return_value = None
 
         payload = {"text": "Irgendeine Notiz die lang genug ist."}
-        result = _tt._process_text("log-2", "tenant-1", payload)
+        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+            result = tt._process_text("log-2", "tenant-1", payload)
 
         assert result["status"] == "ok"
         assert result["memory_chunk_id"] == "chunk-xyz"
@@ -249,12 +99,13 @@ class TestProcessTextRouting:
         self, mock_run, mock_store, mock_load_session, mock_extract, mock_route, mock_p08
     ):
         mock_run.return_value = "chunk-r"
-        mock_load_session.return_value = _active_session()
-        mock_extract.return_value = _make_extraction("spontaneous_idea")
-        mock_route.return_value = _make_decision("reviewer_queue", {})
+        mock_load_session.return_value = active_session()
+        mock_extract.return_value = make_extraction("spontaneous_idea")
+        mock_route.return_value = make_decision("reviewer_queue", {})
 
         payload = {"text": "Eine spontane Idee die lang genug ist."}
-        result = _tt._process_text("log-3", "tenant-1", payload)
+        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+            result = tt._process_text("log-3", "tenant-1", payload)
 
         assert result["status"] == "ok"
         assert result["routed_to"] == "reviewer_queue"
@@ -270,11 +121,12 @@ class TestProcessTextRouting:
         self, mock_run, mock_store, mock_load_session, mock_extract, mock_p08
     ):
         mock_run.return_value = "chunk-fail"
-        mock_load_session.return_value = _active_session()
+        mock_load_session.return_value = active_session()
         mock_extract.side_effect = RuntimeError("layer1 boom")
 
         payload = {"text": "Antwort die einen Routing-Fehler auslöst."}
-        result = _tt._process_text("log-4", "tenant-1", payload)
+        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+            result = tt._process_text("log-4", "tenant-1", payload)
 
         # Chunk-Ergebnis bleibt intakt, kein Crash, kein routed_to
         assert result["status"] == "ok"
@@ -294,15 +146,16 @@ class TestProcessTextRouting:
         # Kern des Fail-open-Versprechens: wirft p08_response, darf das Routing-Dict
         # NICHT halb appliziert werden — Chunk-Return bleibt komplett intakt.
         mock_run.return_value = "chunk-p08fail"
-        mock_load_session.return_value = _active_session()
-        mock_extract.return_value = _make_extraction("answer_to_question")
-        mock_route.return_value = _make_decision(
+        mock_load_session.return_value = active_session()
+        mock_extract.return_value = make_extraction("answer_to_question")
+        mock_route.return_value = make_decision(
             "p08_response", {"session_id": "sess-1", "features": {"k": "v"}}
         )
         mock_p08.side_effect = RuntimeError("p08 boom")
 
         payload = {"text": "Antwort, deren p08-Verarbeitung crasht."}
-        result = _tt._process_text("log-5", "tenant-1", payload)
+        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+            result = tt._process_text("log-5", "tenant-1", payload)
 
         assert result["status"] == "ok"
         assert result["memory_chunk_id"] == "chunk-p08fail"
@@ -343,15 +196,17 @@ class TestProcessVoiceRouting:
             text=TRANSCRIPT, model_name="whisper", confidence=0.95
         )
         mock_run.return_value = "voice-chunk-1"
-        mock_load_session.return_value = _active_session()
-        mock_extract.return_value = _make_extraction("answer_to_question")
-        mock_route.return_value = _make_decision(
+        mock_load_session.return_value = active_session()
+        mock_extract.return_value = make_extraction("answer_to_question")
+        mock_route.return_value = make_decision(
             "p08_response", {"session_id": "sess-1", "features": {"k": "v"}}
         )
-        mock_p08.return_value = _make_p08_result(next_action="vertiefen")
+        mock_p08.return_value = make_p08_result(next_action="vertiefen")
 
         payload = {"voice": {"file_id": "f1", "duration": 12, "mime_type": "audio/ogg"}}
-        result = _tt._process_voice("log-v", "tenant-1", payload)
+        # #56: Guard-SELECT für log_id="log-v" → (None,) = noch nicht geroutet
+        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+            result = tt._process_voice("log-v", "tenant-1", payload)
 
         assert result["status"] == "ok"
         assert result["memory_chunk_id"] == "voice-chunk-1"
