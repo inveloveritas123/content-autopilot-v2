@@ -28,3 +28,5 @@ eval_results/
 *.key
 WERKBANK-GATE-REPORT.md
 frontend/.env.local
+test-results/
+GATE-REPORT.md

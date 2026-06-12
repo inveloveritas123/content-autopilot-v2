@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Content-Autopilot v2 — Gesamtreport</title>
+<style>
+  :root{
+    --teal:#0F766E; --teal-d:#0b5852; --teal-l:#14b8a6;
+    --amber:#d97706; --amber-l:#fbbf24;
+    --ink:#0f172a; --slate:#334155; --muted:#64748b; --line:#e2e8f0;
+    --bg:#f8fafc; --card:#ffffff;
+    --green:#16a34a; --yellow:#ca8a04; --orange:#ea580c; --red:#dc2626; --pause:#64748b;
+    --shadow:0 1px 3px rgba(15,23,42,.08),0 8px 24px rgba(15,23,42,.06);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.6;font-size:15px}
+  a{color:var(--teal);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.86em;
+    background:#eef2f5;padding:.1em .4em;border-radius:4px;color:var(--teal-d)}
+  h1,h2,h3{line-height:1.25;font-weight:700;letter-spacing:-.01em}
+
+  /* layout */
+  .wrap{display:grid;grid-template-columns:260px 1fr;max-width:1320px;margin:0 auto}
+  nav{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;padding:26px 18px;
+    border-right:1px solid var(--line);background:#fff}
+  nav .brand{font-weight:800;font-size:17px;color:var(--teal-d);letter-spacing:-.02em;margin-bottom:2px}
+  nav .brand span{color:var(--amber)}
+  nav .sub{font-size:12px;color:var(--muted);margin-bottom:20px}
+  nav a{display:block;padding:7px 11px;border-radius:7px;color:var(--slate);font-size:13.5px;font-weight:500}
+  nav a:hover{background:#f1f5f9;text-decoration:none}
+  nav a.num{color:var(--muted);font-variant-numeric:tabular-nums}
+  main{padding:0 48px 90px;min-width:0}
+  section{padding-top:42px;margin-top:8px;scroll-margin-top:14px}
+  section>h2{font-size:25px;margin:0 0 6px;display:flex;align-items:baseline;gap:12px}
+  section>h2 .n{font-size:14px;font-weight:700;color:#fff;background:var(--teal);
+    border-radius:7px;padding:3px 9px;letter-spacing:0}
+  .lead{color:var(--slate);font-size:15.5px;max-width:80ch;margin:.3em 0 1.4em}
+
+  /* hero */
+  header.hero{grid-column:1/-1;background:linear-gradient(135deg,#0f766e 0%,#0b5852 55%,#0f3d3a 100%);
+    color:#fff;padding:54px 48px 46px}
+  header.hero .kicker{text-transform:uppercase;letter-spacing:.16em;font-size:12px;
+    color:#7fe3d6;font-weight:700;margin-bottom:10px}
+  header.hero h1{font-size:38px;margin:0 0 12px;letter-spacing:-.025em}
+  header.hero p{max-width:74ch;color:#cdeee9;font-size:16px;margin:.2em 0}
+  header.hero .meta{margin-top:18px;font-size:12.5px;color:#9fd8cf;display:flex;gap:18px;flex-wrap:wrap}
+  header.hero .meta b{color:#e6fffb;font-weight:600}
+
+  /* metric cards */
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:26px 0 8px}
+  .metric{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;
+    box-shadow:var(--shadow)}
+  .metric .v{font-size:34px;font-weight:800;letter-spacing:-.03em;line-height:1}
+  .metric .l{font-size:12.5px;color:var(--muted);font-weight:600;margin-top:7px;text-transform:uppercase;letter-spacing:.04em}
+  .metric .d{font-size:12.5px;color:var(--slate);margin-top:7px}
+  .metric.green .v{color:var(--green)} .metric.blue .v{color:var(--teal)}
+  .metric.amber .v{color:var(--amber)} .metric.red .v{color:var(--red)}
+  .bar{height:9px;border-radius:6px;background:#eef2f5;overflow:hidden;margin-top:11px;display:flex}
+  .bar i{display:block;height:100%}
+  .bar .g{background:var(--green)} .bar .y{background:var(--yellow)} .bar .r{background:#e7556b}
+
+  /* generic card grids */
+  .cards{display:grid;gap:16px}
+  .cards.c2{grid-template-columns:1fr 1fr}
+  .cards.c3{grid-template-columns:repeat(3,1fr)}
+  .cards.c5{grid-template-columns:repeat(5,1fr)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:17px 18px;box-shadow:var(--shadow)}
+  .card h3{margin:0 0 6px;font-size:15.5px}
+  .card h3 .tag{font-size:11px;font-weight:700;color:var(--teal-d);background:#d7f0ec;
+    border-radius:5px;padding:2px 7px;margin-right:7px;vertical-align:middle}
+  .card p{margin:.35em 0;font-size:13.6px;color:var(--slate)}
+  .card.lane{border-top:3px solid var(--teal)}
+
+  /* tables */
+  .tbl{width:100%;border-collapse:collapse;font-size:13.4px;margin:.4em 0 1.1em;
+    background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .tbl th{background:#f1f5f9;text-align:left;padding:9px 12px;font-size:11.5px;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--muted);font-weight:700;border-bottom:1px solid var(--line)}
+  .tbl td{padding:9px 12px;border-bottom:1px solid #eef2f5;vertical-align:top}
+  .tbl tr:last-child td{border-bottom:none}
+  .tbl tr:hover td{background:#fafcfd}
+  .tbl td.c{text-align:center;white-space:nowrap}
+
+  /* status badges */
+  .st{display:inline-block;font-size:11.5px;font-weight:700;border-radius:20px;padding:2px 10px;white-space:nowrap;line-height:1.5}
+  .st.ok{background:#dcfce7;color:#15803d}
+  .st.yel{background:#fef9c3;color:#a16207}
+  .st.ora{background:#ffedd5;color:#c2410c}
+  .st.red{background:#fee2e2;color:#b91c1c}
+  .st.pau{background:#e2e8f0;color:#475569}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
+  .dot.ok{background:var(--green)} .dot.yel{background:var(--yellow)}
+  .dot.ora{background:var(--orange)} .dot.red{background:var(--red)} .dot.pau{background:var(--pause)}
+
+  /* pills for role/model/issue */
+  .pill{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:1.5px 7px;white-space:nowrap}
+  .pill.iss{background:#eef2ff;color:#4338ca;font-variant-numeric:tabular-nums}
+  .pill.blk{background:#fee2e2;color:#b91c1c}
+  .m-fable{background:#f3e8ff;color:#7e22ce}.m-opus{background:#fae8ff;color:#a21caf}
+  .m-sonnet{background:#dbeafe;color:#1d4ed8}.m-haiku{background:#d1fae5;color:#047857}
+  .r-arch{background:#cffafe;color:#0e7490}.r-knecht{background:#fef3c7;color:#92400e}
+  .r-robert{background:#fce7f3;color:#9d174d}.r-chris{background:#e5e7eb;color:#374151}
+
+  /* verdict bars */
+  .verdict{display:grid;grid-template-columns:200px 130px 1fr;gap:0;align-items:stretch;
+    border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;margin-bottom:12px}
+  .verdict>div{padding:13px 15px}
+  .verdict .axis{font-weight:700;font-size:14px;background:#f8fafc;border-right:1px solid var(--line)}
+  .verdict .judge{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px;border-right:1px solid var(--line)}
+  .verdict .judge.pass{background:#ecfdf5;color:#15803d}
+  .verdict .judge.warn{background:#fffbeb;color:#b45309}
+  .verdict .judge.q{background:#fef2f2;color:#b91c1c}
+  .verdict .why{font-size:13.3px;color:var(--slate)}
+
+  /* timeline */
+  .tl{position:relative;margin:.5em 0 0;padding-left:26px}
+  .tl::before{content:"";position:absolute;left:7px;top:6px;bottom:6px;width:2px;background:var(--line)}
+  .tl .step{position:relative;margin-bottom:18px}
+  .tl .step::before{content:"";position:absolute;left:-23px;top:5px;width:12px;height:12px;border-radius:50%;
+    background:var(--teal);border:3px solid #fff;box-shadow:0 0 0 2px var(--teal)}
+  .tl .step h3{margin:0 0 4px;font-size:15px}
+  .tl .step p{margin:.2em 0;font-size:13.6px;color:var(--slate)}
+
+  /* entry list */
+  .entry{display:grid;grid-template-columns:38px 1fr;gap:14px;background:#fff;border:1px solid var(--line);
+    border-radius:12px;padding:15px 17px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .entry .rank{font-size:22px;font-weight:800;color:var(--teal);text-align:center}
+  .entry h3{margin:0 0 5px;font-size:15px}
+  .entry .meta{font-size:12.6px;color:var(--muted);margin-bottom:4px}
+  .entry .meta b{color:var(--slate)}
+  .entry p{margin:.2em 0;font-size:13.5px;color:var(--slate)}
+
+  .callout{border-left:4px solid var(--amber);background:#fffbeb;border-radius:0 10px 10px 0;
+    padding:14px 18px;margin:14px 0;font-size:14px;color:#7c5310}
+  .callout.teal{border-color:var(--teal);background:#f0fdfa;color:#0b5852}
+  .callout b{color:inherit}
+  .grid-note{font-size:12.5px;color:var(--muted);margin-top:8px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--slate);margin:.2em 0 1em}
+  footer{grid-column:1/-1;border-top:1px solid var(--line);padding:26px 48px;color:var(--muted);font-size:12.5px;background:#fff}
+
+  @media(max-width:980px){
+    .wrap{grid-template-columns:1fr}
+    nav{display:none}
+    main{padding:0 22px 60px}
+    header.hero{padding:38px 24px}
+    .metrics{grid-template-columns:1fr 1fr}
+    .cards.c2,.cards.c3,.cards.c5{grid-template-columns:1fr}
+    .verdict{grid-template-columns:1fr}
+    .verdict .axis,.verdict .judge{border-right:none;border-bottom:1px solid var(--line)}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="kicker">Gesamtreport · Stand 2026-06-12</div>
+  <h1>Content-Autopilot v2</h1>
+  <p>Multi-Tenant-SaaS, das aus Telegram-Sprachnachrichten DSGVO-konform fertige LinkedIn-Posts erzeugt — gestützt auf das Stimm-, Werte- und Avatar-Profil des Kunden. Dieser Report bündelt Vision, SOLL-IST-Abgleich, Backlog, priorisierte Maßnahmen, Backend-Einstiegspunkte, die Technologie-Dokumentation und eine Experten-Bewertung der zugrundeliegenden Technologie.</p>
+  <div class="meta">
+    <span><b>Repo</b> inveloveritas123/content-autopilot-v2</span>
+    <span><b>Quelle SOLL</b> Figma-Board (visuelle Analyse)</span>
+    <span><b>Beta</b> Telegram-first</span>
+    <span><b>Querschnitt</b> DSGVO / EU-souverän · White-Label</span>
+  </div>
+</header>
+
+<div class="wrap">
+<nav>
+  <div class="brand">Content-Autopilot <span>v2</span></div>
+  <div class="sub">Gesamtreport</div>
+  <a class="num" href="#summary">0 · Executive Summary</a>
+  <a class="num" href="#vision">1 · Vision</a>
+  <a class="num" href="#sollist">2 · SOLL-IST-Abgleich</a>
+  <a class="num" href="#findings">3 · 5 Kern-Erkenntnisse</a>
+  <a class="num" href="#mvp">4 · Erfüllungsrechnung</a>
+  <a class="num" href="#backlog">5 · Backlog (37)</a>
+  <a class="num" href="#roadmap">6 · Maßnahmen & Roadmap</a>
+  <a class="num" href="#backend">7 · Backend-Einstieg</a>
+  <a class="num" href="#tech">8 · Technologie-Doku</a>
+  <a class="num" href="#assessment">9 · Experten-Bewertung</a>
+</nav>
+
+<main>
+
+<!-- 0 -->
+<section id="summary">
+  <h2><span class="n">0</span> Executive Summary</h2>
+  <p class="lead">Fast alle Bausteine existieren — aber entlang der falschen Achse verdrahtet (Dashboard/MCP statt der Telegram-Konversationsschleife, die das Board ins Zentrum stellt). Der Weg zur Beta ist <b>Integration und reale Beweisläufe, kein Neubau.</b></p>
+
+  <div class="metrics">
+    <div class="metric green">
+      <div class="v">17,2&nbsp;%</div>
+      <div class="l">Belegt</div>
+      <div class="d">5/29 im echten Lauf bewiesen</div>
+    </div>
+    <div class="metric blue">
+      <div class="v">48,3&nbsp;%</div>
+      <div class="l">Gebaut</div>
+      <div class="d">14/29 Code + Mock-Tests grün</div>
+    </div>
+    <div class="metric amber">
+      <div class="v">31,0&nbsp;%</div>
+      <div class="l">Testlücke</div>
+      <div class="d">gebaut, aber nie real gelaufen</div>
+    </div>
+    <div class="metric red">
+      <div class="v">51,7&nbsp;%</div>
+      <div class="l">Fehlt</div>
+      <div class="d">15/29 inkl. Produktkern</div>
+    </div>
+  </div>
+  <div class="bar" title="grün = belegt · gelb = Testlücke · rot = fehlt">
+    <i class="g" style="width:17.2%"></i><i class="y" style="width:31.1%"></i><i class="r" style="width:51.7%"></i>
+  </div>
+  <div class="legend"><span><span class="dot ok"></span>belegt 17,2&nbsp;%</span><span><span class="dot yel"></span>Testlücke 31,0&nbsp;%</span><span><span class="dot red"></span>fehlt 51,7&nbsp;%</span></div>
+
+  <div class="callout">
+    <b>Kern-Wahrheit:</b> Bausteine ja, Workflow nein. Heute könnte <b>kein Kunde über das System auch nur einen einzigen Post erzeugen</b> — der Produktkern (Kunde antwortet → Folgefrage → fertiger Post im Chat → Feedback) existiert in keiner Form (M18/M24/M25 alle rot), und der einzige vollständige reale Pipeline-Lauf (Setup mit Eric-Transkript) ist nachweislich gebrochen (#33).
+  </div>
+  <div class="callout teal">
+    <b>Technologie-Urteil (kurz):</b> Die Stack-Wahl (FastAPI · Celery · PostgreSQL+pgvector · React/Vite · Requesty-EU-LLM-Seam · Docker) ist für Produkt und Team-Größe <b>überwiegend angemessen</b> — bewusst betreibbar statt hip, nicht overengineered. Zwei Risiken sind klein im Code, groß in der Wirkung: (1) Tenant-Isolation rein applikativ <b>ohne Postgres-RLS</b>; (2) drei direkte <b>US-LLM-Calls</b> brechen die EU-Souveränität bei sensiblen Inhalten.
+  </div>
+</section>
+
+<!-- 1 -->
+<section id="vision">
+  <h2><span class="n">1</span> Vision — das Endbild</h2>
+  <p class="lead">Ein KI-gestützter LinkedIn-Content-Autopilot für Agentur-Endkunden. Der Kunde sammelt laufend Rohmaterial, wird einmalig per Onboarding erfasst (Kontext/Voice/Avatar) und bekommt danach <b>im Telegram-Chat</b> über drei Eingangspfade Anstöße. Aus einer Sprachnachricht entsteht — gestützt auf seine echte Stimme, seine Werte und sein Avatar-Profil — ein <b>fertiger Post zurück im Chat</b>, mit Feedback-Schleife.</p>
+
+  <div class="callout teal">
+    <b>Der Workflow in einem Satz:</b> Sammeln → einmaliges Setup (Kontext/Voice/Avatar) → kategorisierter Speicher → Anstoß über einen der drei Chat-Pfade → Sprachnachricht/Transkript (+ max. 2–3 Rückfragen) → <b>P12</b> Post-Erstellung → <b>P12b</b> Optimierung mit Voice/Werte/Avatar → fertiger Post zurück im Telegram-Chat → Feedback-Loop. <b>P17</b> lernt nebenbei mit.
+  </div>
+
+  <h3 style="margin:22px 0 4px;font-size:16px">Die fünf Bahnen des Figma-Boards (SOLL)</h3>
+  <div class="cards c5" style="margin-top:12px">
+    <div class="card lane"><h3>Bahn 1 · Briefing</h3><p>„Alles kann Content werden." Content-Arten personal/Trust/Projekte. „Sammeln, Sammeln, Sammeln": Fotos, Ideen, YouTube → Rohmaterial-Strom.</p></div>
+    <div class="card lane"><h3>Bahn 2 · Setup</h3><p>Einmaliges Onboarding: Mini-Formular + 60-min-Gespräch (8 Phasen) → P01 Kontext · P02 Website · P03 Voice · P04 Avatar → DB. Voice-Fallback.</p></div>
+    <div class="card lane"><h3>Bahn 3 · Speicher</h3><p>Alles laden → kategorisieren (Werte/Stories/Konflikte). „Struktur, damit die KI das sinnvoll nutzen kann." LinkedIn-Erfolgsanalyse (später).</p></div>
+    <div class="card lane"><h3>Bahn 4 · Input</h3><p>Drei Pfade in den Chat: A — P07 Research-Push (Hooks) · B — P08 Fragenliste · C — P09 „gib mir Ideen". Eigene Idee → P13 (3 Aufhänger).</p></div>
+    <div class="card lane"><h3>Bahn 5 · Output</h3><p>Transkript → P12 (Voice+Werte+Avatar) → P12b → fertiger Post im Chat → Feedback-Loop (P16) + Kosten. P17 aktualisiert die Entitäten inkrementell.</p></div>
+  </div>
+  <p class="grid-note">Board-Notizen: „Alles findet in WhatsApp/Telegram statt" (Beta: Telegram-first) · „Claude Opus 4.6 als Modell für Content" (→ Entscheid #42) · „Wie viele Tokens sind nötig?" (Kosten-Transparenz).</p>
+</section>
+
+<!-- 2 -->
+<section id="sollist">
+  <h2><span class="n">2</span> SOLL-IST-Abgleich</h2>
+  <p class="lead">Verdichtete Master-Matrix aus der visuellen Board-Analyse, jede Statusangabe am Code geprüft.</p>
+  <div class="legend">
+    <span><span class="st ok">✓</span> läuft / E2E-belegt</span>
+    <span><span class="st yel">~</span> gebaut, unbewährt</span>
+    <span><span class="st ora">≠</span> anders gebaut</span>
+    <span><span class="st red">✗</span> fehlt</span>
+    <span><span class="st pau">⏸</span> bewusst später</span>
+  </div>
+
+  <h3 style="font-size:15px;margin:18px 0 2px">Bahn 1 — Briefing Kunde</h3>
+  <table class="tbl"><thead><tr><th>SOLL</th><th class="c">Status</th><th>Beleg</th><th class="c">Issue</th></tr></thead><tbody>
+    <tr><td>Ideen/Gedanken via Chat sammeln</td><td class="c"><span class="st ok">läuft</span></td><td><code>telegram_task.py</code> Voice/Text → memory_chunk</td><td class="c">—</td></tr>
+    <tr><td>Fotos sammeln</td><td class="c"><span class="st yel">gebaut</span></td><td><code>_process_photo</code> + <code>photo_pipeline.py</code> (OCR+Vision)</td><td class="c">—</td></tr>
+    <tr><td>YouTube-Videos abspeichern</td><td class="c"><span class="st yel">gebaut</span></td><td><code>monitor_task.py</code>, <code>source_adapters.py</code></td><td class="c">—</td></tr>
+    <tr><td>Content-Arten personal/Trust/Projekte</td><td class="c"><span class="st pau">später</span></td><td>Briefing-Konzept, ggf. Tagging</td><td class="c">—</td></tr>
+  </tbody></table>
+
+  <h3 style="font-size:15px;margin:18px 0 2px">Bahn 2 — Setup</h3>
+  <table class="tbl"><thead><tr><th>SOLL</th><th class="c">Status</th><th>Beleg</th><th class="c">Issue</th></tr></thead><tbody>
+    <tr><td>Onboarding-Wizard (Mini-Formular)</td><td class="c"><span class="st yel">gebaut</span></td><td><code>api/wizard.py</code>, E2E unbewährt</td><td class="c"><span class="pill iss">#32</span></td></tr>
+    <tr><td><b>Gespräch mit 8 Phasen</b></td><td class="c"><span class="st ora">anders</span></td><td>nur <b>6 Phasen</b>; „Expertise & Fachwissen" fehlt</td><td class="c"><span class="pill iss">#44</span></td></tr>
+    <tr><td>Transkript + Formular → Pipeline</td><td class="c"><span class="st yel">gebaut</span></td><td>beide Eingänge verdrahtet</td><td class="c"><span class="pill iss">#32</span></td></tr>
+    <tr><td><b>P01 Kundenkontext</b></td><td class="c"><span class="st red">fehlt</span></td><td><b>echter Lauf widerlegt:</b> Markdown statt JSON</td><td class="c"><span class="pill iss">#33</span></td></tr>
+    <tr><td><b>P02 Website-Analyse</b></td><td class="c"><span class="st red">fehlt</span></td><td>kein Artefakt im Repo</td><td class="c"><span class="pill iss">#39</span></td></tr>
+    <tr><td><b>P03 Voice-Analyse</b></td><td class="c"><span class="st red">fehlt</span></td><td>wie P01: Markdown bricht E2E</td><td class="c"><span class="pill iss">#33</span></td></tr>
+    <tr><td>P04 Avatar-Vertiefung</td><td class="c"><span class="st yel">gebaut</span></td><td><code>p04_task.py</code> kanonisch, nie real erreicht</td><td class="c"><span class="pill iss">#32</span></td></tr>
+    <tr><td><b>Voice-Fallback</b></td><td class="c"><span class="st red">fehlt</span></td><td>kein Fallback; leere Defaults</td><td class="c"><span class="pill iss">#40</span></td></tr>
+  </tbody></table>
+
+  <h3 style="font-size:15px;margin:18px 0 2px">Die drei Entitäten <span style="font-weight:500;color:var(--muted);font-size:13px">— architektur-kritischer Querfluss</span></h3>
+  <table class="tbl"><thead><tr><th>SOLL</th><th class="c">Status</th><th>Beleg</th><th class="c">Issue</th></tr></thead><tbody>
+    <tr><td><b>Kunden Voice</b> speist P12</td><td class="c"><span class="st ok">läuft</span></td><td><code>tenant_voice_profile</code>, <code>canonical_profiles.py</code></td><td class="c">—</td></tr>
+    <tr><td><b>Kunden Avatar</b> speist P12</td><td class="c"><span class="st ok">läuft</span></td><td><code>tenant_audience_avatar</code>, selbe Fassade</td><td class="c">—</td></tr>
+    <tr><td><b>Kunden Werte</b> speist P12</td><td class="c"><span class="st red">fehlt</span></td><td><b>existiert nicht als Speicher</b> — Werte nur als memory_chunk-Kategorie, erreicht P12 nie</td><td class="c"><span class="pill iss">#43</span></td></tr>
+  </tbody></table>
+
+  <h3 style="font-size:15px;margin:18px 0 2px">Bahn 4 — Input an Kunden</h3>
+  <table class="tbl"><thead><tr><th>SOLL</th><th class="c">Status</th><th>Beleg</th><th class="c">Issue</th></tr></thead><tbody>
+    <tr><td><b>Pfad A / P07</b> Research-Push 2×/Woche + Hooks</td><td class="c"><span class="st ora">anders</span></td><td>Findings gebaut, aber <b>kein Telegram-Push</b></td><td class="c"><span class="pill iss">#35</span></td></tr>
+    <tr><td><b>Pfad B / P08</b> Fragen aus Fragenliste</td><td class="c"><span class="st yel">gebaut</span></td><td>Opener läuft; Antwort wird nicht geroutet</td><td class="c"><span class="pill iss">#15</span> <span class="pill iss">#16</span></td></tr>
+    <tr><td><b>Pfad C / P09</b> „gib mir Ideen" on-demand</td><td class="c"><span class="st ora">anders</span></td><td>Ideation gebaut (Dashboard), kein Chat-Trigger</td><td class="c"><span class="pill iss">#36</span></td></tr>
+    <tr><td>Alle drei münden im Chat</td><td class="c"><span class="st red">fehlt</span></td><td>nur P08-Opener + Backlog-Alert gehen raus</td><td class="c"><span class="pill iss">#35</span> <span class="pill iss">#36</span></td></tr>
+    <tr><td><b>P13</b> eigene Idee → 3 Aufhänger → Einmündung</td><td class="c"><span class="st ora">anders</span></td><td><code>p12_variants_task.py</code> (hook/story/these ✓), nur Dashboard</td><td class="c"><span class="pill iss">#36</span></td></tr>
+  </tbody></table>
+
+  <h3 style="font-size:15px;margin:18px 0 2px">Bahn 5 — Output</h3>
+  <table class="tbl"><thead><tr><th>SOLL</th><th class="c">Status</th><th>Beleg</th><th class="c">Issue</th></tr></thead><tbody>
+    <tr><td>Sprachnachricht → Transkript</td><td class="c"><span class="st ok">läuft</span></td><td><code>_process_voice</code> → <code>transcribe_voice</code></td><td class="c">—</td></tr>
+    <tr><td><b>Rückfragen-Loop max 2–3</b></td><td class="c"><span class="st yel">gebaut</span></td><td>Logik fertig; Limit ist <b>5</b> statt 3; Telegram-Brücke fehlt</td><td class="c"><span class="pill iss">#16</span> <span class="pill iss">#17</span></td></tr>
+    <tr><td><b>P12 Post-Erstellung</b> (Voice+Werte+Avatar)</td><td class="c"><span class="st yel">gebaut</span></td><td>EU-Seam (S6); kein Trigger; <b>Werte fehlen im Kontext</b></td><td class="c"><span class="pill iss">#19</span> <span class="pill iss">#43</span></td></tr>
+    <tr><td>P12b Optimierung (Pflicht)</td><td class="c"><span class="st yel">gebaut</span></td><td>im API-Pfad verkettet; E2E unbewährt</td><td class="c"><span class="pill iss">#20</span></td></tr>
+    <tr><td><b>Post zurück im Chat</b></td><td class="c"><span class="st red">fehlt</span></td><td><b>kein Pfad Post→Chat — Kern-Gap der Beta</b></td><td class="c"><span class="pill iss">#17</span> <span class="pill iss">#19</span></td></tr>
+    <tr><td>Feedback-Loop (zurück zum Transkript)</td><td class="c"><span class="st ora">anders</span></td><td>APIs + Cost-Cap da; Telegram-Verdrahtung fehlt</td><td class="c"><span class="pill iss">#37</span></td></tr>
+    <tr><td><b>P17 je-Transkript-Lernen</b></td><td class="c"><span class="st ora">anders</span></td><td>Drift-Review statt je-Transkript; Seam-Bypass; kein Werte-Ziel</td><td class="c"><span class="pill iss">#41</span> <span class="pill iss">#22</span></td></tr>
+    <tr><td>Quality-Gate vor Versand</td><td class="c"><span class="st ora">anders</span></td><td>nur Stub (F1 ≈ 0.27)</td><td class="c"><span class="pill iss">#38</span></td></tr>
+  </tbody></table>
+</section>
+
+<!-- 3 -->
+<section id="findings">
+  <h2><span class="n">3</span> Die fünf wichtigsten Erkenntnisse der visuellen Analyse</h2>
+  <div class="cards c2" style="margin-top:14px">
+    <div class="card"><h3><span class="tag">01</span>Board-Trias = Voice/WERTE/Avatar</h3><p>v2 führt Kontext/Voice/Avatar. „Kunden Werte" existiert nicht als Speicher; Werte-Chunks versanden für die Post-Erstellung. <b>Größte unerkannte Architektur-Lücke</b> — ohne sie ist auch #41 (P17) nicht vollständig umsetzbar. Konzept liegt vor (<code>CONCEPT-43-werte-entitaet.md</code>).</p></div>
+    <div class="card"><h3><span class="tag">02</span>8 Gesprächsphasen sind nur 6</h3><p>„Expertise & Fachwissen" fehlt komplett — fachlicher Substanzverlust fürs Setup. War unsichtbar, weil bisher nur die Existenz des Wizards geprüft wurde, nicht seine Phasen-Struktur.</p></div>
+    <div class="card"><h3><span class="tag">03</span>Kunden-ID korrekt, Provenienz fehlt</h3><p>Die UUID-pro-Eintrag entspricht dem Board exakt, aber <b>Transkript-/Formular-Link fehlen</b> — das Transkript durchläuft die Pipeline und verschwindet ohne Quell-Verweis.</p></div>
+    <div class="card"><h3><span class="tag">04</span>P13 & Feedback sind Einmündungen</h3><p>P13 ist visuell kein Endpunkt, sondern mündet in den Transkript-Knoten; der Feedback-Loop geht <b>zum Transkript zurück</b> (= neuer Durchlauf, nicht bloß „regenerieren"). Konsequenz für #36/#19/#37.</p></div>
+    <div class="card"><h3><span class="tag">05</span>Farb-Semantik bestätigt die Priorisierung</h3><p>Alles Blaue (LinkedIn) und Graue (P05/P06) ist laut Board selbst optional/später — die ⏸-Entscheidungen sind keine Abweichung. Umgekehrt: alles Gelbe/Orange muss für „genau so" stehen — und davon fehlen Post-im-Chat, Intent-Routing, Werte-Entität, P02, Voice-Fallback, P17, 8 Phasen.</p></div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section id="mvp">
+  <h2><span class="n">4</span> Erfüllungsrechnung — MVP M1–M29</h2>
+  <p class="lead"><b>Strenge Definition:</b> <span class="st ok">belegt</span> = im echten Lauf nachgewiesen (Mock-Tests zählen nicht) · <span class="st yel">theoretisch</span> = Code + Mock-Tests grün, nie real · <span class="st red">fehlt</span> = nicht/falsch gebaut oder real gebrochen.</p>
+  <table class="tbl"><thead><tr><th>M#</th><th>Element</th><th class="c">Status</th><th>M#</th><th>Element</th><th class="c">Status</th></tr></thead><tbody>
+    <tr><td>M1</td><td>Server-Deploy & Stack</td><td class="c"><span class="st ok">belegt</span></td><td>M16</td><td>Kategorisierung W/S/K</td><td class="c"><span class="st yel">theor.</span></td></tr>
+    <tr><td>M2</td><td>Multi-Tenant-Grundgerüst</td><td class="c"><span class="st ok">belegt</span></td><td>M17</td><td>P08-Opener-Versand</td><td class="c"><span class="st ok">belegt</span></td></tr>
+    <tr><td>M3</td><td>EU/DSGVO-LLM-Routing</td><td class="c"><span class="st yel">theor.</span></td><td>M18</td><td><b>Konversationsschleife</b></td><td class="c"><span class="st red">fehlt</span></td></tr>
+    <tr><td>M4</td><td>Onboarding-Wizard</td><td class="c"><span class="st yel">theor.</span></td><td>M19</td><td>P07-Push in Chat</td><td class="c"><span class="st red">fehlt</span></td></tr>
+    <tr><td>M5</td><td>8 Gesprächsphasen</td><td class="c"><span class="st red">fehlt</span></td><td>M20</td><td>P09 on-demand</td><td class="c"><span class="st red">fehlt</span></td></tr>
+    <tr><td>M6</td><td>Pipeline-Orchestrierung</td><td class="c"><span class="st yel">theor.</span></td><td>M21</td><td>P13 → Einmündung</td><td class="c"><span class="st red">fehlt</span></td></tr>
+    <tr><td>M7</td><td>P01 Kundenkontext</td><td class="c"><span class="st red">fehlt</span></td><td>M22</td><td>P12 Post-Erstellung</td><td class="c"><span class="st yel">theor.</span></td></tr>
+    <tr><td>M8</td><td>P03 Voice-Analyse</td><td class="c"><span class="st red">fehlt</span></td><td>M23</td><td>P12b Optimierung</td><td class="c"><span class="st yel">theor.</span></td></tr>
+    <tr><td>M9</td><td>P04 Avatar</td><td class="c"><span class="st yel">theor.</span></td><td>M24</td><td><b>Post zurück im Chat</b></td><td class="c"><span class="st red">fehlt</span></td></tr>
+    <tr><td>M10</td><td>P02 Website-Analyse</td><td class="c"><span class="st red">fehlt</span></td><td>M25</td><td>Feedback-Loop + Kosten</td><td class="c"><span class="st red">fehlt</span></td></tr>
+    <tr><td>M11</td><td>Voice-Fallback</td><td class="c"><span class="st red">fehlt</span></td><td>M26</td><td>P17 je-Transkript-Lernen</td><td class="c"><span class="st red">fehlt</span></td></tr>
+    <tr><td>M12</td><td>Voice+Avatar + Fassade</td><td class="c"><span class="st ok">belegt</span></td><td>M27</td><td>Quality-Gate</td><td class="c"><span class="st red">fehlt</span></td></tr>
+    <tr><td>M13</td><td><b>Werte-Entität</b></td><td class="c"><span class="st red">fehlt</span></td><td>M28</td><td>Kosten-Transparenz</td><td class="c"><span class="st yel">theor.</span></td></tr>
+    <tr><td>M14</td><td>Kanonisches Schema</td><td class="c"><span class="st yel">theor.</span></td><td>M29</td><td>Content-Modell-Entscheid</td><td class="c"><span class="st red">fehlt</span></td></tr>
+    <tr><td>M15</td><td>Telegram-Inbound→Memory</td><td class="c"><span class="st ok">belegt</span></td><td></td><td></td><td class="c"></td></tr>
+  </tbody></table>
+  <p class="grid-note"><b>✅ = 5</b> (M1, M2, M12, M15, M17) · <b>🟡 = 9</b> (M3, M4, M6, M9, M14, M16, M22, M23, M28) · <b>🔴 = 15</b> (Rest). Das Bewiesene ist fast ausschließlich Infrastruktur und Inbound — nicht das Produkterlebnis.</p>
+</section>
+
+<!-- 5 -->
+<section id="backlog">
+  <h2><span class="n">5</span> Backlog — 37 offene Issues</h2>
+  <div class="legend">
+    <span><b>Rolle:</b> <span class="pill r-arch">architekt</span> <span class="pill r-knecht">knecht</span> <span class="pill r-robert">robert</span> <span class="pill r-chris">chris</span></span>
+    <span><b>Modell:</b> <span class="pill m-fable">fable</span> <span class="pill m-opus">opus</span> <span class="pill m-sonnet">sonnet</span> <span class="pill m-haiku">haiku</span></span>
+  </div>
+
+  <h3 style="font-size:15px;margin:16px 0 2px">Phase A — Telegram-Konversationsschleife <span style="font-weight:500;color:var(--muted);font-size:13px">(Kern der Beta)</span></h3>
+  <table class="tbl"><thead><tr><th>Issue</th><th>Titel</th><th class="c">Rolle</th><th class="c">Modell</th><th class="c">Status</th></tr></thead><tbody>
+    <tr><td><span class="pill iss">#15</span> <span class="pill blk">BLOCKER</span></td><td>p08 + layer1 auf LLM-Seam</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-opus">opus</span></td><td class="c"><span class="st ok">fertig · PR #55</span></td></tr>
+    <tr><td><span class="pill iss">#16</span></td><td>Inbound-Routing in telegram_task</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-opus">opus</span></td><td class="c"><span class="st ok">fertig · PR #55</span></td></tr>
+    <tr><td><span class="pill iss">#17</span></td><td>Folgefrage/Abschluss zurücksenden (Limit 2–3)</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td><td class="c"><span class="st yel">offen</span></td></tr>
+    <tr><td><span class="pill iss">#18</span></td><td>Idempotenz gegen Doppel-Verarbeitung</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td><td class="c"><span class="st yel">offen</span></td></tr>
+    <tr><td><span class="pill iss">#19</span> <span class="pill blk">BLOCKER</span></td><td>Post-Generierung an Session-Abschluss + Post im Chat</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-opus">opus</span></td><td class="c"><span class="st yel">offen</span></td></tr>
+    <tr><td><span class="pill iss">#20</span></td><td>E2E-Beweislauf Telegram + Tenant-Opt-in</td><td class="c"><span class="pill r-knecht">knecht</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td><td class="c"><span class="st yel">offen</span></td></tr>
+  </tbody></table>
+
+  <h3 style="font-size:15px;margin:16px 0 2px">Phase B — Setup belastbar + Schema</h3>
+  <table class="tbl"><thead><tr><th>Issue</th><th>Titel</th><th class="c">Rolle</th><th class="c">Modell</th></tr></thead><tbody>
+    <tr><td><span class="pill iss">#33</span></td><td>P01/P03-JSON-Fix + Eric-Volldurchlauf</td><td class="c"><span class="pill r-knecht">knecht</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#32</span></td><td>Server-E2E kanonische Validierung</td><td class="c"><span class="pill r-knecht">knecht</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#43</span></td><td><b>Werte-Entität: Speicher + P12-Injektion + P17-Ziel</b></td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-fable">fable</span></td></tr>
+    <tr><td><span class="pill iss">#29</span></td><td>Konsumenten auf kanonisches Louis-Schema</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-opus">opus</span></td></tr>
+    <tr><td><span class="pill iss">#25</span></td><td>Alt-Rows: Louis-Pflichtfelder nachziehen</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#26</span></td><td>_meta-Rehydration + Provenienz-Links</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#44</span></td><td>Wizard 6→8 Gesprächsphasen</td><td class="c"><span class="pill r-arch">arch</span> <span class="pill r-chris">chris</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#47</span></td><td>CI main grün (Lint + E2E-Smoke)</td><td class="c"><span class="pill r-knecht">knecht</span></td><td class="c"><span class="pill m-haiku">haiku</span></td></tr>
+  </tbody></table>
+
+  <h3 style="font-size:15px;margin:16px 0 2px">Phase C — Board-Vervollständigung + Querschnitt</h3>
+  <table class="tbl"><thead><tr><th>Issue</th><th>Titel</th><th class="c">Rolle</th><th class="c">Modell</th></tr></thead><tbody>
+    <tr><td><span class="pill iss">#35</span></td><td>P07-Research-Findings als Chat-Push</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#36</span></td><td>Intent-Routing: P09 on-demand + P13 aus dem Chat</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-opus">opus</span></td></tr>
+    <tr><td><span class="pill iss">#37</span></td><td>P16-Feedback-Loop „nochmal anders"</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-opus">opus</span></td></tr>
+    <tr><td><span class="pill iss">#41</span></td><td>P17 je-Transkript-Beobachter + Seam (inkl. #22)</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-fable">fable</span></td></tr>
+    <tr><td><span class="pill iss">#38</span></td><td>Quality-Gate vom Stub zum echten Scorer</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-opus">opus</span></td></tr>
+    <tr><td><span class="pill iss">#39</span></td><td>P02 Website-Analyse implementieren</td><td class="c"><span class="pill r-arch">arch</span> <span class="pill r-chris">chris</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#40</span></td><td>Voice-Fallback</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#42</span></td><td><b>Modell-Entscheid Content</b> (Opus vs. Sonnet-EU)</td><td class="c"><span class="pill r-robert">robert</span></td><td class="c">—</td></tr>
+    <tr><td><span class="pill iss">#46</span></td><td>Letzte Seam-Bypässe (sensitive_detector + md_converter)</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#30</span></td><td>Modell-Pinning: 29 <code>-latest</code>-Modelle</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-haiku">haiku</span></td></tr>
+    <tr><td><span class="pill iss">#22</span></td><td>P17 lädt mit leerem System-Prompt</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#24</span></td><td>SSH-Erreichbarkeit GitHub-Runner</td><td class="c"><span class="pill r-knecht">knecht</span></td><td class="c"><span class="pill m-haiku">haiku</span></td></tr>
+    <tr><td><span class="pill iss">#27</span></td><td>Prompt-Studio 422-Anzeige</td><td class="c"><span class="pill r-knecht">knecht</span></td><td class="c"><span class="pill m-haiku">haiku</span></td></tr>
+  </tbody></table>
+
+  <h3 style="font-size:15px;margin:16px 0 2px">Test-Serie <span style="font-weight:500;color:var(--muted);font-size:13px">(macht 🟡 → ✅)</span> + Architekt-Folge-Issues</h3>
+  <table class="tbl"><thead><tr><th>Issue</th><th>Titel</th><th class="c">Rolle</th><th class="c">Modell</th></tr></thead><tbody>
+    <tr><td><span class="pill iss">#48</span></td><td>EU-Runtime-Audit (kein US-Endpoint)</td><td class="c"><span class="pill r-knecht">knecht</span></td><td class="c"><span class="pill m-haiku">haiku</span></td></tr>
+    <tr><td><span class="pill iss">#49</span></td><td>Server-E2E Wizard-Eingang</td><td class="c"><span class="pill r-knecht">knecht</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#50</span></td><td>Kategorisierungs-Qualität bewerten</td><td class="c"><span class="pill r-knecht">knecht</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#51</span></td><td>Cost-Cap real auslösen + Kosten-Report</td><td class="c"><span class="pill r-knecht">knecht</span></td><td class="c"><span class="pill m-haiku">haiku</span></td></tr>
+    <tr><td><span class="pill iss">#52</span></td><td>Multi-Tenant-Isolation härten</td><td class="c"><span class="pill r-knecht">knecht</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#56</span></td><td>#16-Followup: <code>routed_to</code> persistieren</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#57</span></td><td>#16-Followup: targeted-Sessions umgehen p08-Routing</td><td class="c"><span class="pill r-arch">architekt</span></td><td class="c"><span class="pill m-sonnet">sonnet</span></td></tr>
+    <tr><td><span class="pill iss">#58</span></td><td>D3-Baseline: gitleaks-Funde (Hygiene)</td><td class="c"><span class="pill r-knecht">knecht</span></td><td class="c"><span class="pill m-haiku">haiku</span></td></tr>
+  </tbody></table>
+</section>
+
+<!-- 6 -->
+<section id="roadmap">
+  <h2><span class="n">6</span> Priorisierte Maßnahmen & Roadmap</h2>
+  <p class="lead">„Bis es GENAU so ist wie das Board." A-Strang (Telegram-Wiring) und B-Strang (Setup-Pipeline) berühren sich kaum → ideale Parallelspur.</p>
+  <div class="tl">
+    <div class="step"><h3>Schritt 1 — sofort, voll parallel</h3>
+      <p><b>Architekt:</b> #15 mergen → <b>#16 ✅</b> → #17/#18 (Folgefrage + Idempotenz).</p>
+      <p><b>Knecht:</b> #33 mergen + Eric-Volldurchlauf → #32 abnehmen; nebenher #34, #47 (CI grün), #24.</p>
+      <p><b>Robert:</b> #42 Modell-Entscheid — blockiert nichts, betrifft aber alle kreativen Pfade.</p>
+    </div>
+    <div class="step"><h3>Schritt 2</h3>
+      <p><b>Architekt:</b> #19 Post-im-Chat (BLOCKER, schließt den Kern-Gap) → #37 Feedback-Loop; parallel #43-Werte-Entität-Design (fable) schon während #19.</p>
+      <p><b>Knecht:</b> #20 echter Bot-Roundtrip sobald #19 deployed; #48 EU-Audit; #49 Wizard-E2E.</p>
+      <p><b>Architekt 2. Spur:</b> #29 → #25 → #26 (Schema) + #44 (8 Phasen) + #46 (letzte Seam-Bypässe).</p>
+    </div>
+    <div class="step"><h3>Schritt 3</h3>
+      <p><b>Architekt:</b> #35 (P07-Push), #36 (Intent-Routing/P09/P13), #41 (P17, nach Werte-Entität), #38 (Quality-Gate), #39 (P02), #40 (Voice-Fallback), #30 (Pinning).</p>
+      <p><b>Knecht:</b> #50/#51/#52 + Korpuslauf für #38; #27.</p>
+    </div>
+    <div class="step"><h3>Schritt 4 — Beta-Abnahme</h3>
+      <p>Kompletter Beweislauf mit echtem Kunden (Eric): Setup → Frage → Voice-Antwort → Post im Chat → Feedback → P17-Update. Jeder Schritt mit Server-Beleg im Issue.</p>
+    </div>
+  </div>
+
+  <div class="callout teal" style="margin-top:20px">
+    <b>Definition of Done — „Beta-ready wenn":</b> (1) Echter Kunde durchläuft das Setup real inkl. <b>Werte</b>-Entität · (2) Anstöße über alle drei Chat-Pfade + P13 · (3) Sprachnachricht → max. 2–3 Rückfragen → fertiger Post <b>im Chat</b> (P12→P12b→Quality-Gate, Voice/Werte/Avatar) · (4) „Nochmal anders" mit Kosten-Check; P17 hat real aktualisiert · (5) Querschnitt belegt: kein US-LLM-Call, Zweit-Tenant isoliert, Kosten pro Post, CI 5/5 grün, #42 entschieden · (6) <b>alle 29 M-Elemente auf ✅</b> — „im echten Lauf bewiesen", nicht „Tests grün".
+  </div>
+  <p class="grid-note"><b>⏸ Bewusst später (Board-grau/-blau):</b> LinkedIn-API (Posts/Statistik/P06), P05-Cron + Extra-Challenge-Loop, WhatsApp-Kanal, Content-Arten-Tagging, Carousels/Kampagnen/Foto-Pipeline einfrieren, MCP-/Claude-Desktop-Ausbau.</p>
+</section>
+
+<!-- 7 -->
+<section id="backend">
+  <h2><span class="n">7</span> Wo ein Entwickler ansetzen sollte (Backend)</h2>
+  <p class="lead">Priorisiert nach Wirkung. Jeder Punkt: Was / Wo / Warum / Hebel — belegt durch Code-Lektüre.</p>
+
+  <div class="entry"><div class="rank">1</div><div>
+    <h3>US-LLM-Bypässe schließen <span class="st red" style="vertical-align:middle">Compliance · höchste Wirkung</span></h3>
+    <div class="meta"><b>Wo:</b> <code>voice_drift_task.py:310-314</code> · <code>md_converter.py:133</code> · <code>sensitive_detector.py:408</code></div>
+    <p><b>Warum:</b> Direkte <code>anthropic.Anthropic()</code> → US-<code>api.anthropic.com</code>, bricht die EU-Souveränität genau bei Drift-/Sensibilitäts-/Konvertierungsdaten. <b>Hebel:</b> Auf <code>call_pipeline_llm</code> (Bedrock-EU) umstellen — der Seam existiert, reine Umverkabelung. (#41/#46)</p>
+  </div></div>
+
+  <div class="entry"><div class="rank">2</div><div>
+    <h3>Tenant-Isolation härten <span class="st red" style="vertical-align:middle">größter stiller Leak-Schutz</span></h3>
+    <div class="meta"><b>Wo:</b> <code>dependencies.py</code> + alle <code>services/*.py</code> mit <code>tenant_id</code>-Queries</div>
+    <p><b>Warum:</b> Keine Postgres-RLS (0 <code>CREATE POLICY</code>) — Isolation hängt vollständig an manuellem <code>WHERE tenant_id</code>; ein vergessenes Predicate = Cross-Tenant-Leak. <b>Hebel:</b> RLS-Policies pro Tabelle + <code>SET app.tenant_id</code> als Session-GUC (Defense-in-Depth). (#52)</p>
+  </div></div>
+
+  <div class="entry"><div class="rank">3</div><div>
+    <h3>Pipeline-Idempotenz P01→P12c <span class="st yel" style="vertical-align:middle">Geld + Stabilität</span></h3>
+    <div class="meta"><b>Wo:</b> <code>p01_task.py</code>, <code>p12_task.py</code> (<code>max_retries=2</code>), <code>pipeline_pump_task.py</code></div>
+    <p><b>Warum:</b> Retries ohne Idempotenz-Guard + Pump-Polling können Stufen doppelt ausführen (doppelte Kosten/Inserts), kein sauberer Resume nach Teilausfall. <b>Hebel:</b> Status-Guard pro Stufe + <code>acks_late=True</code> + DB-Unique-Constraint auf (tenant, stage). (#18)</p>
+  </div></div>
+
+  <div class="entry"><div class="rank">4</div><div>
+    <h3>Test-Suite lokal lauffähig / Sync-Async-DB entwirren <span class="st yel" style="vertical-align:middle">Iterationsgeschwindigkeit</span></h3>
+    <div class="meta"><b>Wo:</b> <code>tests/conftest.py</code>, <code>models/base.py</code> (sync + async Doppel-Engine)</div>
+    <p><b>Warum:</b> Auf bare-Py3.9-venv brechen DB-berührende Tests bei Collection; Doppel-Engine ist dauerhafte Komplexität. <b>Hebel:</b> conftest-Stub/SQLite-Fallback oder gepinnte <code>requirements-dev.txt</code> + <code>make test</code> in Docker; mittelfristig Sync-Pfad reduzieren.</p>
+  </div></div>
+
+  <div class="entry"><div class="rank">5</div><div>
+    <h3>Modell-Pinning der <code>-latest</code>-Aliasse <span class="st yel" style="vertical-align:middle">Reproduzierbarkeit + Budget</span></h3>
+    <div class="meta"><b>Wo:</b> <code>provider_resolver.py</code>, <code>pipeline_llm.py</code> (S2–S5 <code>*-latest</code>)</div>
+    <p><b>Warum:</b> <code>-latest</code> = nicht reproduzierbare Evals + stilles Kosten-/Verhaltens-Drift (verursachte schon einen Overrun). <b>Hebel:</b> auf datierte Aliasse pinnen (S6 ist Vorbild), Bump nur mit Eval-Gate. (#30)</p>
+  </div></div>
+
+  <div class="entry"><div class="rank">6</div><div>
+    <h3>Observability über <code>llm_call_log</code> vereinheitlichen <span class="st yel" style="vertical-align:middle">Audit-Belastbarkeit</span></h3>
+    <div class="meta"><b>Wo:</b> <code>llm_call_log.py</code>, <code>provider_resolver.track_cost</code>, <code>pipeline_llm.py</code></div>
+    <p><b>Warum:</b> Cost-Tracking über zwei Seams verteilt → Lücken/Doppelzählung schwer auditierbar. <b>Hebel:</b> einheitliches Logging (correlation_id + tenant + tier + cache-tokens) an einer Stelle. (stützt #48/#51)</p>
+  </div></div>
+
+  <div class="cards c2" style="margin-top:4px">
+    <div class="card"><h3><span class="tag">7</span>Fail-open-Cap/Throttle bewerten</h3><p><code>llm.py:303-328</code> fängt jede Exception → <code>pass</code>. Bei DB-Ausfall werden Budget- und Rate-Limits <b>lautlos deaktiviert</b> — genau wenn ein Runaway am teuersten ist. Hebel: Sentry-Alert bei Cap-Failure; Throttle ggf. „fail-closed".</p></div>
+    <div class="card"><h3><span class="tag">8</span>Pydantic-v2-Settings <span style="font-weight:500;color:var(--muted)">— Quick Win</span></h3><p><code>config.py:71</code> nutzt v1-Style <code>class Config</code> statt <code>model_config = SettingsConfigDict(...)</code> — in pydantic-settings 2.7 deprecated. Hebel: Einzeiler-Migration, niedriges Risiko.</p></div>
+  </div>
+</section>
+
+<!-- 8 -->
+<section id="tech">
+  <h2><span class="n">8</span> Technologie-Dokumentation</h2>
+
+  <h3 style="font-size:16px;margin:6px 0 2px">8.1 Sprachen-Inventur <span style="font-weight:500;color:var(--muted);font-size:13px">(real gezählt via <code>git ls-files</code>)</span></h3>
+  <table class="tbl"><thead><tr><th>Sprache</th><th class="c">Dateien</th><th class="c">LOC (grob)</th><th>Notiz</th></tr></thead><tbody>
+    <tr><td><b>Python</b></td><td class="c">264</td><td class="c">~58.000</td><td>backend (api 36 · services 53 · tasks 37 · models 21 · tests 50), mcp-server, scripts</td></tr>
+    <tr><td><b>JavaScript / JSX</b> (Frontend)</td><td class="c">74</td><td class="c">~32.500</td><td>reines JSX, <b>kein TypeScript</b></td></tr>
+    <tr><td>Alembic-Migrationen</td><td class="c">49</td><td class="c">—</td><td><code>001</code>…<code>049</code>, lückenlos (Schema vollständig in Python-Migrationen)</td></tr>
+    <tr><td>YAML</td><td class="c">50</td><td class="c">—</td><td>inkl. 11 CI-Workflows</td></tr>
+    <tr><td>JSON</td><td class="c">28</td><td class="c">—</td><td>Config/Fixtures</td></tr>
+    <tr><td>Dockerfiles</td><td class="c">5</td><td class="c">—</td><td>backend, frontend, mcp-server, nginx ×2</td></tr>
+    <tr><td>Shell</td><td class="c">4</td><td class="c">—</td><td><code>setup.sh</code> + 3</td></tr>
+    <tr><td>Markdown</td><td class="c">105</td><td class="c">—</td><td>hohe Doku-Dichte (Vision, SCOPE, HANDOFF, ADRs)</td></tr>
+  </tbody></table>
+  <p class="grid-note"><b>Runtime:</b> Ziel-Python <b>3.12</b> (<code>.python-version</code>; <code>requires-python &gt;=3.11</code>). Lokaler Test-venv ist Py3.9 (ohne sqlalchemy/celery) → volle Suite nur in CI/Docker. Frontend: <b>React 18.3.1 + Vite 6</b>, Tailwind 3.4. Node-Version nicht gepinnt.</p>
+
+  <h3 style="font-size:16px;margin:22px 0 2px">8.2 Tech-Stack</h3>
+  <div class="cards c2">
+    <div class="card"><h3>Web / API</h3><p>FastAPI 0.115 · uvicorn 0.34 · <b>Pydantic v2</b> + pydantic-settings · CSRF-Middleware</p></div>
+    <div class="card"><h3>Async-Tasks</h3><p>Celery 5.4 [redis] · Redis 5.2 (Broker+Backend) · <b>Celery Beat</b> (~20 periodische Tasks) · Worker <code>-c 2</code></p></div>
+    <div class="card"><h3>Datenbank</h3><p>PostgreSQL <b>17</b> (Host) · SQLAlchemy <b>2.0 sync + async</b> (asyncpg + psycopg2) · Alembic · <b>pgvector</b> <code>vector(1536)</code>, HNSW-Index (cosine)</p></div>
+    <div class="card"><h3>LLM-Layer</h3><p>Zwei Seams: <code>pipeline_llm.py</code> (Tier <b>S1–S6</b>, EU gepinnt: S1 Vertex EU, S6 Bedrock Frankfurt) + <code>llm.py</code> (Cost-Cap, Throttle). Router: <b>Requesty/LiteLLM</b></p></div>
+    <div class="card"><h3>Bot / Voice</h3><p>Telegram-Bot · WhatsApp Business Cloud (vorbereitet) · Voice-Transkription · yt-dlp · feedparser · readability-lxml</p></div>
+    <div class="card"><h3>Frontend</h3><p>React 18.3 · Vite 6 · Tailwind 3.4 · React Router · Recharts · lucide-react · react-force-graph-2d · Vitest + Playwright</p></div>
+    <div class="card"><h3>MCP</h3><p><code>mcp-server/server.py</code> mit <b>FastMCP</b>, SSE-Transport, Port 8180, X-API-Key pro Tenant — dünner HTTP-Proxy auf die Backend-API</p></div>
+    <div class="card"><h3>Deploy / Infra</h3><p>6 Container (<code>docker-compose.v2.yml</code>) · Proxmox-LXC (<code>privileged</code>) · nginx Reverse-Proxy · python-json-logger (Redaction) · Sentry · 11 GitHub-Actions</p></div>
+  </div>
+  <div class="callout teal"><b>Architektur in drei Sätzen:</b> FastAPI nimmt Tenant-authentifizierte Requests (<code>X-API-Key</code> → <code>get_tenant</code>), schreibt in Postgres und enqueued Celery-Tasks. Celery-Worker/Beat fahren die Pipeline P01→P12c über den synchronen <code>pipeline_llm</code>-Seam (Tier S1–S6, Requesty-EU-Router) und schreiben Embeddings in pgvector. Der <b>Telegram-Bot ist der Endkunden-Kanal</b>, der MCP-Server ein zweiter Eingang auf dieselbe API; nginx ist Reverse-Proxy.</div>
+</section>
+
+<!-- 9 -->
+<section id="assessment">
+  <h2><span class="n">9</span> Experten-Bewertung der Technologie</h2>
+  <p class="lead">Ist die zugrundeliegende Technologie passend? Bewertet pro Achse — begründet, nicht gefällig.</p>
+
+  <div class="verdict"><div class="axis">Web/API &amp; Validierung<br><span style="font-weight:500;color:var(--muted);font-size:12px">FastAPI + Pydantic v2</span></div><div class="judge pass">✓ Passend</div><div class="why">Quasi-Default für LLM-Pipeline-SaaS, hier korrekt (async, DI für Tenant/DB, Pydantic-Settings). Vorbehalt: <code>config.py:71</code> nutzt noch v1-Style <code>class Config</code> (Deprecation).</div></div>
+
+  <div class="verdict"><div class="axis">Async / Orchestrierung<br><span style="font-weight:500;color:var(--muted);font-size:12px">Celery + Redis + Beat</span></div><div class="judge warn">~ Vorbehalt</div><div class="why">Robust für periodische Jobs. Für die mehrstufige Kette P01→P12c nur „gut genug": keine echte Workflow-Engine, Verkettung über Pump-Polling + DB-Status statt Celery-Canvas; <b>Idempotenz-Guards/<code>acks_late</code> fehlen</b>. Temporal wäre Overkill → Celery behalten, Idempotenz nachrüsten.</div></div>
+
+  <div class="verdict"><div class="axis">Datenhaltung<br><span style="font-weight:500;color:var(--muted);font-size:12px">PostgreSQL + pgvector</span></div><div class="judge pass">✓ Passend</div><div class="why">Für diese Datenmengen die richtige Entscheidung — schlägt Pinecone/Weaviate für ein Ein-Mann-betreibbares Setup. HNSW korrekt. <b>Risiko:</b> keine RLS → Isolation rein applikativ.</div></div>
+
+  <div class="verdict"><div class="axis">LLM-Abstraktion<br><span style="font-weight:500;color:var(--muted);font-size:12px">Requesty-Seam, Tier S1–S6</span></div><div class="judge warn">~ Vorbehalt (ernst)</div><div class="why">Der <code>pipeline_llm</code>-Seam ist <b>vorbildlich</b> (IDs an einer Stelle, EU gepinnt, harter RuntimeError ohne Router). Aber drei Direct-Anthropic-US-Bypässe in Nebenpfaden. p08 ist sauber. Architektur tragfähig, Lecks isoliert behebbar — compliance-seitig scharf.</div></div>
+
+  <div class="verdict"><div class="axis">EU / DSGVO-Souveränität<br><span style="font-weight:500;color:var(--muted);font-size:12px">Architektur-Constraint</span></div><div class="judge warn">~ Vorbehalt</div><div class="why">Stack <i>kann</i> es tragen (Bedrock Frankfurt, Vertex EU, EU-Postgres). Leckstellen: (1) die drei US-Calls; (2) <b>Telegram = US-Firma</b> als Kern-Kanal (strukturell, nicht im Code lösbar); (3) PII-in-Logs nur heuristisch redigiert.</div></div>
+
+  <div class="verdict"><div class="axis">Frontend<br><span style="font-weight:500;color:var(--muted);font-size:12px">React/Vite, 32 kLOC</span></div><div class="judge warn">~ Leicht überinvestiert</div><div class="why">Richtige schlanke Wahl (kein Next.js-Overhead). Aber Funktionsbreite (Force-Graph-Memory-Viz, Carousel-PDF-Editor) ist für eine Telegram-first-Beta üppig — das Dashboard ist laut Vision <i>nicht</i> der Kundenpfad. Kein TypeScript bei 32 kLOC = wachsendes Wartungsrisiko.</div></div>
+
+  <div class="verdict"><div class="axis">MCP-Server<br><span style="font-weight:500;color:var(--muted);font-size:12px">FastMCP, SSE</span></div><div class="judge q">? Timing fragwürdig</div><div class="why">Investition minimal (1 Datei, dünner Proxy) = günstige Optionalität. „MCP ist das Produkt" (Vision) vs. Telegram-first-Realität. Vertretbar <i>weil so billig gebaut</i>.</div></div>
+
+  <div class="callout teal" style="margin-top:18px">
+    <b>Gesamturteil.</b> Die Technologiewahl ist für Produkt <b>und</b> Team-Größe (Robert + 1 Server-Knecht + Claude-Agenten) <b>überwiegend angemessen</b> — bewusst „boring"/operierbar (FastAPI/Celery/Postgres/React) statt hip, mit einer cleveren Konsolidierung (pgvector) und einem vorbildlichen LLM-Seam. <b>Nicht generell overengineered</b>; die einzigen Über-Investitionen (Frontend-Breite, MCP) sind beide günstig. Was fehlt: (a) eine echte Idempotenz-/Resume-Strategie für die Pipeline und (b) DB-erzwungene Tenant-Isolation.
+  </div>
+  <div class="cards c2" style="margin-top:4px">
+    <div class="card" style="border-top:3px solid var(--red)"><h3>Risiko 1 · Tenant-Isolation</h3><p>Rein applikativ, ohne RLS → ein vergessenes <code>WHERE tenant_id</code> leakt Kundendaten. Kritisch für ein White-Label-Multi-Tenant-SaaS. <b>Adressiert in #52.</b></p></div>
+    <div class="card" style="border-top:3px solid var(--red)"><h3>Risiko 2 · US-LLM-Bypässe</h3><p>Drei Direct-Anthropic-Calls → EU-Souveränitätsbruch genau bei sensiblen Inhalten. <b>Adressiert in #41/#46.</b></p></div>
+  </div>
+  <div class="callout" style="margin-top:14px"><b>Strategische Lage:</b> Die Technologie trägt. Die Lücke ist <b>Integration, Beweisläufe und zwei gezielte Härtungen — kein Plattform-Neubau.</b></div>
+</section>
+
+</main>
+
+<footer>
+  Erstellt am 2026-06-12 auf Stand <code>main 70e95f9</code> + <code>arch/weekloop</code>. Quellen: visuelle Figma-Analyse (<code>FIGMA-SOLL-IST-MASTER.md</code>), <code>VISION-UND-PROJEKTPLAN.md</code>, <code>MVP-PLAN.md</code>, GitHub-Backlog (37 Issues), verifizierte Codebase-Tech-Inventur. Markdown-Fassung: <code>docs/REPORT-Content-Autopilot-v2.md</code>. Prozentwerte neu rechnen, sobald #19/#20 + #32 (die großen Beweisläufe) durch sind.
+</footer>
+</div>
+</body>
+</html>
