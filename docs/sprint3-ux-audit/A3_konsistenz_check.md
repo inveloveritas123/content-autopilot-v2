@@ -343,4 +343,3 @@ YouTube API Key hat Eye-Toggle, Tenant API Key nicht — Sicherheits-UX-Falle.
 - B: ~155 min (2,5h)
 - C: ~55 min (1h)
 - **Total: ~315 min (5,25h)**
-

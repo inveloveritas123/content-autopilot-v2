@@ -154,4 +154,3 @@ All real secrets (database passwords, API keys, LLM tokens) are environment-vari
 - **gitleaks unavailable:** Used git log pattern matching fallback
 - **npm dependencies:** Not scanned for CVEs (out of scope)
 - **PostgreSQL:** Host config not reviewed
-

@@ -71,13 +71,11 @@ jobs:
         run: pip install pre-commit==4.0.1
 
       - name: Run hygiene hooks
-        # Nur die filesystem-orientierten Hooks — Ruff/ESLint laufen oben getrennt
+        # Nur die filesystem-orientierten Hooks — Ruff/ESLint/Prettier/gitleaks laufen
+        # in eigenen Jobs. pre-commit akzeptiert keine Mehrfach-Hook-Argumente in einem
+        # Aufruf, daher pro Hook einzeln.
         run: |
-          pre-commit run --all-files \
-            trailing-whitespace \
-            end-of-file-fixer \
-            check-yaml \
-            check-json \
-            check-added-large-files \
-            check-merge-conflict \
-            detect-private-key
+          for hook in trailing-whitespace end-of-file-fixer check-yaml check-json \
+                      check-added-large-files check-merge-conflict detect-private-key; do
+            pre-commit run "$hook" --all-files || exit 1
+          done

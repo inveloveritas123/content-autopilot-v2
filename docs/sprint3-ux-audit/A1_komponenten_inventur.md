@@ -260,4 +260,3 @@ grep -rh "from ['\"]\.\./ui"
 - AST-Analyse für Props-Count-Genauigkeit
 - Manual Review der Tech-Debt-Sekundärmuster (localStorage, useContext-Abuse)
 - Component-Dependency-Graph (welche Components importieren welche)
-

@@ -134,4 +134,3 @@ ContentIdea-Generation nutzt Transkript
 3. **YouTube-Caption-Fallback**
    - Wenn Video offizielle Untertitel hat: nutzen statt ASR
    - Nur bei Fehlen oder `?force=true` re-transkribieren
-
