@@ -45,17 +45,10 @@ logger = logging.getLogger(__name__)
 
 
 def _extract_json_from_text(raw: str) -> dict:
-    """JSON aus dem LLM-Output parsen — entfernt Markdown-Code-Zaun falls vorhanden."""
-    cleaned = raw.strip()
-    # Markdown-Code-Block entfernen (```json ... ``` oder ``` ... ```)
-    if cleaned.startswith("```"):
-        lines = cleaned.splitlines()
-        # erste Zeile (```json) und letzte Zeile (```) entfernen
-        inner_lines = lines[1:]
-        if inner_lines and inner_lines[-1].strip() == "```":
-            inner_lines = inner_lines[:-1]
-        cleaned = "\n".join(inner_lines).strip()
-    return json.loads(cleaned)
+    """JSON aus dem LLM-Output parsen — delegiert an llm_json für robuste Extraktion."""
+    from services.llm_json import parse_json_from_text
+
+    return parse_json_from_text(raw)
 
 
 async def _run_cost_check(tenant_id: str, estimated_cost: float) -> None:
@@ -232,7 +225,7 @@ def run_p01(
         # ------------------------------------------------------------------
         try:
             output_json = _extract_json_from_text(raw_text)
-        except json.JSONDecodeError as first_err:
+        except (json.JSONDecodeError, ValueError) as first_err:
             logger.warning(
                 "p01 run_id=%s: JSON-Parsing fehlgeschlagen (%s), Retry mit Schema-Reminder",
                 run_id,
@@ -259,7 +252,7 @@ def run_p01(
             actual_cost += retry_res.cost_usd
             try:
                 output_json = _extract_json_from_text(raw_text)
-            except json.JSONDecodeError as retry_err:
+            except (json.JSONDecodeError, ValueError) as retry_err:
                 raise ValueError(
                     f"JSON-Parsing auch nach Retry fehlgeschlagen: {retry_err}"
                 ) from retry_err
