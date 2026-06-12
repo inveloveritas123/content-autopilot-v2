@@ -24,6 +24,7 @@ import Memory from './components/Memory'
 import CompanyProfile from './components/CompanyProfile'
 import DataDeletion from './components/DataDeletion'
 import MemoryViz from './components/MemoryViz'
+import PromptStudio from './components/PromptStudio'
 function App() {
   return (
     <ToastProvider>
@@ -54,6 +55,7 @@ function App() {
         <Route path="/memory" element={<Memory />} />
         <Route path="/settings/company-profile" element={<CompanyProfile />} />
         <Route path="/settings/data-deletion" element={<DataDeletion />} />
+        <Route path="/settings/prompt-studio" element={<PromptStudio />} />
         <Route path="/memory/viz" element={<MemoryViz />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

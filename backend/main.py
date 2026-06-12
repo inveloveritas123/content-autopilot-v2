@@ -233,6 +233,9 @@ app.include_router(tenant_init_router, prefix="/api", tags=["TenantInit"])
 from api.eval import router as eval_router
 app.include_router(eval_router, prefix="/api", tags=["Eval"])
 
+from api.prompt_studio import router as prompt_studio_router
+app.include_router(prompt_studio_router, prefix="/api", tags=["PromptStudio"])
+
 
 @app.get("/api/health")
 async def health():

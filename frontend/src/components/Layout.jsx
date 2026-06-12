@@ -24,6 +24,7 @@ import {
   ShieldAlert,
   Pencil,
   Sparkles,
+  FileCode,
 } from 'lucide-react'
 import { getProjects, createProject, deleteProject, updateProject } from '../api'
 
@@ -54,6 +55,7 @@ const brandVoiceNavItems = [
 
 const adminNavItems = [
   { to: '/admin/models/backtest', label: 'Modelle', icon: Settings },
+  { to: '/settings/prompt-studio', label: 'Prompt-Studio', icon: FileCode },
 ]
 
 function ProjectSwitcher() {

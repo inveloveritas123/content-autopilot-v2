@@ -31,7 +31,15 @@ async function request(path, options = {}) {
 
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ detail: resp.statusText }))
-    throw new Error(err.detail || 'API Error')
+    // detail kann ein String ODER ein Objekt/Array sein (z.B. 422 mit schema_errors).
+    let msg = err.detail
+    if (typeof msg !== 'string') {
+      msg = (err.detail && (err.detail.message || err.detail.error)) || JSON.stringify(err.detail)
+    }
+    const e = new Error(msg || 'API Error')
+    e.status = resp.status
+    e.detail = err.detail
+    throw e
   }
   return resp.json()
 }
@@ -459,6 +467,16 @@ export const getMemoryVizData = (params) => request('/memory/viz-data', { params
 export const getMemoryChunkFullText = (chunkId, reason) =>
   request(`/memory/viz-data/${chunkId}/full`, { method: 'POST', body: { confirm: true, reason } })
 export const getLLMAnalyticsAnomaly = (params) => request('/analytics/llm-anomaly', { params })
+
+// Prompt-Studio (P3)
+export const getPromptFiles = () => request('/prompt-studio/files')
+export const getPromptFile = (path) => request(`/prompt-studio/files/${path}`)
+export const validatePromptFile = (path, content) =>
+  request(`/prompt-studio/files/${path}/validate`, { method: 'POST', body: { content } })
+export const savePromptFile = (path, content, baseSha) =>
+  request(`/prompt-studio/files/${path}`, { method: 'PUT', body: { content, base_sha256: baseSha } })
+export const revertPromptFile = (path) =>
+  request(`/prompt-studio/files/${path}/overlay`, { method: 'DELETE' })
 
 // #155 Cost-Monitoring: Trend, Cache-Hit-Rate, Runaway-Detection
 export const getCostTrend = (params) => request('/analytics/cost-trend', { params })
