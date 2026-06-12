@@ -58,19 +58,19 @@ const WIZARD_PHASES = [
       },
       {
         id: 'q2_2',
-        text: 'Vervollständige spontan (nicht nachdenken, einfach reagieren): „Den besten Teil meines Jobs finde ich: ___"',
+        text: 'Vervollständige spontan (nicht nachdenken, einfach reagieren): „Den besten Teil meines Jobs finde ich: ___”',
         nachhaken: ['Tipp: Kein perfekter Satz nötig — Stichwörter reichen.'],
         completion_prefix: 'Den besten Teil meines Jobs finde ich:',
       },
       {
         id: 'q2_3',
-        text: 'Vervollständige: „Am meisten nervt mich: ___"',
+        text: 'Vervollständige: „Am meisten nervt mich: ___”',
         nachhaken: [],
         completion_prefix: 'Am meisten nervt mich:',
       },
       {
         id: 'q2_4',
-        text: 'Vervollständige: \u201EDas letzte Mal, dass ich dachte \u2018genau deshalb mach ich das\u2019, war als: ___\u201D',
+        text: 'Vervollständige: „Das letzte Mal, dass ich dachte ‘genau deshalb mach ich das’, war als: ___”',
         nachhaken: [],
         completion_prefix: "Das letzte Mal, dass ich dachte 'genau deshalb mach ich das', war als:",
       },
@@ -78,6 +78,39 @@ const WIZARD_PHASES = [
   },
   {
     id: 3,
+    name: 'Expertise & Fachwissen',
+    goal: 'Fachexpertise und Thought-Leadership-Themen für Authority-Content erfassen.',
+    questions: [
+      {
+        id: 'qexp_1',
+        text: 'Gibt es einen Fehler, den du bei Kunden oder in deiner Branche immer wieder siehst?',
+        nachhaken: [],
+      },
+      {
+        id: 'qexp_2',
+        text: 'Was ist etwas, das du am Anfang deiner Karriere nicht verstanden hast — und jetzt als offensichtlich empfindest?',
+        nachhaken: [],
+      },
+      {
+        id: 'qexp_3',
+        text: 'Wenn du deiner Branche eine einzige Sache beibringen könntest — was wäre es?',
+        nachhaken: [],
+      },
+      {
+        id: 'qexp_4',
+        text: 'Was ist ein verbreiteter Ratschlag in deiner Branche, den du für falsch hältst?',
+        nachhaken: [],
+      },
+      {
+        id: 'qexp_5',
+        text: 'Was ist der häufigste Denkfehler, den deine Kunden machen?',
+        nachhaken: [],
+        required: false,
+      },
+    ],
+  },
+  {
+    id: 4,
     name: 'Zielkunde',
     goal: 'Den Kunden des Kunden so genau verstehen, dass die KI später in dessen Sprache schreiben kann.',
     questions: [
@@ -94,26 +127,22 @@ const WIZARD_PHASES = [
         text: 'Woran merkst du in den ersten 5 Minuten eines Gesprächs, ob jemand ein guter Kunde wird — oder nicht?',
         nachhaken: [],
       },
-      {
-        id: 'q3_3',
-        text: 'Mit wem willst du auf keinen Fall arbeiten?',
-        nachhaken: [],
-      },
+      { id: 'q3_3', text: 'Mit wem willst du auf keinen Fall arbeiten?', nachhaken: [] },
       {
         id: 'q3_4',
-        text: 'Vervollständige: „Meine Kunden glauben oft, dass ___. In Wirklichkeit ist es so: ___"',
+        text: 'Vervollständige: „Meine Kunden glauben oft, dass ___. In Wirklichkeit ist es so: ___”',
         nachhaken: [],
         completion_prefix: 'Meine Kunden glauben oft, dass... In Wirklichkeit ist es so:',
       },
       {
         id: 'q3_5',
-        text: 'Vervollständige: „Die Frage, die mir am häufigsten gestellt wird, ist: ___"',
+        text: 'Vervollständige: „Die Frage, die mir am häufigsten gestellt wird, ist: ___”',
         nachhaken: [],
         completion_prefix: 'Die Frage, die mir am häufigsten gestellt wird, ist:',
       },
       {
         id: 'q3_6',
-        text: 'Vervollständige: „Was meine Kunden wirklich brauchen, ist nicht ___, sondern: ___"',
+        text: 'Vervollständige: „Was meine Kunden wirklich brauchen, ist nicht ___, sondern: ___”',
         nachhaken: [],
         completion_prefix: 'Was meine Kunden wirklich brauchen, ist nicht..., sondern:',
       },
@@ -122,11 +151,7 @@ const WIZARD_PHASES = [
         text: 'Was ändert sich konkret für deinen Kunden, wenn er mit dir arbeitet? Vorher → Nachher.',
         nachhaken: [],
       },
-      {
-        id: 'q3_8',
-        text: 'Hast du eine Erfolgsgeschichte, die du gerne erzählst?',
-        nachhaken: [],
-      },
+      { id: 'q3_8', text: 'Hast du eine Erfolgsgeschichte, die du gerne erzählst?', nachhaken: [] },
       {
         id: 'q3_9',
         text: 'Hast du originale Zitate von Kunden — WhatsApp-Nachrichten, Bewertungen, Mails? Falls ja, gerne hier einfügen.',
@@ -136,7 +161,7 @@ const WIZARD_PHASES = [
     ],
   },
   {
-    id: 4,
+    id: 5,
     name: 'Angebot & Markt',
     goal: 'Positionierung und Differenzierung verstehen — für strategischen Content.',
     questions: [
@@ -157,11 +182,7 @@ const WIZARD_PHASES = [
         text: "Was machst du anders als andere in deiner Branche? Nicht 'besser' — anders.",
         nachhaken: [],
       },
-      {
-        id: 'q4_4',
-        text: 'Worauf legst du Wert, was anderen scheinbar egal ist?',
-        nachhaken: [],
-      },
+      { id: 'q4_4', text: 'Worauf legst du Wert, was anderen scheinbar egal ist?', nachhaken: [] },
       {
         id: 'q4_5',
         text: 'Wer sind deine Mitbewerber — und was hat dein Kunde typischerweise schon probiert, bevor er zu dir kam?',
@@ -169,32 +190,51 @@ const WIZARD_PHASES = [
       },
       {
         id: 'q4_6',
-        text: 'Vervollständige: „Die meisten in meiner Branche machen den Fehler, dass: ___"',
+        text: 'Vervollständige: „Die meisten in meiner Branche machen den Fehler, dass: ___”',
         nachhaken: [],
         completion_prefix: 'Die meisten in meiner Branche machen den Fehler, dass:',
       },
       {
         id: 'q4_7',
-        text: 'Vervollständige: „Was in meiner Branche total unterschätzt wird, ist: ___"',
+        text: 'Vervollständige: „Was in meiner Branche total unterschätzt wird, ist: ___”',
         nachhaken: [],
         completion_prefix: 'Was in meiner Branche total unterschätzt wird, ist:',
       },
       {
         id: 'q4_8',
-        text: 'Vervollständige: „Der größte Mythos in meiner Branche ist: ___"',
+        text: 'Vervollständige: „Der größte Mythos in meiner Branche ist: ___”',
         nachhaken: [],
         completion_prefix: 'Der größte Mythos in meiner Branche ist:',
       },
       {
         id: 'q4_9',
-        text: 'Vervollständige: „Wenn ich etwas an meiner Branche ändern könnte, wäre es: ___"',
+        text: 'Vervollständige: „Wenn ich etwas an meiner Branche ändern könnte, wäre es: ___”',
         nachhaken: [],
         completion_prefix: 'Wenn ich etwas an meiner Branche ändern könnte, wäre es:',
       },
     ],
   },
   {
-    id: 5,
+    id: 6,
+    name: 'Vertrauen & Integrität',
+    goal: 'Glaubwürdigkeit und Vertrauenssignale dokumentieren.',
+    questions: [
+      {
+        id: 'q6_1',
+        text: 'Was könnte jemanden überzeugen, dass du weißt, wovon du sprichst?',
+        nachhaken: [
+          'Anzahl Kunden/Projekte, Jahre Erfahrung, Zertifikate, Preise, Auftritte, Veröffentlichungen.',
+        ],
+      },
+      {
+        id: 'q6_2',
+        text: 'Was würdest du deinem Ich von vor 5–10 Jahren raten? Ein Satz.',
+        nachhaken: [],
+      },
+    ],
+  },
+  {
+    id: 7,
     name: 'Sprache & Stil',
     goal: 'Sprachliche Präferenzen explizit machen, um die Voice-Analyse zu ergänzen.',
     questions: [
@@ -203,11 +243,7 @@ const WIZARD_PHASES = [
         text: 'Gibt es Wörter oder Ausdrücke, die du besonders gerne benutzt?',
         nachhaken: [],
       },
-      {
-        id: 'q5_2',
-        text: 'Und welche vermeidest du bewusst?',
-        nachhaken: [],
-      },
+      { id: 'q5_2', text: 'Und welche vermeidest du bewusst?', nachhaken: [] },
       {
         id: 'q5_3',
         text: 'Welche Fachbegriffe benutzt deine Branche, die Außenstehende nicht kennen?',
@@ -231,22 +267,10 @@ const WIZARD_PHASES = [
     ],
   },
   {
-    id: 6,
-    name: 'Vertrauenssignale & Abschluss',
-    goal: 'Vertrauenssignale sammeln und den Onboarding-Call abschließen.',
+    id: 8,
+    name: 'Abschluss',
+    goal: 'Onboarding abschließen und optionale Materialien anfordern.',
     questions: [
-      {
-        id: 'q6_1',
-        text: 'Was könnte jemanden überzeugen, dass du weißt, wovon du sprichst?',
-        nachhaken: [
-          'Anzahl Kunden/Projekte, Jahre Erfahrung, Zertifikate, Preise, Auftritte, Veröffentlichungen.',
-        ],
-      },
-      {
-        id: 'q6_2',
-        text: 'Was würdest du deinem Ich von vor 5–10 Jahren raten? Ein Satz.',
-        nachhaken: [],
-      },
       {
         id: 'q6_3',
         text: 'Gibt es etwas, das wir nicht gefragt haben, was du aber wichtig findest?',

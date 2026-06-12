@@ -97,9 +97,43 @@ WIZARD_PHASES = [
             },
         ],
     },
-    # ── Phase 3: Zielkunde ───────────────────────────────────────────────────
+    # ── Phase 3: Expertise & Fachwissen ─────────────────────────────────────
     {
         "phase": 3,
+        "title": "Expertise & Fachwissen",
+        "goal": "Fachexpertise und Thought-Leadership-Themen für Authority-Content erfassen.",
+        "questions": [
+            {
+                "id": "qexp_1",
+                "text": "Gibt es einen Fehler, den du bei Kunden oder in deiner Branche immer wieder siehst?",
+                "hints": [],
+            },
+            {
+                "id": "qexp_2",
+                "text": "Was ist etwas, das du am Anfang deiner Karriere nicht verstanden hast — und jetzt als offensichtlich empfindest?",
+                "hints": [],
+            },
+            {
+                "id": "qexp_3",
+                "text": "Wenn du deiner Branche eine einzige Sache beibringen könntest — was wäre es?",
+                "hints": [],
+            },
+            {
+                "id": "qexp_4",
+                "text": "Was ist ein verbreiteter Ratschlag in deiner Branche, den du für falsch hältst?",
+                "hints": [],
+            },
+            {
+                "id": "qexp_5",
+                "text": "Was ist der häufigste Denkfehler, den deine Kunden machen?",
+                "hints": [],
+                "required": False,
+            },
+        ],
+    },
+    # ── Phase 4: Zielkunde ───────────────────────────────────────────────────
+    {
+        "phase": 4,
         "title": "Zielkunde",
         "goal": "Den Kunden des Kunden so genau verstehen, dass die KI später in dessen Sprache schreiben kann.",
         "questions": [
@@ -157,9 +191,9 @@ WIZARD_PHASES = [
             },
         ],
     },
-    # ── Phase 4: Angebot & Markt ─────────────────────────────────────────────
+    # ── Phase 5: Angebot & Markt ─────────────────────────────────────────────
     {
-        "phase": 4,
+        "phase": 5,
         "title": "Angebot & Markt",
         "goal": "Positionierung und Differenzierung verstehen — für strategischen Content.",
         "questions": [
@@ -216,9 +250,29 @@ WIZARD_PHASES = [
             },
         ],
     },
-    # ── Phase 5: Sprache & Stil ──────────────────────────────────────────────
+    # ── Phase 6: Vertrauen & Integrität ─────────────────────────────────────
     {
-        "phase": 5,
+        "phase": 6,
+        "title": "Vertrauen & Integrität",
+        "goal": "Glaubwürdigkeit und Vertrauenssignale dokumentieren.",
+        "questions": [
+            {
+                "id": "q6_1",
+                "text": "Was könnte jemanden überzeugen, dass du weißt, wovon du sprichst?",
+                "hints": [
+                    "Anzahl Kunden/Projekte, Jahre Erfahrung, Zertifikate, Preise, Auftritte, Veröffentlichungen.",
+                ],
+            },
+            {
+                "id": "q6_2",
+                "text": "Was würdest du deinem Ich von vor 5–10 Jahren raten? Ein Satz.",
+                "hints": [],
+            },
+        ],
+    },
+    # ── Phase 7: Sprache & Stil ──────────────────────────────────────────────
+    {
+        "phase": 7,
         "title": "Sprache & Stil",
         "goal": "Sprachliche Präferenzen explizit machen, um die Voice-Analyse zu ergänzen.",
         "questions": [
@@ -256,24 +310,12 @@ WIZARD_PHASES = [
             },
         ],
     },
-    # ── Phase 6: Vertrauenssignale & Abschluss ───────────────────────────────
+    # ── Phase 8: Abschluss ───────────────────────────────────────────────────
     {
-        "phase": 6,
-        "title": "Vertrauenssignale & Abschluss",
-        "goal": "Vertrauenssignale sammeln und den Onboarding-Call abschließen.",
+        "phase": 8,
+        "title": "Abschluss",
+        "goal": "Onboarding abschließen und optionale Materialien anfordern.",
         "questions": [
-            {
-                "id": "q6_1",
-                "text": "Was könnte jemanden überzeugen, dass du weißt, wovon du sprichst?",
-                "hints": [
-                    "Anzahl Kunden/Projekte, Jahre Erfahrung, Zertifikate, Preise, Auftritte, Veröffentlichungen.",
-                ],
-            },
-            {
-                "id": "q6_2",
-                "text": "Was würdest du deinem Ich von vor 5–10 Jahren raten? Ein Satz.",
-                "hints": [],
-            },
             {
                 "id": "q6_3",
                 "text": "Gibt es etwas, das wir nicht gefragt haben, was du aber wichtig findest?",
@@ -377,8 +419,8 @@ def compute_inline_hints(
         hints.append(
             "Tipp: Schau dir an, welche Wörter du in Phase 2 benutzt hast — das ist oft schon deine natürliche Sprache."
         )
-    if current_phase == 6 and "q5_3" in all_answers:
-        hints.append("Dein LinkedIn-Satz aus Phase 5 kann hier als Aufhänger dienen.")
+    if current_phase == 7 and "q5_3" in all_answers:
+        hints.append("Dein Lieblingswort aus Phase 7 kann hier als Aufhänger dienen.")
 
     return hints[:3]
 
@@ -671,7 +713,7 @@ async def wizard_answer(
 
     # current_phase ggf. hochsetzen
     current_phase = row.current_phase
-    if _phase_complete(current_phase, answered_ids) and current_phase < 6:
+    if _phase_complete(current_phase, answered_ids) and current_phase < 8:
         current_phase = current_phase + 1
 
     phase_done = _phase_complete(data.phase, answered_ids)
