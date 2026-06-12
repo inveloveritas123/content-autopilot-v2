@@ -25,6 +25,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant, get_tenant_id
+from api.brand_voice_drift_helpers import apply_drift_changes, get_entity_table
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -745,6 +746,7 @@ class DriftChange(BaseModel):
     field_path: str
     accepted: bool
     modified_value: Any = None
+    op: str = "set"  # "set" (default, bestehend) | "append" (neu, #43 Schritt 4)
 
 
 class DriftDecideRequest(BaseModel):
@@ -768,7 +770,8 @@ async def decide_drift_observation(
     obs_row = (
         await db.execute(
             text(
-                "SELECT id, tenant_id, suggested_changes, current_voice_version, status "
+                "SELECT id, tenant_id, suggested_changes, current_voice_version, status, "
+                "COALESCE(entity_type, 'voice') AS entity_type "
                 "FROM voice_drift_observation "
                 "WHERE id = :id"
             ),
@@ -803,12 +806,26 @@ async def decide_drift_observation(
 
     new_version_number = None
 
-    # 4. Fuer accepted/partial: neue Voice-Profile-Version anlegen
+    # 4. Fuer accepted/partial: neue Profil-Version anlegen (entitäts-generisch, #43 Schritt 4)
     if new_status in ("accepted", "partial"):
+        # Zieltabelle aus entity_type der Observation ableiten (Default 'voice' → Rückwärtskompatibilität)
+        entity_type: str = getattr(obs_row, "entity_type", None) or "voice"
+        try:
+            target_table = get_entity_table(entity_type)
+        except ValueError:
+            # Unbekannter entity_type → 422. Schutz gegen ungültige DB-Werte.
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unbekannter entity_type in Observation: {entity_type!r}",
+            )
+
+        # source-Wert: 'drift_update' für voice (Rückwärtskompatibilität), 'p17_update' für andere
+        drift_source = "drift_update" if entity_type == "voice" else "p17_update"
+
         active_vp_row = (
             await db.execute(
                 text(
-                    "SELECT id, payload, version FROM tenant_voice_profile "
+                    f"SELECT id, payload, version FROM {target_table} "  # noqa: S608 — Tabellenname aus Whitelist
                     "WHERE tenant_id = :t AND is_active = true"
                 ),
                 {"t": str(auth_tenant_id)},
@@ -816,8 +833,6 @@ async def decide_drift_observation(
         ).fetchone()
 
         if active_vp_row:
-            new_payload = copy.deepcopy(active_vp_row.payload)
-
             # suggested_changes als Lookup aufbauen: field_path -> new_value
             suggested_lookup: dict[str, Any] = {}
             if obs_row.suggested_changes and isinstance(obs_row.suggested_changes, list):
@@ -825,49 +840,45 @@ async def decide_drift_observation(
                     if isinstance(sc, dict) and "field_path" in sc:
                         suggested_lookup[sc["field_path"]] = sc.get("new_value")
 
-            for change in data.changes:
-                if not change.accepted:
-                    continue
+            # Akzeptierte Änderungen als Dict-Liste für den Helper aufbereiten
+            accepted_changes = [
+                {
+                    "field_path": change.field_path,
+                    "op": change.op,
+                    "new_value": change.modified_value,
+                }
+                for change in data.changes
+                if change.accepted
+            ]
 
-                # Nur Pfade anwenden, die im aktuellen Payload existieren
-                parts = change.field_path.split(".")
-                cursor: Any = new_payload
-                path_valid = True
-                for part in parts[:-1]:
-                    if not isinstance(cursor, dict) or part not in cursor:
-                        path_valid = False
-                        break
-                    cursor = cursor[part]
-                if not path_valid or not isinstance(cursor, dict) or parts[-1] not in cursor:
-                    continue  # Pfad existiert nicht — still skip
-
-                value_to_set = (
-                    change.modified_value
-                    if change.modified_value is not None
-                    else suggested_lookup.get(change.field_path)
+            try:
+                new_payload = apply_drift_changes(
+                    active_vp_row.payload, accepted_changes, suggested_lookup
                 )
-                cursor[parts[-1]] = value_to_set
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
 
             new_version_number = active_vp_row.version + 1
             old_vp_id = str(active_vp_row.id)
 
             await db.execute(
                 text(
-                    "INSERT INTO tenant_voice_profile "
+                    f"INSERT INTO {target_table} "  # noqa: S608 — Tabellenname aus Whitelist
                     "(tenant_id, version, is_active, source, source_meta, payload, "
                     "prompt_version_hash, model_id) "
-                    "VALUES (:tenant_id, :version, true, 'drift_update', "
+                    "VALUES (:tenant_id, :version, true, :drift_source, "
                     "CAST(:source_meta AS jsonb), CAST(:payload AS jsonb), '', '')"
                 ),
                 {
                     "tenant_id": str(auth_tenant_id),
                     "version": new_version_number,
+                    "drift_source": drift_source,
                     "source_meta": json.dumps({"observation_id": observation_id}),
                     "payload": json.dumps(new_payload),
                 },
             )
             await db.execute(
-                text("UPDATE tenant_voice_profile SET is_active = false WHERE id = :id"),
+                text(f"UPDATE {target_table} SET is_active = false WHERE id = :id"),  # noqa: S608
                 {"id": old_vp_id},
             )
 
