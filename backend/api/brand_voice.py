@@ -618,6 +618,12 @@ async def patch_profile_field(
     Mit project_id-Query-Parameter wird das Profil des jeweiligen Projekts
     editiert. Ohne project_id wird der globale Tenant-Slot bearbeitet.
     """
+    # Auth check first — must happen before any feature-flag guard
+    resolved_id = str(auth_tenant_id) if tenant_id == "me" else tenant_id
+    if resolved_id != str(auth_tenant_id):
+        raise HTTPException(status_code=403, detail="Zugriff verweigert")
+    tenant_id = resolved_id
+
     # Schutzschritt (2026-06-12, #29): Der Dot-Path-Feld-Editor kann kanonische
     # Pflicht-Objekte (z.B. grundton) und minItems-Arrays zerstören und schreibt
     # ohne kanonische Re-Validierung (kein finalize_canonical, escapt HTML, kopiert
@@ -636,11 +642,6 @@ async def patch_profile_field(
             detail="Feld-Editor deaktiviert (Schutz kanonischer Louis-Profile, #29). "
             "Bitte Profil neu generieren statt einzelne Felder zu patchen.",
         )
-
-    resolved_id = str(auth_tenant_id) if tenant_id == "me" else tenant_id
-    if resolved_id != str(auth_tenant_id):
-        raise HTTPException(status_code=403, detail="Zugriff verweigert")
-    tenant_id = resolved_id
 
     if profile_type not in _PROFILE_TABLE:
         raise HTTPException(
