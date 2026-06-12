@@ -69,18 +69,23 @@ def _stub(name: str) -> types.ModuleType:
 # sqlalchemy + Untermodule
 # ---------------------------------------------------------------------------
 
-if "sqlalchemy" not in sys.modules:
-    _sq = _stub("sqlalchemy")
+# Defensiv: ein anderes Test-Modul kann sqlalchemy(-Untermodule) bereits
+# UNVOLLSTÄNDIG gestubbt haben (nur den Modul-Namen, ohne AsyncSession etc.).
+# Darum Attribute IMMER sicherstellen (nur setzen wenn fehlend → in CI mit echtem
+# sqlalchemy werden die echten Attribute nie überschrieben).
+_sq = _stub("sqlalchemy")  # get-or-create
+if not hasattr(_sq, "text"):
     _sq.text = lambda q: q
 
-for _name in ["sqlalchemy.ext", "sqlalchemy.ext.asyncio", "sqlalchemy.orm"]:
-    if _name not in sys.modules:
-        _m = _stub(_name)
-        if _name == "sqlalchemy.ext.asyncio":
-            _m.AsyncSession = MagicMock
-            _m.create_async_engine = MagicMock()
-        if _name == "sqlalchemy.orm":
-            _m.sessionmaker = MagicMock()
+_sq_async = _stub("sqlalchemy.ext.asyncio")  # get-or-create
+if not hasattr(_sq_async, "AsyncSession"):
+    _sq_async.AsyncSession = MagicMock
+if not hasattr(_sq_async, "create_async_engine"):
+    _sq_async.create_async_engine = MagicMock()
+_stub("sqlalchemy.ext")  # get-or-create
+_sq_orm = _stub("sqlalchemy.orm")  # get-or-create
+if not hasattr(_sq_orm, "sessionmaker"):
+    _sq_orm.sessionmaker = MagicMock()
 
 # ---------------------------------------------------------------------------
 # config.settings
@@ -191,8 +196,12 @@ _services_pkg.p08_service = sys.modules["services.p08_service"]
 # das Attribut via patch("api.telegram._send_telegram_message") ersetzen können.
 # ---------------------------------------------------------------------------
 
-if "api" not in sys.modules:
-    _stub("api")
+# api als PAKET mit echtem __path__ stubben — sonst bricht der Import realer
+# Submodule wie `from api.wizard_phases import ...` (test_wizard_phases). Wir stubben
+# NUR api.telegram (zieht sonst sqlalchemy), lassen aber die echten Submodule auflösbar.
+_api_pkg = _stub("api")
+if not hasattr(_api_pkg, "__path__"):
+    _api_pkg.__path__ = [os.path.join(_BACKEND_DIR, "api")]
 if "api.telegram" not in sys.modules:
     _at = _stub("api.telegram")
     _at._send_telegram_message = MagicMock()

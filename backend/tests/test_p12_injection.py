@@ -172,11 +172,8 @@ if "tasks.celery_app" not in sys.modules:
     _ca = _stub("tasks.celery_app")
     _ca.celery_app = _FakeCeleryApp()
 
-# jsonschema
-if "jsonschema" not in sys.modules:
-    _js = _stub("jsonschema")
-    _js.validate = MagicMock()
-    _js.ValidationError = type("ValidationError", (Exception,), {"message": ""})
+# jsonschema NICHT stubben — echtes jsonschema ist installiert; ein no-op-validate-Stub
+# würde test_layer1_extraction (Schema-Retry-Logik) brechen (validate() müsste raisen).
 
 # ---------------------------------------------------------------------------
 # p12_pruning — dep-frei, direkt ladbar

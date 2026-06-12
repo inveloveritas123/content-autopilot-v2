@@ -69,8 +69,11 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 - ✅ **#44 Wizard 6→8 Phasen fertig** — `api/wizard_phases.py` (dep-frei extrahiert), 8 Board-Phasen in Reihenfolge, hardcoded „6" entfernt; 101 Tests grün. Fragen-Wortlaut der neuen Phasen = Chris-Flag (board-konforme Defaults).
 - 📋 **#43-Detailplan fertig** (`docs/SPRINT-2-PLAN-43.md`): Tabelle `tenant_customer_values` (Migration **053**, Robert-Freigabe), P12-Eingriff `p12_task.py:83-114`+`:333-339`, P17-Vorbau `brand_voice.py:759-899`. Atomare Schritte: 1) Schema+Resolver (sonnet, Review opus) → 2) Backfill → 3) P12-Injektion → 4) P17-decide-generisch.
 - ✅ **#43 Schritt 1 fertig**: Migration 053 (`tenant_customer_values`, down_revision=049, freigabe-robert, NICHT angewandt) + canonical_profiles TABLE_MAP/Resolver/Regex + schema_transformer. 29 Tests + 115 Anti-Pollution grün. Pre-existing Py3.9-Bug in canonical_profiles mitgefixt. Robert-Flag in ROBERT-BACKLOG.
-- ✅ **#43 Schritt 3 fertig**: P12-Injektion — `_load_active_profiles` → 4-Tupel inkl. customer_values, fail-open (Tabelle fehlt vor Migration → Werte leer, P12 unverändert → sicher vor Migration deploybar). `VALUES_KEYS_FOR_P12`-Whitelist. 158 Anti-Pollution grün.
-- **Nächste Aktion: #43 Schritt 2 (Backfill memory_chunks 'werte' → Entität) + Schritt 4 (P17 decide-generisch via entity_type)** — danach ist die Board-Trias komplett.
+- ✅ **#43 Schritt 3 fertig**: P12-Injektion — `_load_active_profiles` → 4-Tupel inkl. customer_values, fail-open. `VALUES_KEYS_FOR_P12`-Whitelist.
+- ✅ **#43 Schritt 2 fertig**: `tasks/values_backfill_task.py` — idempotenter, tenant-gescopter Backfill aus memory_chunks 'werte' (+ Setup-Werte), source='memory_promotion', fail-open (Tabelle fehlt → no_op).
+- ✅ **#43 Schritt 4 fertig**: P17-Vorbau — `brand_voice.py` decide_drift_observation entitäts-generisch (`entity_type` → Zieltabelle via `brand_voice_drift_helpers._ENTITY_TABLE`), neue `op:"append"`-Operation für Listen-Felder (werte[]); voice-Pfad 100% rückwärtskompatibel (COALESCE entity_type='voice'). Schreibziel für #41 steht.
+- ✅ **#43 KOMPLETT** — Board-Trias Voice/WERTE/Avatar hergestellt (Schema+Resolver+P12-Injektion+Backfill+P17-Ziel). Volle Wirkung nach Migration 053 (Robert) + Backfill-Lauf (Knecht). Test-Infra durabel saniert: **307 Stub-Tests reihenfolge-unabhängig grün** über 14 Suiten.
+- **Nächste Aktion:** Sprint 2 Rest (#29/#25/#26 Schema — besser nach #33-Merge) ODER Sprint 3 (#35 P07-Push, #37 Feedback-Loop, #38 Quality-Gate — opus). Robert-Merges + Migration entblocken die Sprint-2-Abnahme.
 
 ---
 
