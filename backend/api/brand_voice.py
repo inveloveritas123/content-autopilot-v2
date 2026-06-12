@@ -389,9 +389,8 @@ async def get_review_queue(
     db: AsyncSession = Depends(get_db),
 ):
     """Sensible Posts in der Review-Queue abrufen (gefiltert nach Status)."""
-    resolved_tenant_id = str(auth_tenant_id) if tenant_id == "me" else tenant_id
-    if resolved_tenant_id != str(auth_tenant_id):
-        raise HTTPException(status_code=403, detail="Zugriff verweigert")
+    # Always use auth tenant — foreign tenant_id query params are silently ignored
+    resolved_tenant_id = str(auth_tenant_id)
 
     rows = (
         await db.execute(
