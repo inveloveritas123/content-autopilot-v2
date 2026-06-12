@@ -136,7 +136,7 @@ Bereits gepostet: {ja_nein}
 
 ---
 
-Extrahiere den vollständigen Kundenkontext als JSON.
+Extrahiere den vollständigen Kundenkontext als JSON. Antworte ausschließlich mit dem JSON-Objekt (siehe Output-Format), ohne Text davor oder danach.
 ```
 
 ---

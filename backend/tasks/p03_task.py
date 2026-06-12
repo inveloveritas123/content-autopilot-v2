@@ -30,6 +30,7 @@ import uuid
 from sqlalchemy import text
 
 from models.base import sync_session_factory
+from services.llm_json import parse_json_from_text as _parse_json_from_text
 from services.pipeline_llm import (
     call_pipeline_llm,
     estimate_tier_cost,
@@ -41,36 +42,6 @@ from tasks.canonical_wiring import fetch_tenant_meta, now_iso
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Hilfsfunktionen
-# ---------------------------------------------------------------------------
-
-
-def _parse_json_from_text(raw: str) -> dict:
-    """Extrahiert JSON aus dem LLM-Output.
-
-    Versucht zuerst direktes Parsen, danach Extraktion aus einem ```json-Block.
-    """
-    raw = raw.strip()
-    # Direkter Parse-Versuch
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        pass
-    # Fenced code block: ```json ... ```
-    for fence in ("```json", "```"):
-        if fence in raw:
-            start = raw.index(fence) + len(fence)
-            end = raw.find("```", start)
-            if end != -1:
-                candidate = raw[start:end].strip()
-                try:
-                    return json.loads(candidate)
-                except json.JSONDecodeError:
-                    pass
-    raise ValueError(f"Konnte kein JSON aus LLM-Output extrahieren. Anfang: {raw[:200]!r}")
 
 
 def _insert_voice_profile(
@@ -365,7 +336,29 @@ def run_p03(
         )
 
         # 6. JSON-Parsing + kanonische Validierung (Soft-Fail mit _meta.luecken)
-        parsed = _parse_json_from_text(raw_text)
+        try:
+            parsed = _parse_json_from_text(raw_text)
+        except ValueError:
+            logger.warning(
+                "P03 run_id=%s: JSON-Parse fehlgeschlagen, 1 Korrektur-Call",
+                run_id,
+            )
+            retry_res = call_pipeline_llm(
+                prompt_key="P03",
+                system_prompt=loaded.system_prompt,
+                user_content=(
+                    user_content
+                    + "\n\n---\n\nDeine vorherige Antwort war kein reines JSON-Objekt. "
+                    "Antworte ausschließlich mit dem JSON-Objekt. "
+                    "Kein Text davor, kein Text danach, keine ```json-Backticks."
+                ),
+                tenant_id=tenant_id,
+            )
+            raw_text = retry_res.text
+            input_tokens += retry_res.input_tokens
+            output_tokens += retry_res.output_tokens
+            actual_cost += retry_res.cost_usd
+            parsed = _parse_json_from_text(raw_text)
 
         tenant_name, agentur_id = fetch_tenant_meta(tenant_id)
         llm_meta = parsed.get("_meta") if isinstance(parsed.get("_meta"), dict) else None
