@@ -65,6 +65,10 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 
 **Empfohlener erster Sprint-2-Schritt nach Reset:** fable-Detailplan #44 + #43 → #44 sonnet bauen (sicher, board-anchored) → #43 Code+Migration vorlegen (Robert-Flag).
 
+### Sprint-2-Fortschritt
+- ✅ **#44 Wizard 6→8 Phasen fertig** — `api/wizard_phases.py` (dep-frei extrahiert), 8 Board-Phasen in Reihenfolge, hardcoded „6" entfernt; 101 Tests grün. Fragen-Wortlaut der neuen Phasen = Chris-Flag (board-konforme Defaults).
+- 📋 **#43-Detailplan fertig** (`docs/SPRINT-2-PLAN-43.md`): Tabelle `tenant_customer_values` (Migration **053**, Robert-Freigabe), P12-Eingriff `p12_task.py:83-114`+`:333-339`, P17-Vorbau `brand_voice.py:759-899`. Atomare Schritte: 1) Schema+Resolver (sonnet, Review opus) → 2) Backfill → 3) P12-Injektion → 4) P17-decide-generisch. **Nächste Aktion: #43 Schritt 1 bauen.**
+
 ---
 
 ## LOG (jüngste zuerst)
