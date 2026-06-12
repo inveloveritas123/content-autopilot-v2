@@ -54,10 +54,15 @@ def main() -> int:
     with sync_session_factory() as s:
         s.execute(
             text(
-                "INSERT INTO tenants (id, name, settings) "
-                "VALUES (:id, :name, '{}'::jsonb) ON CONFLICT (id) DO NOTHING"
+                "INSERT INTO tenants (id, name, api_key, slug, settings) "
+                "VALUES (:id, :name, :api_key, :slug, '{}'::jsonb) ON CONFLICT (id) DO NOTHING"
             ),
-            {"id": args.tenant_id, "name": "E2E Canonical"},
+            {
+                "id": args.tenant_id,
+                "name": "E2E Canonical",
+                "api_key": f"e2e-{args.tenant_id}",
+                "slug": f"e2e-{args.tenant_id}",
+            },
         )
         s.commit()
 

@@ -1,1 +1,305 @@
-IyBDb250ZW50IEF1dG9waWxvdCB2Mi4wIOKAlCBQcm9qZWt0LUtvbnRleHQKCj4gKipISU5XRUlTICgyMDI2LTA2LTExKToqKiBHaXRlYSBpc3Qgc3RpbGxnZWxlZ3QuIEthbm9uaXNjaGVzIFJlbW90ZSBpc3QgR2l0SHViIGBpbnZlbG92ZXJpdGFzMTIzL2NvbnRlbnQtYXV0b3BpbG90LXYyYC4gRnLDvGhlcmUgR2l0ZWEtUmVmZXJlbnplbiB1bnRlbiBzaW5kIGhpc3RvcmlzY2guCgojIyBERUlOIEFVRlRSQUcKCkR1IGJpc3QgZGVyIEZ1bGxzdGFjay1Wb3JhcmJlaXRlciBmdWVyIENvbnRlbnQgQXV0b3BpbG90IHYyLiBEdSBoYXN0IE9wdXMtU3ViYWdlbnRlbiB6dXIgVmVyZnVlZ3VuZy4gRWluIHp3ZWl0ZXIgQ2xhdWRlICgiQ293b3JrIikgdWViZXJ3YWNodCBkZWluZSBBcmJlaXQgYWxzIFFBLUFyY2hpdGVrdCB2aWEgR2l0ZWEgSXNzdWVzLgoKKipXSUNIVElHOioqIERpZXMgaXN0IGRpZSB2Mi1JbnN0YW56IChGb3JrKS4gRGllIHYxICgiUGl0Y2ggQWxwaGEiKSB1bnRlciAvb3B0L3p1a3VuZnRzYnVuZC1jb250ZW50LWF1dG9waWxvdC8gZGFyZiBOSUNIVCBhbmdlZmFzc3Qgd2VyZGVuIQoKKipTVEFSVEUgU086KioKMS4gTGllcyBkaWUgb2ZmZW5lbiBJc3N1ZXMgKGN1cmwtQmVmZWhsIHVudGVuKQoyLiBBcmJlaXRlIHNpZSBpbiBQcmlvcml0YWV0cy1SZWloZW5mb2xnZSBhYiAoS1JJVElTQ0gg4oaSIEhPQ0gg4oaSIE1JVFRFTCkKMy4gTmFjaCBqZWRlbSBGaXg6IGdpdCBjb21taXQgKyBwdXNoLCBJc3N1ZSBrb21tZW50aWVyZW4gKyBzY2hsaWVzc2VuCjQuIExpZXMgU0NPUEUubWQgZnVlciBkZW4gR2VzYW10a29udGV4dAoKIyMgWnVnYW5nCgpEdSBhcmJlaXRlc3QgZGlyZWt0IGF1ZiBkaWVzZW0gU2VydmVyOgotIFNlcnZlciBCOiAxNTIuNTMuMTQyLjE2MywgUG9ydCAxMDAyMiwgVXNlciBtZWlzdGVyCi0gUHJvamVrdHZlcnplaWNobmlzOiAvb3B0L2NvbnRlbnQtYXV0b3BpbG90LXYyLwotIEdpdGVhIFJlcG86IG1laXN0ZXIvY29udGVudC1hdXRvcGlsb3QtdjIgKEJyYW5jaDogbWFpbikKLSBHaXRlYSBQdXNoIFVSTDogaHR0cDovL21laXN0ZXI6JHtHSVRFQV9UT0tFTn1AbG9jYWxob3N0OjMwMDAvbWVpc3Rlci9jb250ZW50LWF1dG9waWxvdC12Mi5naXQKCiMjIFp3ZWkgSW5zdGFuemVuIOKAlCBOSUNIVCBWRVJXRUNIU0VMTgoKfCBJbnN0YW56IHwgUGZhZCB8IEZyb250ZW5kIHwgQVBJIHwgTUNQIHwgU3RhdHVzIHwKfC0tLS0tLS0tLXwtLS0tLS18LS0tLS0tLS0tLXwtLS0tLXwtLS0tLXwtLS0tLS0tLXwKfCAqKlBpdGNoIEFscGhhICh2MSkqKiB8IC9vcHQvenVrdW5mdHNidW5kLWNvbnRlbnQtYXV0b3BpbG90LyB8IDo4NTAxIHwgOjg1MDEvYXBpIHwgOjgwODAgfCBFSU5HRUZST1JFTiDigJQgRklOR0VSIFdFRyB8CnwgKip2MiAoTWFpbiBEZXYpKiogfCAvb3B0L2NvbnRlbnQtYXV0b3BpbG90LXYyLyB8IDo4NjAxIHwgOjg2MDEvYXBpIHwgOjgxODAgfCBBS1RJVkUgRU5UV0lDS0xVTkcgfAoKIyMgQXJjaGl0ZWt0dXIKCjYgRG9ja2VyLUNvbnRhaW5lciwgYWxsZSB2aWEgZG9ja2VyLWNvbXBvc2UudjIueW1sOgoKfCBDb250YWluZXIgfCBJbWFnZSB8IFBvcnQgfCBGdW5rdGlvbiB8CnwtLS0tLS0tLS0tLXwtLS0tLS0tfC0tLS0tLXwtLS0tLS0tLS0tfAp8IGJhY2tlbmQtdjIgfCBGYXN0QVBJL3V2aWNvcm4gfCBpbnRlcm4gOjgwMDAgfCBSRVNUIEFQSSB2Mi4wIHwKfCBjZWxlcnktd29ya2VyLXYyIHwgZ2xlaWNoIHdpZSBiYWNrZW5kIHwgLSB8IEFzeW5jIFRhc2tzIChUcmFuc2tyaXB0aW9uLCBBbmFseXNlLCBDb250ZW50KSB8CnwgY2VsZXJ5LWJlYXQtdjIgfCBnbGVpY2ggd2llIGJhY2tlbmQgfCAtIHwgU2NoZWR1bGVyIChkeW5hbWlzY2hlIEludGVydmFsbGUgcHJvIFNvdXJjZSEpIHwKfCBtY3Atc2VydmVyLXYyIHwgUHl0aG9uL0Zhc3RNQ1AgfCA6ODE4MCAoVlBOKSB8IE1DUCBUb29scywgU1NFIFRyYW5zcG9ydCB8CnwgbmdpbngtdjIgfCBuZ2lueDphbHBpbmUgfCA6ODYwMSAoVlBOKSB8IFJldmVyc2UgUHJveHkgKEZyb250ZW5kICsgL2FwaS8pIHwKfCByZWRpcy12MiB8IHJlZGlzOjctYWxwaW5lIHwgLSB8IENlbGVyeSBCcm9rZXIgKERCIDEpIHwKClBvc3RncmVTUUwgMTcgbGFldWZ0IE5JQ0hUIGltIERvY2tlciwgc29uZGVybiBkaXJla3QgYXVmIGRlbSBIb3N0ICg6NTQzMikuCkRCOiBgY29udGVudF9hdXRvcGlsb3RfdjJgIChOSUNIVCBkaWUgdjEtREIhKQpMaXRlTExNIFByb3h5IGxhZXVmdCBhdWYgOjQwMDAgKHNlcGFyYXRlciBTZXJ2aWNlLCBOSUNIVCBBTkZBU1NFTikuCgojIyBOZXR6d2VyawoKLSB2MiBpc3QgTlVSIHBlciBWUE4gZXJyZWljaGJhciAoMTAuMTAuMC4wLzI0KQotIERvY2tlci1OZXR6d2VyazogY2FwLXYyLW5ldCAoU3VibmV0IDE5Mi4xNjguMTEyLjAvMjApCi0gVUZXOiBQb3J0cyA4NjAxICsgODE4MCBudXIgZnVlciBWUE4KCiMjIFByb3htb3ggTFhDIEVpZ2VuaGVpdGVuIChLUklUSVNDSCkKCjEuIEFMTEUgRG9ja2VyLUNvbnRhaW5lciBicmF1Y2hlbiBgcHJpdmlsZWdlZDogdHJ1ZWAgdW5kIGBzZWN1cml0eV9vcHQ6IFtsYWJlbD1kaXNhYmxlXWAKMi4gbnBtL2VzYnVpbGQgaW0gRG9ja2VyIGZ1bmt0aW9uaWVydCBOSUNIVCDigJQgRnJvbnRlbmQgYXVmIEhvc3QgYmF1ZW4KMy4gRG9ja2VyLU5ldHp3ZXJrLVN1Ym5ldCBpc3QgMTkyLjE2OC54LnggKG5pY2h0IDE3Mi4xNy54KQoKIyMgRnJvbnRlbmQgQnVpbGQtUHJvemVzcwoKYGBgYmFzaAojIDEuIEZyb250ZW5kIGF1ZiBIb3N0IGJhdWVuIChOSUNIVCBpbiBEb2NrZXIhKQpjZCAvb3B0L2NvbnRlbnQtYXV0b3BpbG90LXYyL2Zyb250ZW5kCm5wbSBpbnN0YWxsCm5wbSBydW4gYnVpbGQKCiMgMi4gTmdpbngtQ29udGFpbmVyIG5ldSBiYXVlbgpjZCAvb3B0L2NvbnRlbnQtYXV0b3BpbG90LXYyCmRvY2tlciBjb21wb3NlIC1mIGRvY2tlci1jb21wb3NlLnYyLnltbCBidWlsZCBuZ2lueC12MgoKIyAzLiBOZ2lueCBuZXUgc3RhcnRlbgpkb2NrZXIgY29tcG9zZSAtZiBkb2NrZXItY29tcG9zZS52Mi55bWwgdXAgLWQgLS1mb3JjZS1yZWNyZWF0ZSBuZ2lueC12MgpgYGAKCiMjIEJhY2tlbmQgYWVuZGVybgoKYGBgYmFzaApjZCAvb3B0L2NvbnRlbnQtYXV0b3BpbG90LXYyCmRvY2tlciBjb21wb3NlIC1mIGRvY2tlci1jb21wb3NlLnYyLnltbCBidWlsZCBiYWNrZW5kLXYyIGNlbGVyeS13b3JrZXItdjIgY2VsZXJ5LWJlYXQtdjIKZG9ja2VyIGNvbXBvc2UgLWYgZG9ja2VyLWNvbXBvc2UudjIueW1sIHVwIC1kIC0tZm9yY2UtcmVjcmVhdGUgYmFja2VuZC12MiBjZWxlcnktd29ya2VyLXYyIGNlbGVyeS1iZWF0LXYyCmBgYAoKIyMgVGVzdGVuCgpgYGBiYXNoCiMgSGVhbHRoCmN1cmwgLXNmIGh0dHA6Ly9sb2NhbGhvc3Q6ODYwMS9hcGkvaGVhbHRoCgojIEFQSSBtaXQgQXV0aApjdXJsIC1zZiAtSCAnWC1BUEktS2V5OiBjYXAtdGVuYW50LXpmYi0yMDI2JyBodHRwOi8vbG9jYWxob3N0Ojg2MDEvYXBpL2Rhc2hib2FyZApjdXJsIC1zZiAtSCAnWC1BUEktS2V5OiBjYXAtdGVuYW50LXpmYi0yMDI2JyBodHRwOi8vbG9jYWxob3N0Ojg2MDEvYXBpL3NvdXJjZXMKY3VybCAtc2YgLUggJ1gtQVBJLUtleTogY2FwLXRlbmFudC16ZmItMjAyNicgaHR0cDovL2xvY2FsaG9zdDo4NjAxL2FwaS9pZGVhcwoKIyBGcm9udGVuZApjdXJsIC1zZiAtbyAvZGV2L251bGwgLXcgJyV7aHR0cF9jb2RlfScgaHR0cDovL2xvY2FsaG9zdDo4NjAxLwoKIyBNQ1AKY3VybCAtc2YgLW8gL2Rldi9udWxsIC13ICcle2h0dHBfY29kZX0nIGh0dHA6Ly9sb2NhbGhvc3Q6ODE4MC9zc2UKCiMgdjEgTVVTUyBOT0NIIExBVUZFTgpjdXJsIC1zZiAtbyAvZGV2L251bGwgLXcgJyV7aHR0cF9jb2RlfScgaHR0cDovL2xvY2FsaG9zdDo4NTAxLwoKIyBMb2dzIGJlaSBQcm9ibGVtZW4KZG9ja2VyIGNvbXBvc2UgLWYgZG9ja2VyLWNvbXBvc2UudjIueW1sIGxvZ3MgYmFja2VuZC12MiAtLXRhaWwgMzAKZG9ja2VyIGNvbXBvc2UgLWYgZG9ja2VyLWNvbXBvc2UudjIueW1sIGxvZ3MgbmdpbngtdjIgLS10YWlsIDEwCmRvY2tlciBjb21wb3NlIC1mIGRvY2tlci1jb21wb3NlLnYyLnltbCBsb2dzIG1jcC1zZXJ2ZXItdjIgLS10YWlsIDEwCmBgYAoKIyMgdjIuMCBCYWNrZW5kIEFQSSAoYmVzdGVoZW5kIHZvbiB2MSkKCi0gR0VUL1BPU1QgL2FwaS9zb3VyY2VzIOKAlCBRdWVsbGVuIHZlcndhbHRlbiAoWW91VHViZSwgUlNTLCBQb2RjYXN0LCBXZWIpCi0gR0VUIC9hcGkvaXRlbXMg4oCUIFZpZGVvcy9BcnRpa2VsIG1pdCBUcmFuc2tyaXB0ZW4vQW5hbHlzZW4KLSBHRVQvUE9TVCAvYXBpL2NvbnRlbnQg4oCUIEdlbmVyaWVydGUgUG9zdHMKLSBHRVQgL2FwaS9jYW1wYWlnbnMg4oCUIENvbnRlbnQtS2FtcGFnbmVuCi0gR0VUIC9hcGkvZGFzaGJvYXJkIOKAlCBTdGF0aXN0aWtlbgotIEdFVCAvYXBpL3BpcGVsaW5lL3Byb2dyZXNzIOKAlCBQaXBlbGluZS1Gb3J0c2Nocml0dAotIEdFVCAvYXBpL3BpcGVsaW5lL2xvZyDigJQgQWN0aXZpdHktTG9nCi0gR0VUL1BPU1QgL2FwaS9pZGVhcyDigJQgQ29udGVudC1JZGVlbiAoZGlhbG9naXNjaGVyIFdvcmtmbG93KQotIFBPU1QgL2FwaS9pZGVhcy97aWR9L2Fuc3dlciDigJQgVW50ZXJuZWhtZXItQW50d29ydGVuCi0gUE9TVCAvYXBpL2lkZWFzL3tpZH0vZ2VuZXJhdGUtcG9zdCDigJQgUG9zdCBhdXMgQW50d29ydGVuIGdlbmVyaWVyZW4KLSBHRVQgL2FwaS9mZWVkYmFjay9zdGF0cyDigJQgRmVlZGJhY2stU3RhdGlzdGlrZW4KLSBQT1NUIC9hcGkvZmVlZGJhY2svZWRpdC1kaWZmIOKAlCBFZGl0LURpZmYgVHJhY2tpbmcKLSBQT1NUIC9hcGkvZmVlZGJhY2svcGVyZm9ybWFuY2Ug4oCUIFBlcmZvcm1hbmNlLU1ldHJpa2VuCi0gR0VUIC9hcGkvdGVuYW50cy9tZS92b2ljZS1wcm9maWxlIOKAlCBWb2ljZS1Qcm9maWwgKDEyIERpbWVuc2lvbmVuKQoKIyMgVGVjaC1TdGFjayBGcm9udGVuZAoKLSBSZWFjdCAxOCArIFZpdGUKLSBUYWlsd2luZCBDU1MgKFpCIEJyYW5kOiBwcmltYXJ5PXRlYWwgIzBGNzY2RSwgYWNjZW50PWFtYmVyKQotIFJlYWN0IFJvdXRlciBET00KLSBSZWNoYXJ0cyAoQ2hhcnRzKQotIEx1Y2lkZSBSZWFjdCAoSWNvbnMpCi0gY2xzeCArIHRhaWx3aW5kLW1lcmdlIChVdGlsaXR5KQotIEZvbnQ6IEludGVyCgpVSS1Lb21wb25lbnRlbiB1bnRlciBzcmMvY29tcG9uZW50cy91aS8gKEJ1dHRvbiwgQ2FyZCwgQmFkZ2UsIERpYWxvZywgSW5wdXQsIFRhYnMpLgoKIyMgR2l0LVdvcmtmbG93CgpOYWNoIEpFREVNIGZlcnRpZ2VuIEZlYXR1cmU6CmBgYGJhc2gKY2QgL29wdC9jb250ZW50LWF1dG9waWxvdC12MgpnaXQgYWRkIC1BCmdpdCBjb21taXQgLW0gJ2ZlYXQ6IDx3YXMgZ2ViYXV0IHd1cmRlPicKZ2l0IHB1c2ggb3JpZ2luIG1haW4KYGBgCgojIyBLb29yZGluYXRpb24gbWl0IENvd29yayAoV0lDSFRJRykKCkR1IGFyYmVpdGVzdCBpbSBUZWFtIG1pdCBlaW5lbSB6d2VpdGVuIENsYXVkZSAoIkNvd29yayIpIGRlciBhbHMgUUEgdW5kIEFyY2hpdGVrdCBmdW5naWVydC4KS29tbXVuaWthdGlvbnNrYW5hbDogR2l0ZWEgSXNzdWVzIGltIFJlcG8gbWVpc3Rlci9jb250ZW50LWF1dG9waWxvdC12Mi4KCiMjIyBEZWluIFdvcmtmbG93IHZvciBKRURFTSBuZXVlbiBGZWF0dXJlOgoKMS4gQ2hlY2tlIG9mZmVuZSBJc3N1ZXM6CiAgIGN1cmwgLXNmICdodHRwOi8vbG9jYWxob3N0OjMwMDAvYXBpL3YxL3JlcG9zL21laXN0ZXIvY29udGVudC1hdXRvcGlsb3QtdjIvaXNzdWVzP3N0YXRlPW9wZW4mdG9rZW49JHtHSVRFQV9BUElfVE9LRU59JyB8IHB5dGhvbjMgLW0ganNvbi50b29sCgoyLiBBcmJlaXRlIElzc3VlcyBtaXQgaG9lY2hzdGVyIFByaW9yaXRhZXQgenVlcnN0IGFiIChLUklUSVNDSCA+IEhPQ0ggPiBNSVRURUwpCgozLiBOYWNoIEZlcnRpZ3N0ZWxsdW5nOiBLb21tZW50aWVyZSBhdWYgZGVtIElzc3VlOgogICBjdXJsIC1zZiAtWCBQT1NUICdodHRwOi8vbG9jYWxob3N0OjMwMDAvYXBpL3YxL3JlcG9zL21laXN0ZXIvY29udGVudC1hdXRvcGlsb3QtdjIvaXNzdWVzL0lTU1VFX05SL2NvbW1lbnRzP3Rva2VuPSR7R0lURUFfQVBJX1RPS0VOfScgLUggJ0NvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vanNvbicgLWQgJ3siYm9keSI6ICJFcmxlZGlndCBpbiBDb21taXQgWFlaLiBEZXBsb3llZCB1bmQgZ2V0ZXN0ZXQuIn0nCgo0LiBTY2hsaWVzc2UgZGFzIElzc3VlOgogICBjdXJsIC1zZiAtWCBQQVRDSCAnaHR0cDovL2xvY2FsaG9zdDozMDAwL2FwaS92MS9yZXBvcy9tZWlzdGVyL2NvbnRlbnQtYXV0b3BpbG90LXYyL2lzc3Vlcy9JU1NVRV9OUj90b2tlbj0ke0dJVEVBX0FQSV9UT0tFTn0nIC1IICdDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL2pzb24nIC1kICd7InN0YXRlIjogImNsb3NlZCJ9JwoKIyMjIFdlbm4ga2VpbmUgSXNzdWVzIG9mZmVuIHNpbmQ6CkxpZXMgU0NPUEUubWQgdW5kIGFyYmVpdGUgZGllIG5hZWNoc3RlIFBoYXNlIGFiLgoKIyMgUmVzZWFyY2gtUHJvdG9rb2xsIChQRkxJQ0hUIHZvciBqZWRlciBJbXBsZW1lbnRpZXJ1bmcpCgpLZWluIEZlYXR1cmUgd2lyZCBnZWJhdXQgb2huZSB2YWxpZGllcnRlbiBBbnNhdHouIEFibGF1ZjoKCjEuICoqV2ViU2VhcmNoKiog4oCUIFN1Y2hlIG5hY2ggYWt0dWVsbGVuIEJlc3QgUHJhY3RpY2VzLCBQYXBlcnMsIE9mZmljaWFsIERvY3MKICAgLSBNaW5kZXN0ZW5zIDIgaG9jaHdlcnRpZ2UgUXVlbGxlbiAoTUROLCBvZmZpY2lhbCBkb2NzLCBhcnhpdiwgQUNNLCBJRUVFLCB3ZWIuZGV2LCBtYXJ0aW5mb3dsZXIuY29tKQogICAtIFN1Y2hvcGVyYXRvcmVuOiBgc2l0ZTpkb2NzLnB5dGhvbi5vcmdgLCBgc2l0ZTpyZWFjdC5kZXZgLCBgZmlsZXR5cGU6cGRmIHJlc2VhcmNoYAogICAtIEphaHIgYmVhY2h0ZW46IGJldm9yenVnZSBRdWVsbGVuIDIwMjMtMjAyNQoyLiAqKlF1ZWxsZW4gZG9rdW1lbnRpZXJlbioqIOKAlCBBbHMgSXNzdWUtS29tbWVudGFyIFZPUiBkZXIgSW1wbGVtZW50aWVydW5nCjMuICoqU2NvcGUgZGVmaW5pZXJlbioqIOKAlCBFeHBsaXppdCBzYWdlbiB3YXMgTklDSFQgZ2ViYXV0IHdpcmQKNC4gKipLZWluIENhcmdvLUN1bHQqKiDigJQgTnVyIGltcGxlbWVudGllcmVuIHdlbm4gZHUgZGVuIE1lY2hhbmlzbXVzIHZlcnN0ZWhzdAoKIyMgRnJlaWdhYmUtV29ya2Zsb3cg4oCUIFdhbm4gUm9iZXJ0IGVudHNjaGVpZGVuIG11c3MKCioqQXV0b21hdGlzY2ggYmVhcmJlaXRlbiAoa2VpbiBXYXJ0ZW4pOioqCi0gVUktQWVuZGVydW5nZW4sIG5ldWUgU2VpdGVuLCBuZXVlIEFQSS1FbmRwb2ludHMgaW5uZXJoYWxiIGRlcyBiZXN0ZWhlbmRlbiBTY2hlbWFzCi0gQnVnLUZpeGVzLCBQZXJmb3JtYW5jZS1PcHRpbWllcnVuZ2VuLCBuZXVlIENlbGVyeS1UYXNrcwotIE5ldWUgREItU3BhbHRlbiBpbiBiZXN0ZWhlbmRlbiBUYWJlbGxlbiwgbmV1ZSBQeXRob24vSlMtUGFrZXRlCi0gQ0xBVURFLm1kIFVwZGF0ZXMgbWl0IG5ldWVuIExlYXJuaW5ncwoKKipSb2JlcnQgZWluYmV6aWVoZW4g4oCUIExhYmVsIGBmcmVpZ2FiZS1yb2JlcnRgIHNldHplbiwgZGFubiBhbmRlcmUgSXNzdWVzIGJlYXJiZWl0ZW46KioKLSBOZXVlIERCLVRhYmVsbGVuIG9kZXIgZ3Jvc3NlIFNjaGVtYS1BZW5kZXJ1bmdlbgotIE5ldWUgZXh0ZXJuZSBBUEktSW50ZWdyYXRpb25lbiAobmV1ZSBLZXlzIG5vZXRpZykKLSBBZW5kZXJ1bmdlbiBhbiBQb3J0cywgTmV0endlcmssIERvY2tlci1Db21wb3NlLVN0cnVrdHVyCi0gTExNLVByb3ZpZGVyIG9kZXIgUHJvbXB0LVN0cmF0ZWdpZSB3ZWNoc2VsbgotIEFsbGVzIHdhcyB2MSBiZXRyZWZmZW4ga29lbm50ZQoKKipTb2ZvcnQgc3RvcHBlbiArIFRlbGVncmFtIFJvYmVydCArIExhYmVsIGBrcml0aXNjaGA6KioKLSBGaXJld2FsbCwgaXB0YWJsZXMsIFVGVyDigJQgaXJnZW5kd2VsY2hlIEFlbmRlcnVuZ2VuCi0gQXV0aCwgQVBJLUtleXMsIFNlY3JldHMsIENyZWRlbnRpYWxzCi0gUG9zdGdyZVNRTC1Db25maWctRmlsZXMgKG5pY2h0IERhdGVuYmFua2RhdGVuKQotIEFsbGVzIGluIC9vcHQvenVrdW5mdHNidW5kLWNvbnRlbnQtYXV0b3BpbG90LyAoRUlOR0VGUk9SRU4pCgojIyBTZWxmLUxlYXJuaW5nIOKAlCBDTEFVREUubWQgYXV0b21hdGlzY2ggYWt0dWFsaXNpZXJlbgoKTmFjaCBqZWRlciBlcmZvbGdyZWljaGVuIElzc3VlLUJlYXJiZWl0dW5nOiBQcnVlZmUgb2IgZWluZSBuZXVlIEVya2VubnRuaXMgYXVmZ2Vub21tZW4gd2VyZGVuIHNvbGx0ZS4KKipXYXMgYXVmbmVobWVuOioqIEdvdGNoYXMsIG5pY2h0LW9mZmVuc2ljaHRsaWNoZSBQYXR0ZXJucywgdmVybWllZGVuZSBGZWhsZXIuCioqQ29tbWl0OioqIGBjaG9yZTogdXBkYXRlIENMQVVERS5tZCBsZWFybmluZ3MgZnJvbSAjTlJgCgpFcmdhZW56ZSBkZW4gQWJzY2huaXR0IGAjIyBHZWxlcm50ZSBQYXR0ZXJuc2AgYW0gRW5kZSBkaWVzZXIgRGF0ZWkuCgojIyBHUkVOWkVOIOKAlCBXYXMgZHUgTklDSFQgdHVuIGRhcmZzdAoKLSBLRUlORSBEYXRlaWVuIGF1c3NlcmhhbGIgdm9uIC9vcHQvY29udGVudC1hdXRvcGlsb3QtdjIvIGFlbmRlcm4KLSBLRUlORSBzeXN0ZW1kIFNlcnZpY2VzIGFlbmRlcm4gb2RlciBlcnN0ZWxsZW4KLSBLRUlORSBVRlcvRmlyZXdhbGwtUmVnZWxuIGFlbmRlcm4gKGF1c3NlciBpbSBJc3N1ZSAjMSBleHBsaXppdCBhbmdld2llc2VuKQotIEtFSU5FIFBvc3RncmVTUUwtQ29uZmlnIChwZ19oYmEuY29uZiwgcG9zdGdyZXNxbC5jb25mKSBhZW5kZXJuCi0gS0VJTkUgYW5kZXJlbiBEb2NrZXItQ29udGFpbmVyIG9kZXIgLU5ldHp3ZXJrZSBhbmZhc3NlbgotIEtFSU5FIFBvcnRzIGJlbGVnZW4gZGllIG5pY2h0IDg2MDEgb2RlciA4MTgwIHNpbmQKLSAvb3B0L3p1a3VuZnRzYnVuZC1jb250ZW50LWF1dG9waWxvdC8g4oCUIEFCU09MVVQgRklOR0VSIFdFRyAoUGl0Y2ggQWxwaGEgZnVlciBFcmljISkKLSBMaXRlTExNICg6NDAwMCksIE5leHRjbG91ZCwgR2l0ZWEsIE5hbm9ib3QsIG44biDigJQgRklOR0VSIFdFRwotIEtFSU5FIExMTS1Db25maWcgb2RlciBBUEktS2V5cyBhZW5kZXJuIChHRVNQRVJSVCBsYXV0IEZpcm1lbnJpY2h0bGluaWUpCi0gS0VJTiBzdWRvIGZ1ZXIgc3lzdGVtd2VpdGUgQWVuZGVydW5nZW4KCiMjIC5lbnYgVmFyaWFibGVuIChiZXJlaXRzIGtvbmZpZ3VyaWVydCwgTklDSFQgQUVOREVSTikKCi0gREJfUEFTU1dPUkQsIERFRkFVTFRfVEVOQU5UX0tFWSwgTElURUxMTV9CQVNFX1VSTCwgTElURUxMTV9BUElfS0VZCi0gQVBQX1BPUlQ9ODYwMSwgTUNQX1BPUlQ9ODE4MAotIERBVEFCQVNFX1VSTCBtaXQgREIgY29udGVudF9hdXRvcGlsb3RfdjIKLSBORVhUQ0xPVURfVVJMLCBORVhUQ0xPVURfVVNFUiwgTkVYVENMT1VEX1BBU1NXT1JECgojIyBHZWxlcm50ZSBQYXR0ZXJucwoKPCEtLSBXaXJkIGF1dG9tYXRpc2NoIGR1cmNoIGRlbiBJc3N1ZS1BZ2VudCBlcmdhZW56dCAtLT4KPCEtLSBGb3JtYXQ6ICMjIyBUaGVtYSAoSXNzdWUgI05SLCBEYXR1bSkgLyBFcmtlbm50bmlzIC8gV2FydW0gd2ljaHRpZyAvIFF1ZWxsZSAtLT4KCiMjIyBTdGF0aWMgSGFzaHRhZyBMaWJyYXJpZXMgKElzc3VlICMzNywgMjAyNi0wNC0xMykKV2VubiBMTE0tQnVkZ2V0IGVyc2Nob2VwZnQgaXN0LCBzaW5kIHN0YXRpc2NoIGt1cmF0aWVydGUgRGF0ZW5zYWV0emUgYmVzc2VyIGFscyBuaWNodHMuClNIS19IQVNIVEFHUyBLb25zdGFudGUgaW4gUG9zdHMuanN4OiA0IEthdGVnb3JpZW4sIDQwKyBIYXNodGFncywga2VpbiBMTE0tQ2FsbCBub2V0aWcuCldhcnVtIHdpY2h0aWc6IEJ1ZGdldC1BdXNmYWVsbGUgZHVlcmZlbiBVSS1GZWF0dXJlcyBuaWNodCBrb21wbGV0dCBkZWFrdGl2aWVyZW4uCgojIyMgQ2Fyb3VzZWwgVGVtcGxhdGVzOiBEQi1TZWVkaW5nIHZpYSBDb250YWluZXIgYXN5bmNpbyAoSXNzdWUgIzM3LCAyMDI2LTA0LTEzKQpDYXJvdXNlbC1UZW1wbGF0ZXMgd2VyZGVuIHZpYSBgYXN5bmNfc2Vzc2lvbl9mYWN0b3J5KClgIGRpcmVrdCBpbiBEQiBnZXNlZWRlZCAobmljaHQgdmlhIEFsZW1iaWMtTWlncmF0aW9uKS4KR3J1bmQ6IFRlbXBsYXRlLURhdGVuIHNpbmQga29uZmlndXJpZXJiYXIsIGtlaW4gU2NoZW1hLUNoYW5nZS4KVm9yZ2VoZW46IGBkb2NrZXIgY29tcG9zZSBleGVjIC1UIGJhY2tlbmQtdjIgcHl0aG9uMyAtYyAiLi4uYXN5bmNpby5ydW4oc2VlZCgpKSJgCgojIyMgbmdpbnggSVAtQ2FjaGUgbmFjaCBCYWNrZW5kLVJlYnVpbGQgKElzc3VlICMzNywgMjAyNi0wNC0xMykKTmFjaCBEb2NrZXItQnVpbGQgZGVzIEJhY2tlbmRzIGFlbmRlcnQgc2ljaCBkaWUgQ29udGFpbmVyLUlQIGltIERvY2tlci1OZXR6LgpuZ2lueCBjYWNoZWQgZGllIGFsdGUgQmFja2VuZC1JUCDihpIgNTAyIEVycm9ycyBiaXMgbmdpbnggbmV1IGdlc3RhcnRldCB3aXJkLgpGaXg6IE5hY2ggQmFja2VuZC1SZWJ1aWxkIGltbWVyIEFVQ0ggbmdpbnggbmV1IHN0YXJ0ZW4gKHJlc3RhcnQsIG5pY2h0IHJlY3JlYXRlKS4KUmVpaGVuZm9sZ2U6IGJ1aWxkIGJhY2tlbmQg4oaSIHVwIGJhY2tlbmQg4oaSIHJlc3RhcnQgbmdpbnguCgojIyMgUHlkYW50aWMgZmllbGRfdmFsaWRhdG9yIGZ1ZXIgVVJMLVZhbGlkYXRpb24gKElzc3VlICMzNywgMjAyNi0wNC0xMykKYEBmaWVsZF92YWxpZGF0b3IoInVybCIpYCBpbiBQeWRhbnRpYyB2MiBzdGF0dCBgQHZhbGlkYXRvcmAuCkdpYnQgSFRUUCA0MjIgenVydWVjayB3ZW5uIFVSTCBuaWNodCBtaXQgaHR0cDovLyBvZGVyIGh0dHBzOi8vIGJlZ2lubnQuCldpY2h0aWc6IGBAY2xhc3NtZXRob2RgIGlzdCBQZmxpY2h0IGJlaSBgZmllbGRfdmFsaWRhdG9yYCBpbiBQeWRhbnRpYyB2Mi4KCiMjIyBDYXJvdXNlbCBVSTogVGVtcGxhdGVzIHBlciBBUEkgbGFkZW4sIG5pY2h0IGhhcmRjb2RlbiAoSXNzdWUgIzM3LCAyMDI2LTA0LTEzKQpDYXJvdXNlbFRlbXBsYXRlcyB3ZXJkZW4gYmVpbSBlcnN0ZW4gQ2Fyb3VzZWwtQ2xpY2sgZ2VsYWRlbiB1bmQgZ2VjYWNodCAodXNlU3RhdGUpLgpJbSBNb2RhbDogVGVtcGxhdGUtU3dpdGNoZXIgemVpZ3QgYWxsZSBUZW1wbGF0ZXMsIGJlaSBBdXN3YWhsIHdlcmRlbiBzbGlkZXNfY29uZmlnLnNsaWRlcyBpbmppemllcnQuCl9vcmlnaW5hbFNsaWRlcyB3aXJkIGdlc3BlaWNoZXJ0IGRhbWl0ICJBdXMgUG9zdC1UZXh0IiB3aWVkZXJoZXJnZXN0ZWxsdCB3ZXJkZW4ga2Fubi4KCiMjIEtuZWNodC1Qcm90b2tvbGwg4oCUIER1YWwtQWdlbnQtQXJjaGl0ZWt0dXIKClJvYmVydCBiZXRyZWlidCB6d2VpIENsYXVkZS1Db2RlLVRlcm1pbmFscyBhdWYgZGllc2VtIFNlcnZlcjoKLSAqKktuZWNodC1IYWlrdSoqICh0bXV4OiBga25lY2h0LWhhaWt1YCkg4oCUIENsYXVkZSBIYWlrdSwgZnVlciA4MCUgZGVyIEF1ZmdhYmVuCi0gKipLbmVjaHQtU29ubmV0KiogKHRtdXg6IGBrbmVjaHQtc29ubmV0YCkg4oCUIENsYXVkZSBTb25uZXQsIGZ1ZXIga29tcGxleGUgMjAlCgojIyMgVGFzay1Sb3V0aW5nIHZpYSBHaXRlYSBMYWJlbHMKCnwgTGFiZWwgfCBGYXJiZSB8IEFnZW50IHwgRWluc2F0eiB8CnwtLS0tLS0tfC0tLS0tLS18LS0tLS0tLXwtLS0tLS0tLS18CnwgYGtuZWNodC1oYWlrdWAgfCBibGF1ICgjMDA3NWNhKSB8IEhhaWt1IHwgVUktRml4ZXMsIGVpbmZhY2hlIEVuZHBvaW50cywgVGVzdHMsIFJlZmFjdG9yaW5nLCBEb2NzIHwKfCBga25lY2h0LXNvbm5ldGAgfCByb3QgKCNlMTFkNDgpIHwgU29ubmV0IHwgQXJjaGl0ZWt0dXIsIGtvbXBsZXhlIFBpcGVsaW5lcywgTXVsdGktRmlsZS1SZWZhY3RvcmluZyB8CgojIyMgRXNrYWxhdGlvbgoKV2VubiBIYWlrdSBlaW5lIEF1ZmdhYmUgbmljaHQgbG9lc2VuIGthbm46CjEuIEtvbW1lbnRhciBhdWYgSXNzdWU6ICJFc2thbGF0aW9uOiBbR3J1bmRdIgoyLiBMYWJlbCBga25lY2h0LWhhaWt1YCBlbnRmZXJuZW4sIGBrbmVjaHQtc29ubmV0YCBzZXR6ZW4KMy4gTmljaHQgd2VpdGVyIHZlcnN1Y2hlbiDigJQgU29ubmV0IHVlYmVybmltbXQKCiMjIyBRQS1MZWFkIChDb3dvcmsgRGVza3RvcCkKCkRlciBkcml0dGUgQ2xhdWRlICgiQ293b3JrIikgYXVmIFJvYmVydHMgRGVza3RvcCBmdW5naWVydCBhbHMgUUEtTGVhZCB1bmQgQXJjaGl0ZWt0OgotIEVyc3RlbGx0IHVuZCBwcmlvcmlzaWVydCBJc3N1ZXMgbWl0IExhYmVscwotIFJldmlld3QgRXJnZWJuaXNzZSB2aWEgR2l0ZWEtS29tbWVudGFyZQotIEthbm4gYmVpZGUgS25lY2h0ZSB1ZWJlciBJc3N1ZXMgc3RldWVybgoKIyMjIExMTS1Sb3V0aW5nIGltIEJhY2tlbmQtQ29kZSAoUEZMSUNIVCkKCkJhc2llcmVuZCBhdWYgTExNLVJPVVRJTkctU1RBQ0stdjIgKE5leHRjbG91ZDogL3p1a3VuZnRzYnVuZC9JbmZyYXN0cnVrdHVyL0xMTS8pOgoKfCBUaWVyIHwgTW9kZWxsIHwgS29zdGVuL0NhbGwgfCBFaW5zYXR6IGltIEJhY2tlbmQgfAp8LS0tLS0tfC0tLS0tLS0tfC0tLS0tLS0tLS0tLS18LS0tLS0tLS0tLS0tLS0tLS0tLXwKfCBTMSB8IGBnb29nbGUvZ2VtaW5pLTIuNS1mbGFzaC1saXRlLXByZXZpZXctMDYtMTdgIHwg4oKsMC4wMDEgfCBSb3V0aW5nLCBLbGFzc2lmaWthdGlvbiwgVGFnZ2luZyB8CnwgUzIgfCBgbWlzdHJhbC9taXN0cmFsLXNtYWxsLWxhdGVzdGAgfCDigqwwLjAwMyB8IERlZmF1bHQgQ2hhdCwgZWluZmFjaGUgQW5hbHlzZSB8CnwgUzMgfCBgbWlzdHJhbC9kZXZzdHJhbC1zbWFsbC1sYXRlc3RgIHwg4oKsMC4wMDIgfCBFaW5mYWNoZXIgQ29kZSwgVGVtcGxhdGVzIHwKfCBTNCB8IGBtaXN0cmFsL21pc3RyYWwtbGFyZ2UtbGF0ZXN0YCB8IOKCrDAuMDEgfCBQcmVtaXVtLUFuYWx5c2UsIFZvaWNlIFByb2ZpbGUgfAp8IFM1IHwgYG1pc3RyYWwvZGV2c3RyYWwtbGF0ZXN0YCB8IOKCrDAuMDMgfCBLb21wbGV4ZXIgQ29kZSDigJQgQ09ORklSTSBub2V0aWcgfAp8IFM2IHwgYGFudGhyb3BpYy9jbGF1ZGUtc29ubmV0LTQtNmAgfCDigqwwLjIwIHwgRnJvbnRpZXIg4oCUIENPTkZJUk0gbm9ldGlnIHwKCioqUkVHRUxOOioqCi0gUzEtUzQ6IEZyZWkgdmVyd2VuZGJhciwga2VpbiBDb25maXJtIG5vZXRpZwotIFM1LVM2OiBOVVIgbWl0IGV4cGxpeml0ZW0gR3J1bmQgaW0gSXNzdWUtS29tbWVudGFyCi0gYG1vZGVsPSJjbGF1ZGUtc29ubmV0ImAgaXN0IFZFUkJPVEVOIGltIEJhY2tlbmQtQ29kZSDigJQgaW1tZXIgUzEtUzQgbnV0emVuCi0gQWxsZSBDYWxscyBnZWhlbiB1ZWJlciBSZXF1ZXN0eS5haSBSb3V0ZXIgKExJVEVMTE1fQkFTRV9VUkwgaW4gLmVudikKLSBaaWVsYnVkZ2V0OiA84oKsMTcwL01vbmF0IGZ1ZXIgZGVuIGdlc2FtdGVuIFN0YWNrCg==
+# Content Autopilot v2.0 — Projekt-Kontext
+
+## DEIN AUFTRAG
+
+Du bist der Fullstack-Vorarbeiter fuer Content Autopilot v2. Du hast Opus-Subagenten zur Verfuegung. Ein zweiter Claude ("Cowork") ueberwacht deine Arbeit als QA-Architekt via GitHub Issues.
+
+**WICHTIG:** Dies ist die v2-Instanz (Fork). Die v1 ("Pitch Alpha") unter /opt/zukunftsbund-content-autopilot/ darf NICHT angefasst werden!
+
+**STARTE SO:**
+1. Lies die offenen Issues (gh-Befehl unten)
+2. Arbeite sie in Prioritaets-Reihenfolge ab (KRITISCH → HOCH → MITTEL)
+3. Nach jedem Fix: git commit + push, Issue kommentieren + schliessen
+4. Lies SCOPE.md fuer den Gesamtkontext
+
+## Zugang
+
+Du arbeitest direkt auf diesem Server:
+- Server B: 152.53.142.163, Port 10022, User meister
+- Projektverzeichnis: /opt/content-autopilot-v2/
+- GitHub Repo: inveloveritas123/content-autopilot-v2 (Branch: main)
+
+## Zwei Instanzen — NICHT VERWECHSELN
+
+| Instanz | Pfad | Frontend | API | MCP | Status |
+|---------|------|----------|-----|-----|--------|
+| **Pitch Alpha (v1)** | /opt/zukunftsbund-content-autopilot/ | :8501 | :8501/api | :8080 | EINGEFROREN — FINGER WEG |
+| **v2 (Main Dev)** | /opt/content-autopilot-v2/ | :8601 | :8601/api | :8180 | AKTIVE ENTWICKLUNG |
+
+## Architektur
+
+6 Docker-Container, alle via docker-compose.v2.yml:
+
+| Container | Image | Port | Funktion |
+|-----------|-------|------|----------|
+| backend-v2 | FastAPI/uvicorn | intern :8000 | REST API v2.0 |
+| celery-worker-v2 | gleich wie backend | - | Async Tasks (Transkription, Analyse, Content) |
+| celery-beat-v2 | gleich wie backend | - | Scheduler (dynamische Intervalle pro Source!) |
+| mcp-server-v2 | Python/FastMCP | :8180 (VPN) | MCP Tools, SSE Transport |
+| nginx-v2 | nginx:alpine | :8601 (VPN) | Reverse Proxy (Frontend + /api/) |
+| redis-v2 | redis:7-alpine | - | Celery Broker (DB 1) |
+
+PostgreSQL 17 laeuft NICHT im Docker, sondern direkt auf dem Host (:5432).
+DB: `content_autopilot_v2` (NICHT die v1-DB!)
+LiteLLM Proxy laeuft auf :4000 (separater Service, NICHT ANFASSEN).
+
+## Netzwerk
+
+- v2 ist NUR per VPN erreichbar (10.10.0.0/24)
+- Docker-Netzwerk: cap-v2-net (Subnet 192.168.112.0/20)
+- UFW: Ports 8601 + 8180 nur fuer VPN
+
+## Proxmox LXC Eigenheiten (KRITISCH)
+
+1. ALLE Docker-Container brauchen `privileged: true` und `security_opt: [label=disable]`
+2. npm/esbuild im Docker funktioniert NICHT — Frontend auf Host bauen
+3. Docker-Netzwerk-Subnet ist 192.168.x.x (nicht 172.17.x)
+
+## Frontend Build-Prozess
+
+```bash
+# 1. Frontend auf Host bauen (NICHT in Docker!)
+cd /opt/content-autopilot-v2/frontend
+npm install
+npm run build
+
+# 2. Nginx-Container neu bauen
+cd /opt/content-autopilot-v2
+docker compose -f docker-compose.v2.yml build nginx-v2
+
+# 3. Nginx neu starten
+docker compose -f docker-compose.v2.yml up -d --force-recreate nginx-v2
+```
+
+## Backend aendern
+
+```bash
+cd /opt/content-autopilot-v2
+docker compose -f docker-compose.v2.yml build backend-v2 celery-worker-v2 celery-beat-v2
+docker compose -f docker-compose.v2.yml up -d --force-recreate backend-v2 celery-worker-v2 celery-beat-v2
+```
+
+## Testen
+
+```bash
+# Health
+curl -sf http://localhost:8601/api/health
+
+# API mit Auth
+curl -sf -H 'X-API-Key: cap-tenant-zfb-2026' http://localhost:8601/api/dashboard
+curl -sf -H 'X-API-Key: cap-tenant-zfb-2026' http://localhost:8601/api/sources
+curl -sf -H 'X-API-Key: cap-tenant-zfb-2026' http://localhost:8601/api/ideas
+
+# Frontend
+curl -sf -o /dev/null -w '%{http_code}' http://localhost:8601/
+
+# MCP
+curl -sf -o /dev/null -w '%{http_code}' http://localhost:8180/sse
+
+# v1 MUSS NOCH LAUFEN
+curl -sf -o /dev/null -w '%{http_code}' http://localhost:8501/
+
+# Logs bei Problemen
+docker compose -f docker-compose.v2.yml logs backend-v2 --tail 30
+docker compose -f docker-compose.v2.yml logs nginx-v2 --tail 10
+docker compose -f docker-compose.v2.yml logs mcp-server-v2 --tail 10
+```
+
+## v2.0 Backend API (bestehend von v1)
+
+- GET/POST /api/sources — Quellen verwalten (YouTube, RSS, Podcast, Web)
+- GET /api/items — Videos/Artikel mit Transkripten/Analysen
+- GET/POST /api/content — Generierte Posts
+- GET /api/campaigns — Content-Kampagnen
+- GET /api/dashboard — Statistiken
+- GET /api/pipeline/progress — Pipeline-Fortschritt
+- GET /api/pipeline/log — Activity-Log
+- GET/POST /api/ideas — Content-Ideen (dialogischer Workflow)
+- POST /api/ideas/{id}/answer — Unternehmer-Antworten
+- POST /api/ideas/{id}/generate-post — Post aus Antworten generieren
+- GET /api/feedback/stats — Feedback-Statistiken
+- POST /api/feedback/edit-diff — Edit-Diff Tracking
+- POST /api/feedback/performance — Performance-Metriken
+- GET /api/tenants/me/voice-profile — Voice-Profil (12 Dimensionen)
+
+## Tech-Stack Frontend
+
+- React 18 + Vite
+- Tailwind CSS (ZB Brand: primary=teal #0F766E, accent=amber)
+- React Router DOM
+- Recharts (Charts)
+- Lucide React (Icons)
+- clsx + tailwind-merge (Utility)
+- Font: Inter
+
+UI-Komponenten unter src/components/ui/ (Button, Card, Badge, Dialog, Input, Tabs).
+
+## Git-Workflow
+
+Nach JEDEM fertigen Feature:
+```bash
+cd /opt/content-autopilot-v2
+git add -A
+git commit -m 'feat: <was gebaut wurde>'
+git push origin main
+```
+
+## Koordination mit Cowork (WICHTIG)
+
+Du arbeitest im Team mit einem zweiten Claude ("Cowork") der als QA und Architekt fungiert.
+Kommunikationskanal: GitHub Issues im Repo `inveloveritas123/content-autopilot-v2`.
+
+### Dein Workflow vor JEDEM neuen Feature:
+
+1. Checke offene Issues:
+   gh issue list -R inveloveritas123/content-autopilot-v2 --state open
+
+2. Arbeite Issues mit hoechster Prioritaet zuerst ab (KRITISCH > HOCH > MITTEL)
+
+3. Nach Fertigstellung: Kommentiere auf dem Issue:
+   gh issue comment ISSUE_NR -R inveloveritas123/content-autopilot-v2 --body "Erledigt in Commit XYZ. Deployed und getestet."
+
+4. Schliesse das Issue:
+   gh issue close ISSUE_NR -R inveloveritas123/content-autopilot-v2
+
+### Wenn keine Issues offen sind:
+Lies SCOPE.md und arbeite die naechste Phase ab.
+
+## Research-Protokoll (PFLICHT vor jeder Implementierung)
+
+Kein Feature wird gebaut ohne validierten Ansatz. Ablauf:
+
+1. **WebSearch** — Suche nach aktuellen Best Practices, Papers, Official Docs
+   - Mindestens 2 hochwertige Quellen (MDN, official docs, arxiv, ACM, IEEE, web.dev, martinfowler.com)
+   - Suchoperatoren: `site:docs.python.org`, `site:react.dev`, `filetype:pdf research`
+   - Jahr beachten: bevorzuge Quellen 2023-2025
+2. **Quellen dokumentieren** — Als Issue-Kommentar VOR der Implementierung
+3. **Scope definieren** — Explizit sagen was NICHT gebaut wird
+4. **Kein Cargo-Cult** — Nur implementieren wenn du den Mechanismus verstehst
+
+## Freigabe-Workflow — Wann Robert entscheiden muss
+
+**Automatisch bearbeiten (kein Warten):**
+- UI-Aenderungen, neue Seiten, neue API-Endpoints innerhalb des bestehenden Schemas
+- Bug-Fixes, Performance-Optimierungen, neue Celery-Tasks
+- Neue DB-Spalten in bestehenden Tabellen, neue Python/JS-Pakete
+- CLAUDE.md Updates mit neuen Learnings
+
+**Robert einbeziehen — Label `freigabe-robert` setzen, dann andere Issues bearbeiten:**
+- Neue DB-Tabellen oder grosse Schema-Aenderungen
+- Neue externe API-Integrationen (neue Keys noetig)
+- Aenderungen an Ports, Netzwerk, Docker-Compose-Struktur
+- LLM-Provider oder Prompt-Strategie wechseln
+- Alles was v1 betreffen koennte
+
+**Sofort stoppen + Telegram Robert + Label `kritisch`:**
+- Firewall, iptables, UFW — irgendwelche Aenderungen
+- Auth, API-Keys, Secrets, Credentials
+- PostgreSQL-Config-Files (nicht Datenbankdaten)
+- Alles in /opt/zukunftsbund-content-autopilot/ (EINGEFROREN)
+
+## Self-Learning — CLAUDE.md automatisch aktualisieren
+
+Nach jeder erfolgreichen Issue-Bearbeitung: Pruefe ob eine neue Erkenntnis aufgenommen werden sollte.
+**Was aufnehmen:** Gotchas, nicht-offensichtliche Patterns, vermiedene Fehler.
+**Commit:** `chore: update CLAUDE.md learnings from #NR`
+
+Ergaenze den Abschnitt `## Gelernte Patterns` am Ende dieser Datei.
+
+## GRENZEN — Was du NICHT tun darfst
+
+- KEINE Dateien ausserhalb von /opt/content-autopilot-v2/ aendern
+- KEINE systemd Services aendern oder erstellen
+- KEINE UFW/Firewall-Regeln aendern (ausser im Issue #1 explizit angewiesen)
+- KEINE PostgreSQL-Config (pg_hba.conf, postgresql.conf) aendern
+- KEINE anderen Docker-Container oder -Netzwerke anfassen
+- KEINE Ports belegen die nicht 8601 oder 8180 sind
+- /opt/zukunftsbund-content-autopilot/ — ABSOLUT FINGER WEG (Pitch Alpha fuer Eric!)
+- LiteLLM (:4000), Nextcloud, Nanobot, n8n — FINGER WEG
+- KEINE LLM-Config oder API-Keys aendern (GESPERRT laut Firmenrichtlinie)
+- KEIN sudo fuer systemweite Aenderungen
+
+## .env Variablen (bereits konfiguriert, NICHT AENDERN)
+
+- DB_PASSWORD, DEFAULT_TENANT_KEY, LITELLM_BASE_URL, LITELLM_API_KEY
+- APP_PORT=8601, MCP_PORT=8180
+- DATABASE_URL mit DB content_autopilot_v2
+- NEXTCLOUD_URL, NEXTCLOUD_USER, NEXTCLOUD_PASSWORD
+
+## Gelernte Patterns
+
+<!-- Wird automatisch durch den Issue-Agent ergaenzt -->
+<!-- Format: ### Thema (Issue #NR, Datum) / Erkenntnis / Warum wichtig / Quelle -->
+
+### Static Hashtag Libraries (Issue #37, 2026-04-13)
+Wenn LLM-Budget erschoepft ist, sind statisch kuratierte Datensaetze besser als nichts.
+SHK_HASHTAGS Konstante in Posts.jsx: 4 Kategorien, 40+ Hashtags, kein LLM-Call noetig.
+Warum wichtig: Budget-Ausfaelle duerfen UI-Features nicht komplett deaktivieren.
+
+### Carousel Templates: DB-Seeding via Container asyncio (Issue #37, 2026-04-13)
+Carousel-Templates werden via `async_session_factory()` direkt in DB geseeded (nicht via Alembic-Migration).
+Grund: Template-Daten sind konfigurierbar, kein Schema-Change.
+Vorgehen: `docker compose exec -T backend-v2 python3 -c "...asyncio.run(seed())"`
+
+### nginx IP-Cache nach Backend-Rebuild (Issue #37, 2026-04-13)
+Nach Docker-Build des Backends aendert sich die Container-IP im Docker-Netz.
+nginx cached die alte Backend-IP → 502 Errors bis nginx neu gestartet wird.
+Fix: Nach Backend-Rebuild immer AUCH nginx neu starten (restart, nicht recreate).
+Reihenfolge: build backend → up backend → restart nginx.
+
+### Pydantic field_validator fuer URL-Validation (Issue #37, 2026-04-13)
+`@field_validator("url")` in Pydantic v2 statt `@validator`.
+Gibt HTTP 422 zurueck wenn URL nicht mit http:// oder https:// beginnt.
+Wichtig: `@classmethod` ist Pflicht bei `field_validator` in Pydantic v2.
+
+### Carousel UI: Templates per API laden, nicht hardcoden (Issue #37, 2026-04-13)
+CarouselTemplates werden beim ersten Carousel-Click geladen und gecacht (useState).
+Im Modal: Template-Switcher zeigt alle Templates, bei Auswahl werden slides_config.slides injiziert.
+_originalSlides wird gespeichert damit "Aus Post-Text" wiederhergestellt werden kann.
+
+## Knecht-Protokoll — Dual-Agent-Architektur
+
+Robert betreibt zwei Claude-Code-Terminals auf diesem Server:
+- **Knecht-Haiku** (tmux: `knecht-haiku`) — Claude Haiku, fuer 80% der Aufgaben
+- **Knecht-Sonnet** (tmux: `knecht-sonnet`) — Claude Sonnet, fuer komplexe 20%
+
+### Task-Routing via GitHub Labels
+
+| Label | Farbe | Agent | Einsatz |
+|-------|-------|-------|---------|
+| `knecht-haiku` | blau (#0075ca) | Haiku | UI-Fixes, einfache Endpoints, Tests, Refactoring, Docs |
+| `knecht-sonnet` | rot (#e11d48) | Sonnet | Architektur, komplexe Pipelines, Multi-File-Refactoring |
+
+### Eskalation
+
+Wenn Haiku eine Aufgabe nicht loesen kann:
+1. Kommentar auf Issue: "Eskalation: [Grund]"
+2. Label `knecht-haiku` entfernen, `knecht-sonnet` setzen
+3. Nicht weiter versuchen — Sonnet uebernimmt
+
+### QA-Lead (Cowork Desktop)
+
+Der dritte Claude ("Cowork") auf Roberts Desktop fungiert als QA-Lead und Architekt:
+- Erstellt und priorisiert Issues mit Labels
+- Reviewt Ergebnisse via GitHub Issue-Kommentare
+- Kann beide Knechte ueber Issues steuern
+
+### LLM-Routing im Backend-Code (PFLICHT)
+
+Basierend auf LLM-ROUTING-STACK-v2 (Nextcloud: /zukunftsbund/Infrastruktur/LLM/):
+
+| Tier | Modell | Kosten/Call | Einsatz im Backend |
+|------|--------|-------------|-------------------|
+| S1 | `google/gemini-2.5-flash-lite-preview-06-17` | €0.001 | Routing, Klassifikation, Tagging |
+| S2 | `mistral/mistral-small-latest` | €0.003 | Default Chat, einfache Analyse |
+| S3 | `mistral/devstral-small-latest` | €0.002 | Einfacher Code, Templates |
+| S4 | `mistral/mistral-large-latest` | €0.01 | Premium-Analyse, Voice Profile |
+| S5 | `mistral/devstral-latest` | €0.03 | Komplexer Code — CONFIRM noetig |
+| S6 | `anthropic/claude-sonnet-4-6` | €0.20 | Frontier — CONFIRM noetig |
+
+**REGELN:**
+- S1-S4: Frei verwendbar, kein Confirm noetig
+- S5-S6: NUR mit explizitem Grund im Issue-Kommentar
+- `model="claude-sonnet"` ist VERBOTEN im Backend-Code — immer S1-S4 nutzen
+- Alle Calls gehen ueber Requesty.ai Router (LITELLM_BASE_URL in .env)
+- Zielbudget: <€170/Monat fuer den gesamten Stack

@@ -8,7 +8,7 @@
 
 Jedes Feature durchlaeuft: PLAN -> DO -> CHECK -> ACT
 Kein Issue wird geschlossen ohne Test-Evidenz.
-Bugs werden sofort als Gitea Issue erfasst.
+Bugs werden sofort als GitHub Issue erfasst.
 STATUS.md im Repo wird nach jedem Issue aktualisiert.
 
 ---

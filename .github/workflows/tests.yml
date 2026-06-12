@@ -12,8 +12,7 @@ name: Tests (pytest)
 #   - test_tenant_export_formats (2)            → CSV-UTF8-BOM-Assertion
 #   - test_embedding_versioning canary (1)      → celery-Stub-Limitierung
 # TODO: Integrations-Tests (security/telegram) als eigenen Job mit
-#       Postgres+Redis service-containern aktivieren (vgl. altes
-#       .gitea/workflows/security-tests.yml) und die 12 Einzelfehler fixen.
+#       Postgres+Redis service-containern aktivieren und die 12 Einzelfehler fixen.
 
 on:
   push:

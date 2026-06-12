@@ -42,7 +42,7 @@ jobs:
             MODE="${{ github.event.inputs.mode }}"
           fi
           echo "Running eval in $MODE mode"
-          # Eval-Runner-Aufruf — kompatibel mit Bestand .gitea/workflows/eval.yml
+          # Eval-Runner-Aufruf
           if [ -f eval/run_eval.py ]; then
             python eval/run_eval.py --mode "$MODE" || true
           else

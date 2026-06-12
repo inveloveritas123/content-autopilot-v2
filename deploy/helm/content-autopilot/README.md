@@ -62,14 +62,13 @@ helm install --dry-run --debug content-autopilot ./deploy/helm/content-autopilot
 - **PostgreSQL in-cluster**: Nur fuer Dev/Staging. Fuer Production externe
   Managed DB (Cloud SQL, RDS) verwenden und postgresql.persistence auf
   `enabled: false` setzen.
-- **Image Registry**: Standard ist `10.10.0.1:3000` (interne Gitea-Registry).
-  Fuer externen Cluster `global.registry` anpassen.
+- **Image Registry**: Standard ist `ghcr.io`. Fuer eigene Registry `global.registry` anpassen.
 
 ## Konfiguration (Auszug)
 
 | Parameter | Default | Beschreibung |
 |---|---|---|
-| `global.registry` | `10.10.0.1:3000` | Docker-Registry |
+| `global.registry` | `ghcr.io` | Docker-Registry |
 | `global.imageTag` | `main` | Image-Tag fuer alle App-Container |
 | `ingress.host` | `cap.example.com` | Hostname |
 | `backend.hpa.enabled` | `true` | HPA fuer Backend aktivieren |
