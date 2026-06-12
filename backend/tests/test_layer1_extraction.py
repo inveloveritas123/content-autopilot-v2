@@ -495,6 +495,82 @@ class TestLayer1Extraction:
         mock_call.assert_not_called()
         assert result.routed_to == "paused_for_cost"
 
+    def test_cost_cap_query_uses_daily_cost_tenant(self):
+        """Cost-cap prueft daily_cost_tenant (nicht cost_tracking) mit Spalte cost_usd.
+
+        Stellt sicher, dass die tatsaechliche SQL-Query die korrekte migrierte Tabelle
+        (018_brand_voice_tables) und den richtigen Spaltennamen verwendet.
+        """
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=False)
+        # Unter Cap — damit kein paused_for_cost zurueckkommt
+        mock_session.execute.return_value.fetchone.return_value = (0.5,)
+
+        captured_queries = []
+
+        def _capture_execute(query, params=None):
+            captured_queries.append((str(query), params))
+            return mock_session.execute.return_value
+
+        mock_session.execute.side_effect = _capture_execute
+
+        mock_llm_res = _make_llm_result(_valid_response(intent="spontaneous_idea"))
+        with (
+            patch("services.layer1_extraction.call_pipeline_llm", return_value=mock_llm_res),
+            patch("services.layer1_extraction.sync_session_factory", return_value=mock_session),
+        ):
+            result = extract_intent_features(
+                transcript="Ich moechte einen Post erstellen.",
+                tenant_id="tenant_dct_test",
+            )
+
+        # Mindestens eine Query muss ausgefuehrt worden sein
+        assert len(captured_queries) >= 1, "Keine DB-Query ausgefuehrt — Cost-Cap-Pfad inert?"
+        sql_text, params = captured_queries[0]
+        assert "daily_cost_tenant" in sql_text, (
+            f"Erwarte 'daily_cost_tenant' in Query, bekam: {sql_text!r}"
+        )
+        assert "cost_tracking" not in sql_text, (
+            f"Query darf nicht 'cost_tracking' enthalten (nicht migriert): {sql_text!r}"
+        )
+        assert "cost_usd" in sql_text, (
+            f"Erwarte Spalte 'cost_usd' in Query, bekam: {sql_text!r}"
+        )
+        assert "total_usd" not in sql_text, (
+            f"Spalte 'total_usd' existiert nicht in daily_cost_tenant: {sql_text!r}"
+        )
+        # Tenant-Scope (E3): tenant_id muss als Bind-Parameter uebergeben werden
+        assert params is not None, "Bind-Params fehlen — Tenant-Scope verletzt (E3)"
+        assert "tenant_id" in params, f"'tenant_id' nicht in Bind-Params: {params!r}"
+        assert params["tenant_id"] == "tenant_dct_test"
+        # Normaler Pfad — kein paused_for_cost
+        assert result.routed_to != "paused_for_cost"
+
+    def test_cost_cap_under_cap_proceeds_to_llm(self):
+        """Tageskosten unter Cap → LLM wird aufgerufen, kein paused_for_cost."""
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=False)
+        # Tageskosten weit unter dem Default-Cap von 5.0 USD
+        mock_session.execute.return_value.fetchone.return_value = (1.23,)
+
+        mock_llm_res = _make_llm_result(_valid_response(intent="smalltalk"))
+        with (
+            patch(
+                "services.layer1_extraction.call_pipeline_llm", return_value=mock_llm_res
+            ) as mock_call,
+            patch("services.layer1_extraction.sync_session_factory", return_value=mock_session),
+        ):
+            result = extract_intent_features(
+                transcript="Guten Morgen, wie war dein Wochenende?",
+                tenant_id="tenant_under_cap",
+            )
+
+        mock_call.assert_called_once()
+        assert result.routed_to == "ok"
+        assert result.intent == "smalltalk"
+
     def test_injection_attempt_neue_anweisung(self):
         """Injection via 'neue anweisung'."""
         mock_res = _make_llm_result(_valid_response(intent="spontaneous_idea"))

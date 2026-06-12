@@ -10,7 +10,9 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import UTC
+from datetime import timezone as _timezone
+
+UTC = _timezone.utc  # datetime.UTC requires Python 3.11+; alias for Py3.9 compat
 
 from models.base import sync_session_factory
 from services.pipeline_llm import call_pipeline_llm
@@ -240,7 +242,8 @@ def extract_intent_features(
 
     # --- 3. Cost-cap check ---
     # CostCapMiddleware requires an AsyncSession — not available in this sync service.
-    # Instead, query the cost_tracking table directly to check today's spend.
+    # Instead, query daily_cost_tenant directly (same table used by CostCapMiddleware
+    # and all other pipeline paths; created in alembic migration 018_brand_voice_tables).
     try:
         from datetime import date
 
@@ -249,8 +252,11 @@ def extract_intent_features(
         cap_usd = float(os.environ.get("COST_CAP_USD_PER_DAY", "5.0"))
         with sync_session_factory() as _cap_session:
             row = _cap_session.execute(
-                _text("SELECT total_usd FROM cost_tracking WHERE tenant_id = :tid AND date = :d"),
-                {"tid": tenant_id, "d": date.today().isoformat()},
+                _text(
+                    "SELECT cost_usd FROM daily_cost_tenant"
+                    " WHERE tenant_id = :tenant_id AND date = :date"
+                ),
+                {"tenant_id": tenant_id, "date": date.today().isoformat()},
             ).fetchone()
             if row and float(row[0]) >= cap_usd:
                 logger.warning(
