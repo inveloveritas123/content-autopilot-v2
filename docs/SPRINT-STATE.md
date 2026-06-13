@@ -96,8 +96,16 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 
 - ✅ **#38 Chunk 3 fertig** (Commit 01f78c1): Quality-Gate als Final-Gate in `session_post_task` (Block 6b) verdrahtet, **Shadow-Mode Default** (score+log, Versand unverändert). Enforce hinter Setting `quality_gate_enforce` (Default False, outward → **Robert-Freigabe zum Scharfschalten**). fail-open. Impl Sonnet → Review Opus (PASS). 15 Tests grün. branche=_generic (Follow-up-Issue).
 
-### Nächste Architekt-Items (alle per-File-TDD, dann fetch+rebase+push)
-- #38 Chunk 2 (semantische LLM-Schicht) — baubar, aber **Wert erst nach #80 (Korpus) messbar** → niedrige Prio (Testmodus-first: Pipeline-läuft > Qualität).
+- ✅ **#81 branche-Auflösung fertig** (gepusht): `_resolve_branche` (customer_context → handwerk/recht/finanzen, fail-open _generic). Impl Sonnet → Review Opus. 36 Tests grün. Issue geschlossen.
+- ✅ **#22 P17-Prompt v1.1 angewandt aufs Original** (Robert-Freigabe, bc29724): #41-Prompt-Gate greift; docs/PROMPT-CHANGELOG.md. **P02/#39 weggelassen** (kein Prompt, unreferenziert). **PR #55 geschlossen**, **PR #66 war schon merged**.
+
+### ⛔ Unabhängige Architekt-Front ABGEARBEITET — Rest ist gated
+Buildbar-ohne-Abhängigkeit ist erledigt (#41, #38 Chunk 1+3, #22/P17, #81). Die großen MVP-Reste sind **gated**:
+- **#29/#25/#26 Schema** → brauchen `arch/weekloop`-Rebase auf `main` NACH der Knecht-Landung (#33 ist auf main, aber nicht auf weekloop) + **#26 neue Migrationen 050/051 = Robert**. Sonst Rework-Risiko.
+- **#20 E2E-Beweislauf** (Beta-Tor) → braucht gelandeten Code auf main + Test-Tenant (Knecht/Server).
+- **#38 Chunk 2** (semantisch) → Wert erst nach Korpus #80; niedrige Prio (Testmodus-first).
+- **#30 Modell-Pinning** → LLM-Config gesperrt → nur Policy-Ausnahme; braucht erst Untersuchung des F1-Gate-Mechanismus (Werkbank-Repo), nicht sauber delegierbar.
+**→ Größter Hebel jetzt: Knecht landet Stränge per-Issue → dann rebase ich weekloop → Schema + E2E.**
 - cost_tracking-Fix (sonnet) · Sprint-2-Rest #29/#25/#26 (Schema) nach #33-Landing (Knecht).
 - **Chris (blockiert Scharfschaltung):** #22 P17-Headings (#41), #39 P02-Prompt. **Robert-Housekeeping:** PR #66 mergen, #55 schließen. **Späterer Sprint:** #72 Modell-Modus-Switch.
 
