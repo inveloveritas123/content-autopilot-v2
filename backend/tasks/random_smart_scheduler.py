@@ -6,6 +6,7 @@ Läuft alle 5 Minuten via Celery Beat, prüft ob Cron-Pattern gefired haben.
 import logging
 from datetime import UTC, datetime
 
+from models.base import sync_session_factory
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -86,8 +87,6 @@ def _send_opening_question(tenant_id: str, question_text: str) -> None:
     try:
         from sqlalchemy import text
 
-        from models.base import sync_session_factory
-
         chat_id = None
         with sync_session_factory() as s:
             row = s.execute(
@@ -116,8 +115,6 @@ def _send_opening_question(tenant_id: str, question_text: str) -> None:
 def check_random_smart_triggers():
     """Beat-Job: prüft alle Tenants auf Random-Smart-Cron-Trigger und startet Bot-Sessions."""
     from sqlalchemy import text
-
-    from models.base import sync_session_factory
 
     with sync_session_factory() as session:
         rows = session.execute(
