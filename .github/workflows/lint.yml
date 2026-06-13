@@ -10,42 +10,32 @@ on:
 jobs:
   backend-ruff:
     name: Backend — Ruff (lint + format)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, kolonie]
     defaults:
       run:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
       - name: Install ruff
-        run: pip install ruff==0.7.4
+        run: |
+          python3 -m venv .ci-lint-venv
+          .ci-lint-venv/bin/pip install -q ruff==0.7.4
 
       - name: Ruff check
-        run: ruff check . --output-format=github
+        run: .ci-lint-venv/bin/ruff check . --output-format=github
 
       - name: Ruff format (--check)
-        run: ruff format --check .
+        run: .ci-lint-venv/bin/ruff format --check .
 
   frontend-eslint:
     name: Frontend — ESLint + Prettier
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, kolonie]
     defaults:
       run:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -58,17 +48,14 @@ jobs:
 
   yaml-json-hygiene:
     name: YAML/JSON Hygiene + Secrets-Detection
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, kolonie]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python (fuer pre-commit)
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
       - name: Install pre-commit
-        run: pip install pre-commit==4.0.1
+        run: |
+          python3 -m venv .ci-hygiene-venv
+          .ci-hygiene-venv/bin/pip install -q pre-commit==4.0.1
 
       - name: Run hygiene hooks
         # Nur die filesystem-orientierten Hooks — Ruff/ESLint/Prettier/gitleaks laufen
@@ -77,5 +64,5 @@ jobs:
         run: |
           for hook in trailing-whitespace end-of-file-fixer check-yaml check-json \
                       check-added-large-files check-merge-conflict detect-private-key; do
-            pre-commit run "$hook" --all-files || exit 1
+            .ci-hygiene-venv/bin/pre-commit run "$hook" --all-files || exit 1
           done

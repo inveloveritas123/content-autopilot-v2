@@ -24,7 +24,7 @@ on:
 jobs:
   unit-tests:
     name: Backend Unit Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, kolonie]
     defaults:
       run:
         working-directory: backend
@@ -37,21 +37,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: |
-            backend/requirements.txt
-            backend/requirements-test.txt
-
       - name: Install dependencies
-        run: pip install -r requirements.txt -r requirements-test.txt
+        run: |
+          python3 -m venv .ci-venv
+          .ci-venv/bin/pip install -q -r requirements.txt -r requirements-test.txt
 
       - name: Run unit tests
         run: |
-          python -m pytest tests/ -p no:cacheprovider --tb=short \
+          .ci-venv/bin/python -m pytest tests/ -p no:cacheprovider --tb=short \
             --ignore=tests/security \
             --ignore=tests/test_telegram_webhook.py \
             --deselect "tests/test_embedding_versioning.py::test_canary_task_unknown_model_id_returns_error" \
