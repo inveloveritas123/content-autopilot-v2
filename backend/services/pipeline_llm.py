@@ -15,6 +15,8 @@ Umgesetzt: 2026-06-11 (P5-anthropic-provider.md)
 Abweichungen vom Spec: keine
 """
 
+from __future__ import annotations  # Python 3.9-Kompatibilität: str | None Syntax
+
 import logging
 import os
 import time
@@ -56,12 +58,14 @@ MODEL_PER_PROMPT: dict[str, str] = {
     "P01": "S6",
     "P03": "S6",
     "P04": "S6",
+    "P08": "S6",  # Conversation Q&A — Frontier-Qualität, CONFIRM-pflichtig (Issue #15)
     "P12": "S6",
     "P12B": "S6",
     "P12C": "S6",
     # Inline-Klassifikation / Konvertierung — S2 ausreichend (Issue #46)
     "SENSITIVE_DETECT": "S2",
     "MD_CONVERT_P03": "S2",
+    "LAYER1": "S2",  # Strukturierte Intent/Feature-Extraktion — schnelle JSON-Klassifikation, kein Frontier nötig (Issue #15)
 }
 
 # Per-Prompt max_tokens — übernommen aus den bisherigen Task-Konstanten.
@@ -69,11 +73,13 @@ PROMPT_MAX_TOKENS: dict[str, int] = {
     "P01": 2048,
     "P03": 2000,
     "P04": 2048,
+    "P08": 512,  # Conversation turns — kurze JSON-Antworten (next_action/message/quality)
     "P12": 2000,
     "P12B": 2000,
     "P12C": 1024,
     "SENSITIVE_DETECT": 512,
     "MD_CONVERT_P03": 2000,
+    "LAYER1": 512,  # Kompaktes JSON (5 Felder) — gleiche Größenordnung wie P08
 }
 
 

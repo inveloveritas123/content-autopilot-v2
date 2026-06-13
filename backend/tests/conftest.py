@@ -31,7 +31,6 @@ if "google.generativeai" not in sys.modules:
     _stub_module("google.generativeai")
 
 # anthropic — stubbed so modules can be imported without a real API key.
-# Anthropic class is a MagicMock so tests can patch services.layer1_extraction.anthropic.Anthropic.
 if "anthropic" not in sys.modules:
     from unittest.mock import MagicMock
 
