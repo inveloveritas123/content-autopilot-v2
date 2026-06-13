@@ -83,9 +83,15 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 
 - ✅ **#37 Feedback-Loop fertig**: kein-aktive-Session + letzter Post (48h) + post_feedback-Intent → `regenerate_post_from_feedback` (neuer P12→P12b-Durchlauf mit Feedback im answers-Dict, Loop-Limit `TELEGRAM_FEEDBACK_MAX_ROUNDS`=2 migrationsfrei via content_pieces-COUNT, E3/fail-open). Mapping-Fix `voice_feedback_api→voice_feedback` (CHECK-Constraint 019:66). Cross-Model-Review GRÜN. 55 Tests beide Ordnungen grün. **Nebenbefund → neues Issue: layer1 cost-gate liest nicht-existente Tabelle `cost_tracking` (inert).**
 
+- ✅ **#41 P17 je-Transkript-Beobachter fertig** (Commit 2a4c025): additiver, transkript-getriebener Erzeuger von `voice_drift_observation`-Rows (`entity_type` voice/values/avatar) → speist den Drift-Decide-Pfad (#43 S4). `services/p17_observer_core.py` (dep-frei, 16 Tests Py3.9-grün) + `tasks/p17_transcript_observer_task.py` (Wiring: kill-switch, Idempotenz migrationsfrei via `suggested_changes->>'source_item_id'`, E3, cost-cap, EU-Seam; 9 Wiring-Tests beide Ordnungen grün) + `transcribe_task.py`-Trigger (parallel zu analyze_item, fail-open). **Seam-Teil von #41 war via #46 schon erfüllt.** **Grenze:** fail-open `skipped/prompt_unavailable` solange P17-System-Prompt leer (#22 → Chris). Scharf erst nach Migration 053 (Robert freigegeben, nach #43-Landing). `docs/SPRINT-3-PLAN-41.md`.
+
+### Robert-Entscheide 2026-06-13 (in ROBERT-BACKLOG → Erledigt)
+- **#42** Testmodus zuerst: kreative Pfade bleiben auf Gemini-Flash-Lite (S1), Quality-Mode erst wenn MVP-Kern 100%. **#46** sensitive_detector bleibt mistral-small (S2). → beides zentral über **Modell-Modus-Switch (Issue #72, späterer Sprint)**. **#43** Migration 053 **freigegeben** (anwenden nach Landing).
+- **Housekeeping offen (Robert):** PR #66 mergen, PR #55 schließen.
+
 ### Nächste Architekt-Items (alle per-File-TDD, dann fetch+rebase+push)
-- #36 Intent-Routing P09/P13 (opus, dep #16✅) · #41 P17-Beobachter (fable, dep #43✅) · #38 Quality-Gate (opus) · #22 P17-Prompt (sonnet) · cost_tracking-Fix (sonnet, neues Issue).
-- Sprint-2-Rest #29/#25/#26 (Schema) besser nach #33-Merge (Knecht).
+- #38 Quality-Gate vor Versand (opus, semantisch statt Stub) · cost_tracking-Fix (sonnet, neues Issue) · Sprint-2-Rest #29/#25/#26 (Schema) besser nach #33-Landing (Knecht).
+- #22 P17-Prompt-Headings = Chris (blockiert #41-Scharfschaltung). #72 Modell-Modus-Switch = späterer Sprint.
 
 ---
 
