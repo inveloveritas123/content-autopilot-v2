@@ -59,7 +59,7 @@ def _maybe_send_global_cap_alert(spent_usd: float, cap_usd: float, today) -> Non
             # Already sent today
             return
 
-        from api.telegram import _send_telegram_message
+        from api.telegram import _send_admin_telegram_message
 
         pct = 100 * spent_usd / cap_usd
         msg = (
@@ -67,7 +67,7 @@ def _maybe_send_global_cap_alert(spent_usd: float, cap_usd: float, today) -> Non
             f"{spent_usd:.2f}$ / {cap_usd:.2f}$ ({pct:.0f}%). "
             f"LLM-Block-Stop noch nicht erreicht, aber bitte prüfen."
         )
-        _send_telegram_message(int(settings.telegram_admin_chat_id), msg)
+        _send_admin_telegram_message(int(settings.telegram_admin_chat_id), msg)
         logger.info(f"Global 50% cap alert sent: {spent_usd:.2f}/{cap_usd:.2f} USD")
     except Exception as exc:
         logger.warning(f"_maybe_send_global_cap_alert failed (non-fatal): {exc}")

@@ -31,6 +31,9 @@ _REDACT_PATTERNS = [
     re.compile(r"bearer [A-Za-z0-9._-]{8,}", re.IGNORECASE),
     re.compile(r'api[_-]?key["\s:=]+[A-Za-z0-9._-]{8,}', re.IGNORECASE),
     re.compile(r'password["\s:=]+\S+', re.IGNORECASE),
+    # Telegram-Bot-Tokens + Bot-API-URLs (E2/D3 Defense-in-Depth, Issue Telegram-per-Projekt)
+    re.compile(r"/bot\d{6,12}:[A-Za-z0-9_-]{30,}", re.IGNORECASE),
+    re.compile(r"\b\d{6,12}:[A-Za-z0-9_-]{35}\b"),
 ]
 
 

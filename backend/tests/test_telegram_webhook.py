@@ -7,8 +7,10 @@ No DB required — all DB/HTTP calls are patched.
 
 import sys
 import types
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone as _tz
 from unittest.mock import MagicMock, patch
+
+UTC = _tz.utc  # datetime.UTC ist erst ab Python 3.11 verfügbar
 
 # ---------------------------------------------------------------------------
 # Stubs for heavy dependencies not available in the test environment
@@ -47,8 +49,30 @@ _fake_settings.telegram_bot_username = "test_bot"
 _fake_base_mod = _ensure_stub("models.base")
 _fake_base_mod.sync_session_factory = MagicMock()
 
-_ensure_stub("models")
+_models_pkg = _ensure_stub("models")
 _ensure_stub("models.tenant")
+# models.base als Attribut registrieren (für patch("models.base.sync_session_factory"))
+_models_pkg.base = _fake_base_mod
+
+# datetime.UTC Py3.9-Compat: api.telegram importiert `from datetime import UTC`
+# WICHTIG: sys.modules["datetime"] NICHT ersetzen — das bricht FastAPI's class-Identity
+# (fastapi.routing würde doppelt importiert, isinstance-Checks schlagen fehl).
+# Stattdessen das bereits gecachte datetime-Modul mutieren.
+import datetime as _dt_mod
+if not hasattr(_dt_mod, "UTC"):
+    _dt_mod.UTC = _dt_mod.timezone.utc  # type: ignore[attr-defined]
+# sys.modules["datetime"] = _dt_mod  # NICHT! Bricht FastAPI
+
+# services.telegram_token_resolver — api.telegram importiert es lazy (in _send_telegram_message)
+_ensure_stub("services")
+if "services.crypto" not in sys.modules:
+    _sc = _ensure_stub("services.crypto")
+    _sc.decrypt_secret = MagicMock(return_value="decrypted-token")
+    _sc.encrypt_secret = MagicMock(return_value="encrypted-token")
+if "services.telegram_token_resolver" not in sys.modules:
+    _ttr = _ensure_stub("services.telegram_token_resolver")
+    _ttr.get_tenant_bot_token = MagicMock(return_value="test-tenant-token")
+    _ttr.update_last_active = MagicMock()
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +85,18 @@ with (
 ):
     # We import after patching sys.modules so the module picks up fake config
     sys.modules["config"] = types.SimpleNamespace(settings=_fake_settings)
+
+    # Stub-Module aus _telegram_task_env (api, api.telegram) entfernen,
+    # damit der echte Import der FastAPI-App mit echtem Router stattfindet.
+    # Das stellt sicher dass der Test auch dann läuft, wenn er nach
+    # test_telegram_inbound_routing.py ausgeführt wird (welches _telegram_task_env
+    # importiert und damit api.telegram als leeren Stub setzt).
+    for _stale_key in ("api", "api.telegram"):
+        if _stale_key in sys.modules:
+            _mod = sys.modules[_stale_key]
+            # Nur entfernen wenn es ein leerer Stub ist (kein __file__)
+            if not getattr(_mod, "__file__", None):
+                del sys.modules[_stale_key]
 
     import api.telegram as tg_module
 
@@ -120,7 +156,7 @@ def test_webhook_rejects_wrong_secret():
 
 
 def test_webhook_accepts_valid_secret():
-    # Mock DB: no active link found → send "Unbekannter User"
+    # Mock DB: no active link found → send "Unbekannter User" via admin message
     mock_session = MagicMock()
     mock_session.__enter__ = MagicMock(return_value=mock_session)
     mock_session.__exit__ = MagicMock(return_value=False)
@@ -128,7 +164,7 @@ def test_webhook_accepts_valid_secret():
 
     with (
         patch.object(tg_module, "sync_session_factory", return_value=mock_session),
-        patch.object(tg_module, "_send_telegram_message"),
+        patch.object(tg_module, "_send_admin_telegram_message"),
     ):
         resp = client.post(
             WEBHOOK_URL,
@@ -182,8 +218,9 @@ def test_start_command_valid_token():
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
     mock_session.commit.assert_called()
-    # Confirmation message sent to chat
+    # Confirmation message sent to chat (via tenant bot, tenant_id known here)
     assert mock_send.called
+    # Neue Signatur: positional args (chat_id, text), keyword tenant_id
     sent_text = mock_send.call_args[0][1]
     assert "Verbunden" in sent_text or "verbunden" in sent_text.lower()
 
@@ -220,6 +257,7 @@ def test_start_command_expired_token():
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
     assert mock_send.called
+    # Neue Signatur: (chat_id, text, *, tenant_id) — text ist positional args[1]
     sent_text = mock_send.call_args[0][1]
     assert "abgelaufen" in sent_text.lower()
 
@@ -239,7 +277,7 @@ def test_unknown_user_gets_reply():
 
     with (
         patch.object(tg_module, "sync_session_factory", return_value=mock_session),
-        patch.object(tg_module, "_send_telegram_message") as mock_send,
+        patch.object(tg_module, "_send_admin_telegram_message") as mock_send,
     ):
         resp = client.post(
             WEBHOOK_URL,
@@ -319,7 +357,7 @@ def test_token_single_use():
 
     with (
         patch.object(tg_module, "sync_session_factory", return_value=mock_session),
-        patch.object(tg_module, "_send_telegram_message") as mock_send,
+        patch.object(tg_module, "_send_admin_telegram_message") as mock_send,
     ):
         resp = client.post(
             WEBHOOK_URL,

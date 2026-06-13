@@ -266,7 +266,7 @@ def _push_research_to_telegram(tenant_id: str, inserted: int) -> None:
             if first_hook:
                 lines.append(f'   → „{first_hook[:120]}"')
         lines.append("\nAlle Vorschläge im Dashboard unter Research-Findings.")
-        _send_telegram_message(chat_id, "\n".join(lines))
+        _send_telegram_message(chat_id, "\n".join(lines), tenant_id=tenant_id)
     except Exception as exc:
         logger.warning("p07 telegram push failed for %s: %s", tenant_id, exc)
 

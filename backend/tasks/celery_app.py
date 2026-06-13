@@ -1,3 +1,5 @@
+import os
+
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import task_prerun
@@ -107,6 +109,19 @@ celery_app.conf.beat_schedule = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# Optionaler Telegram-Poller via Beat (standardmäßig DEAKTIVIERT).
+# Nur aktivieren wenn KEIN Standalone-Runner (telegram_runner.py) läuft —
+# sonst würden beide doppelt pollen. Für den VPN-only-Betrieb ist der
+# Standalone-Runner (python backend/telegram_runner.py) empfohlen.
+# Aktivierung: TELEGRAM_POLLING_ENABLED=true in der Beat-Umgebung setzen.
+# ---------------------------------------------------------------------------
+if os.environ.get("TELEGRAM_POLLING_ENABLED", "false").lower() in ("1", "true", "yes", "on"):
+    celery_app.conf.beat_schedule["telegram-poll-active-bots-every-60s"] = {
+        "task": "tasks.telegram_poll_task.poll_all_active_bots",
+        "schedule": 60.0,
+    }
+
 
 # ---------------------------------------------------------------------------
 # Logging context — contextvars are NOT inherited across process boundaries.
@@ -156,5 +171,6 @@ celery_app.conf.include = [
     "tasks.reembed_task",
     "tasks.drift_monitor_task",
     "tasks.values_backfill_task",
+    "tasks.telegram_poll_task",
     "api.wizard",
 ]
