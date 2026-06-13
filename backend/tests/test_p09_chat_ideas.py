@@ -126,7 +126,10 @@ class TestP09Gate:
         assert result.get("p09_enqueued") is True
         mock_deliver.apply_async.assert_called_once()
         # tenant_id ist das erste Arg
-        args = mock_deliver.apply_async.call_args.kwargs.get("args") or mock_deliver.apply_async.call_args.args[0]
+        args = (
+            mock_deliver.apply_async.call_args.kwargs.get("args")
+            or mock_deliver.apply_async.call_args.args[0]
+        )
         assert args[0] == "tenant-1"
 
     @patch("services.chat_intent_heuristics.is_idea_request", return_value=False)
@@ -153,23 +156,36 @@ class TestP09Gate:
     @patch("tasks.telegram_task._store_chunk_async", new_callable=MagicMock)
     @patch("tasks.telegram_task.asyncio.run")
     def test_active_session_path_unchanged(
-        self, mock_run, mock_store, mock_session, mock_deliver,
-        mock_route, mock_p08, mock_extract,
+        self,
+        mock_run,
+        mock_store,
+        mock_session,
+        mock_deliver,
+        mock_route,
+        mock_p08,
+        mock_extract,
     ):
         # Aktive Session → p08-Pfad (#16/#17), KEIN P09 (auch wenn Text nach Idee klingt)
         mock_run.return_value = "chunk-3"
         mock_session.return_value = active_session()
         mock_extract.return_value = types.SimpleNamespace(
-            intent="answer_to_question", extracted_features={"k": "v"},
-            flagged_for_review=False, flag_reasons=[], routed_to="ok",
+            intent="answer_to_question",
+            extracted_features={"k": "v"},
+            flagged_for_review=False,
+            flag_reasons=[],
+            routed_to="ok",
             session_context="active",
         )
         mock_route.return_value = types.SimpleNamespace(
             target="p08_response", payload={"session_id": "sess-1", "features": {"k": "v"}}
         )
         mock_p08.return_value = types.SimpleNamespace(
-            next_action="vertiefen", message="weiter?", quality="gold",
-            session_id="sess-1", is_closed=False, was_already_closed=False,
+            next_action="vertiefen",
+            message="weiter?",
+            quality="gold",
+            session_id="sess-1",
+            is_closed=False,
+            was_already_closed=False,
         )
         with patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)):
             with patch("tasks.telegram_task._resolve_chat_id", return_value=42):
@@ -206,12 +222,19 @@ class TestP09Task:
 
     def test_send_ideas_message_formats_and_sends(self):
         ideas = [
-            {"id": "1", "title": "Warum Teams scheitern", "hook_suggestion": "Der wahre Grund", "relevance_score": 0.9},
+            {
+                "id": "1",
+                "title": "Warum Teams scheitern",
+                "hook_suggestion": "Der wahre Grund",
+                "relevance_score": 0.9,
+            },
             {"id": "2", "title": "Remote Work", "hook_suggestion": "", "relevance_score": 0.5},
         ]
         sent = {}
         fake_api = types.ModuleType("api.telegram")
-        fake_api._send_telegram_message = lambda cid, msg: sent.update({"cid": cid, "msg": msg})
+        fake_api._send_telegram_message = lambda cid, msg, **kwargs: sent.update(
+            {"cid": cid, "msg": msg}
+        )
         with patch.object(p09, "_resolve_chat_id", return_value=99):
             with patch.dict(sys.modules, {"api.telegram": fake_api}):
                 res = p09._send_ideas_message("tenant-1", ideas)
@@ -222,7 +245,10 @@ class TestP09Task:
 
     def test_send_ideas_no_chat_link(self):
         with patch.object(p09, "_resolve_chat_id", return_value=None):
-            res = p09._send_ideas_message("tenant-1", [{"id": "1", "title": "X", "hook_suggestion": "", "relevance_score": None}])
+            res = p09._send_ideas_message(
+                "tenant-1",
+                [{"id": "1", "title": "X", "hook_suggestion": "", "relevance_score": None}],
+            )
         assert res["sent"] is False and res["reason"] == "no_chat_link"
 
     def test_cost_cap_blocks_on_demand(self):
@@ -240,7 +266,11 @@ class TestP09Task:
         # deliver_ideas_to_chat: keine Ideen → _generate_on_demand aufgerufen
         # bind=True → erstes Arg ist self (Dummy genügt, FakeCeleryApp gibt fn unverändert)
         with patch.object(p09, "_load_top_ideas", return_value=[]):
-            with patch.object(p09, "_generate_on_demand", return_value={"status": "skipped", "reason": "no_source_item"}) as mock_gen:
+            with patch.object(
+                p09,
+                "_generate_on_demand",
+                return_value={"status": "skipped", "reason": "no_source_item"},
+            ) as mock_gen:
                 res = p09.deliver_ideas_to_chat(None, "tenant-1", "gib mir Ideen", log_id="l1")
         mock_gen.assert_called_once()
         assert res["reason"] == "no_source_item"

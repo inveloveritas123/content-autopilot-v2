@@ -422,7 +422,8 @@ class TenantExportService:
             return val if val is not None else ""
 
         def _make_csv(headers: list, rows_data: list) -> bytes:
-            buf = io.StringIO(initial_value="\ufeff")  # UTF-8-BOM als Initialwert
+            buf = io.StringIO()
+            buf.write("\ufeff")  # UTF-8-BOM: write() advances position past BOM
             writer = csv.writer(buf)
             writer.writerow(headers)
             for row in rows_data:

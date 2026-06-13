@@ -309,7 +309,7 @@ class TestGlobalCapAlert:
         with patch("services.llm.settings") as mock_settings:
             mock_settings.telegram_admin_chat_id = None
             mock_settings.redis_url = "redis://localhost:6379/0"
-            with patch("api.telegram._send_telegram_message") as mock_send:
+            with patch("api.telegram._send_admin_telegram_message") as mock_send:
                 _maybe_send_global_cap_alert(11.0, 20.0, date.today())
                 mock_send.assert_not_called()
                 mock_redis.set.assert_not_called()
@@ -326,7 +326,7 @@ class TestGlobalCapAlert:
             mock_settings.telegram_admin_chat_id = "987654321"
             mock_settings.redis_url = "redis://localhost:6379/0"
             with patch("redis.from_url", return_value=mock_redis):
-                with patch("api.telegram._send_telegram_message") as mock_send:
+                with patch("api.telegram._send_admin_telegram_message") as mock_send:
                     _maybe_send_global_cap_alert(11.0, 20.0, date.today())
 
         mock_redis.set.assert_called_once()
@@ -352,7 +352,7 @@ class TestGlobalCapAlert:
             mock_settings.telegram_admin_chat_id = "987654321"
             mock_settings.redis_url = "redis://localhost:6379/0"
             with patch("redis.from_url", return_value=mock_redis):
-                with patch("api.telegram._send_telegram_message") as mock_send:
+                with patch("api.telegram._send_admin_telegram_message") as mock_send:
                     _maybe_send_global_cap_alert(12.0, 20.0, date.today())
 
         mock_redis.close.assert_called_once()
@@ -368,7 +368,7 @@ class TestGlobalCapAlert:
             mock_settings.telegram_admin_chat_id = "987654321"
             mock_settings.redis_url = "redis://localhost:6379/0"
             with patch("redis.from_url", side_effect=Exception("Redis unavailable")):
-                with patch("api.telegram._send_telegram_message") as mock_send:
+                with patch("api.telegram._send_admin_telegram_message") as mock_send:
                     # Must not raise
                     _maybe_send_global_cap_alert(11.0, 20.0, date.today())
                     mock_send.assert_not_called()
@@ -387,7 +387,7 @@ class TestGlobalCapAlert:
             with (
                 patch("redis.from_url", return_value=mock_redis),
                 patch(
-                    "api.telegram._send_telegram_message",
+                    "api.telegram._send_admin_telegram_message",
                     side_effect=Exception("Telegram API down"),
                 ),
             ):

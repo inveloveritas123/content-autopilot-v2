@@ -321,9 +321,36 @@ if "celery" not in sys.modules:
 
 class _FakeCeleryApp:
     def task(self, *a, **kw):
+        _bind = kw.get("bind", False)
+
+        def _make_apply(fn):
+            def apply(*call_a, **call_kw):
+                pos_args = call_kw.pop("args", call_a[0] if call_a else [])
+                kw_args = call_kw.pop("kwargs", {})
+                try:
+                    if _bind:
+                        fake_self = types.SimpleNamespace(
+                            request=types.SimpleNamespace(id="fake-task-id")
+                        )
+                        ret = fn(fake_self, *pos_args, **kw_args)
+                    else:
+                        ret = fn(*pos_args, **kw_args)
+                except Exception as exc:
+                    ret = exc
+                return types.SimpleNamespace(get=lambda r=ret: r, result=ret)
+
+            return apply
+
         def deco(fn):
+            fn.apply = _make_apply(fn)
+            fn.apply_async = lambda *a, **kw: types.SimpleNamespace(id="fake-task-id")
             return fn
 
+        if len(a) == 1 and callable(a[0]):
+            fn = a[0]
+            fn.apply = _make_apply(fn)
+            fn.apply_async = lambda *a, **kw: types.SimpleNamespace(id="fake-task-id")
+            return fn
         return deco
 
 

@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import sys
 import types
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # Stub-Basisumgebung (identisch zum Muster in _telegram_task_env.py)
@@ -34,8 +34,10 @@ def _ensure_stub(name: str) -> types.ModuleType:
     return sys.modules[name]
 
 
-# sqlalchemy-Stubs (Py3.9-venv hat kein sqlalchemy installiert)
-if "sqlalchemy" not in sys.modules:
+# sqlalchemy-Stubs (nur wenn sqlalchemy wirklich nicht installiert ist)
+try:
+    import sqlalchemy  # noqa: F401
+except ImportError:
     _sq = _ensure_stub("sqlalchemy")
     _sq.text = lambda q: q
     _sq.create_engine = MagicMock()
@@ -66,7 +68,7 @@ except ImportError:
         def decrypt(self, token: bytes) -> bytes:
             prefix = b"ENCRYPTED[" + self._key + b"]:"
             if token.startswith(prefix):
-                return token[len(prefix):]
+                return token[len(prefix) :]
             # Falscher Schlüssel → InvalidToken
             raise _InvalidToken("wrong key")
 
@@ -85,26 +87,32 @@ if "config" not in sys.modules:
         default_tenant_key="test-key-32-chars-padded-xxxxxxxx",
         database_url="postgresql+asyncpg://t:t@localhost/t",
         sync_database_url="postgresql://t:t@localhost/t",
+        # Required by services/__init__.py → LLMService() and NextcloudClient()
+        litellm_base_url="https://stub-requesty/v1",
+        litellm_api_key="stub-key",
+        nextcloud_url="https://stub-nextcloud",
+        nextcloud_user="stub",
+        nextcloud_password="stub",
     )
 
-# models.base-Stub
-_ensure_stub("models")
-if "models.base" not in sys.modules:
-    _mb = _ensure_stub("models.base")
-    _mb.sync_session_factory = MagicMock()
-
-# services-Basispaket
-if "services" not in sys.modules:
-    _svc = _ensure_stub("services")
-    _svc.__path__ = []
+# models.base-Stub (nur wenn models noch nicht real geladen)
+if "models" not in sys.modules:
+    _ensure_stub("models")
+    if "models.base" not in sys.modules:
+        _mb = _ensure_stub("models.base")
+        _mb.sync_session_factory = MagicMock()
+    # services.provider_resolver imports models.llm_provider — stub it to prevent ImportError
+    if "models.llm_provider" not in sys.modules:
+        _ensure_stub("models.llm_provider").LLMProvider = MagicMock
 
 # datetime.UTC Py3.9-Compat-Stub:
 # api/telegram.py importiert `from datetime import UTC` — erst ab Py3.11.
 # Nur das Modul mutieren, NICHT sys.modules["datetime"] ersetzen
 # (Ersatz bricht FastAPI's class-Identity durch Doppelimport).
 import datetime as _dt_real
+
 if not hasattr(_dt_real, "UTC"):
-    _dt_real.UTC = _dt_real.timezone.utc  # type: ignore[attr-defined]
+    _dt_real.UTC = _dt_real.UTC  # type: ignore[attr-defined]
 
 # ---------------------------------------------------------------------------
 # Modul unter Test laden: services.telegram_token_resolver
@@ -139,8 +147,10 @@ _ttr_spec.loader.exec_module(_ttr_mod)
 _ensure_stub("api")
 _at_stub = _ensure_stub("api.telegram")  # Platzhalter; wird gleich überschrieben
 
-# Stubs für api.telegram-Deps
-if "services.embedding_service" not in sys.modules:
+# Stubs für api.telegram-Deps (nur wenn nicht installierbar)
+try:
+    import services.embedding_service  # noqa: F401
+except (ImportError, Exception):
     _es = _ensure_stub("services.embedding_service")
     _es.search_similar = MagicMock()
     _es.store_chunk = MagicMock()
@@ -242,9 +252,9 @@ class TestGetTenantBotToken:
             resolver.get_tenant_bot_token("tenant-123")
 
         for record in caplog.records:
-            assert raw_token not in record.getMessage(), (
-                f"Token im Log gefunden: {record.getMessage()}"
-            )
+            assert (
+                raw_token not in record.getMessage()
+            ), f"Token im Log gefunden: {record.getMessage()}"
 
 
 # ===========================================================================
@@ -359,9 +369,7 @@ class TestSendTelegramMessagePerTenant:
             tg._send_telegram_message(12345, "Safe message", tenant_id="t-test")
 
         for record in caplog.records:
-            assert secret_token not in record.getMessage(), (
-                f"Token im Log: {record.getMessage()}"
-            )
+            assert secret_token not in record.getMessage(), f"Token im Log: {record.getMessage()}"
 
     def test_fail_open_on_http_error(self):
         """HTTP-Fehler → return False, kein Raise (fail-open)."""

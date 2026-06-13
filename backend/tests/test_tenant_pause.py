@@ -16,13 +16,13 @@ import json
 import sys
 import types
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-
 # ── Stubs für schwere Dependencies (Py3.9-lokal fehlen sqlalchemy etc.) ──────
+
 
 def _stub(name: str) -> types.ModuleType:
     if name not in sys.modules:
@@ -33,27 +33,28 @@ def _stub(name: str) -> types.ModuleType:
 
 
 # sqlalchemy core + ext
-_sa = _stub("sqlalchemy")
-_sa.func = MagicMock()
-_sa.select = MagicMock()
-_sa.text = lambda sql: sql           # text() gibt den SQL-String zurück — ausreichend für unsere Tests
-_sa.Boolean = MagicMock()
-_sa.DateTime = MagicMock()
-_sa.String = MagicMock()
-_sa.Text = MagicMock()
-_sa_ext = _stub("sqlalchemy.ext")
-_sa_ext_async = _stub("sqlalchemy.ext.asyncio")
-_sa_ext_async.AsyncSession = MagicMock()
-_sa_orm = _stub("sqlalchemy.orm")
-_sa_orm.Mapped = MagicMock()
-_sa_orm.mapped_column = MagicMock()
-_sa_orm.relationship = MagicMock()
-_sa_orm.attributes = _stub("sqlalchemy.orm.attributes")
-_sa_orm.attributes.flag_modified = MagicMock()
-_sa_dialects = _stub("sqlalchemy.dialects")
-_sa_pg = _stub("sqlalchemy.dialects.postgresql")
-_sa_pg.JSONB = MagicMock()
-_sa_pg.UUID = MagicMock()
+if "sqlalchemy" not in sys.modules:
+    _sa = _stub("sqlalchemy")
+    _sa.func = MagicMock()
+    _sa.select = MagicMock()
+    _sa.text = lambda sql: sql  # text() gibt den SQL-String zurück — ausreichend für unsere Tests
+    _sa.Boolean = MagicMock()
+    _sa.DateTime = MagicMock()
+    _sa.String = MagicMock()
+    _sa.Text = MagicMock()
+    _sa_ext = _stub("sqlalchemy.ext")
+    _sa_ext_async = _stub("sqlalchemy.ext.asyncio")
+    _sa_ext_async.AsyncSession = MagicMock()
+    _sa_orm = _stub("sqlalchemy.orm")
+    _sa_orm.Mapped = MagicMock()
+    _sa_orm.mapped_column = MagicMock()
+    _sa_orm.relationship = MagicMock()
+    _sa_orm.attributes = _stub("sqlalchemy.orm.attributes")
+    _sa_orm.attributes.flag_modified = MagicMock()
+    _sa_dialects = _stub("sqlalchemy.dialects")
+    _sa_pg = _stub("sqlalchemy.dialects.postgresql")
+    _sa_pg.JSONB = MagicMock()
+    _sa_pg.UUID = MagicMock()
 
 # pydantic (kann installiert sein oder auch nicht — Stub schadet nicht)
 if "pydantic" not in sys.modules:
@@ -72,15 +73,19 @@ if "fastapi" not in sys.modules:
 
     class _FakeAPIRouter:
         """APIRouter-Stub: Decorators geben Funktion unverändert zurück."""
+
         def __init__(self, *a, **kw):
             pass
+
         def _noop_decorator(self, *a, **kw):
             def decorator(fn):
                 return fn
+
             # Falls ohne Klammern benutzt
             if len(a) == 1 and callable(a[0]):
                 return a[0]
             return decorator
+
         get = post = put = patch = delete = _noop_decorator
 
     _fa.APIRouter = _FakeAPIRouter
@@ -93,7 +98,7 @@ if "fastapi" not in sys.modules:
     _stub("fastapi.responses").StreamingResponse = MagicMock()
     HTTPException = _FakeHTTPException
 else:
-    from fastapi import HTTPException  # noqa: E402
+    from fastapi import HTTPException
 
 # models, services, dependencies — minimale Stubs
 for _mod in [
@@ -117,14 +122,18 @@ sys.modules["models.content_performance"].ContentPerformance = MagicMock()
 sys.modules["services.nextcloud"].nextcloud_client = MagicMock()
 sys.modules["services.tenant_export"].TenantExportService = MagicMock(return_value=MagicMock())
 sys.modules["services.tenant_import"].TenantImportService = MagicMock(return_value=MagicMock())
-sys.modules["services.llm"].set_llm_tenant = MagicMock()
-sys.modules["services.llm"].PURPOSE_MAX_TOKENS = {}
-sys.modules["services.llm"].PURPOSE_MODEL_MAP = {}
-sys.modules["services.llm"].REQUESTY_MODELS = {}
+# Only overwrite services.llm attributes when it's a stub (not the real module).
+# The real module already has these; overwriting them pollutes subsequent tests
+# that rely on set_llm_tenant actually setting the ContextVar.
+_llm_mod = sys.modules["services.llm"]
+if not hasattr(_llm_mod, "BudgetExceededError"):
+    _llm_mod.set_llm_tenant = MagicMock()
+    _llm_mod.PURPOSE_MAX_TOKENS = {}
+    _llm_mod.PURPOSE_MODEL_MAP = {}
+    _llm_mod.REQUESTY_MODELS = {}
 
 # ── Jetzt erst importieren ────────────────────────────────────────────────────
-from api.tenants import get_automation_status, pause_automation, resume_automation  # noqa: E402
-
+from api.tenants import get_automation_status, pause_automation, resume_automation
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -146,7 +155,7 @@ def _make_async_db(raise_exc=None):
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 # ── automation-status ─────────────────────────────────────────────────────────
@@ -165,7 +174,7 @@ def test_automation_status_enabled():
 
 def test_automation_status_paused():
     """GET automation-status → enabled=false, paused=true wenn Tenant deaktiviert."""
-    dt = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    dt = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
     tenant = _make_tenant(enabled=False, disabled_at=dt, disabled_reason="dashboard-pause")
     result = _run(get_automation_status(tenant=tenant))
 
@@ -289,9 +298,9 @@ def test_pause_uses_own_tenant_id_only():
         params = call.args[1] if len(call.args) > 1 else {}
         # other_id darf nirgends vorkommen
         for v in params.values():
-            assert str(other_id) not in str(v), (
-                f"Fremde Tenant-ID {other_id} in DB-Call — E3-Verletzung!"
-            )
+            assert str(other_id) not in str(
+                v
+            ), f"Fremde Tenant-ID {other_id} in DB-Call — E3-Verletzung!"
     # UPDATE-Call: WHERE id=:id muss own_id sein
     update_params = db.execute.call_args_list[0].args[1]
     assert str(update_params["id"]) == str(own_id)
@@ -314,6 +323,6 @@ def test_resume_uses_own_tenant_id_only():
     for call in db.execute.call_args_list:
         params = call.args[1] if len(call.args) > 1 else {}
         for v in params.values():
-            assert str(other_id) not in str(v), (
-                f"Fremde Tenant-ID {other_id} in DB-Call — E3-Verletzung!"
-            )
+            assert str(other_id) not in str(
+                v
+            ), f"Fremde Tenant-ID {other_id} in DB-Call — E3-Verletzung!"

@@ -13,6 +13,15 @@ from unittest.mock import AsyncMock, patch
 
 
 def _import_p12c():
+    import sys as _sys
+
+    # test_p17_transcript_observer_task stubs services.cost_cap at collection time;
+    # if that stub is in sys.modules, tasks.p12c_task imports the fake CostCapMiddleware.
+    # Pop both to force a clean reimport with the real module.
+    _cc = _sys.modules.get("services.cost_cap")
+    if _cc is not None and not hasattr(_cc, "__file__"):
+        _sys.modules.pop("services.cost_cap")
+        _sys.modules.pop("tasks.p12c_task", None)
     from tasks.p12c_task import run_p12c
 
     return run_p12c

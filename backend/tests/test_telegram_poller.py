@@ -32,10 +32,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ===========================================================================
 # Stub-Infrastruktur (muss VOR allen Modul-Imports stehen)
 # ===========================================================================
+
 
 def _ensure_stub(name: str) -> types.ModuleType:
     if name not in sys.modules:
@@ -107,6 +107,7 @@ if "celery" not in sys.modules:
         def connect(self, *a, **kw):
             def d(fn):
                 return fn
+
             return a[0] if len(a) == 1 and callable(a[0]) else d
 
     _sig = _ensure_stub("celery.signals")
@@ -131,8 +132,9 @@ _ensure_stub("sentry_config")
 
 # datetime.UTC Py3.9-Compat
 import datetime as _dt_real
+
 if not hasattr(_dt_real, "UTC"):
-    _dt_real.UTC = _dt_real.timezone.utc  # type: ignore[attr-defined]
+    _dt_real.UTC = _dt_real.UTC  # type: ignore[attr-defined]
 
 # services.crypto: direkt per importlib laden (dep-frei, keine __init__.py-Kette)
 import importlib.util as _ilu
@@ -179,9 +181,11 @@ _api_tg = _ensure_stub("api.telegram")
 _dispatch_mock = MagicMock()
 _api_tg.dispatch_inbound_update = _dispatch_mock
 
-# services.telegram_token_resolver Stub (wird von tasks.telegram_poll_task nicht
-# direkt importiert, aber von api.telegram bei dispatch — vorsichtshalber stubben)
-_ttr = _ensure_stub("services.telegram_token_resolver")
+# services.telegram_token_resolver — eigenes Stub-Modul (NICHT _ensure_stub —
+# test_telegram_outbound_pertenant lädt das echte Modul, _ensure_stub würde es
+# mutieren und TestGetTenantBotToken zerstören)
+_ttr = types.ModuleType("services.telegram_token_resolver")
+sys.modules["services.telegram_token_resolver"] = _ttr
 _ttr.get_tenant_bot_token = MagicMock(return_value="tok")
 _ttr.update_last_active = MagicMock()
 
@@ -193,7 +197,7 @@ _poll_task_mod = _load_module("tasks.telegram_poll_task", "tasks/telegram_poll_t
 # Re-Exports für Tests
 # ===========================================================================
 
-from services.telegram_poller import (  # noqa: E402
+from services.telegram_poller import (
     TelegramAPIError,
     TelegramHTTPError,
     TelegramUnauthorized,
@@ -333,9 +337,9 @@ class TestPollOnce:
             poll_once(_TOKEN_A, offset=None, timeout=0, http=http)
 
         for record in caplog.records:
-            assert _TOKEN_A not in record.getMessage(), (
-                f"Token in Log-Record: {record.getMessage()!r}"
-            )
+            assert (
+                _TOKEN_A not in record.getMessage()
+            ), f"Token in Log-Record: {record.getMessage()!r}"
 
     def test_single_update_next_offset(self):
         """Einzelnes Update → next_offset = update_id + 1."""
@@ -353,17 +357,20 @@ class TestPollOnce:
 
 
 class TestPollAllActiveBots:
-
     def test_polls_active_bots_and_counts(self):
         """Aktive Bots werden gepollt, Zähler korrekt."""
         with (
-            patch.object(_poll_task_mod, "_load_active_bots", return_value=[
-                {
-                    "tenant_id": _TENANT_A,
-                    "telegram_bot_token_encrypted": "enc_a",
-                    "telegram_poll_offset": None,
-                }
-            ]),
+            patch.object(
+                _poll_task_mod,
+                "_load_active_bots",
+                return_value=[
+                    {
+                        "tenant_id": _TENANT_A,
+                        "telegram_bot_token_encrypted": "enc_a",
+                        "telegram_poll_offset": None,
+                    }
+                ],
+            ),
             patch.object(_poll_task_mod, "decrypt_secret", return_value=_TOKEN_A),
             patch.object(_poll_task_mod, "poll_once", return_value=([], None)),
             patch.object(_poll_task_mod, "_persist_offset"),
@@ -381,13 +388,17 @@ class TestPollAllActiveBots:
         dispatch_mock = MagicMock()
 
         with (
-            patch.object(_poll_task_mod, "_load_active_bots", return_value=[
-                {
-                    "tenant_id": _TENANT_A,
-                    "telegram_bot_token_encrypted": "enc_a",
-                    "telegram_poll_offset": 199,
-                }
-            ]),
+            patch.object(
+                _poll_task_mod,
+                "_load_active_bots",
+                return_value=[
+                    {
+                        "tenant_id": _TENANT_A,
+                        "telegram_bot_token_encrypted": "enc_a",
+                        "telegram_poll_offset": 199,
+                    }
+                ],
+            ),
             patch.object(_poll_task_mod, "decrypt_secret", return_value=_TOKEN_A),
             patch.object(_poll_task_mod, "poll_once", return_value=([update1, update2], 202)),
             patch.object(_poll_task_mod, "_persist_offset") as mock_persist,
@@ -413,10 +424,22 @@ class TestPollAllActiveBots:
             return ([update_b], 301)
 
         with (
-            patch.object(_poll_task_mod, "_load_active_bots", return_value=[
-                {"tenant_id": _TENANT_A, "telegram_bot_token_encrypted": "enc_a", "telegram_poll_offset": None},
-                {"tenant_id": _TENANT_B, "telegram_bot_token_encrypted": "enc_b", "telegram_poll_offset": None},
-            ]),
+            patch.object(
+                _poll_task_mod,
+                "_load_active_bots",
+                return_value=[
+                    {
+                        "tenant_id": _TENANT_A,
+                        "telegram_bot_token_encrypted": "enc_a",
+                        "telegram_poll_offset": None,
+                    },
+                    {
+                        "tenant_id": _TENANT_B,
+                        "telegram_bot_token_encrypted": "enc_b",
+                        "telegram_poll_offset": None,
+                    },
+                ],
+            ),
             patch.object(_poll_task_mod, "decrypt_secret", side_effect=[_TOKEN_A, _TOKEN_B]),
             patch.object(_poll_task_mod, "poll_once", side_effect=_poll_side),
             patch.object(_poll_task_mod, "_persist_offset") as mock_persist,
@@ -426,7 +449,7 @@ class TestPollAllActiveBots:
             result = poll_all_active_bots()
 
         # Bot B lief trotz Fehler bei Bot A
-        assert result["bots_polled"] == 1   # nur Bot B kam durch
+        assert result["bots_polled"] == 1  # nur Bot B kam durch
         assert result["updates_processed"] == 1
         dispatch_mock.assert_called_once_with(update_b, _TENANT_B)
         mock_persist.assert_called_once_with(_TENANT_B, 301, last_active=True)
@@ -434,9 +457,17 @@ class TestPollAllActiveBots:
     def test_unauthorized_marks_bot_error(self):
         """HTTP 401 → _mark_bot_error wird aufgerufen."""
         with (
-            patch.object(_poll_task_mod, "_load_active_bots", return_value=[
-                {"tenant_id": _TENANT_A, "telegram_bot_token_encrypted": "enc_a", "telegram_poll_offset": None},
-            ]),
+            patch.object(
+                _poll_task_mod,
+                "_load_active_bots",
+                return_value=[
+                    {
+                        "tenant_id": _TENANT_A,
+                        "telegram_bot_token_encrypted": "enc_a",
+                        "telegram_poll_offset": None,
+                    },
+                ],
+            ),
             patch.object(_poll_task_mod, "decrypt_secret", return_value=_TOKEN_A),
             patch.object(_poll_task_mod, "poll_once", side_effect=TelegramUnauthorized("401")),
             patch.object(_poll_task_mod, "_mark_bot_error") as mock_mark,
@@ -450,9 +481,17 @@ class TestPollAllActiveBots:
     def test_empty_token_after_decrypt_skipped(self):
         """Leeres Token nach Decrypt → Bot überspringen, kein poll_once."""
         with (
-            patch.object(_poll_task_mod, "_load_active_bots", return_value=[
-                {"tenant_id": _TENANT_A, "telegram_bot_token_encrypted": "enc_a", "telegram_poll_offset": None},
-            ]),
+            patch.object(
+                _poll_task_mod,
+                "_load_active_bots",
+                return_value=[
+                    {
+                        "tenant_id": _TENANT_A,
+                        "telegram_bot_token_encrypted": "enc_a",
+                        "telegram_poll_offset": None,
+                    },
+                ],
+            ),
             patch.object(_poll_task_mod, "decrypt_secret", return_value=""),
             patch.object(_poll_task_mod, "poll_once") as mock_poll,
             patch.dict("os.environ", {"TELEGRAM_POLLING_ENABLED": "true"}),
@@ -476,9 +515,17 @@ class TestPollAllActiveBots:
     def test_token_not_in_any_log_output(self, caplog):
         """Token darf in KEINER Log-Nachricht auftauchen (D3/E2)."""
         with (
-            patch.object(_poll_task_mod, "_load_active_bots", return_value=[
-                {"tenant_id": _TENANT_A, "telegram_bot_token_encrypted": "enc_a", "telegram_poll_offset": None},
-            ]),
+            patch.object(
+                _poll_task_mod,
+                "_load_active_bots",
+                return_value=[
+                    {
+                        "tenant_id": _TENANT_A,
+                        "telegram_bot_token_encrypted": "enc_a",
+                        "telegram_poll_offset": None,
+                    },
+                ],
+            ),
             patch.object(_poll_task_mod, "decrypt_secret", return_value=_TOKEN_A),
             patch.object(_poll_task_mod, "poll_once", side_effect=TelegramUnauthorized("401")),
             patch.object(_poll_task_mod, "_mark_bot_error", return_value=None),
@@ -495,9 +542,17 @@ class TestPollAllActiveBots:
     def test_returns_summary_no_pii_keys(self):
         """Rückgabe enthält nur erlaubte Schlüssel (keine Tokens, keine tenant_ids)."""
         with (
-            patch.object(_poll_task_mod, "_load_active_bots", return_value=[
-                {"tenant_id": _TENANT_A, "telegram_bot_token_encrypted": "enc_a", "telegram_poll_offset": 10},
-            ]),
+            patch.object(
+                _poll_task_mod,
+                "_load_active_bots",
+                return_value=[
+                    {
+                        "tenant_id": _TENANT_A,
+                        "telegram_bot_token_encrypted": "enc_a",
+                        "telegram_poll_offset": 10,
+                    },
+                ],
+            ),
             patch.object(_poll_task_mod, "decrypt_secret", return_value=_TOKEN_A),
             patch.object(_poll_task_mod, "poll_once", return_value=([_make_update(11)], 12)),
             patch.object(_poll_task_mod, "_persist_offset"),

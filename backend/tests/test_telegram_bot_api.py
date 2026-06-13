@@ -23,11 +23,11 @@ from __future__ import annotations
 import sys
 import types
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Python 3.9 compat: datetime.UTC was added in 3.11
-UTC = timezone.utc
+UTC = UTC
 
 # ---------------------------------------------------------------------------
 # Minimal stubs for unavailable heavy dependencies
@@ -78,10 +78,12 @@ _OTHER_TENANT_ID = uuid.UUID("11111111-2222-3333-4444-555555555555")
 
 _fake_settings = MagicMock()
 _fake_settings.default_tenant_key = "test-key-32-bytes-padding-xxxxxx"
+_fake_settings.database_url = "postgresql+asyncpg://stub:stub@localhost/stub_db"
 
 # Stub config module
 config_stub = types.SimpleNamespace(settings=_fake_settings)
-sys.modules["config"] = config_stub  # type: ignore[assignment]
+if "config" not in sys.modules:
+    sys.modules["config"] = config_stub  # type: ignore[assignment]
 
 # Stub services.crypto — we want deterministic behaviour without real Fernet
 _crypto_mod = _stub("services.crypto")
@@ -114,16 +116,21 @@ _stub("models.tenant")
 
 # Stub services.llm (imported by dependencies transitively)
 _llm_mod = _stub("services.llm")
-_llm_mod.set_llm_tenant = MagicMock()
+# Guard: only overwrite set_llm_tenant on stub modules, never on the real module.
+# The real module has BudgetExceededError; overwriting set_llm_tenant with MagicMock
+# prevents _tenant_id_ctx from being set, breaking cost_cap and throttle tests.
+if not hasattr(_llm_mod, "BudgetExceededError"):
+    _llm_mod.set_llm_tenant = MagicMock()
+_llm_mod.llm_service = MagicMock()  # services/__init__.py does `from .llm import llm_service`
 
 # ---------------------------------------------------------------------------
 # Import the module under test AFTER stubs are in place
 # ---------------------------------------------------------------------------
 
-import api.telegram_bots as bot_module  # noqa: E402 — must come after stubs
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import api.telegram_bots as bot_module
 
 # Build minimal test app
 _app = FastAPI()
@@ -135,12 +142,14 @@ _app.include_router(bot_module.router, prefix="/api")
 def _override_tenant_id(tid: uuid.UUID = _FAKE_TENANT_ID):
     async def _dep():
         return tid
+
     return _dep
 
 
 def _override_db(session: MagicMock):
     async def _dep():
         yield session
+
     return _dep
 
 
@@ -162,7 +171,9 @@ def _make_empty_db_session() -> MagicMock:
     session = MagicMock()
     # mappings().fetchone() → None (no row found)
     session.execute = AsyncMock(
-        return_value=MagicMock(mappings=MagicMock(return_value=MagicMock(fetchone=MagicMock(return_value=None))))
+        return_value=MagicMock(
+            mappings=MagicMock(return_value=MagicMock(fetchone=MagicMock(return_value=None)))
+        )
     )
     session.commit = AsyncMock()
     return session
@@ -348,9 +359,7 @@ def test_post_get_me_ok_returns_201_active():
     execute_calls = [
         MagicMock(),  # upsert — result not used
         MagicMock(
-            mappings=MagicMock(
-                return_value=MagicMock(fetchone=MagicMock(return_value=_bot_row))
-            )
+            mappings=MagicMock(return_value=MagicMock(fetchone=MagicMock(return_value=_bot_row)))
         ),
     ]
     session = MagicMock()
@@ -360,9 +369,7 @@ def test_post_get_me_ok_returns_201_active():
     _app.dependency_overrides[bot_module.get_tenant_id] = _override_tenant_id()
     _app.dependency_overrides[bot_module.get_db] = _override_db(session)
 
-    fake_get_me = AsyncMock(
-        return_value={"id": 1234567890, "username": "mybot", "is_bot": True}
-    )
+    fake_get_me = AsyncMock(return_value={"id": 1234567890, "username": "mybot", "is_bot": True})
     try:
         with patch.object(bot_module, "_telegram_get_me", new=fake_get_me):
             resp = client.post(
@@ -403,9 +410,7 @@ def test_delete_configured_returns_revoked():
     # execute call 1 = fetch row; call 2 = UPDATE
     execute_calls = [
         MagicMock(
-            mappings=MagicMock(
-                return_value=MagicMock(fetchone=MagicMock(return_value=db_row))
-            )
+            mappings=MagicMock(return_value=MagicMock(fetchone=MagicMock(return_value=db_row)))
         ),
         MagicMock(),  # UPDATE
     ]
@@ -434,9 +439,11 @@ def test_delete_configured_returns_revoked():
 def test_delete_not_configured_idempotent():
     db = _make_empty_db_session()
     # Second execute call for UPDATE also fine
-    db.execute = AsyncMock(return_value=MagicMock(
-        mappings=MagicMock(return_value=MagicMock(fetchone=MagicMock(return_value=None)))
-    ))
+    db.execute = AsyncMock(
+        return_value=MagicMock(
+            mappings=MagicMock(return_value=MagicMock(fetchone=MagicMock(return_value=None)))
+        )
+    )
 
     _app.dependency_overrides[bot_module.get_tenant_id] = _override_tenant_id()
     _app.dependency_overrides[bot_module.get_db] = _override_db(db)
@@ -475,9 +482,7 @@ def test_e3_sql_uses_api_key_tenant_not_path_param():
     session.execute = _fake_execute
     session.commit = AsyncMock()
 
-    _app.dependency_overrides[bot_module.get_tenant_id] = _override_tenant_id(
-        _FAKE_TENANT_ID
-    )
+    _app.dependency_overrides[bot_module.get_tenant_id] = _override_tenant_id(_FAKE_TENANT_ID)
     _app.dependency_overrides[bot_module.get_db] = _override_db(session)
     try:
         resp = client.get(_URL, headers={"X-API-Key": "test-key"})
@@ -486,9 +491,9 @@ def test_e3_sql_uses_api_key_tenant_not_path_param():
 
     assert resp.status_code == 200
     # At least one DB call must have been made with the correct tid
-    assert any(p.get("tid") == str(_FAKE_TENANT_ID) for p in captured_params), (
-        f"Expected tid={_FAKE_TENANT_ID} in SQL params, got: {captured_params}"
-    )
+    assert any(
+        p.get("tid") == str(_FAKE_TENANT_ID) for p in captured_params
+    ), f"Expected tid={_FAKE_TENANT_ID} in SQL params, got: {captured_params}"
     # The OTHER tenant's id must never appear
     assert not any(p.get("tid") == str(_OTHER_TENANT_ID) for p in captured_params)
 
