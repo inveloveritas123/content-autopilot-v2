@@ -108,8 +108,9 @@ _mt = _stub("models.tenant")
 if not hasattr(_mt, "Tenant"):
     _mt.Tenant = MagicMock()
 
-# services
-_stub("services")
+# services — NUR Submodule stubben die wizard.py direkt importiert.
+# "services" selbst NICHT als Blanko-Modul stubben: bricht test_eu_router_migration
+# das services.pipeline_llm als echtes Package-Submodul laden muss.
 _llm = _stub("services.llm")
 if not hasattr(_llm, "llm_service"):
     _llm.llm_service = MagicMock()
@@ -176,6 +177,8 @@ def _next_question_pure(current_phase: int, answered_ids: set) -> dict | None:
         if phase_data["phase"] < current_phase:
             continue
         for q in phase_data["questions"]:
+            if "text" not in q:  # UI-only widgets (z.B. linkedin_posts) überspringen
+                continue
             if q["id"] not in answered_ids:
                 return {"id": q["id"], "text": q["text"], "phase": phase_data["phase"]}
     return None
@@ -429,3 +432,13 @@ class TestPhaseFunctions:
         assert nq["id"].startswith(
             "q3_"
         ), f"Phase 4 nutzt q3_* Präfix auf main (historisch), gefunden: {nq['id']}"
+
+    def test_next_question_skips_linkedin_posts_widget(self):
+        """_next_question_pure darf q5_linkedin_posts (kein text-Feld) nicht zurückgeben."""
+        # Alle text-Fragen bis Ende Phase 6 beantwortet; Phase 7 enthält q5_linkedin_posts (optional)
+        answered = {q["id"] for p in WIZARD_PHASES[:6] for q in p["questions"] if "text" in q}
+        nq = _next_question_pure(7, answered)
+        if nq is not None:
+            assert "text" in next(
+                q for p in WIZARD_PHASES for q in p["questions"] if q["id"] == nq["id"]
+            ), f"_next_question_pure lieferte question ohne text-Feld: {nq['id']}"
