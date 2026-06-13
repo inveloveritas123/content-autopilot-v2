@@ -78,21 +78,22 @@ def _update_log_transcript(log_id: str, transcript: str, model: str, confidence:
 
 
 def _load_active_session(tenant_id: str) -> object | None:
-    """Lädt die aktive random_smart bot_session des Tenants.
+    """Lädt die aktive bot_session des Tenants (random_smart oder targeted).
 
     Gibt ein leichtgewichtiges SimpleNamespace(id, status) zurück (KEIN
     ORM-Model — route_telegram_intent greift nur per getattr/str darauf zu)
     oder None, wenn keine aktive Session existiert.
+
+    #57: Filter auf mode IN ('random_smart','targeted') erweitert — ohne dies
+    umgehen targeted-Antworten still das p08-Routing (p08_service unterstützt
+    targeted bereits).
     """
     with sync_session_factory() as db:
         row = db.execute(
             text(
-                # NB: mode='random_smart' deckt heute alle live geschalteten
-                # Sessions ab; sobald 'targeted' produktiv geht → Filter erweitern
-                # (sonst umgehen targeted-Antworten still das p08-Routing → Issue).
                 "SELECT id, status FROM bot_session "
                 "WHERE tenant_id = :tid AND status = 'active' "
-                "      AND mode = 'random_smart' "
+                "      AND mode IN ('random_smart', 'targeted') "
                 "ORDER BY created_at DESC LIMIT 1"
             ),
             {"tid": tenant_id},
@@ -131,9 +132,13 @@ def _route_inbound_message(
 ) -> dict | None:
     """Verdrahtet eingehende Antworten mit der Intent-Routing-Pipeline (Issue #16).
 
-    Schritt 1: aktive Session laden (PRIMÄRES Gate). Keine Session → None.
-    Schritt 2: extract_intent_features → route_telegram_intent.
-    Schritt 3: bei target == 'p08_response' → p08_response aufrufen.
+    Schritt 1: Idempotenz-Guard — wenn log_id gesetzt und routed_to bereits
+               non-NULL → Duplikat, früh return (kein zweiter p08-Call). (#56/#18)
+    Schritt 2: aktive Session laden (PRIMÄRES Gate). Keine Session → None.
+    Schritt 3: extract_intent_features → route_telegram_intent.
+    Schritt 4: Routing-Marker persistieren BEVOR p08_response (at-most-once,
+               damit ein Crash mitten in p08 beim Retry nicht erneut routet). (#56)
+    Schritt 5: bei target == 'p08_response' → p08_response aufrufen.
 
     Fail-open: jede Exception wird nur geloggt, Rückgabe None — der bestehende
     Chunk-Return des Callers darf NIEMALS kaputtgehen.
@@ -142,12 +147,30 @@ def _route_inbound_message(
     bot_session_id) oder None, wenn nicht geroutet wurde.
     """
     try:
+        # #56/#18 Schicht A — Idempotenz-Guard: bereits geroutete Log-Zeile überspringen
+        if log_id is not None:
+            with sync_session_factory() as db:
+                guard_row = db.execute(
+                    text(
+                        "SELECT routed_to FROM telegram_message_log WHERE id = :id"
+                    ),
+                    {"id": log_id},
+                ).fetchone()
+            if guard_row is not None and guard_row[0] is not None:
+                # Bereits geroutet — Celery-Retry oder Doppel-Event → überspringen
+                logger.info(
+                    "inbound routing deduplicated: log_id=%s already routed_to=%s",
+                    log_id,
+                    guard_row[0],
+                )
+                return {"routed_to": guard_row[0], "deduped": True}
+
         session = _load_active_session(tenant_id)
         if session is None:
             return None
 
         from services.layer1_extraction import extract_intent_features
-        from services.layer2_routing import route_telegram_intent
+        from services.layer2_routing import persist_routing_decision, route_telegram_intent
 
         extraction = extract_intent_features(
             transcript=text_content,
@@ -155,6 +178,13 @@ def _route_inbound_message(
             session_state="active",
         )
         decision = route_telegram_intent(extraction, tenant_id, current_session=session)
+
+        # #56: Routing-Marker VOR dem LLM-Call setzen (at-most-once für p08_response).
+        # Fail-open: persist_routing_decision fängt intern alle Exceptions.
+        # Nur p08_response ist CHECK-konform persistierbar (B11); für andere
+        # Targets scheitert das UPDATE im Constraint still (fail-open eingebaut).
+        if log_id is not None:
+            persist_routing_decision(log_id, decision)
 
         routing_info: dict = {"routed_to": decision.target, "bot_session_id": str(session.id)}
 
@@ -368,7 +398,7 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         "source_type": source_type,
         "channel": channel,
     }
-    routing_info = _route_inbound_message(tenant_id, transcript)
+    routing_info = _route_inbound_message(tenant_id, transcript, log_id=log_id)
     if routing_info:
         result_dict.update(routing_info)
     return result_dict
@@ -480,7 +510,7 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
         "source_type": "manual_note",
         "channel": channel,
     }
-    routing_info = _route_inbound_message(tenant_id, text_content)
+    routing_info = _route_inbound_message(tenant_id, text_content, log_id=log_id)
     if routing_info:
         result_dict.update(routing_info)
     return result_dict

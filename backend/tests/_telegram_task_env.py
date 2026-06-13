@@ -49,7 +49,6 @@ if _BACKEND_DIR not in sys.path:
 # Interner Stub-Helfer — nur wenn noch nicht in sys.modules
 # ---------------------------------------------------------------------------
 
-
 def _stub(name: str) -> types.ModuleType:
     """Stub-Modul nur anlegen, wenn noch nicht in sys.modules."""
     if name in sys.modules:
@@ -187,20 +186,6 @@ if "services.p08_service" not in sys.modules:
 _services_pkg.p08_service = sys.modules["services.p08_service"]
 
 # ---------------------------------------------------------------------------
-# api.telegram — Lazy-Import in _route_inbound_message (#17).
-# Stub-Modul mit _send_telegram_message als MagicMock, damit Tests
-# das Attribut via patch("api.telegram._send_telegram_message") ersetzen können.
-# ---------------------------------------------------------------------------
-
-if "api" not in sys.modules:
-    _stub("api")
-if "api.telegram" not in sys.modules:
-    _at = _stub("api.telegram")
-    _at._send_telegram_message = MagicMock()
-# Als Paket-Attribut registrieren (für @patch-Auflösung via getattr)
-sys.modules["api"].telegram = sys.modules["api.telegram"]
-
-# ---------------------------------------------------------------------------
 # celery + tasks.celery_app
 # ---------------------------------------------------------------------------
 
@@ -263,24 +248,14 @@ def make_decision(target: str, payload: dict | None = None) -> types.SimpleNames
     return types.SimpleNamespace(target=target, payload=payload or {})
 
 
-def make_p08_result(
-    next_action: str = "vertiefen",
-    message: str = "Erzähl mir mehr.",
-    is_closed: bool = False,
-    quality: str = "gold",
-    session_id: str = "sess-1",
-) -> types.SimpleNamespace:
-    """Erzeugt einen P08Result-Namespace für Tests.
-
-    Alle Felder sind überschreibbar, damit Tests Folgefrage- und Abschluss-
-    Szenarien (is_closed=True, message='Danke!') direkt parametrisieren können.
-    """
+def make_p08_result(next_action: str = "vertiefen") -> types.SimpleNamespace:
+    """Erzeugt einen P08Result-Namespace für Tests."""
     return types.SimpleNamespace(
         next_action=next_action,
-        message=message,
-        quality=quality,
-        session_id=session_id,
-        is_closed=is_closed,
+        message="Erzähl mir mehr.",
+        quality="gold",
+        session_id="sess-1",
+        is_closed=False,
     )
 
 

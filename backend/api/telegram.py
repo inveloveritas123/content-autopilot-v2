@@ -148,8 +148,38 @@ def _handle_start_command(message: dict, token: str) -> None:
 
 
 def _store_and_dispatch(tenant_id: str, message: dict, message_type: str) -> None:
-    """Insert telegram_message_log row and enqueue Celery task."""
+    """Insert telegram_message_log row and enqueue Celery task.
+
+    #18 Schicht B: update_id-Deduplizierung.
+    Wenn message["_update_id"] gesetzt → prüfe ob bereits eine Log-Zeile
+    für diesen (tenant_id, update_id) existiert. Treffer → früh return ohne
+    INSERT/Dispatch (kein Doppel-Task bei Telegram-Redelivery).
+    """
     import json as _json
+
+    update_id = message.get("_update_id")
+    if update_id is not None:
+        try:
+            with sync_session_factory() as db:
+                dup_row = db.execute(
+                    text(
+                        "SELECT 1 FROM telegram_message_log "
+                        "WHERE tenant_id = :tid AND direction = 'in' "
+                        "      AND original_payload->>'_update_id' = :uid "
+                        "LIMIT 1"
+                    ),
+                    {"tid": tenant_id, "uid": str(update_id)},
+                ).fetchone()
+            if dup_row is not None:
+                logger.info(
+                    "_store_and_dispatch: duplicate update_id=%s for tenant=%s — skipped",
+                    update_id,
+                    tenant_id,
+                )
+                return
+        except Exception as e:
+            # Fail-open: wenn der Dedupe-Check nicht klappt, weiter mit normalem Insert.
+            logger.warning("update_id dedup check failed: %s", type(e).__name__)
 
     log_id = None
     with sync_session_factory() as db:
@@ -282,6 +312,13 @@ async def telegram_webhook(
         cmd_handled = _try_memory_command(tenant_id, chat_id_for_reply, text_content)
         if cmd_handled:
             return {"ok": True}
+
+    # #18 Schicht B: update_id aus dem Top-Level-Update in die Payload injizieren.
+    # Konvention: _update_id (Prefix-Underscore wie _channel) — überschreibt nie
+    # echte Telegram-Felder. Wird in _store_and_dispatch zur Deduplizierung genutzt.
+    update_id = body.get("update_id")
+    if update_id is not None:
+        message["_update_id"] = update_id
 
     try:
         _store_and_dispatch(tenant_id, message, message_type)
