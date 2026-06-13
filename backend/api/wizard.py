@@ -459,6 +459,8 @@ def _next_question(current_phase: int, answered_ids: set[str]) -> dict | None:
         if phase_data["phase"] < current_phase:
             continue
         for q in phase_data["questions"]:
+            if "text" not in q:  # UI-only widgets (z.B. linkedin_posts) überspringen
+                continue
             if q["id"] not in answered_ids:
                 return {"id": q["id"], "text": q["text"], "phase": phase_data["phase"]}
     return None
@@ -468,7 +470,9 @@ def _phase_complete(phase_num: int, answered_ids: set[str]) -> bool:
     phase_data = _PHASE_BY_NUM.get(phase_num)
     if not phase_data:
         return False
-    return all(q["id"] in answered_ids for q in phase_data["questions"])
+    # Optionale Fragen (required=False) und UI-only Widgets nicht als Blocker
+    required_qs = [q for q in phase_data["questions"] if q.get("required", True) and "text" in q]
+    return all(q["id"] in answered_ids for q in required_qs)
 
 
 # ---------------------------------------------------------------------------
