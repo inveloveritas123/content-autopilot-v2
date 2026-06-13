@@ -38,6 +38,7 @@ import {
   getBrandVoiceStatus,
 } from '../api'
 import ResearchFindings from './ResearchFindings'
+import TenantSwitcher from './TenantSwitcher'
 
 function FrequencyAdvisor({ approved, drafts }) {
   const [freq, setFreq] = useState(5)
@@ -841,6 +842,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <TenantSwitcher />
           <button
             onClick={handleAutoPump}
             disabled={autoPumping}
