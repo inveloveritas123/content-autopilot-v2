@@ -436,6 +436,8 @@ def _wizard_to_pseudo_transcript(answers: dict, phase_syntheses: dict) -> str:
         phase_num = phase_data["phase"]
         parts.append(f"## Phase {phase_num}: {phase_data['title']}\n")
         for q in phase_data["questions"]:
+            if "text" not in q:  # UI-only widgets überspringen
+                continue
             ans = answers.get(q["id"], "")
             if ans:
                 parts.append(f"**{q['text']}**\n{ans}\n")
