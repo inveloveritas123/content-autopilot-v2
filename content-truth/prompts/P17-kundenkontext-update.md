@@ -1,4 +1,5 @@
 # Prompt: Kundenkontext-Update
+<!-- prompt-version: v1.1 | 2026-06-13 | #22: +'## System-Prompt' vor Block 1, +'## User-Prompt' ({context_json}) fuer die v2-Loader-Konvention. Louis' Block-Wortlaut unveraendert. Changelog: docs/PROMPT-CHANGELOG.md -->
 
 **Position im System:** Paralleler Beobachter-Prompt zum Post-Generierungs-Pfad. Läuft jedes Mal, wenn der Kunde Input liefert (Sprachnachricht, Chat, Mail-Antwort), parallel zur Sprachmemo-Aufbereitung (P10). Job: neue Erkenntnisse für den persistenten Kundenkontext extrahieren und gegen die bestehende Kontext-Datenbank abgleichen, um Dopplungen zu vermeiden.
 
@@ -30,6 +31,8 @@ const response = await anthropic.messages.create({
 **Wichtig:** Block 2 (KUNDENKONTEXT) ist Pflicht. Der Prompt funktioniert nur sinnvoll mit Datenbank-Abgleich — sonst entstehen Dopplungen. Bei allererstem Input (Onboarding-Edge-Case) wird Block 2 mit `[Kontext noch leer — alle Funde als NEU markieren]` gefüllt.
 
 ---
+
+## System-Prompt
 
 ## Block 1: PROMPT_ROLLE (System-Prompt — ready to paste)
 
@@ -232,6 +235,16 @@ Sektionen weglassen. Keine zusätzlichen Sektionen erfinden.
 erstmals offen über Thema X" oder "Tonale Verschiebung zu vorherigen Inputs".
 Sonst Sektion weglassen.]
 ```
+
+---
+
+## User-Prompt
+
+Neuer Kundeninput (Transkript) samt aktuellem Kundenkontext als JSON (vom System injiziert):
+
+{context_json}
+
+Extrahiere daraus neue Erkenntnisse gemaess deiner Rolle (Block 1) und gib sie exakt im Output-Format (Block 3) aus. Gleiche jeden Fund gegen den Kundenkontext ab.
 
 ---
 
