@@ -14,12 +14,21 @@
 
 ### #22 — P17-Prompt lädt mit leerem System-Prompt (blockiert #41-Scharfschaltung)
 **Datei:** `content-truth/prompts/P17-kundenkontext-update.md`
-**Problem:** Nutzt Eigenkonstruktions-Headings (`## Block 1: PROMPT_ROLLE …`, `## Block 2/3`) statt der
-Loader-Konvention `## System-Prompt` / `## User-Prompt` → `prompt_loader` liefert **leeren System-Prompt**
-→ `prompt_health` meldet WEIRD. Der #41-Beobachter fail-opent deshalb (`skipped/prompt_unavailable`).
-**Konkreter Vorschlag (zur Abstimmung):**
-- Überschriften vereinheitlichen: `## System-Prompt` (Rolle/Regeln) + `## User-Prompt` (mit Platzhalter
-  `{context_json}` und dem Output-Kontrakt unten). Inhalt/Wortlaut bleibt Chris.
+**Befund (Architekt, Gegencheck mit Louis-Übergabe):** Die v2-Datei ist **byte-identisch** mit Louis'
+Original (`Import/Linkedin-Content-Autopilot/prompts/P17 prompt-kundenkontext-update.md`, 268 Zeilen) →
+**kein v2-Transkriptionsfehler**, sondern Louis' eigene „Block"-Konvention (`## Block 1: PROMPT_ROLLE
+(System-Prompt …)`, `## Block 2: KUNDENKONTEXT (…injiziert)`, `## Block 3: OUTPUT_FORMAT`). **P17 ist der
+EINZIGE Nicht-Konformer** — P01/P03/P04/P08/… nutzen alle `## System-Prompt` / `## User-Prompt`.
+Der Loader (`prompt_loader._extract_system_prompt`) keyt eindeutig auf `^## System-Prompt`; P17 hat das nicht
+→ leerer System-Prompt → `prompt_health`=WEIRD → #41-Beobachter fail-opent (`skipped/prompt_unavailable`).
+**Konkreter Vorschlag (minimal, braucht Chris/Robert-Freigabe da Template-Change):**
+- P17 an die **Haus-Konvention** angleichen (wie die 12 anderen Prompts): `## System-Prompt` direkt vor
+  „Block 1: PROMPT_ROLLE" einfügen; `## User-Prompt` bei „Block 2: KUNDENKONTEXT (…injiziert)" mit
+  Platzhalter `{context_json}`. „Block 3: OUTPUT_FORMAT" bleibt inhaltlich im System-Block. **Wortlaut/Inhalt
+  bleibt unverändert** — nur 2 Überschriften ergänzt.
+- Architekt-Confidence **hoch** (Loader keyt eindeutig auf die Headings). Alternative „Loader lernt
+  Block-Konvention" **verworfen**: fragiler Spezialfall nur für diese eine Datei.
+- Output-Kontrakt (den der #41-Beobachter erwartet) unten — sollte in den `## User-Prompt`/Block-3-Teil.
 - **Output-Kontrakt, den der #41-Beobachter erwartet** (Bucket-Form bevorzugt):
   ```json
   {
