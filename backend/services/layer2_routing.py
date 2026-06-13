@@ -21,6 +21,8 @@ ALLOWED_TARGETS = frozenset(
         "close_friendly",
         "reviewer_queue",
         "paused",
+        # P09 (on-demand Ideen in den Chat) — Issue #36 S1
+        "p09_ideation",
     }
 )
 
@@ -75,7 +77,7 @@ def route_telegram_intent(
             "active_session_response",
         )
 
-    # 4. Spontane Content-Idee
+    # 4. Spontane Content-Idee (bestehende Regel unverändert #16; P13-Routing kommt in #36 S3)
     if extraction_result.intent == "spontaneous_idea":
         return RoutingDecision(
             "p10_extract_post_kernel",
@@ -129,6 +131,10 @@ _ROUTED_TO_MAP = {
     "p10_extract_post_kernel": "p10",
     "help_response": "help",
     "close_friendly": "close",
+    # P09/P13: neue Targets → 'p10' (CHECK-Constraint-kompatibel, migrationsfrei).
+    # Semantische Unschärfe im Log dokumentiert (ROBERT-Flag #36/§4.2).
+    # Saubere Lösung: Mini-Migration um 'p09','p13' im CHECK zu erweitern.
+    "p09_ideation": "p10",
     # 'p08_response', 'reviewer_queue', 'paused' bleiben unverändert /
     # 'paused' ist nicht im Constraint (fail-open eingebaut).
 }

@@ -179,11 +179,19 @@ if "services.layer2_routing" not in sys.modules:
     _l2.persist_routing_decision = MagicMock()
 _services_pkg.layer2_routing = sys.modules["services.layer2_routing"]
 
-# Sicherstellen, dass persist_routing_decision immer vorhanden ist
-# (unabhängig davon, welches Testmodul den Stub zuerst angelegt hat)
+# Sicherstellen, dass route_telegram_intent/persist_routing_decision/RoutingDecision
+# immer vorhanden sind (unabhängig davon, welches Testmodul den Stub zuerst anlegt).
+# RoutingDecision wird vom P09-Gate (#36) lazy importiert.
 _l2_mod = sys.modules["services.layer2_routing"]
 if not hasattr(_l2_mod, "persist_routing_decision"):
     _l2_mod.persist_routing_decision = MagicMock()
+if not hasattr(_l2_mod, "route_telegram_intent"):
+    _l2_mod.route_telegram_intent = MagicMock()
+if not hasattr(_l2_mod, "RoutingDecision"):
+    def _RoutingDecision(target, payload=None, reason=""):
+        return types.SimpleNamespace(target=target, payload=payload or {}, reason=reason)
+
+    _l2_mod.RoutingDecision = _RoutingDecision
 
 # services.p08_service — lazy in _route_inbound_message importiert
 if "services.p08_service" not in sys.modules:
@@ -256,6 +264,35 @@ if "tasks.post_feedback_task" not in sys.modules:
     _pft.regenerate_post_from_feedback = MagicMock()
 # Als Paket-Attribut registrieren (für @patch-Auflösung via getattr)
 sys.modules["tasks"].post_feedback_task = sys.modules["tasks.post_feedback_task"]
+
+# services.chat_intent_heuristics — Lazy-Import im P09-Gate von _route_inbound_message
+# (#36 S2). Echtes dep-freies Modul ist lokal importierbar (nur re + stdlib).
+# Stub nur anlegen wenn noch nicht vorhanden, damit das echte Modul Vorrang hat.
+if "services.chat_intent_heuristics" not in sys.modules:
+    _cih = _stub("services.chat_intent_heuristics")
+    _cih.is_idea_request = MagicMock(return_value=False)
+    _cih.is_own_idea = MagicMock(return_value=False)
+    _cih.extract_topic = MagicMock(return_value=None)
+_services_pkg.chat_intent_heuristics = sys.modules["services.chat_intent_heuristics"]
+# Attribute sicherstellen (falls Stub zuerst von anderem Testmodul angelegt)
+_cih_mod = sys.modules["services.chat_intent_heuristics"]
+if not hasattr(_cih_mod, "is_idea_request"):
+    _cih_mod.is_idea_request = MagicMock(return_value=False)
+if not hasattr(_cih_mod, "is_own_idea"):
+    _cih_mod.is_own_idea = MagicMock(return_value=False)
+if not hasattr(_cih_mod, "extract_topic"):
+    _cih_mod.extract_topic = MagicMock(return_value=None)
+
+# tasks.p09_chat_ideas_task — Lazy-Import im P09-Gate von _route_inbound_message
+# (#36 S2). Stub mit deliver_ideas_to_chat als MagicMock.
+if "tasks.p09_chat_ideas_task" not in sys.modules:
+    _p09t = _stub("tasks.p09_chat_ideas_task")
+    _p09t.deliver_ideas_to_chat = MagicMock()
+# Als Paket-Attribut registrieren
+sys.modules["tasks"].p09_chat_ideas_task = sys.modules["tasks.p09_chat_ideas_task"]
+_p09t_mod = sys.modules["tasks.p09_chat_ideas_task"]
+if not hasattr(_p09t_mod, "deliver_ideas_to_chat"):
+    _p09t_mod.deliver_ideas_to_chat = MagicMock()
 
 # ---------------------------------------------------------------------------
 # tasks.telegram_task — genau EINMAL laden; bei Wiederholungsimport wiederverwenden

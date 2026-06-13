@@ -204,6 +204,32 @@ def _route_inbound_message(
 
         session = _load_active_session(tenant_id)
         if session is None:
+            # #36 Gate 4 — P09-Heuristik: vor _resolve_last_post, damit der
+            # 48h-Feedback-Pfad (#37) Ideen-Anfragen nicht frisst.
+            # Deterministisch, kein LLM-Call (dep-freie Heuristik).
+            try:
+                from services.chat_intent_heuristics import is_idea_request
+                from tasks.p09_chat_ideas_task import deliver_ideas_to_chat
+
+                if is_idea_request(text_content):
+                    deliver_ideas_to_chat.apply_async(
+                        args=[tenant_id, text_content[:500], log_id]
+                    )
+                    if log_id is not None:
+                        # Persist-Marker (at-most-once, Dedup-Guard); fail-open wenn
+                        # CHECK-Constraint den p10-Mapped-Wert ablehnt.
+                        from services.layer2_routing import (
+                            RoutingDecision,
+                            persist_routing_decision,
+                        )
+
+                        _dec = RoutingDecision("p09_ideation", {}, "p09_heuristic")
+                        persist_routing_decision(log_id, _dec)
+                    return {"routed_to": "p09_ideation", "p09_enqueued": True}
+            except Exception as exc:
+                logger.warning("p09 heuristic gate failed: %s", type(exc).__name__)
+                # Fail-open: weiter mit normalem Flow
+
             # #37 — Feedback-Zweig: kein aktives Session-Objekt, aber letzter Post vorhanden?
             last_post = _resolve_last_post(tenant_id)
             if last_post is None:
