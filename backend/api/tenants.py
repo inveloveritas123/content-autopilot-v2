@@ -494,6 +494,48 @@ async def get_tenant_industry(tenant: Tenant = Depends(get_tenant)):
     }
 
 
+# ── UI-Mode: MVP vs Features (Issue #90) ─────────────────────────────────────
+#
+# Default: "mvp" — schlank, nur Kern-Flows sichtbar.
+# Robert/Admin kann per PUT auf "features" umschalten (voller Funktionsumfang).
+# Wert wird in tenant.settings["ui_mode"] (JSONB) gespeichert — keine Migration.
+DEFAULT_UI_MODE = "mvp"  # 1-Zeilen-Default, tunbar durch Robert
+
+_VALID_UI_MODES = {"mvp", "features"}
+
+
+class UiModeUpdate(BaseModel):
+    mode: str
+
+
+@router.get("/tenants/me/ui-mode")
+async def get_ui_mode(tenant: Tenant = Depends(get_tenant)):
+    """Gibt den aktuellen Oberflächen-Modus zurück: 'mvp' oder 'features'."""
+    mode = (tenant.settings or {}).get("ui_mode", DEFAULT_UI_MODE)
+    return {"mode": mode}
+
+
+@router.put("/tenants/me/ui-mode")
+async def set_ui_mode(
+    data: UiModeUpdate,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Setzt den Oberflächen-Modus für diesen Tenant (E3: nur eigener Tenant via get_tenant)."""
+    if data.mode not in _VALID_UI_MODES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Ungültiger Modus '{data.mode}'. Erlaubt: {sorted(_VALID_UI_MODES)}",
+        )
+    current = tenant.settings or {}
+    current["ui_mode"] = data.mode
+    tenant.settings = current
+    flag_modified(tenant, "settings")
+    await db.commit()
+    logger.info("UI-Modus für Tenant %s auf '%s' gesetzt", tenant.id, data.mode)
+    return {"mode": data.mode}
+
+
 # ── Self-service Automation Pause/Resume (Issue #89) ─────────────────────────
 
 
