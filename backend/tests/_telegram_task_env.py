@@ -240,6 +240,16 @@ if "tasks.session_post_task" not in sys.modules:
 # Als Paket-Attribut registrieren (für @patch-Auflösung via getattr)
 sys.modules["tasks"].session_post_task = sys.modules["tasks.session_post_task"]
 
+# tasks.post_feedback_task — Lazy-Import im Feedback-Zweig von _route_inbound_message
+# (#37). Stub mit regenerate_post_from_feedback als MagicMock, damit Tests den
+# Enqueue (apply_async) via patch beobachten/auslösen können.
+# Muster: tasks.session_post_task (oben, Zeilen 244-248).
+if "tasks.post_feedback_task" not in sys.modules:
+    _pft = _stub("tasks.post_feedback_task")
+    _pft.regenerate_post_from_feedback = MagicMock()
+# Als Paket-Attribut registrieren (für @patch-Auflösung via getattr)
+sys.modules["tasks"].post_feedback_task = sys.modules["tasks.post_feedback_task"]
+
 # ---------------------------------------------------------------------------
 # tasks.telegram_task — genau EINMAL laden; bei Wiederholungsimport wiederverwenden
 # ---------------------------------------------------------------------------

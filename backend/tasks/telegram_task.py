@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import types
 
 import httpx
@@ -127,6 +128,44 @@ def _resolve_chat_id(tenant_id: str) -> int | None:
         return None
 
 
+_FEEDBACK_WINDOW_HOURS = int(os.environ.get("TELEGRAM_FEEDBACK_WINDOW_HOURS", "48"))
+
+
+def _resolve_last_post(tenant_id: str) -> object | None:
+    """Löst den jüngsten Bot-Post (bot_session_close oder post_feedback_regen) auf.
+
+    Zeitfenster: TELEGRAM_FEEDBACK_WINDOW_HOURS (Default 48h).
+    Liefert SimpleNamespace(id, summary, bot_session_id) oder None.
+    Fail-open (E2): nur type(exc).__name__ loggen. Tenant-gescopet (E3).
+
+    #37: migrationsfrei — nutzt content_metadata->>'source' IN ('bot_session_close',
+    'post_feedback_regen'), Marker aus #19 (session_post_task.py:192).
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text(
+                    "SELECT id, content_text, content_metadata->>'bot_session_id' AS bot_session_id "
+                    "FROM content_pieces "
+                    "WHERE tenant_id = :tid "
+                    "  AND content_metadata->>'source' IN ('bot_session_close', 'post_feedback_regen') "
+                    "  AND created_at > now() - make_interval(hours => :window_hours) "
+                    "ORDER BY created_at DESC LIMIT 1"
+                ),
+                {"tid": tenant_id, "window_hours": _FEEDBACK_WINDOW_HOURS},
+            ).fetchone()
+        if row is None:
+            return None
+        return types.SimpleNamespace(
+            id=str(row.id),
+            summary=(row.content_text or "")[:200],
+            bot_session_id=str(row.bot_session_id) if row.bot_session_id else None,
+        )
+    except Exception as exc:
+        logger.warning("_resolve_last_post failed: %s", type(exc).__name__)
+        return None
+
+
 def _route_inbound_message(
     tenant_id: str, text_content: str, log_id: str | None = None
 ) -> dict | None:
@@ -165,7 +204,36 @@ def _route_inbound_message(
 
         session = _load_active_session(tenant_id)
         if session is None:
-            return None
+            # #37 — Feedback-Zweig: kein aktives Session-Objekt, aber letzter Post vorhanden?
+            last_post = _resolve_last_post(tenant_id)
+            if last_post is None:
+                return None  # Verhalten wie bisher: keine Session, kein Post → None
+
+            from services.layer1_extraction import extract_intent_features
+            from services.layer2_routing import persist_routing_decision, route_telegram_intent
+
+            extraction = extract_intent_features(
+                transcript=text_content,
+                tenant_id=tenant_id,
+                session_state="no_session",
+                last_post_summary=last_post.summary,
+            )
+            decision = route_telegram_intent(extraction, tenant_id, last_post_id=last_post.id)
+            if log_id is not None:
+                persist_routing_decision(log_id, decision)
+            if decision.target == "voice_feedback_api":
+                try:
+                    from tasks.post_feedback_task import regenerate_post_from_feedback
+
+                    regenerate_post_from_feedback.apply_async(
+                        args=[last_post.id, tenant_id, text_content, log_id]
+                    )
+                    return {"routed_to": "voice_feedback_api", "regen_enqueued": True}
+                except Exception as exc:
+                    logger.warning("feedback regen enqueue failed: %s", type(exc).__name__)
+                    return {"routed_to": "voice_feedback_api", "regen_enqueued": False}
+            # Andere Targets: Routing-Marker setzen, kein Chat-Spam
+            return {"routed_to": decision.target}
 
         from services.layer1_extraction import extract_intent_features
         from services.layer2_routing import persist_routing_decision, route_telegram_intent
