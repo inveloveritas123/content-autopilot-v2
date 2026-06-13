@@ -2,7 +2,7 @@
 """Add tenant_customer_values (4. Profil-Entität, #43) + voice_drift_observation.entity_type.
 
 Revision ID: 053
-Revises: 049
+Revises: 050
 Create Date: 2026-06-12
 
 Issue #43: tenant_customer_values als vierter Zwilling der kanonischen Profil-Tabellen
@@ -10,9 +10,7 @@ Issue #43: tenant_customer_values als vierter Zwilling der kanonischen Profil-Ta
 aus Migration 032, source-CHECK mit 2 neuen Werten). Zusätzlich: entity_type-Spalte auf
 voice_drift_observation für den entitäts-generischen P17-Schreibpfad (Schritt 4, #43).
 
-KETTE: down_revision='049' (aktuell höchste echte Migration). Issue #26 reserviert 050–052,
-ist aber noch NICHT gebaut. Wenn #26 VOR #43 mergt → 053.down_revision auf '052' bumpen
-(oder `alembic merge`), damit kein doppelter Head entsteht. Vor dem Merge mit Robert abstimmen.
+KETTE: down_revision='050' (wizard_phase_constraint_8 — höchste Migration auf main).
 """
 
 import sqlalchemy as sa
@@ -21,7 +19,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from alembic import op
 
 revision = "053"
-down_revision = "049"
+down_revision = "050"
 branch_labels = None
 depends_on = None
 
