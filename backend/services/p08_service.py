@@ -4,6 +4,8 @@ Drei Modi: OPENER, RESPONSE, CLOSE.
 Schicht-3-Sicherheit: Response bekommt NUR features, NICHT Original-Transkript.
 """
 
+from __future__ import annotations  # Python 3.9-Kompatibilität: str | None Syntax
+
 import hashlib
 import json
 import logging
@@ -13,14 +15,13 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-import anthropic
 from sqlalchemy import text
 
 from models.base import sync_session_factory
+from services.pipeline_llm import call_pipeline_llm
 
 logger = logging.getLogger(__name__)
 
-ANTHROPIC_MODEL_ID = "claude-sonnet-4-6-20251022"
 MAX_QUESTIONS_TARGETED = 5
 MAX_QUESTIONS_RANDOM_SMART = 3
 
@@ -268,22 +269,14 @@ def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> O
         max_questions=max_q,
     )
 
-    # 4. Anthropic call
-    client = anthropic.Anthropic()
-    model_id = os.environ.get("BACKTEST_MODEL_OVERRIDE") or ANTHROPIC_MODEL_ID
-    response = client.messages.create(
-        model=model_id,
-        max_tokens=512,
-        system=[
-            {
-                "type": "text",
-                "text": prompt.system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[{"role": "user", "content": user_content}],
+    # 4. LLM call via Seam (kein direkter Anthropic SDK-Aufruf)
+    res = call_pipeline_llm(
+        prompt_key="P08",
+        system_prompt=prompt.system_prompt,
+        user_content=user_content,
+        tenant_id=tenant_id,
     )
-    raw_output = response.content[0].text.strip()
+    raw_output = res.text.strip()
     parsed = _parse_llm_response(raw_output)
     question_text = parsed.get("message", raw_output[:500])
 
@@ -394,22 +387,14 @@ def p08_response(session_id: str, features: dict) -> ResponseResult:
         max_questions=max_q,
     )
 
-    # Anthropic call
-    client = anthropic.Anthropic()
-    model_id = os.environ.get("BACKTEST_MODEL_OVERRIDE") or ANTHROPIC_MODEL_ID
-    response = client.messages.create(
-        model=model_id,
-        max_tokens=512,
-        system=[
-            {
-                "type": "text",
-                "text": prompt.system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[{"role": "user", "content": user_content}],
+    # LLM call via Seam (kein direkter Anthropic SDK-Aufruf)
+    res = call_pipeline_llm(
+        prompt_key="P08",
+        system_prompt=prompt.system_prompt,
+        user_content=user_content,
+        tenant_id=tenant_id,
     )
-    raw_output = response.content[0].text.strip()
+    raw_output = res.text.strip()
 
     # 4. Parse JSON response
     parsed = _parse_llm_response(raw_output)

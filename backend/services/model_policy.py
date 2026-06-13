@@ -17,6 +17,8 @@ hot-reload via mtime). Pfad:
 Dep-frei (nur json/os/pathlib) → via importlib testbar ohne services/__init__.
 """
 
+from __future__ import annotations  # Python 3.9-Kompatibilität: str | None Syntax
+
 import json
 import logging
 import os
