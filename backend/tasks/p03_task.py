@@ -40,6 +40,7 @@ from services.prompt_loader import get_default_prompt_loader
 from services.schema_transformer import build_canonical_meta, finalize_canonical
 from tasks.canonical_wiring import fetch_tenant_meta, now_iso
 from tasks.celery_app import celery_app
+from tasks.p03_voice_fallback import run_p03_voice_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -290,6 +291,65 @@ def run_p03(
             return {"run_id": run_id, "status": "paused_for_cost"}
         except Exception as cap_err:
             logger.warning("P03 cost-cap check failed (fail-open): %s", cap_err)
+
+        # 2b. Voice-Fallback (Issue #40): wenn keine Voice-Quelle vorhanden,
+        #     plausiblen Ton aus Kontext+Avatar ableiten und kanonisch schreiben.
+        #     Bei Erfolg → frühzeitiger Return (Fallback-Profil geschrieben).
+        #     Bei Fehler oder vorhandener Voice-Quelle → regulärer Pfad unverändert.
+        tenant_name_for_fallback, agentur_id_for_fallback = fetch_tenant_meta(tenant_id)
+        fallback_result = run_p03_voice_fallback(
+            tenant_id=tenant_id,
+            transcript=transcript,
+            written_texts=written_texts,
+            linkedin_posts=linkedin_posts,
+            tenant_name=tenant_name_for_fallback,
+            agentur_id=agentur_id_for_fallback,
+            project_id=project_id,
+        )
+        if fallback_result is not None:
+            # Fallback erfolgreich → kanonisches Voice-Profil mit Provenance geschrieben.
+            # Audit-Update: Fallback-Run als done markieren (kein output_hash, da kein regulärer LLM-Call).
+            duration_ms = int((time.monotonic() - t_start) * 1000)
+            try:
+                with sync_session_factory() as session:
+                    session.execute(
+                        text(
+                            "UPDATE setup_pipeline_run SET "
+                            "status = 'done', "
+                            "input_tokens = :input_tokens, "
+                            "output_tokens = :output_tokens, "
+                            "cost_usd = :cost_usd, "
+                            "duration_ms = :duration_ms, "
+                            "prompt_version_hash = 'voice_fallback', "
+                            "finished_at = now() "
+                            "WHERE id = :run_id"
+                        ),
+                        {
+                            "run_id": run_id,
+                            "input_tokens": fallback_result.get("input_tokens", 0),
+                            "output_tokens": fallback_result.get("output_tokens", 0),
+                            "cost_usd": str(fallback_result.get("cost_usd", 0.0)),
+                            "duration_ms": duration_ms,
+                        },
+                    )
+                    session.commit()
+            except Exception as audit_exc:
+                logger.warning("P03 fallback audit-update fehlgeschlagen: %s", audit_exc)
+
+            logger.info(
+                "P03 voice_fallback done tenant=%s run_id=%s duration=%dms",
+                tenant_id, run_id, duration_ms,
+            )
+            return {
+                "run_id": run_id,
+                "status": "done",
+                "voice_fallback": True,
+                "source": "voice_fallback",
+                "input_tokens": fallback_result.get("input_tokens", 0),
+                "output_tokens": fallback_result.get("output_tokens", 0),
+                "cost_usd": fallback_result.get("cost_usd", 0.0),
+                "duration_ms": duration_ms,
+            }
 
         # 3. Prompt laden
         loader = get_default_prompt_loader()

@@ -66,6 +66,7 @@ MODEL_PER_PROMPT: dict[str, str] = {
     "SENSITIVE_DETECT": "S2",
     "MD_CONVERT_P03": "S2",
     "LAYER1": "S2",  # Strukturierte Intent/Feature-Extraktion — schnelle JSON-Klassifikation, kein Frontier nötig (Issue #15)
+    "VOICE_FALLBACK": "S6",  # Voice-Fallback-Generierung aus Kontext+Avatar — analytisch, Frontier-Qualität, EU via Bedrock-Frankfurt (Issue #40)
 }
 
 # Per-Prompt max_tokens — übernommen aus den bisherigen Task-Konstanten.
@@ -80,6 +81,7 @@ PROMPT_MAX_TOKENS: dict[str, int] = {
     "SENSITIVE_DETECT": 512,
     "MD_CONVERT_P03": 2000,
     "LAYER1": 512,  # Kompaktes JSON (5 Felder) — gleiche Größenordnung wie P08
+    "VOICE_FALLBACK": 2000,  # Fallback-Voice-Profil JSON (sprache/ton/kommunikationsstil/werte — P03-strukturiert)
 }
 
 
