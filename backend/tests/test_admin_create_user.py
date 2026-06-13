@@ -25,49 +25,62 @@ def _maybe_stub(name: str, factory):
         sys.modules[name] = factory()
 
 
-# --- sqlalchemy ---
-def _make_sqlalchemy_stub():
-    sa = types.ModuleType("sqlalchemy")
-    sa.text = lambda q: q
-    sa.select = lambda *a, **kw: None
-    sa.Boolean = None
-    sa.DateTime = None
-    sa.String = lambda *a, **kw: None
-    sa.Text = None
-    sa.func = types.SimpleNamespace(now=lambda: None)
-    sa.update = lambda *a, **kw: None
-    return sa
+# --- sqlalchemy (real if installed, stub only as fallback) ---
+try:
+    import sqlalchemy
+    import sqlalchemy.dialects.postgresql
+    import sqlalchemy.ext.asyncio
+    import sqlalchemy.orm
+    import sqlalchemy.orm.attributes  # noqa: F401
+except ImportError:
 
+    def _make_sqlalchemy_stub():
+        sa = types.ModuleType("sqlalchemy")
+        sa.text = lambda q: q
+        sa.select = lambda *a, **kw: None
+        sa.Boolean = None
+        sa.DateTime = None
+        sa.String = lambda *a, **kw: None
+        sa.Text = None
+        sa.func = types.SimpleNamespace(now=lambda: None)
+        sa.update = lambda *a, **kw: None
+        return sa
 
-_maybe_stub("sqlalchemy", _make_sqlalchemy_stub)
+    if "sqlalchemy" not in sys.modules:
+        sys.modules["sqlalchemy"] = _make_sqlalchemy_stub()
+    if "sqlalchemy.ext" not in sys.modules:
+        sys.modules["sqlalchemy.ext"] = types.ModuleType("sqlalchemy.ext")
+    if "sqlalchemy.ext.asyncio" not in sys.modules:
+        _sa_async = types.ModuleType("sqlalchemy.ext.asyncio")
+        _sa_async.AsyncSession = object
+        _sa_async.create_async_engine = lambda *a, **kw: None
+        sys.modules["sqlalchemy.ext.asyncio"] = _sa_async
+    if "sqlalchemy.orm" not in sys.modules:
+        _sa_orm = types.ModuleType("sqlalchemy.orm")
+        _sa_orm.Mapped = object
+        _sa_orm.mapped_column = lambda *a, **kw: None
+        _sa_orm.relationship = lambda *a, **kw: None
+        _sa_orm.sessionmaker = lambda *a, **kw: None
+        sys.modules["sqlalchemy.orm"] = _sa_orm
+        _sa_orm_attrs = types.ModuleType("sqlalchemy.orm.attributes")
+        _sa_orm_attrs.flag_modified = lambda *a, **kw: None
+        sys.modules["sqlalchemy.orm.attributes"] = _sa_orm_attrs
+    if "sqlalchemy.dialects" not in sys.modules:
+        sys.modules["sqlalchemy.dialects"] = types.ModuleType("sqlalchemy.dialects")
+    if "sqlalchemy.dialects.postgresql" not in sys.modules:
+        _pg = types.ModuleType("sqlalchemy.dialects.postgresql")
+        _pg.JSONB = None
+        _pg.UUID = lambda *a, **kw: None
+        sys.modules["sqlalchemy.dialects.postgresql"] = _pg
 
-if "sqlalchemy.ext" not in sys.modules:
-    sys.modules["sqlalchemy.ext"] = types.ModuleType("sqlalchemy.ext")
-
-if "sqlalchemy.ext.asyncio" not in sys.modules:
-    _sa_async = types.ModuleType("sqlalchemy.ext.asyncio")
-    _sa_async.AsyncSession = object
-    sys.modules["sqlalchemy.ext.asyncio"] = _sa_async
-
-if "sqlalchemy.orm" not in sys.modules:
-    _sa_orm = types.ModuleType("sqlalchemy.orm")
-    _sa_orm.Mapped = object
-    _sa_orm.mapped_column = lambda *a, **kw: None
-    _sa_orm.relationship = lambda *a, **kw: None
-    sys.modules["sqlalchemy.orm"] = _sa_orm
-
-if "sqlalchemy.dialects" not in sys.modules:
-    sys.modules["sqlalchemy.dialects"] = types.ModuleType("sqlalchemy.dialects")
-
-if "sqlalchemy.dialects.postgresql" not in sys.modules:
-    _pg = types.ModuleType("sqlalchemy.dialects.postgresql")
-    _pg.JSONB = None
-    _pg.UUID = lambda *a, **kw: None
-    sys.modules["sqlalchemy.dialects.postgresql"] = _pg
-
-# --- redis ---
-_maybe_stub("redis", lambda: types.ModuleType("redis"))
-_maybe_stub("redis.asyncio", lambda: types.ModuleType("redis.asyncio"))
+# --- redis — real import preferred so redis.from_url stays available ---
+if "redis" not in sys.modules:
+    try:
+        import redis
+        import redis.asyncio  # noqa: F401
+    except ImportError:
+        sys.modules.setdefault("redis", types.ModuleType("redis"))
+        sys.modules.setdefault("redis.asyncio", types.ModuleType("redis.asyncio"))
 
 # --- pydantic_settings ---
 if "pydantic_settings" not in sys.modules:
@@ -80,55 +93,142 @@ if "pydantic_settings" not in sys.modules:
     _ps.BaseSettings = _BaseSettings
     sys.modules["pydantic_settings"] = _ps
 
-# --- config ---
+
+# --- _FakeSettings: defined at module level so _make_app_with_db can always reference it ---
+class _FakeSettings:
+    # Admin fields
+    admin_user: str | None = None
+    admin_password: str | None = None
+    admin_session_secret: str | None = None
+    cookie_secure: bool = False
+    # Core
+    database_url: str = "postgresql+asyncpg://t:t@localhost/t"
+    sync_database_url: str = "postgresql://t:t@localhost/t"
+    redis_url: str = "redis://localhost:6379/0"
+    default_tenant_key: str = "default-key"
+    # LLM
+    gemini_api_key: str = ""
+    anthropic_api_key: str = ""
+    litellm_base_url: str | None = None
+    litellm_api_key: str | None = None
+    requesty_api_key: str | None = None
+    # Nextcloud
+    nextcloud_url: str = ""
+    nextcloud_user: str = ""
+    nextcloud_password: str = ""
+    # Misc
+    sentry_dsn: str = ""
+    app_env: str = "production"
+    prompt_storage_backend: str = "localfs"
+    content_truth_base_path: str = "/app/content-truth"
+    content_truth_overlay_path: str = "/app/data/prompts-custom"
+    telegram_bot_token: str | None = None
+    telegram_admin_chat_id: str | None = None
+    telegram_webhook_secret: str | None = None
+    telegram_bot_username: str | None = None
+
+
+# --- config: minimaler Stub mit den benötigten Feldern ---
 if "config" not in sys.modules:
     _cfg = types.ModuleType("config")
 
     class _FakeSettings:
+        # Admin fields
         admin_user: str | None = None
         admin_password: str | None = None
         admin_session_secret: str | None = None
-        default_tenant_key: str = "default-key"
         cookie_secure: bool = False
+        # Core
+        database_url: str = "postgresql+asyncpg://t:t@localhost/t"
+        sync_database_url: str = "postgresql://t:t@localhost/t"
+        redis_url: str = "redis://localhost:6379/0"
+        default_tenant_key: str = "default-key"
+        # LLM
+        gemini_api_key: str = ""
+        anthropic_api_key: str = ""
+        litellm_base_url: str | None = None
+        litellm_api_key: str | None = None
+        requesty_api_key: str | None = None
+        # Nextcloud — needed by services/__init__.py → nextcloud.py at collection time
+        nextcloud_url: str = ""
+        nextcloud_user: str = ""
+        nextcloud_password: str = ""
+        # Misc
+        sentry_dsn: str = ""
+        app_env: str = "production"
+        prompt_storage_backend: str = "localfs"
+        content_truth_base_path: str = "/app/content-truth"
+        content_truth_overlay_path: str = "/app/data/prompts-custom"
+        telegram_bot_token: str | None = None
+        telegram_admin_chat_id: str | None = None
+        telegram_webhook_secret: str | None = None
+        telegram_bot_username: str | None = None
 
     _cfg.settings = _FakeSettings()
     sys.modules["config"] = _cfg
 
-# --- services.llm ---
-_maybe_stub("services", lambda: types.ModuleType("services"))
+# --- services.llm — real import preferred so downstream tests keep LLMService ---
 if "services.llm" not in sys.modules:
-    _svc_llm = types.ModuleType("services.llm")
-    _svc_llm.set_llm_tenant = lambda *a: None
-    sys.modules["services.llm"] = _svc_llm
+    try:
+        import services.llm  # noqa: F401
+    except Exception:
+        from unittest.mock import MagicMock as _MM
+
+        _svc_llm = types.ModuleType("services.llm")
+        _svc_llm.set_llm_tenant = lambda *a: None
+        _svc_llm.llm_service = _MM()
+        _svc_llm.LLMService = _MM
+        _svc_llm._maybe_send_global_cap_alert = _MM()
+        _svc_llm.BudgetExceededError = type("BudgetExceededError", (Exception,), {})
+        sys.modules["services.llm"] = _svc_llm
 
 # --- models stubs ---
-_maybe_stub("models", lambda: types.ModuleType("models"))
+# Give the models stub a real __path__ so Python can find submodules like
+# models.llm_provider when services/provider_resolver.py is imported later.
+import os as _os
+
+_BACKEND_DIR_CU = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+if "models" not in sys.modules:
+    _models_pkg = types.ModuleType("models")
+    _models_pkg.__path__ = [_os.path.join(_BACKEND_DIR_CU, "models")]
+    _models_pkg.__package__ = "models"
+    sys.modules["models"] = _models_pkg
+elif not hasattr(sys.modules["models"], "__path__"):
+    sys.modules["models"].__path__ = [_os.path.join(_BACKEND_DIR_CU, "models")]
+    sys.modules["models"].__package__ = "models"
 
 if "models.base" not in sys.modules:
     _mb = types.ModuleType("models.base")
     _mb.async_session_factory = None
+    _mb.sync_session_factory = None  # needed by tasks/p03_task.py etc.
     _mb.Base = object
     sys.modules["models.base"] = _mb
 
 # Tenant-Stub — leichtes Objekt das die nötigen Felder hat
+# Always patch Tenant even if models.tenant already exists (test_admin_auth.py
+# installs a bare _FakeTenant without __init__ args that crashes create_tenant).
 if "models.tenant" not in sys.modules:
     _mt = types.ModuleType("models.tenant")
-
-    class _FakeTenant:
-        """Minimales ORM-Stub-Objekt für Tenant."""
-
-        def __init__(self, *, name, api_key, slug, settings=None, enabled=True):
-            import uuid as _uuid
-
-            self.id = _uuid.uuid4()
-            self.name = name
-            self.api_key = api_key
-            self.slug = slug
-            self.settings = settings or {}
-            self.enabled = enabled
-
-    _mt.Tenant = _FakeTenant
     sys.modules["models.tenant"] = _mt
+else:
+    _mt = sys.modules["models.tenant"]
+
+
+class _FakeTenant:
+    """Minimales ORM-Stub-Objekt für Tenant."""
+
+    def __init__(self, *, name, api_key, slug, settings=None, enabled=True):
+        import uuid as _uuid
+
+        self.id = _uuid.uuid4()
+        self.name = name
+        self.api_key = api_key
+        self.slug = slug
+        self.settings = settings or {}
+        self.enabled = enabled
+
+
+_mt.Tenant = _FakeTenant
 
 # --- dependencies stub ---
 if "dependencies" not in sys.modules:
@@ -148,8 +248,7 @@ if "dependencies" not in sys.modules:
 # Echte Imports ab hier
 # ---------------------------------------------------------------------------
 
-import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -181,7 +280,7 @@ def _make_db_for_create(
 
     async def _execute(query, params=None):
         result = MagicMock()
-        sql = str(query).upper() if hasattr(query, "upper") else ""
+        sql = str(query).upper()
         # api_key-Duplikat-Check
         if "API_KEY" in sql or "API_KEY_SECONDARY" in sql:
             if api_key_dup:
@@ -212,13 +311,29 @@ def _make_db_for_create(
 
 def _make_app_with_db(db=None) -> FastAPI:
     """Minimale Test-App mit admin_auth-Router."""
+    import sys as _sys
+
+    # Re-install _FakeTenant in case another test file (e.g. test_cost_analytics.py)
+    # reloaded models.tenant with the real SQLAlchemy Tenant between collection and run.
+    _sys.modules["models.tenant"].Tenant = _FakeTenant
+    if "api.admin_auth" in _sys.modules:
+        _sys.modules["api.admin_auth"].Tenant = _FakeTenant
+
+    # Re-install _FakeSettings in case config was replaced/removed by other test files
+    # (e.g. test_telegram_bot_api.py installs MagicMock-based config after earlier
+    #  test files remove config from sys.modules during their cleanup).
+    import api.admin_auth as _admin_mod
     import dependencies
     from api.admin_auth import router
+
+    if not isinstance(_admin_mod.settings, _FakeSettings):
+        _admin_mod.settings = _FakeSettings()
 
     app = FastAPI()
     app.include_router(router, prefix="/api")
 
     if db is not None:
+
         async def _override_db():
             yield db
 
@@ -310,7 +425,7 @@ class TestCreateTenant:
 
         async def _execute(query, params=None):
             result = MagicMock()
-            sql = str(query).upper() if hasattr(query, "upper") else ""
+            sql = str(query).upper()
             if "SLUG" in sql:
                 slug_call_count["n"] += 1
                 if slug_call_count["n"] == 1:

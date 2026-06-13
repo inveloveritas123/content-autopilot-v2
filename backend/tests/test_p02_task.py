@@ -35,6 +35,7 @@ if _BACKEND_DIR not in sys.path:
 # Stub-Hilfsfunktion
 # ---------------------------------------------------------------------------
 
+
 def _stub(name: str) -> types.ModuleType:
     """Stub nur anlegen wenn noch nicht in sys.modules."""
     if name in sys.modules:
@@ -45,39 +46,53 @@ def _stub(name: str) -> types.ModuleType:
 
 
 # ---------------------------------------------------------------------------
-# sqlalchemy vollständig stubben (nicht im lokalen venv)
+# sqlalchemy — use real if available, stub only missing attrs (guards prevent
+# corrupting the real module when it is already loaded by earlier test files).
 # ---------------------------------------------------------------------------
 _sa = _stub("sqlalchemy")
-_sa.text = lambda s: s  # text("SQL...") → den String direkt zurückgeben
-_sa.Column = MagicMock()
-_sa.String = MagicMock()
-_sa.Boolean = MagicMock()
-_sa.Integer = MagicMock()
-_sa.select = MagicMock()
-_sa.func = MagicMock()
+# text() is used in mock-DB helpers below; str(TextClause) also works
+if not hasattr(_sa, "text"):
+    _sa.text = lambda s: s
+if not hasattr(_sa, "Column"):
+    _sa.Column = MagicMock()
+if not hasattr(_sa, "String"):
+    _sa.String = MagicMock()
+if not hasattr(_sa, "Boolean"):
+    _sa.Boolean = MagicMock()
+if not hasattr(_sa, "Integer"):
+    _sa.Integer = MagicMock()
+if not hasattr(_sa, "select"):
+    _sa.select = MagicMock()
+if not hasattr(_sa, "func"):
+    _sa.func = MagicMock()
 
 _sa_ext = _stub("sqlalchemy.ext")
 _sa_ext_async = _stub("sqlalchemy.ext.asyncio")
-_sa_ext_async.AsyncSession = MagicMock()
-_sa_ext_async.create_async_engine = MagicMock()
+if not hasattr(_sa_ext_async, "AsyncSession"):
+    _sa_ext_async.AsyncSession = MagicMock()
+if not hasattr(_sa_ext_async, "create_async_engine"):
+    _sa_ext_async.create_async_engine = MagicMock()
 
 _sa_orm = _stub("sqlalchemy.orm")
-_sa_orm.sessionmaker = MagicMock()
+if not hasattr(_sa_orm, "sessionmaker"):
+    _sa_orm.sessionmaker = MagicMock()
 
 _sa_pool = _stub("sqlalchemy.pool")
 _sa_dialects = _stub("sqlalchemy.dialects")
 _sa_dialects_pg = _stub("sqlalchemy.dialects.postgresql")
-_sa_dialects_pg.JSONB = MagicMock()
+if not hasattr(_sa_dialects_pg, "JSONB"):
+    _sa_dialects_pg.JSONB = MagicMock()
 
 # ---------------------------------------------------------------------------
-# config.settings Stub
+# config.settings Stub — only install if not yet set (admin tests may set it first)
 # ---------------------------------------------------------------------------
 _cfg_mod = _stub("config")
-_cfg_mod.settings = MagicMock()
-_cfg_mod.settings.database_url = "postgresql+asyncpg://fake/fake"
-_cfg_mod.settings.litellm_base_url = "http://fake-router:4000"
-_cfg_mod.settings.litellm_api_key = "fake-key"
-_cfg_mod.settings.requesty_api_key = ""
+if not hasattr(_cfg_mod, "settings") or not hasattr(_cfg_mod.settings, "database_url"):
+    _cfg_mod.settings = MagicMock()
+    _cfg_mod.settings.database_url = "postgresql+asyncpg://fake/fake"
+    _cfg_mod.settings.litellm_base_url = "http://fake-router:4000"
+    _cfg_mod.settings.litellm_api_key = "fake-key"
+    _cfg_mod.settings.requesty_api_key = ""
 
 # ---------------------------------------------------------------------------
 # models.base — sync_session_factory Stub
@@ -99,17 +114,17 @@ if _services_pkg is None or not isinstance(_services_pkg, types.ModuleType):
 _llm_mod = _stub("services.llm")
 _BudgetExceededError = type("BudgetExceededError", (Exception,), {})
 _llm_mod.BudgetExceededError = _BudgetExceededError
-setattr(_services_pkg, "llm", _llm_mod)
+_services_pkg.llm = _llm_mod
 
 # services.model_policy
 _mp_mod = _stub("services.model_policy")
 _mp_mod.get_override = MagicMock(return_value=None)
-setattr(_services_pkg, "model_policy", _mp_mod)
+_services_pkg.model_policy = _mp_mod
 
 # services.provider_resolver
 _pr_mod = _stub("services.provider_resolver")
 _pr_mod.get_active_provider = MagicMock(return_value=None)
-setattr(_services_pkg, "provider_resolver", _pr_mod)
+_services_pkg.provider_resolver = _pr_mod
 
 # services.kill_switch
 _ks_mod = _stub("services.kill_switch")
@@ -121,33 +136,38 @@ class _KillSwitchTriggered(Exception):
 
 _ks_mod.KillSwitchTriggered = _KillSwitchTriggered
 _ks_mod.check_kill_switch = MagicMock()  # Default: kein Trigger
-setattr(_services_pkg, "kill_switch", _ks_mod)
+_services_pkg.kill_switch = _ks_mod
 
 # services.cost_cap
 _cc_mod = _stub("services.cost_cap")
 _CostCapExceeded = type("CostCapExceeded", (Exception,), {})
 _cc_mod.CostCapExceeded = _CostCapExceeded
 _cc_mod.CostCapMiddleware = MagicMock()
-setattr(_services_pkg, "cost_cap", _cc_mod)
+# estimate_anthropic_cost needed by api/wizard.py (alias for estimate_tier_cost)
+if not hasattr(_cc_mod, "estimate_anthropic_cost"):
+    _cc_mod.estimate_anthropic_cost = MagicMock(return_value=0.01)
+_services_pkg.cost_cap = _cc_mod
 
 # services.llm_json — parse_json_from_text
 _llmj_mod = _stub("services.llm_json")
 _llmj_mod.parse_json_from_text = MagicMock(return_value={"unternehmensname": "Acme GmbH"})
-setattr(_services_pkg, "llm_json", _llmj_mod)
+_services_pkg.llm_json = _llmj_mod
 
 # services.prompt_loader — Stub (P02 hat noch keinen echten Prompt)
 _pl_mod = _stub("services.prompt_loader")
 _pl_mod.get_default_prompt_loader = MagicMock(side_effect=Exception("no P02 prompt"))
-setattr(_services_pkg, "prompt_loader", _pl_mod)
+_services_pkg.prompt_loader = _pl_mod
 
 # services.pipeline_llm — laden wir echt (nur httpx nötig, das im venv ist)
 # Es werden nur call_pipeline_llm, resolve_tier, estimate_tier_cost gebraucht.
 # Wir patchen call_pipeline_llm in den Tests, daher reicht ein Stub.
 _pllm_mod = _stub("services.pipeline_llm")
 _pllm_mod.call_pipeline_llm = MagicMock()
-_pllm_mod.resolve_tier = MagicMock(return_value=("S1", "vertex/gemini-2.5-flash-lite@europe-north1"))
+_pllm_mod.resolve_tier = MagicMock(
+    return_value=("S1", "vertex/gemini-2.5-flash-lite@europe-north1")
+)
 _pllm_mod.estimate_tier_cost = MagicMock(return_value=0.0001)
-setattr(_services_pkg, "pipeline_llm", _pllm_mod)
+_services_pkg.pipeline_llm = _pllm_mod
 
 # ---------------------------------------------------------------------------
 # tasks.celery_app — Stub (kein Broker)
@@ -156,6 +176,10 @@ _tasks_pkg = sys.modules.get("tasks")
 if _tasks_pkg is None:
     _tasks_pkg = types.ModuleType("tasks")
     sys.modules["tasks"] = _tasks_pkg
+# Make the stub usable as a package so later imports (tasks.p03_task etc.) work
+if not hasattr(_tasks_pkg, "__path__"):
+    _tasks_pkg.__path__ = [os.path.join(_BACKEND_DIR, "tasks")]
+    _tasks_pkg.__package__ = "tasks"
 
 _celery_app_mod = _stub("tasks.celery_app")
 _fake_celery = MagicMock()
@@ -177,7 +201,7 @@ def _fake_task_decorator(*args, **kwargs):
 
 _fake_celery.task = _fake_task_decorator
 _celery_app_mod.celery_app = _fake_celery
-setattr(_tasks_pkg, "celery_app", _celery_app_mod)
+_tasks_pkg.celery_app = _celery_app_mod
 
 # ---------------------------------------------------------------------------
 # p02_task laden (nach allen Stubs)
@@ -192,14 +216,14 @@ if _existing_p02 is None or not hasattr(_existing_p02, "run_p02"):
     _p02_mod = _ilu.module_from_spec(_spec)
     sys.modules["tasks.p02_task"] = _p02_mod
     _spec.loader.exec_module(_p02_mod)
-    setattr(_tasks_pkg, "p02_task", _p02_mod)
+    _tasks_pkg.p02_task = _p02_mod
 
 p02 = sys.modules["tasks.p02_task"]
 
 # ---------------------------------------------------------------------------
 # httpx (echt im venv — nach p02-Import verwenden)
 # ---------------------------------------------------------------------------
-import httpx  # noqa: E402
+import httpx
 
 # ---------------------------------------------------------------------------
 # Hilfs-Mocks
@@ -524,7 +548,9 @@ class TestSaveWebsiteContext:
 
     def test_fail_open_on_db_error(self):
         """DB-Fehler → kein Raise (fail-open)."""
-        with patch("models.base.sync_session_factory", side_effect=RuntimeError("db down"), create=True):
+        with patch(
+            "models.base.sync_session_factory", side_effect=RuntimeError("db down"), create=True
+        ):
             # Darf keinen Exception werfen
             p02._save_website_context("tenant-123", {"unternehmensname": "Acme"})
 

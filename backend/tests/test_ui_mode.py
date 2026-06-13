@@ -24,8 +24,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-
 # ── Stubs für schwere Dependencies ───────────────────────────────────────────
+
 
 def _stub(name: str) -> types.ModuleType:
     if name not in sys.modules:
@@ -76,12 +76,15 @@ if "fastapi" not in sys.modules:
     class _FakeAPIRouter:
         def __init__(self, *a, **kw):
             pass
+
         def _noop_decorator(self, *a, **kw):
             def decorator(fn):
                 return fn
+
             if len(a) == 1 and callable(a[0]):
                 return a[0]
             return decorator
+
         get = post = put = patch = delete = _noop_decorator
 
     _fa.APIRouter = _FakeAPIRouter
@@ -94,13 +97,20 @@ if "fastapi" not in sys.modules:
     _stub("fastapi.responses").StreamingResponse = MagicMock()
     HTTPException = _FakeHTTPException
 else:
-    from fastapi import HTTPException  # noqa: E402
+    from fastapi import HTTPException
 
 # models, services, dependencies
 for _mod in [
-    "models", "models.base", "models.tenant", "models.content_performance",
-    "services", "services.nextcloud", "services.tenant_export",
-    "services.tenant_import", "services.llm", "dependencies",
+    "models",
+    "models.base",
+    "models.tenant",
+    "models.content_performance",
+    "services",
+    "services.nextcloud",
+    "services.tenant_export",
+    "services.tenant_import",
+    "services.llm",
+    "dependencies",
 ]:
     _stub(_mod)
 
@@ -117,7 +127,7 @@ sys.modules["services.llm"].PURPOSE_MODEL_MAP = {}
 sys.modules["services.llm"].REQUESTY_MODELS = {}
 
 # ── Jetzt erst importieren ────────────────────────────────────────────────────
-from api.tenants import (  # noqa: E402
+from api.tenants import (
     DEFAULT_UI_MODE,
     get_ui_mode,
     set_ui_mode,
@@ -138,6 +148,7 @@ def _mode_payload(mode: str):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _make_tenant(settings=None):
     t = MagicMock()
     t.id = uuid.UUID("11111111-1111-1111-1111-111111111111")
@@ -150,7 +161,7 @@ def _make_async_db():
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 # ── GET /tenants/me/ui-mode ───────────────────────────────────────────────────
