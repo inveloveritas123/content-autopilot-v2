@@ -92,9 +92,10 @@ _SCHEMA_FILE_MAP: dict[str, str] = {
     "p03": "p03.schema.json",
     "p04": "p04.schema.json",
     "voice_profile": "voice_profile.schema.json",
+    "values": "values.schema.json",  # #43 — Werte-Entität (Chris-Abstimmung ausstehend)
 }
 
-# Semantische Default-Prompt-Version je Prompt (Pattern: ^p0X-vN.N$).
+# Semantische Default-Prompt-Version je Prompt (Pattern: ^p0X-vN.N$ oder ^values-vN.N$).
 # Louis' Prompts pinnen das Pattern NICHT zuverlässig im Output, das LLM darf
 # es also nicht bestimmen. Server-seitig setzen wir die Vertrags-Version hier.
 # Override pro Prompt via Env CANONICAL_PROMPT_VERSION_P01 etc.
@@ -102,6 +103,7 @@ CANONICAL_PROMPT_VERSION: dict[str, str] = {
     "p01": "p01-v1.0",
     "p03": "p03-v1.0",
     "p04": "p04-v1.0",
+    "values": "values-v1.0",  # #43 — Werte-Schema-Version (Namensraum: Schema, nicht Prompt)
 }
 
 # Autoritative _meta-Felder: vom Server bestimmt, NIE vom LLM überschrieben.
@@ -1410,7 +1412,8 @@ def resolve_canonical_prompt_version(prompt_key: str) -> str:
     """
     key = prompt_key.lower()
     env_val = os.environ.get(f"CANONICAL_PROMPT_VERSION_{key.upper()}", "").strip()
-    if env_val and re.match(r"^p0[0-9]+-v[0-9]+\.[0-9]+$", env_val):
+    # Erweitert um 'values'-Präfix (Issue #43): values-v1.0 ist gültig neben p0X-vN.N.
+    if env_val and re.match(r"^(p0[0-9]+|values)-v[0-9]+\.[0-9]+$", env_val):
         return env_val
     return CANONICAL_PROMPT_VERSION.get(key, f"{key}-v1.0")
 

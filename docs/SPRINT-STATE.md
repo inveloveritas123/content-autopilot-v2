@@ -41,9 +41,38 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 **Aktueller Fokus:** Sprint-1-Detailplan (fable) wird erstellt; #46 läuft parallel.
 **Nächste Aktion:** fable-Plan abwarten → S1.1 (#17) starten.
 
-### Backlog danach (Sprint 2+, Reihenfolge vorläufig)
-- Sprint 2 „Setup-Schema": #43-Impl (DB-Migration → Robert!), #29/#25/#26 Schema, #44 Wizard 6→8.
-- Sprint 3 „Board-Vervollständigung": #35 P07-Push, #36 Intent-Routing, #37 Feedback-Loop, #41 P17-Ausrichtung, #38 Quality-Gate, #39 P02, #40 Voice-Fallback.
+### GitHub-Sprint-Struktur (angelegt)
+- Milestones 1/2/3 = Sprint 1/2/3; alle Issues zugeordnet.
+- **Master-Tracking-Issue #59** = detaillierter Fahrplan Architekt+Knecht (Reihenfolge, Deps, Akzeptanz, Robert-Entscheide).
+
+---
+
+## BOOTSTRAP (bei Wiederaufnahme — z.B. nach Limit-Reset/Kompaktierung)
+1. Diese Datei lesen → `git -C content-autopilot-v2 log --oneline -10` (Stand prüfen).
+2. Branch `arch/weekloop`. Test-Sanity (sollte grün sein): `cd content-autopilot-v2/backend && PYTHONPATH=. ../../.venv/bin/python -m pytest tests/test_idempotency_routing.py tests/test_telegram_inbound_routing.py tests/test_p08_service.py tests/test_session_post_task.py tests/test_eu_router_migration.py tests/test_pipeline_llm.py tests/test_layer1_extraction.py -q` → 138 passed erwartet.
+3. **Subagenten verfügbar?** (Session-Limit-Reset 22:30 Europe/Berlin). Wenn ja → Sprint 2 bauen; wenn nein → Hauptloop-eigene, kleine, sichere Items oder erneut warten.
+4. Sprint-2-Plan: fable Detailplan je Issue gegen den Code (wie SPRINT-1-PLAN.md), dann sonnet/opus-Impl mit TDD + geteiltem Test-Helper `tests/_telegram_task_env.py` (Anti-Pollution!), Gate-Orakel, push, Issue kommentieren.
+
+### Sprint 2 — Reihenfolge & autonom-Machbarkeit
+| Issue | Tier | autonom jetzt? | Hinweis |
+|---|---|---|---|
+| #44 Wizard 6→8 Phasen | sonnet | ✅ Struktur (Fragen-Content später Chris) | self-contained in `api/wizard.py:WIZARD_PHASES`; Board 2.2 listet die 8 Phasen |
+| #43 Werte-Entität | fable→sonnet | ⚠️ Code ja, **Migration→Robert** | Konzept `docs/CONCEPT-43-werte-entitaet.md`; Tabelle `tenant_customer_values` NICHT auf Prod anwenden |
+| #29 Schema-Konsumenten | opus | ⚠️ besser nach #33-Merge | gradual rewire; ohne echte Schema-Läufe riskant |
+| #25/#26 Alt-Rows/_meta | sonnet | ⚠️ dep #29 | |
+| #30 Modell-Pinning | haiku | ⚠️ vorsichtig | -latest pinnen ändert Verhalten → eher Policy-Ausnahme dokumentieren |
+| #33/#32/#34/#47/#48/#49 | knecht | ❌ Knecht-Revier | nicht anfassen |
+
+**Empfohlener erster Sprint-2-Schritt nach Reset:** fable-Detailplan #44 + #43 → #44 sonnet bauen (sicher, board-anchored) → #43 Code+Migration vorlegen (Robert-Flag).
+
+### Sprint-2-Fortschritt
+- ✅ **#44 Wizard 6→8 Phasen fertig** — `api/wizard_phases.py` (dep-frei extrahiert), 8 Board-Phasen in Reihenfolge, hardcoded „6" entfernt; 101 Tests grün. Fragen-Wortlaut der neuen Phasen = Chris-Flag (board-konforme Defaults).
+- ✅ **#43 Schritt 1 fertig**: Migration 053 (`tenant_customer_values`, down_revision=049, freigabe-robert, NICHT angewandt) + canonical_profiles TABLE_MAP/Resolver/Regex + schema_transformer. 29 Tests + 115 Anti-Pollution grün. Pre-existing Py3.9-Bug in canonical_profiles mitgefixt. Robert-Flag in ROBERT-BACKLOG.
+- ✅ **#43 Schritt 3 fertig**: P12-Injektion — `_load_active_profiles` → 4-Tupel inkl. customer_values, fail-open. `VALUES_KEYS_FOR_P12`-Whitelist.
+- ✅ **#43 Schritt 2 fertig**: `tasks/values_backfill_task.py` — idempotenter, tenant-gescopter Backfill aus memory_chunks 'werte' (+ Setup-Werte), source='memory_promotion', fail-open (Tabelle fehlt → no_op).
+- ✅ **#43 Schritt 4 fertig**: P17-Vorbau — `brand_voice.py` decide_drift_observation entitäts-generisch (`entity_type` → Zieltabelle via `brand_voice_drift_helpers._ENTITY_TABLE`), neue `op:"append"`-Operation für Listen-Felder (werte[]); voice-Pfad 100% rückwärtskompatibel (COALESCE entity_type='voice'). Schreibziel für #41 steht.
+- ✅ **#43 KOMPLETT** — Board-Trias Voice/WERTE/Avatar hergestellt (Schema+Resolver+P12-Injektion+Backfill+P17-Ziel). Volle Wirkung nach Migration 053 (Robert) + Backfill-Lauf (Knecht). Test-Infra durabel saniert: **307 Stub-Tests reihenfolge-unabhängig grün** über 14 Suiten.
+- **Nächste Aktion:** Sprint 2 Rest (#29/#25/#26 Schema — besser nach #33-Merge) ODER Sprint 3 (#35 P07-Push, #37 Feedback-Loop, #38 Quality-Gate — opus). Robert-Merges + Migration entblocken die Sprint-2-Abnahme.
 
 ---
 
