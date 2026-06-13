@@ -1,0 +1,302 @@
+"""Gemeinsame Stub-Umgebung für tasks.telegram_task — KEIN Test-Modul.
+
+Wird von test_telegram_inbound_routing.py und test_idempotency_routing.py
+importiert, um den sys.modules-Pollution-Konflikt zwischen den beiden Dateien
+zu lösen (Issue #16, #18, #56, #57).
+
+Kernprinzipien
+--------------
+* tasks.telegram_task wird **genau einmal** via spec_from_file_location geladen
+  und in sys.modules["tasks.telegram_task"] eingetragen. Jeder spätere Import
+  dieser Umgebung erhält dasselbe Modulobjekt zurück (``tt``).
+* ``services`` wird NICHT als Plain-ModuleType gestubbt — das echte Paket-
+  verzeichnis bleibt erreichbar, damit test_eu_router_migration.py und
+  test_pipeline_llm.py ``import services.pipeline_llm`` erfolgreich ausführen
+  können.
+* Alle Stubs werden mit ``if name not in sys.modules``-Guards gesetzt, damit
+  Wiederholungsimporte idempotent sind.
+* Stub-Submodule werden als Attribut des jeweiligen Eltern-Pakets registriert,
+  damit ``@patch("services.<sub>.<fn>")`` via ``getattr`` aufgelöst werden kann.
+
+Exportierte Namen
+-----------------
+  tt                  — das telegram_task-Modulobjekt
+  make_extraction     — Helfer: ExtractionResult-Namespace
+  make_decision       — Helfer: RoutingDecision-Namespace
+  make_p08_result     — Helfer: P08Result-Namespace
+  active_session      — Helfer: aktive Bot-Session
+  make_guard_db_mock  — Helfer: Mock-DB-Kontext für Idempotenz-Guard-SELECT
+"""
+
+from __future__ import annotations
+
+import importlib.util as _ilu
+import os
+import sys
+import types
+from unittest.mock import MagicMock
+
+# ---------------------------------------------------------------------------
+# Pfad sicherstellen
+# ---------------------------------------------------------------------------
+
+_BACKEND_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
+
+# ---------------------------------------------------------------------------
+# Interner Stub-Helfer — nur wenn noch nicht in sys.modules
+# ---------------------------------------------------------------------------
+
+
+def _stub(name: str) -> types.ModuleType:
+    """Stub-Modul nur anlegen, wenn noch nicht in sys.modules."""
+    if name in sys.modules:
+        return sys.modules[name]
+    mod = types.ModuleType(name)
+    sys.modules[name] = mod
+    return mod
+
+
+# ---------------------------------------------------------------------------
+# httpx — echtes Modul ist im venv installiert; KEIN Stub.
+# test_pipeline_llm.py braucht httpx.HTTPStatusError aus dem echten Modul.
+# telegram_task.py importiert httpx ebenfalls — da httpx verfügbar ist,
+# brauchen wir keinen Stub.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# sqlalchemy + Untermodule
+# ---------------------------------------------------------------------------
+
+if "sqlalchemy" not in sys.modules:
+    _sq = _stub("sqlalchemy")
+    _sq.text = lambda q: q
+
+for _name in ["sqlalchemy.ext", "sqlalchemy.ext.asyncio", "sqlalchemy.orm"]:
+    if _name not in sys.modules:
+        _m = _stub(_name)
+        if _name == "sqlalchemy.ext.asyncio":
+            _m.AsyncSession = MagicMock
+            _m.create_async_engine = MagicMock()
+        if _name == "sqlalchemy.orm":
+            _m.sessionmaker = MagicMock()
+
+# ---------------------------------------------------------------------------
+# config.settings
+# ---------------------------------------------------------------------------
+
+if "config" not in sys.modules:
+    _cfg = _stub("config")
+    _cfg.settings = types.SimpleNamespace(
+        telegram_bot_token="test-token",
+        database_url="postgresql+asyncpg://t:t@localhost/t",
+    )
+
+# ---------------------------------------------------------------------------
+# models.base
+# ---------------------------------------------------------------------------
+
+if "models" not in sys.modules:
+    _stub("models")
+if "models.base" not in sys.modules:
+    _mb = _stub("models.base")
+    _mb.sync_session_factory = MagicMock()
+
+# ---------------------------------------------------------------------------
+# services — WICHTIG: NICHT als Plain-ModuleType stubben.
+# Das echte Paketverzeichnis muss erreichbar bleiben, damit andere
+# Testdateien (test_eu_router_migration, test_pipeline_llm) über normales
+# Python-Import auf services.pipeline_llm zugreifen können.
+#
+# Strategie:
+#   1. services.llm und services.nextcloud VOR services-Import stubben
+#      (services/__init__.py importiert sie; llm.py nutzt str|None = Py3.10+
+#       Syntax die in Py3.9 nicht läuft).
+#   2. services als echtes Paket importieren.
+#   3. Danach services.voice_transcription/layer1/layer2/p08 als Stubs
+#      in sys.modules eintragen UND als Paketat­tribute registrieren.
+# ---------------------------------------------------------------------------
+
+# services.llm VOR services-Import stubben (str|None in llm.py bricht Py3.9)
+if "services.llm" not in sys.modules:
+    _llm = _stub("services.llm")
+    _llm.llm_service = MagicMock()
+
+    class _BudgetExceededError(Exception):
+        pass
+
+    class _RateLimitExceededError(Exception):
+        pass
+
+    _llm.BudgetExceededError = _BudgetExceededError
+    _llm.RateLimitExceededError = _RateLimitExceededError
+
+# services.nextcloud VOR services-Import stubben
+if "services.nextcloud" not in sys.modules:
+    _nc = _stub("services.nextcloud")
+    _nc.nextcloud_client = None
+
+# Jetzt services als echtes Paket importieren (damit __path__ gesetzt ist)
+import services as _services_pkg
+
+# services.voice_transcription — telegram_task importiert es auf Modulebene
+if "services.voice_transcription" not in sys.modules:
+    _vt = _stub("services.voice_transcription")
+
+    class _TranscriptionError(Exception):
+        pass
+
+    class _TranscriptionResult:
+        def __init__(self, text="", model_name="whisper", confidence=0.9):
+            self.text = text
+            self.model_name = model_name
+            self.confidence = confidence
+
+    _vt.TranscriptionError = _TranscriptionError
+    _vt.TranscriptionResult = _TranscriptionResult
+    _vt.transcribe_voice = MagicMock()
+
+# Als Paket-Attribut registrieren (für @patch("services.voice_transcription.*"))
+_services_pkg.voice_transcription = sys.modules["services.voice_transcription"]
+
+# services.layer1_extraction — lazy in _route_inbound_message importiert
+if "services.layer1_extraction" not in sys.modules:
+    _l1 = _stub("services.layer1_extraction")
+    _l1.extract_intent_features = MagicMock()
+_services_pkg.layer1_extraction = sys.modules["services.layer1_extraction"]
+
+# services.layer2_routing — lazy in _route_inbound_message importiert
+if "services.layer2_routing" not in sys.modules:
+    _l2 = _stub("services.layer2_routing")
+    _l2.route_telegram_intent = MagicMock()
+    _l2.persist_routing_decision = MagicMock()
+_services_pkg.layer2_routing = sys.modules["services.layer2_routing"]
+
+# Sicherstellen, dass persist_routing_decision immer vorhanden ist
+# (unabhängig davon, welches Testmodul den Stub zuerst angelegt hat)
+_l2_mod = sys.modules["services.layer2_routing"]
+if not hasattr(_l2_mod, "persist_routing_decision"):
+    _l2_mod.persist_routing_decision = MagicMock()
+
+# services.p08_service — lazy in _route_inbound_message importiert
+if "services.p08_service" not in sys.modules:
+    _p08 = _stub("services.p08_service")
+    _p08.p08_response = MagicMock()
+_services_pkg.p08_service = sys.modules["services.p08_service"]
+
+# ---------------------------------------------------------------------------
+# api.telegram — Lazy-Import in _route_inbound_message (#17).
+# Stub-Modul mit _send_telegram_message als MagicMock, damit Tests
+# das Attribut via patch("api.telegram._send_telegram_message") ersetzen können.
+# ---------------------------------------------------------------------------
+
+if "api" not in sys.modules:
+    _stub("api")
+if "api.telegram" not in sys.modules:
+    _at = _stub("api.telegram")
+    _at._send_telegram_message = MagicMock()
+# Als Paket-Attribut registrieren (für @patch-Auflösung via getattr)
+sys.modules["api"].telegram = sys.modules["api.telegram"]
+
+# ---------------------------------------------------------------------------
+# celery + tasks.celery_app
+# ---------------------------------------------------------------------------
+
+if "celery" not in sys.modules:
+    _stub("celery")
+
+
+class _FakeCeleryApp:
+    def task(self, *a, **kw):
+        def deco(fn):
+            return fn
+
+        return deco
+
+
+if "tasks" not in sys.modules:
+    _stub("tasks")
+if "tasks.celery_app" not in sys.modules:
+    _ca = _stub("tasks.celery_app")
+    _ca.celery_app = _FakeCeleryApp()
+
+# ---------------------------------------------------------------------------
+# tasks.telegram_task — genau EINMAL laden; bei Wiederholungsimport wiederverwenden
+# ---------------------------------------------------------------------------
+
+if "tasks.telegram_task" not in sys.modules:
+    _spec = _ilu.spec_from_file_location(
+        "tasks.telegram_task",
+        os.path.join(_BACKEND_DIR, "tasks", "telegram_task.py"),
+    )
+    _tt_mod = _ilu.module_from_spec(_spec)
+    sys.modules["tasks.telegram_task"] = _tt_mod
+    _spec.loader.exec_module(_tt_mod)
+    # Als Attribut des tasks-Stub-Pakets registrieren (für @patch("tasks.telegram_task.*"))
+    sys.modules["tasks"].telegram_task = _tt_mod
+
+#: Das gemeinsam genutzte telegram_task-Modulobjekt.
+tt = sys.modules["tasks.telegram_task"]
+
+
+# ---------------------------------------------------------------------------
+# Gemeinsame Helfer (aus beiden Test-Dateien konsolidiert)
+# ---------------------------------------------------------------------------
+
+
+def make_extraction(intent: str = "answer_to_question") -> types.SimpleNamespace:
+    """Erzeugt einen ExtractionResult-Namespace für Tests."""
+    return types.SimpleNamespace(
+        intent=intent,
+        session_context="active_response",
+        extracted_features={"key_insight": "wir wachsen"},
+        flagged_for_review=False,
+        flag_reasons=[],
+        routed_to="ok",
+    )
+
+
+def make_decision(target: str, payload: dict | None = None) -> types.SimpleNamespace:
+    """Erzeugt einen RoutingDecision-Namespace für Tests."""
+    return types.SimpleNamespace(target=target, payload=payload or {})
+
+
+def make_p08_result(
+    next_action: str = "vertiefen",
+    message: str = "Erzähl mir mehr.",
+    is_closed: bool = False,
+    quality: str = "gold",
+    session_id: str = "sess-1",
+) -> types.SimpleNamespace:
+    """Erzeugt einen P08Result-Namespace für Tests.
+
+    Alle Felder sind überschreibbar, damit Tests Folgefrage- und Abschluss-
+    Szenarien (is_closed=True, message='Danke!') direkt parametrisieren können.
+    """
+    return types.SimpleNamespace(
+        next_action=next_action,
+        message=message,
+        quality=quality,
+        session_id=session_id,
+        is_closed=is_closed,
+    )
+
+
+def active_session() -> types.SimpleNamespace:
+    """Erzeugt eine aktive Bot-Session für Tests."""
+    return types.SimpleNamespace(id="sess-1", status="active")
+
+
+def make_guard_db_mock(routed_to: str | None = None) -> MagicMock:
+    """Erzeugt einen Mock-DB-Kontext-Manager für den Idempotenz-Guard-SELECT.
+
+    routed_to=None  → (None,)        — Nachricht noch nicht geroutet (Guard lässt durch).
+    routed_to='p08' → ('p08_response',) — bereits geroutet (Guard dedupliziert).
+    """
+    mock_db = MagicMock()
+    mock_db.__enter__ = MagicMock(return_value=mock_db)
+    mock_db.__exit__ = MagicMock(return_value=False)
+    mock_db.execute.return_value.fetchone.return_value = (routed_to,)
+    return mock_db

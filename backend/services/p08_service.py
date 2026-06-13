@@ -22,7 +22,7 @@ from services.pipeline_llm import call_pipeline_llm
 
 logger = logging.getLogger(__name__)
 
-MAX_QUESTIONS_TARGETED = 5
+MAX_QUESTIONS_TARGETED = 3  # Board 5.2: max 2–3 Rückfragen (Issue #17)
 MAX_QUESTIONS_RANDOM_SMART = 3
 
 # 17 question categories for random_smart mode

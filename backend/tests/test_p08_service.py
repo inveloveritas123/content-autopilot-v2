@@ -210,6 +210,25 @@ def _make_db_session_row(
 
 
 # ---------------------------------------------------------------------------
+# #17 Board-Compliance Guard
+# ---------------------------------------------------------------------------
+
+
+class TestBoardCompliance:
+    def test_max_questions_targeted_is_board_compliant(self):
+        """MAX_QUESTIONS_TARGETED muss == 3 sein (Board 5.2: max 2–3 Rückfragen, Issue #17)."""
+        from services import p08_service as _p08_svc
+        assert _p08_svc.MAX_QUESTIONS_TARGETED == 3, (
+            f"MAX_QUESTIONS_TARGETED ist {_p08_svc.MAX_QUESTIONS_TARGETED}, erwartet 3 (Board 5.2)"
+        )
+
+    def test_max_questions_random_smart_unchanged(self):
+        """MAX_QUESTIONS_RANDOM_SMART bleibt 3 (nicht von #17 betroffen)."""
+        from services import p08_service as _p08_svc
+        assert _p08_svc.MAX_QUESTIONS_RANDOM_SMART == 3
+
+
+# ---------------------------------------------------------------------------
 # Static Guard
 # ---------------------------------------------------------------------------
 
@@ -414,9 +433,12 @@ class TestP08Response:
     def test_response_closes_on_max_questions(
         self, mock_load_prompt, mock_call_llm, mock_db_factory
     ):
-        """When current_question_index >= max, session is closed without LLM call."""
+        """When current_question_index >= max, session is closed without LLM call.
+
+        #17: MAX_QUESTIONS_TARGETED is now 3 (Board 5.2). Test uses index=3 (>= 3) to trigger.
+        """
         messages = [{"bot": "Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
-        session_row = _make_db_session_row(mode="targeted", messages=messages, current_question_index=5)
+        session_row = _make_db_session_row(mode="targeted", messages=messages, current_question_index=3)
 
         ctx = MagicMock()
         ctx.__enter__ = MagicMock(return_value=ctx)

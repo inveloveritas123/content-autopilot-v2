@@ -102,7 +102,33 @@ def _load_active_session(tenant_id: str) -> object | None:
     return types.SimpleNamespace(id=row.id, status=row.status)
 
 
-def _route_inbound_message(tenant_id: str, text_content: str) -> dict | None:
+def _resolve_chat_id(tenant_id: str) -> int | None:
+    """Lookup active Telegram chat_id for a tenant (Issue #17).
+
+    1:1 nach dem Muster random_smart_scheduler._send_opening_question.
+    Fail-open: gibt None zurück bei Fehler oder wenn kein aktiver Link.
+    E2: nur type(e).__name__ loggen, nie str(exc).
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text(
+                    "SELECT telegram_chat_id FROM tenant_telegram_link "
+                    "WHERE tenant_id = :tid AND status = 'active' LIMIT 1"
+                ),
+                {"tid": tenant_id},
+            ).fetchone()
+        if row and row[0] is not None:
+            return int(row[0])
+        return None
+    except Exception as exc:
+        logger.warning("_resolve_chat_id failed: %s", type(exc).__name__)
+        return None
+
+
+def _route_inbound_message(
+    tenant_id: str, text_content: str, log_id: str | None = None
+) -> dict | None:
     """Verdrahtet eingehende Antworten mit der Intent-Routing-Pipeline (Issue #16).
 
     Schritt 1: aktive Session laden (PRIMÄRES Gate). Keine Session → None.
@@ -140,6 +166,24 @@ def _route_inbound_message(tenant_id: str, text_content: str) -> dict | None:
                 decision.payload["features"],
             )
             routing_info["p08_next_action"] = result.next_action
+
+            # #17 — Folgefrage / Abschluss-Nachricht an den Kunden zurücksenden.
+            # Fail-open: Send-Fehler darf den Chunk-Return NICHT kaputtmachen.
+            # E2: nur type(exc).__name__ loggen, nie str(exc).
+            chat_id = _resolve_chat_id(tenant_id)
+            if chat_id is not None and result.message:
+                try:
+                    from api.telegram import (
+                        _send_telegram_message,
+                    )  # Lazy-Import wie scheduler.py:104
+
+                    _send_telegram_message(chat_id, result.message)
+                    routing_info["p08_message_sent"] = True
+                except Exception as exc:
+                    logger.warning("p08 message send failed: %s", type(exc).__name__)
+                    routing_info["p08_message_sent"] = False
+            else:
+                routing_info["p08_message_sent"] = False
 
         return routing_info
     except Exception as exc:
