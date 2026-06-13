@@ -121,6 +121,21 @@ if "models.base" not in sys.modules:
     _mb.async_engine = MagicMock()
     _mb.sync_engine = MagicMock()
 
+# Models-Submodule vorab stubben: ohne diese Stubs würde Python beim Import
+# von api.analytics / services.provider_resolver die ECHTEN Dateien laden,
+# die `from .base import Base` machen. Mit Base=MagicMock() ergibt das dann
+# `class LLMCallLog(MagicMock())` → kaputte MagicMock-Klasse ohne Attribute.
+# MagicMock()-Instanzen auto-create Attribute → sqlfunc.date(LLMCallLog.created_at) ok.
+if "models.llm_call_log" not in sys.modules:
+    _mllc = _stub("models.llm_call_log")
+    _mllc.LLMCallLog = MagicMock()
+if "models.tenant" not in sys.modules:
+    _mten = _stub("models.tenant")
+    _mten.Tenant = MagicMock()
+if "models.llm_provider" not in sys.modules:
+    _mlp = _stub("models.llm_provider")
+    _mlp.LLMProvider = MagicMock()
+
 # ---------------------------------------------------------------------------
 # services — WICHTIG: NICHT als Plain-ModuleType stubben.
 # Das echte Paketverzeichnis muss erreichbar bleiben, damit andere
@@ -174,6 +189,10 @@ if "services.provider_resolver" not in sys.modules:
     _pr = _stub("services.provider_resolver")
     _pr.get_active_provider = MagicMock(return_value=None)
     _pr.track_cost = MagicMock()
+    # llm.py importiert diese Konstanten lazy aus provider_resolver.
+    # Werte entsprechen den ENV-Defaults aus provider_resolver.py.
+    _pr._DAILY_CAP_USD = 5.0
+    _pr._GLOBAL_CAP_USD = 20.0
 _services_pkg.provider_resolver = sys.modules["services.provider_resolver"]
 
 # services.voice_transcription — telegram_task importiert es auf Modulebene.

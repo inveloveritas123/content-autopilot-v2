@@ -89,11 +89,15 @@ if "tasks.celery_app" not in sys.modules:
 
     _ca.celery_app = _FakeCeleryApp()
 
-# config — minimal
+# config — minimal stub; muss alle Felder enthalten die Downstream-Module nutzen.
+# max_calls_per_tenant_per_hour + max_calls_global_per_hour: services.throttle liest
+# sie zur Laufzeit (patch.object braucht pre-existente Attribute).
 if "config" not in sys.modules:
     _cfg = _stub("config")
     _cfg.settings = types.SimpleNamespace(
-        database_url="postgresql+asyncpg://test:test@localhost/test"
+        database_url="postgresql+asyncpg://test:test@localhost/test",
+        max_calls_per_tenant_per_hour=200,
+        max_calls_global_per_hour=1000,
     )
 
 # services.llm — BudgetExceededError + llm_service

@@ -97,15 +97,16 @@ class TestLayer2Routing:
         assert result.reason == "unmapped_intent"
 
     def test_spontaneous_idea_routes_p10(self):
+        """Ohne aktive Session → p13_variants (Issue #36 S3: neuer No-Session-Zweig)."""
         from services.layer2_routing import route_telegram_intent
 
         result = route_telegram_intent(
             _extraction("spontaneous_idea"),
             tenant_id="tenant-xyz",
         )
-        assert result.target == "p10_extract_post_kernel"
+        assert result.target == "p13_variants"
         assert result.payload["tenant_id"] == "tenant-xyz"
-        assert result.reason == "spontaneous_idea"
+        assert result.reason == "own_idea_to_variants"
 
     def test_post_feedback_with_post_id_routes_voice_feedback(self):
         from services.layer2_routing import route_telegram_intent

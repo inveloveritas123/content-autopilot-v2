@@ -8,9 +8,70 @@ Tests (ohne echte DB — reine Logik-Tests):
   test_csv_export
 """
 
+import importlib.util as _ilu
+import os
+import sys
+import types
+
+
+# ---------------------------------------------------------------------------
+# Fix: wenn _telegram_task_env (via test_branche_resolution) zuerst geladen
+# wurde, ist models.base.Base = MagicMock() — das bricht class LLMCallLog(Base).
+# Wir installieren eine echte DeclarativeBase und laden die Model-Dateien neu,
+# damit LLMCallLog echte SQLAlchemy-Column-Descriptoren hat (nötig für select()).
+# ---------------------------------------------------------------------------
+def _fix_models_for_sqlalchemy() -> None:
+    from sqlalchemy.orm import DeclarativeBase
+
+    mb = sys.modules.get("models.base")
+    if (
+        mb is not None
+        and isinstance(getattr(mb, "Base", None), type)
+        and issubclass(mb.Base, DeclarativeBase)
+    ):
+        return  # already real — nothing to do
+
+    class _Base(DeclarativeBase):
+        pass
+
+    new_mb = types.ModuleType("models.base")
+    new_mb.Base = _Base
+    new_mb.sync_session_factory = MagicMock()
+    new_mb.async_session_factory = MagicMock()
+    new_mb.sync_engine = MagicMock()
+    new_mb.async_engine = MagicMock()
+    sys.modules["models.base"] = new_mb
+    if "models" in sys.modules:
+        sys.modules["models"].base = new_mb
+
+    _backend = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+
+    def _reload(dotted: str, relpath: str) -> None:
+        sys.modules.pop(dotted, None)
+        spec = _ilu.spec_from_file_location(dotted, os.path.join(_backend, relpath))
+        mod = _ilu.module_from_spec(spec)
+        sys.modules[dotted] = mod
+        spec.loader.exec_module(mod)
+
+    _reload("models.llm_call_log", "models/llm_call_log.py")
+    _reload("models.tenant", "models/tenant.py")
+    sys.modules.pop("api.analytics", None)
+
+    # tasks wird von _telegram_task_env ohne __path__ gestubbt → tasks.cost_alert_task
+    # ist nicht findbar. __path__ nachträglich setzen damit der echte Task geladen wird.
+    _tasks = sys.modules.get("tasks")
+    if _tasks is not None and not hasattr(_tasks, "__path__"):
+        _tasks.__path__ = [os.path.join(_backend, "tasks")]
+        _tasks.__package__ = "tasks"
+
+
+from unittest.mock import MagicMock
+
+_fix_models_for_sqlalchemy()
+
 import csv
 import io
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
