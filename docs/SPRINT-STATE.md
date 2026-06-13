@@ -28,7 +28,7 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 
 | # | Issue | Titel | Tier | Dep | Status |
 |---|---|---|---|---|---|
-| S1.1 | #17 | Folgefrage/Abschluss per Telegram zurück + Limit 2–3 | sonnet | #16 ✅ | ☐ offen |
+| S1.1 | #17 | Folgefrage/Abschluss per Telegram zurück + Limit 2–3 | sonnet | #16 ✅ | ✅ fertig (Send via _send_telegram_message, Limit 5→3) |
 | S1.2 | #18 | Idempotenz gegen Doppel-Verarbeitung (update_id-Dedupe) | sonnet | #16 | ✅ fertig (2-Schicht: routed_to-Guard + update_id-Dedupe) |
 | S1.3 | #19 | [BLOCKER] Post-Generierung an Session-Abschluss + Post im Chat (M24-Kern-Gap) | opus | #17 | ✅ fertig (session_post_task, P12→P12b→Chat, 3-fach idempotent, E3-Scope) |
 | S1.4 | #46 | Letzte Seam-Bypässe (voice_drift/md_converter/sensitive_detector) auf EU-Router | sonnet | — | ✅ fertig (lokal 99 Tests grün; sensitive_detector-Modellwahl → Robert) |
@@ -36,10 +36,10 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 | S1.6 | #30 | Modell-Pinning: -latest-Modelle pinnen oder Policy-Ausnahme | haiku | — | ☐ offen |
 | S1.7 | #56 | #16-Followup: routed_to in telegram_message_log persistieren | sonnet | #16 ✅ | ✅ fertig (mit #18 gebündelt) |
 | S1.8 | #57 | #16-Followup: targeted-Sessions mode-Filter | sonnet | #16 ✅ | ✅ fertig (mit #18 gebündelt) |
-| S1.9 | — | Security-Review (fable) + Gate-Orakel über den ganzen Sprint | fable | alle | ☐ offen |
+| S1.9 | — | Security-Review + Gate-Orakel über den ganzen Sprint | fable→Architekt | alle | ✅ GRÜN (`docs/SPRINT-1-SECURITY-REVIEW.md`; fable-Pass nachzuholen nach Limit-Reset) |
 
-**Aktueller Fokus:** Sprint-1-Detailplan (fable) wird erstellt; #46 läuft parallel.
-**Nächste Aktion:** fable-Plan abwarten → S1.1 (#17) starten.
+**✅ SPRINT 1 ABGESCHLOSSEN** — Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→**Post im Chat**, M24-Kern-Gap geschlossen) + EU-Souveränität gehärtet (#46). Alle auf `arch/weekloop`, PR #55. Server-E2E = Knecht.
+**Nächste Aktion:** Sprint 2 (Setup/Schema) detailliert planen → bauen. Subagenten erst nach Session-Limit-Reset 22:30 Europe/Berlin verfügbar.
 
 ### GitHub-Sprint-Struktur (angelegt)
 - Milestones 1/2/3 = Sprint 1/2/3; alle Issues zugeordnet.
@@ -67,12 +67,25 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 
 ### Sprint-2-Fortschritt
 - ✅ **#44 Wizard 6→8 Phasen fertig** — `api/wizard_phases.py` (dep-frei extrahiert), 8 Board-Phasen in Reihenfolge, hardcoded „6" entfernt; 101 Tests grün. Fragen-Wortlaut der neuen Phasen = Chris-Flag (board-konforme Defaults).
+- 📋 **#43-Detailplan fertig** (`docs/SPRINT-2-PLAN-43.md`): Tabelle `tenant_customer_values` (Migration **053**, Robert-Freigabe), P12-Eingriff `p12_task.py:83-114`+`:333-339`, P17-Vorbau `brand_voice.py:759-899`. Atomare Schritte: 1) Schema+Resolver (sonnet, Review opus) → 2) Backfill → 3) P12-Injektion → 4) P17-decide-generisch.
 - ✅ **#43 Schritt 1 fertig**: Migration 053 (`tenant_customer_values`, down_revision=049, freigabe-robert, NICHT angewandt) + canonical_profiles TABLE_MAP/Resolver/Regex + schema_transformer. 29 Tests + 115 Anti-Pollution grün. Pre-existing Py3.9-Bug in canonical_profiles mitgefixt. Robert-Flag in ROBERT-BACKLOG.
 - ✅ **#43 Schritt 3 fertig**: P12-Injektion — `_load_active_profiles` → 4-Tupel inkl. customer_values, fail-open. `VALUES_KEYS_FOR_P12`-Whitelist.
 - ✅ **#43 Schritt 2 fertig**: `tasks/values_backfill_task.py` — idempotenter, tenant-gescopter Backfill aus memory_chunks 'werte' (+ Setup-Werte), source='memory_promotion', fail-open (Tabelle fehlt → no_op).
 - ✅ **#43 Schritt 4 fertig**: P17-Vorbau — `brand_voice.py` decide_drift_observation entitäts-generisch (`entity_type` → Zieltabelle via `brand_voice_drift_helpers._ENTITY_TABLE`), neue `op:"append"`-Operation für Listen-Felder (werte[]); voice-Pfad 100% rückwärtskompatibel (COALESCE entity_type='voice'). Schreibziel für #41 steht.
 - ✅ **#43 KOMPLETT** — Board-Trias Voice/WERTE/Avatar hergestellt (Schema+Resolver+P12-Injektion+Backfill+P17-Ziel). Volle Wirkung nach Migration 053 (Robert) + Backfill-Lauf (Knecht). Test-Infra durabel saniert: **307 Stub-Tests reihenfolge-unabhängig grün** über 14 Suiten.
-- **Nächste Aktion:** Sprint 2 Rest (#29/#25/#26 Schema — besser nach #33-Merge) ODER Sprint 3 (#35 P07-Push, #37 Feedback-Loop, #38 Quality-Gate — opus). Robert-Merges + Migration entblocken die Sprint-2-Abnahme.
+### Sprint 3 (begonnen)
+- ✅ **#35 P07-Research-Push fertig**: `p07_research_task` sendet neue Findings + Hooks pro Tenant in den Chat (`_resolve_chat_id`+`_send_telegram_message`), idempotent (natürlich über bestehenden source_item_id-SELECT, keine Migration), E3-gescopet, fail-open. 21 Tests, 301 Anti-Pollution grün. Bahn 4 Pfad A geschlossen.
+- ✅ **#40 Voice-Fallback fertig**: bei fehlender Stimmquelle generiert P03 ein kanonisches Voice-Profil aus Kontext+Avatar über den EU-Seam (VOICE_FALLBACK→S6), Fallback-Provenance, fail-open. 26 Tests grün.
+
+### ⚠️ Branch-Koordination (NEU, 2026-06-13)
+**Knecht arbeitet jetzt AKTIV auf `arch/weekloop`** (Commit 29e4b1c: ruff/eslint/yaml + Test-Collection-Pollution-Fixes). → **vor jedem Push `git fetch` + rebase** (nicht force-pushen). Arbeitsteilung: Architekt = Features (per-File-TDD grün), Knecht = CI-Grünung auf echter Py3.11-Umgebung.
+**Py3.9-Realität:** Lokaler venv = Py3.9; Code zielt auf Py3.11/3.12. Module mit `datetime.UTC` u.ä. sind lokal NICHT importierbar → kombinierte lokale Läufe können Collection-Errors zeigen, die in CI (Py3.11+) NICHT existieren. **Verifikations-Bar: Einzeldatei grün + per-File-Anti-Pollution; volle kombinierte Suite = CI (Knecht).**
+
+- ✅ **#37 Feedback-Loop fertig**: kein-aktive-Session + letzter Post (48h) + post_feedback-Intent → `regenerate_post_from_feedback` (neuer P12→P12b-Durchlauf mit Feedback im answers-Dict, Loop-Limit `TELEGRAM_FEEDBACK_MAX_ROUNDS`=2 migrationsfrei via content_pieces-COUNT, E3/fail-open). Mapping-Fix `voice_feedback_api→voice_feedback` (CHECK-Constraint 019:66). Cross-Model-Review GRÜN. 55 Tests beide Ordnungen grün. **Nebenbefund → neues Issue: layer1 cost-gate liest nicht-existente Tabelle `cost_tracking` (inert).**
+
+### Nächste Architekt-Items (alle per-File-TDD, dann fetch+rebase+push)
+- #36 Intent-Routing P09/P13 (opus, dep #16✅) · #41 P17-Beobachter (fable, dep #43✅) · #38 Quality-Gate (opus) · #22 P17-Prompt (sonnet) · cost_tracking-Fix (sonnet, neues Issue).
+- Sprint-2-Rest #29/#25/#26 (Schema) besser nach #33-Merge (Knecht).
 
 ---
 

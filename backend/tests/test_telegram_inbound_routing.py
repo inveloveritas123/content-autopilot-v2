@@ -505,3 +505,211 @@ class TestClosePostGenerationTrigger:
         ):
             result = tt._route_inbound_message("tenant-1", "Meine Antwort", log_id="log-19")
         return result, gen_task_mock
+
+
+# ---------------------------------------------------------------------------
+# #37 — Feedback-Loop: kein aktive Session → letzter Post → regenerate_post_from_feedback
+# ---------------------------------------------------------------------------
+
+
+def _make_last_post(post_id="post-42", summary="Mein letzter Post.", bot_session_id="sess-1"):
+    """Erzeugt ein SimpleNamespace das _resolve_last_post() zurückgeben würde."""
+    return types.SimpleNamespace(id=post_id, summary=summary, bot_session_id=bot_session_id)
+
+
+class TestFeedbackLoopRouting:
+    """#37: Keine aktive Session + letzter Post + post_feedback-Intent
+    → regenerate_post_from_feedback enqueued (fail-open).
+
+    Alle Tests patchen _load_active_session=None, _resolve_last_post=<Wert>,
+    extract_intent_features, route_telegram_intent und das Post-Feedback-Task.
+    """
+
+    def _run(
+        self,
+        last_post,
+        extraction_intent="post_feedback",
+        decision_target="voice_feedback_api",
+        enqueue_side_effect=None,
+    ):
+        """Führt _route_inbound_message im Feedback-Pfad aus und gibt
+        (result, regen_task_mock) zurück."""
+        regen_mock = MagicMock()
+        if enqueue_side_effect is not None:
+            regen_mock.apply_async.side_effect = enqueue_side_effect
+
+        with (
+            patch.object(tt, "_load_active_session", return_value=None),
+            patch.object(tt, "_resolve_last_post", return_value=last_post),
+            patch.object(
+                sys.modules["services.layer1_extraction"],
+                "extract_intent_features",
+                return_value=make_extraction(extraction_intent),
+            ),
+            patch.object(
+                sys.modules["services.layer2_routing"],
+                "route_telegram_intent",
+                return_value=make_decision(decision_target, {}),
+            ),
+            patch.object(
+                sys.modules["services.layer2_routing"],
+                "persist_routing_decision",
+                MagicMock(),
+            ),
+            patch.object(
+                sys.modules["tasks.post_feedback_task"],
+                "regenerate_post_from_feedback",
+                regen_mock,
+            ),
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+        ):
+            result = tt._route_inbound_message(
+                "tenant-1", "Das war zu lang, mach kürzer!", log_id="log-37"
+            )
+        return result, regen_mock
+
+    def test_no_session_no_last_post_returns_none(self):
+        """Regression: keine Session + kein letzter Post → None wie heute."""
+        with (
+            patch.object(tt, "_load_active_session", return_value=None),
+            patch.object(tt, "_resolve_last_post", return_value=None),
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+        ):
+            result = tt._route_inbound_message("tenant-1", "Irgendeine Notiz", log_id="log-37b")
+        assert result is None
+
+    def test_no_session_last_post_feedback_intent_enqueues(self):
+        """Keine Session + letzter Post + post_feedback-Intent → Enqueue mit korrekten Args."""
+        last_post = _make_last_post("post-42", "Mein Post.", "sess-1")
+        result, regen_mock = self._run(last_post)
+
+        assert result is not None
+        assert result.get("routed_to") == "voice_feedback_api"
+        assert result.get("regen_enqueued") is True
+        regen_mock.apply_async.assert_called_once()
+        call_args = regen_mock.apply_async.call_args
+        # args: [last_post.id, tenant_id, feedback_text, log_id]
+        positional_args = call_args[1].get("args") or call_args[0][0]
+        assert positional_args[0] == "post-42"
+        assert positional_args[1] == "tenant-1"
+        assert "log-37" in str(positional_args)
+
+    def test_no_session_last_post_smalltalk_no_enqueue(self):
+        """Keine Session + letzter Post + smalltalk-Intent → kein Enqueue, kein Chat-Spam."""
+        last_post = _make_last_post()
+        result, regen_mock = self._run(
+            last_post, extraction_intent="smalltalk", decision_target="close_friendly"
+        )
+        # Ergebnis darf nicht None sein (routing lief), aber kein Enqueue
+        assert result is not None
+        assert result.get("routed_to") == "close_friendly"
+        regen_mock.apply_async.assert_not_called()
+
+    def test_enqueue_failure_fail_open(self):
+        """apply_async wirft → routing_info bleibt intakt, kein Raise, regen_enqueued=False."""
+        last_post = _make_last_post()
+        result, regen_mock = self._run(last_post, enqueue_side_effect=RuntimeError("broker down"))
+        assert result is not None
+        assert result.get("routed_to") == "voice_feedback_api"
+        assert result.get("regen_enqueued") is False
+
+    def test_active_session_path_unchanged(self):
+        """Regression: aktive Session vorhanden → bestehender p08-Pfad läuft,
+        _resolve_last_post wird NICHT aufgerufen."""
+        resolve_mock = MagicMock()
+        p08_mock = MagicMock(return_value=make_p08_result())
+        with (
+            patch.object(tt, "_load_active_session", return_value=active_session()),
+            patch.object(tt, "_resolve_last_post", resolve_mock),
+            patch.object(
+                sys.modules["services.layer1_extraction"],
+                "extract_intent_features",
+                return_value=make_extraction("answer_to_question"),
+            ),
+            patch.object(
+                sys.modules["services.layer2_routing"],
+                "route_telegram_intent",
+                return_value=make_decision(
+                    "p08_response", {"session_id": "sess-1", "features": {}}
+                ),
+            ),
+            patch.object(sys.modules["services.p08_service"], "p08_response", p08_mock),
+            patch.object(tt, "_resolve_chat_id", return_value=None),
+            patch.object(sys.modules["api.telegram"], "_send_telegram_message", MagicMock()),
+            patch.object(
+                sys.modules["tasks.session_post_task"],
+                "generate_post_from_session",
+                MagicMock(),
+            ),
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+        ):
+            result = tt._route_inbound_message("tenant-1", "Antwort", log_id="log-active")
+        assert result is not None
+        assert result.get("routed_to") == "p08_response"
+        resolve_mock.assert_not_called()
+
+
+class TestPersistMappingFix:
+    """#37/D5: persist_routing_decision mappt voice_feedback_api → voice_feedback
+    (CHECK-Constraint in migration 019:66 kennt nur 'voice_feedback', nicht '_api').
+    """
+
+    def test_voice_feedback_api_mapped_to_voice_feedback(self):
+        """voice_feedback_api → voice_feedback vor dem UPDATE.
+
+        Testet die Mapping-Logik über _ROUTED_TO_MAP und einen direkten
+        persist_routing_decision-Aufruf auf dem echten Modulcode.
+
+        Strategie: persist_routing_decision über den bereits geladenen (echten oder
+        gestubbt) layer2_routing-Eintrag aus sys.modules aufrufen — der Stub hat
+        jedoch keine _ROUTED_TO_MAP. Daher direkt die Mapping-Konstante prüfen,
+        die in der echten Datei definiert ist (über den Helfer sys.modules im
+        echten Modul-Kontext, das per spec_from_file_location unter dem vollen
+        Paketnamen registriert und in sys.modules eingetragen wird).
+        """
+        import importlib.util as _ilu
+        import os as _os
+
+        _BACKEND = _os.path.normpath(_os.path.join(_os.path.dirname(__file__), ".."))
+        _MOD_NAME = "services.layer2_routing"
+
+        # Echtes Modul laden — falls Stub drin ist (kein _ROUTED_TO_MAP), ersetzen.
+        _existing = sys.modules.get(_MOD_NAME)
+        need_load = _existing is None or not hasattr(_existing, "_ROUTED_TO_MAP")
+        if need_load:
+            _spec = _ilu.spec_from_file_location(
+                _MOD_NAME,
+                _os.path.join(_BACKEND, "services", "layer2_routing.py"),
+            )
+            _l2_real = _ilu.module_from_spec(_spec)
+            sys.modules[_MOD_NAME] = _l2_real  # echten Namen registrieren → @dataclass OK
+            _spec.loader.exec_module(_l2_real)
+            import services as _svc
+
+            _svc.layer2_routing = _l2_real
+        else:
+            _l2_real = _existing
+
+        # Mapping-Konstante prüfen (schnell, kein DB nötig)
+        assert hasattr(_l2_real, "_ROUTED_TO_MAP"), "_ROUTED_TO_MAP fehlt im echten Modul"
+        assert _l2_real._ROUTED_TO_MAP.get("voice_feedback_api") == "voice_feedback"
+
+        # Außerdem: persist_routing_decision schreibt den gemappten Wert
+        written_vals = []
+        mock_db = MagicMock()
+        mock_db.__enter__ = MagicMock(return_value=mock_db)
+        mock_db.__exit__ = MagicMock(return_value=False)
+
+        def capture_execute(sql, params):
+            written_vals.append(params.get("rt"))
+
+        mock_db.execute.side_effect = capture_execute
+
+        decision = types.SimpleNamespace(target="voice_feedback_api")
+
+        with patch.object(_l2_real, "sync_session_factory", return_value=mock_db):
+            _l2_real.persist_routing_decision("log-map-1", decision)
+
+        assert written_vals == [
+            "voice_feedback"
+        ], f"Erwartet 'voice_feedback', bekommen {written_vals}"
