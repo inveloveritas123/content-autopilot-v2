@@ -89,9 +89,16 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 - **#42** Testmodus zuerst: kreative Pfade bleiben auf Gemini-Flash-Lite (S1), Quality-Mode erst wenn MVP-Kern 100%. **#46** sensitive_detector bleibt mistral-small (S2). → beides zentral über **Modell-Modus-Switch (Issue #72, späterer Sprint)**. **#43** Migration 053 **freigegeben** (anwenden nach Landing).
 - **Housekeeping offen (Robert):** PR #66 mergen, PR #55 schließen.
 
+- ✅ **#38 Chunk 1 fertig** (Commit 18513be): Stub→echter dep-freier Struktur-/Regel-Scorer (7 Signale + `config/quality_standards/*.yml`, Kontrakt stabil). Impl=Sonnet, Review=Opus (Cross-Model, PASS-WITH-NITS, Path-Traversal-Härtung). 74 Tests grün. **F1 0.27→1.0 — korpus-TRIVIAL** (Skelett), kein fertiger Gate → Korpus-Erweiterung = **Issue #80** (Daten). Plan `docs/SPRINT-3-PLAN-38.md`.
+
+### Subagenten-Arbeitsweise (Robert bekräftigt 2026-06-13)
+„Immer mit Subagenten + passendem Modell." → Impl delegieren (sonnet), Cross-Model-Review (fable/opus, ≠ Implementer; fable aktuell down → opus). Architekt-Hauptloop = Wiring/Entscheid/Review. Prompts/MD nie ohne Freigabe ändern → `docs/CHRIS-BACKLOG.md`. Originale in Louis-Übergabe `Import/Linkedin-Content-Autopilot/`.
+
 ### Nächste Architekt-Items (alle per-File-TDD, dann fetch+rebase+push)
-- #38 Quality-Gate vor Versand (opus, semantisch statt Stub) · cost_tracking-Fix (sonnet, neues Issue) · Sprint-2-Rest #29/#25/#26 (Schema) besser nach #33-Landing (Knecht).
-- #22 P17-Prompt-Headings = Chris (blockiert #41-Scharfschaltung). #72 Modell-Modus-Switch = späterer Sprint.
+- **#38 Chunk 3** (Final-Gate-Wiring in `session_post_task` vor `_send_telegram_message`) — **Shadow-Mode** (score+log, KEINE Verhaltensänderung; Blockieren erst nach Robert-Freigabe, da outward). Sonnet-Impl + Opus-Review.
+- #38 Chunk 2 (semantische LLM-Schicht) — Wert erst nach #80 (Korpus) messbar.
+- cost_tracking-Fix (sonnet) · Sprint-2-Rest #29/#25/#26 (Schema) nach #33-Landing (Knecht).
+- **Chris (blockiert Scharfschaltung):** #22 P17-Headings (#41), #39 P02-Prompt. **Robert-Housekeeping:** PR #66 mergen, #55 schließen. **Späterer Sprint:** #72 Modell-Modus-Switch.
 
 ---
 
