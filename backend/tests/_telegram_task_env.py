@@ -201,16 +201,19 @@ if "services.layer1_extraction" not in sys.modules:
     _l1.extract_intent_features = MagicMock()
 _services_pkg.layer1_extraction = sys.modules["services.layer1_extraction"]
 
-# services.layer2_routing — lazy in _route_inbound_message importiert
+# services.layer2_routing — echtes Modul laden (braucht nur models.base, bereits gestubbt).
+# test_layer2_routing.py importiert SecurityException + RoutingDecision direkt aus dem
+# echten Modul; ein reiner Stub-MagicMock wuerde die Routing-Logik-Tests brechen.
 if "services.layer2_routing" not in sys.modules:
-    _l2 = _stub("services.layer2_routing")
-    _l2.route_telegram_intent = MagicMock()
-    _l2.persist_routing_decision = MagicMock()
+    try:
+        import services.layer2_routing as _l2_real  # noqa: F401
+    except Exception:
+        _l2 = _stub("services.layer2_routing")
+        _l2.route_telegram_intent = MagicMock()
+        _l2.persist_routing_decision = MagicMock()
 _services_pkg.layer2_routing = sys.modules["services.layer2_routing"]
 
-# Sicherstellen, dass route_telegram_intent/persist_routing_decision/RoutingDecision
-# immer vorhanden sind (unabhängig davon, welches Testmodul den Stub zuerst anlegt).
-# RoutingDecision wird vom P09-Gate (#36) lazy importiert.
+# Attribute sicherstellen — falls Stub-Fallback aktiv oder echtes Modul unvollstaendig.
 _l2_mod = sys.modules["services.layer2_routing"]
 if not hasattr(_l2_mod, "persist_routing_decision"):
     _l2_mod.persist_routing_decision = MagicMock()
@@ -222,6 +225,13 @@ if not hasattr(_l2_mod, "RoutingDecision"):
         return types.SimpleNamespace(target=target, payload=payload or {}, reason=reason)
 
     _l2_mod.RoutingDecision = _RoutingDecision
+
+if not hasattr(_l2_mod, "SecurityException"):
+
+    class _SecurityException(Exception):
+        pass
+
+    _l2_mod.SecurityException = _SecurityException
 
 # services.p08_service — lazy in _route_inbound_message importiert
 if "services.p08_service" not in sys.modules:

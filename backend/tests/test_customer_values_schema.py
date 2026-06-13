@@ -186,7 +186,7 @@ class TestMigration053:
 
     def test_migration_revision_is_053(self):
         source = self._migration_path.read_text(encoding="utf-8")
-        assert "revision = '053'" in source
+        assert 'revision = "053"' in source
 
     def test_migration_creates_tenant_customer_values(self):
         source = self._migration_path.read_text(encoding="utf-8")
