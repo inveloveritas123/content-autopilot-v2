@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOLL-IST Figma-Abgleich — Content Autopilot v2 (Beta-Stand)</title>
+<style>
+  :root{--teal:#0F766E;--teal-50:#f0fdfa;--teal-100:#ccfbf1;--amber:#d97706;--red:#dc2626;
+        --ink:#1f2937;--muted:#6b7280;--line:#e5e7eb;--blue:#2563eb;--green:#16a34a;}
+  *{box-sizing:border-box}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);margin:0;background:#f9fafb;line-height:1.5}
+  header{background:var(--teal);color:#fff;padding:26px 32px}
+  header h1{margin:0 0 4px;font-size:22px} header p{margin:0;opacity:.9;font-size:13px}
+  .wrap{max-width:1120px;margin:0 auto;padding:24px 32px 64px}
+  .gauges{display:flex;gap:16px;flex-wrap:wrap;margin:20px 0}
+  .gauge{flex:1;min-width:200px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+  .gauge .big{font-size:34px;font-weight:700;line-height:1}
+  .gauge .lbl{font-size:13px;color:var(--muted);margin-top:6px}
+  .bar{height:8px;border-radius:99px;background:#eef2f7;margin-top:10px;overflow:hidden}
+  .bar > i{display:block;height:100%}
+  .g-built .big{color:var(--teal)} .g-built i{background:var(--teal)}
+  .g-ver .big{color:var(--green)} .g-ver i{background:var(--green)}
+  .g-e2e .big{color:var(--amber)} .g-e2e i{background:var(--amber)}
+  .note{border-radius:10px;padding:12px 16px;font-size:13px;margin:14px 0}
+  .note.warn{background:#fffbeb;border:1px solid #fcd34d}
+  .note.crit{background:#fef2f2;border:1px solid #fecaca}
+  h2{font-size:15px;margin:26px 0 8px;color:var(--teal);border-bottom:2px solid var(--teal-100);padding-bottom:6px}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{text-align:left;padding:8px 11px;font-size:13px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--teal-50);color:var(--teal);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+  tr:last-child td{border-bottom:none}
+  td.st{white-space:nowrap;font-weight:600}
+  .s-ok{color:var(--green)} .s-built{color:var(--blue)} .s-open{color:var(--red)} .s-later{color:var(--muted)}
+  .ref{font-size:11px;color:var(--muted)}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;margin:6px 0 2px}
+  ul.todo{margin:6px 0;padding-left:18px;font-size:13px} ul.todo li{margin:3px 0}
+  footer{color:var(--muted);font-size:12px;margin-top:30px;border-top:1px solid var(--line);padding-top:12px}
+  .pct{font-size:11px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>SOLL-IST Figma-Abgleich — Content Autopilot v2</h1>
+  <p>Board = SOLL (docs/FIGMA-SOLL-IST-MASTER.md) · Stand 2026-06-13 · Quelle: GitHub Issues (geschlossen=gelandet+CI) + Branch arch/post-landing</p>
+</header>
+<div class="wrap">
+
+  <div class="legend">
+    <span class="s-ok">● erledigt + Knecht-verifiziert</span> (auf main gelandet, CI-grün)
+    <span class="s-built">● gebaut (Architekt)</span> (arch/post-landing, Knecht-Prüfung/Merge offen)
+    <span class="s-open">● offen</span> (zu bauen)
+    <span class="s-later">● bewusst später</span> (Board grau/blau)
+  </div>
+
+  <div class="gauges">
+    <div class="gauge g-built"><div class="big">96%</div><div class="lbl">Board-Kern <b>gebaut</b> (Architekt)<br>43 / 45 Items</div><div class="bar"><i style="width:96%"></i></div></div>
+    <div class="gauge g-ver"><div class="big">87%</div><div class="lbl">Board-Kern <b>Knecht-verifiziert</b><br>gelandet + CI-grün (39 / 45)</div><div class="bar"><i style="width:87%"></i></div></div>
+    <div class="gauge g-e2e"><div class="big">0%</div><div class="lbl"><b>E2E-Server-Beweislauf</b> (#20)<br>= das eigentliche Beta-Tor — steht aus</div><div class="bar"><i style="width:4%"></i></div></div>
+  </div>
+
+  <div class="note crit">
+    <b>Ehrliche Beta-Einschätzung:</b> Das Produkt ist <b>feature-complete gebaut</b> und unit-/integration-CI-grün — aber der <b>durchgehende E2E-Beweislauf am Server</b> (echtes Eric-Transkript → Setup → Chat-Schleife → Post im Chat, <b>#20</b>) ist noch <b>nicht gefahren</b>. „Stabile Beta" = #20 grün. Das ist Knecht-geführt; ich liefere code-seitige Blocker sofort zu.
+  </div>
+
+  <h2>Bahn 1 — Briefing / Sammeln</h2>
+  <table><tr><th>Item</th><th>Status</th><th>Ref</th></tr>
+    <tr><td>1.1 Sammeln via Chat (Voice→Transkript→Memory)</td><td class="st s-ok">erledigt+verif.</td><td class="ref">produktiv</td></tr>
+    <tr><td>1.2 Fotos (OCR/Vision)</td><td class="st s-built">gebaut</td><td class="ref">photo_pipeline, kein E2E</td></tr>
+    <tr><td>1.3 YouTube/RSS-Quellen-Monitoring</td><td class="st s-built">gebaut</td><td class="ref">sources, Beta sekundär</td></tr>
+    <tr><td>1.4 Content-Arten-Tagging</td><td class="st s-later">später</td><td class="ref">⏸</td></tr>
+  </table>
+
+  <h2>Bahn 2 — Setup &amp; DB-Felder</h2>
+  <table><tr><th>Item</th><th>Status</th><th>Ref</th></tr>
+    <tr><td>2.1 Onboarding-Wizard (Mini-Formular)</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#32/#49 closed</td></tr>
+    <tr><td>2.2 8 Gesprächsphasen (Expertise ergänzt)</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#44 closed</td></tr>
+    <tr><td>2.3 Transkript+Formular → Pipeline</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#32</td></tr>
+    <tr><td>2.4 Prompts nacheinander → DB</td><td class="st s-ok">erledigt+verif.</td><td class="ref">setup_pipeline</td></tr>
+    <tr><td>2.5 P01 Kundenkontext (JSON-Fix)</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#33 closed</td></tr>
+    <tr><td><b>2.6 P02 Website-Analyse</b></td><td class="st s-open">OFFEN</td><td class="ref">#39 — letzte 🔴 Board-Lücke</td></tr>
+    <tr><td>2.7 P03 Voice-Analyse</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#33</td></tr>
+    <tr><td>2.8 P04 Avatar-Vertiefung</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#32</td></tr>
+    <tr><td>2.12 Voice-Fallback (keine Quelle)</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#40 closed</td></tr>
+    <tr><td>2.13 Kundenavatar (Entität)</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#32</td></tr>
+    <tr><td>2.9/2.10/2.11 P05/Challenge/P06</td><td class="st s-later">später</td><td class="ref">⏸ Board-grau</td></tr>
+    <tr><td>DB-Felder D1/D2/D5/D6 (ID, Kontext, Analysepunkte, kanonisch)</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#29/#43</td></tr>
+    <tr><td>D3/D4 Transkript-/Formular-Provenienz (Link)</td><td class="st s-built">gebaut/teilw.</td><td class="ref">#26 (klein)</td></tr>
+    <tr><td>D7 Posts-Statistik (LinkedIn)</td><td class="st s-later">später</td><td class="ref">⏸ blau</td></tr>
+  </table>
+
+  <h2>Die drei Entitäten (Voice · Werte · Avatar → P12)</h2>
+  <table><tr><th>Item</th><th>Status</th><th>Ref</th></tr>
+    <tr><td>E1 Kunden-Voice → P12</td><td class="st s-ok">erledigt+verif.</td><td class="ref">—</td></tr>
+    <tr><td>E2 Kunden-Avatar → P12</td><td class="st s-ok">erledigt+verif.</td><td class="ref">—</td></tr>
+    <tr><td><b>E3 Kunden-Werte → P12</b> (war größte Lücke)</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#43 closed</td></tr>
+    <tr><td>E4 Querfluss DB-Felder → Entitäten</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#43/#29</td></tr>
+  </table>
+
+  <h2>Bahn 3 — Speicher</h2>
+  <table><tr><th>Item</th><th>Status</th><th>Ref</th></tr>
+    <tr><td>3.1 Kategorisieren (Werte/Stories/Konflikte)</td><td class="st s-ok">erledigt</td><td class="ref">#50 Qualitäts-Eval offen (Knecht)</td></tr>
+    <tr><td>3.2 Speicher von P12 genutzt</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#43-Injektion</td></tr>
+    <tr><td>3.3/3.4 LinkedIn ziehen / Posts laden</td><td class="st s-later">später</td><td class="ref">⏸ blau</td></tr>
+  </table>
+
+  <h2>Bahn 4 — Input an Kunden (Telegram)</h2>
+  <table><tr><th>Item</th><th>Status</th><th>Ref</th></tr>
+    <tr><td>4.1 P07 Research-Push in Chat</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#35 closed</td></tr>
+    <tr><td>4.2 P08 Fragenliste</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#15/#16 closed</td></tr>
+    <tr><td>4.3 P09 „gib mir Ideen" on-demand</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#36 closed</td></tr>
+    <tr><td>4.4/4.5 Alle Pfade → Chat + Intent-Routing</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#35/#36</td></tr>
+    <tr><td>4.6/4.7 Eigene Idee → P13 → Transkript-Einmündung</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#36</td></tr>
+  </table>
+
+  <h2>Bahn 5 — Output (Post-Erstellung)</h2>
+  <table><tr><th>Item</th><th>Status</th><th>Ref</th></tr>
+    <tr><td>5.1 Sprachnachricht → Transkript</td><td class="st s-ok">erledigt+verif.</td><td class="ref">produktiv</td></tr>
+    <tr><td>5.2 Rückfragen-Loop</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#16/#17/#18</td></tr>
+    <tr><td>5.3 P12 (Voice+Werte+Avatar)</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#19+#43</td></tr>
+    <tr><td>5.4 P12b Optimierung</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#19</td></tr>
+    <tr><td>5.5 „Kunde hat fertigen Text in Chat"</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#19 closed (Kern-Gap zu)</td></tr>
+    <tr><td>5.6 Feedback-Loop → Transkript</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#37 closed</td></tr>
+    <tr><td>5.7 P17 je-Transkript-Beobachter</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#41 closed</td></tr>
+    <tr><td>5.8 Quality-/Final-Gate (Shadow)</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#38 closed; scharf=Robert</td></tr>
+  </table>
+
+  <h2>Querschnitt</h2>
+  <table><tr><th>Item</th><th>Status</th><th>Ref</th></tr>
+    <tr><td>Q1 „Alles in Telegram" (WhatsApp später)</td><td class="st s-ok">erledigt+verif.</td><td class="ref">Telegram-first</td></tr>
+    <tr><td>Q2 Content-Modell (Opus/Gemini-Remap)</td><td class="st s-open">OFFEN (Robert)</td><td class="ref">#42 + #72 Mode-Switch (pausiert)</td></tr>
+    <tr><td>Q3 Kosten-Transparenz</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#51 closed</td></tr>
+    <tr><td>Q4 Speicher-Struktur für KI</td><td class="st s-ok">erledigt+verif.</td><td class="ref">#43</td></tr>
+  </table>
+
+  <h2>Operator/UX-Welle (diese Session — auf arch/post-landing, Merge+Verif. offen)</h2>
+  <table><tr><th>Item</th><th>Status</th><th>Ref</th></tr>
+    <tr><td>#89 Start/Stop-Button (Automatik pausieren)</td><td class="st s-built">gebaut</td><td class="ref">Review GRÜN, Merge offen</td></tr>
+    <tr><td>#90 MVP/Features-Modus</td><td class="st s-built">gebaut</td><td class="ref">Review GRÜN</td></tr>
+    <tr><td>#97 Per-Projekt Telegram-Bot-Token</td><td class="st s-built">gebaut</td><td class="ref">Review GRÜN; Migration 055+Runner=Knecht</td></tr>
+    <tr><td>#98 Admin-Tool (Port 8611, Session, API-Keys)</td><td class="st s-built">gebaut</td><td class="ref">Review GRÜN; nginx/.env=Knecht</td></tr>
+    <tr><td>#91 Projekt-Isolation</td><td class="st s-ok">entschieden</td><td class="ref">row-level (A)</td></tr>
+    <tr><td>#88 Tenant-Switcher wechselt keine Daten</td><td class="st s-open">OFFEN</td><td class="ref">Frontend-Bug</td></tr>
+  </table>
+
+  <h2>Was bis morgen früh abzuarbeiten ist (Beta-stabil)</h2>
+  <div class="note warn">Reihenfolge nach Beta-Hebel:</div>
+  <ul class="todo">
+    <li><b>#20 E2E-Server-Beweislauf</b> (Beta-Tor) — Knecht führt; Architekt liefert Code-Blocker. <i>Größter Hebel.</i></li>
+    <li><b>#39 P02 Website-Analyse</b> — letzte 🔴 Board-Feature-Lücke (Architekt, baue ich als nächstes).</li>
+    <li><b>Merge arch/post-landing → main</b> (Robert) — damit #89/#90/#97/#98 verifizierbar werden.</li>
+    <li><b>#88 Tenant-Switcher-Bug</b> — Frontend (apiKey-Wechsel + Refetch).</li>
+    <li>#25 Alt-Row-Zählung + #26 _meta/Provenienz (Knecht/Architekt) — Schema-Politur.</li>
+    <li>Infra: #97 Migration 055 + Poller-Runner · #98 Port 8611+nginx+.env (Knecht/Robert).</li>
+  </ul>
+
+  <footer>
+    Methodik: „Knecht-verifiziert" = Issue geschlossen + auf main gelandet + CI-grün. „gebaut" = auf arch/post-landing, Opus-Review GRÜN, aber noch nicht gemerged/E2E. ⏸ = laut Board-Farbsemantik (blau=LinkedIn, grau=P05/P06) bewusst spätere Phase, nicht in der Prozent-Basis. Prozent-Basis = 45 Board-Kern-Items (ohne ⏸).
+  </footer>
+</div>
+</body>
+</html>
