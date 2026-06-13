@@ -92,7 +92,7 @@ export default function Settings() {
 
   const handleSaveApiKey = () => {
     setApiKey(localApiKey)
-    refetch()
+    window.location.reload()
   }
 
   const handleSave = async () => {
