@@ -70,23 +70,14 @@ def _stub(name: str) -> types.ModuleType:
 # sqlalchemy + Untermodule
 # ---------------------------------------------------------------------------
 
-# Defensiv: ein anderes Test-Modul kann sqlalchemy(-Untermodule) bereits
-# UNVOLLSTÄNDIG gestubbt haben (nur den Modul-Namen, ohne AsyncSession etc.).
-# Darum Attribute IMMER sicherstellen (nur setzen wenn fehlend → in CI mit echtem
-# sqlalchemy werden die echten Attribute nie überschrieben).
-_sq = _stub("sqlalchemy")  # get-or-create
-if not hasattr(_sq, "text"):
-    _sq.text = lambda q: q
-
-_sq_async = _stub("sqlalchemy.ext.asyncio")  # get-or-create
-if not hasattr(_sq_async, "AsyncSession"):
-    _sq_async.AsyncSession = MagicMock
-if not hasattr(_sq_async, "create_async_engine"):
-    _sq_async.create_async_engine = MagicMock()
-_stub("sqlalchemy.ext")  # get-or-create
-_sq_orm = _stub("sqlalchemy.orm")  # get-or-create
-if not hasattr(_sq_orm, "sessionmaker"):
-    _sq_orm.sessionmaker = MagicMock()
+# Echtes sqlalchemy importieren (ist im venv installiert). Ein Stub-Modul mit
+# nur 'text' wuerde provider_resolver.py brechen (braucht 'select') und
+# api/analytics.py (braucht 'func'). Python-Import-Mechanismus nutzt
+# sys.modules-Cache — wiederholte Imports sind Noops.
+import sqlalchemy
+import sqlalchemy.ext
+import sqlalchemy.ext.asyncio
+import sqlalchemy.orm  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # config.settings
