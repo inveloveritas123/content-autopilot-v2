@@ -8,12 +8,9 @@ name: Deploy (Server B)
 # Postgres-Aenderungen, v1 unter /opt/zukunftsbund-content-autopilot/ tabu.
 # Dieses Deploy beruehrt ausschliesslich /opt/content-autopilot-v2.
 #
-# Benoetigt GitHub-Secrets (einmalig setzen — Anleitung: docs/DEPLOY.md):
-#   DEPLOY_SSH_KEY        privater ed25519-Key
-#   DEPLOY_HOST           152.53.142.163
-#   DEPLOY_PORT           10022
-#   DEPLOY_USER           meister
-#   DEPLOY_KNOWN_HOSTS    Ausgabe von ssh-keyscan -p 10022 152.53.142.163
+# Runner: self-hosted im incus-Container 'content-autopilot' (kolonie-incus),
+# laeuft als User 'runner', hat direkten Zugriff auf /opt/content-autopilot-v2
+# und docker. Keine SSH-Secrets benoetigt.
 
 on:
   workflow_run:
