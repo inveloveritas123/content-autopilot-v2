@@ -56,20 +56,103 @@ class InsightsErrorBoundary extends Component {
 }
 
 // ─── Allow-List editierbarer Felder (clientseitige Spiegelung vom Backend) ─────
+//
+// Kanonisch-Union-Strategie (Issue #29, 2026-06-13):
+// Neue Rows (P01/P03/P04-Schreibpfad) sind KANONISCH (Louis-Schema).
+// Alt-Rows sind v2-förmig. Das Backend akzeptiert beide Key-Sätze (EDITABLE_ROOT_KEYS Union).
+// EDITABLE_PATHS_CANONICAL: Keys für kanonische Rows (primär, neue Rows).
+// EDITABLE_PATHS_V2: Keys für Alt-Rows (Übergang — entfernen nach Daten-Migration).
+// detectRowSchema() prüft anhand von Payload-Keys welche Variante vorliegt.
 
-const EDITABLE_PATHS = {
+const EDITABLE_PATHS_CANONICAL = {
+  // Kanonische Keys aus backend/api/brand_voice.py EDITABLE_ROOT_KEYS + p03/p04 schema
   voice_profile: [
-    'grundton',
-    'satzarchitektur',
+    'grundton',           // Objekt: { charakterisierung, spektrum, linkedin_kalibrierung }
+    'satzarchitektur',    // Objekt: { laenge, typische_satzanfaenge, verbindungen, beispiele }
+    'wortschatz',         // Objekt: { signalwoerter, fuellwoerter, verbotene_woerter, ... }
+    'erzaehlmuster',      // Objekt: { story_einstieg, argumentation, perspektive }
+    'emotionaler_ausdruck',   // Objekt: { spektrum, humor_typ }
+    'persoenlichkeits_stance', // Objekt: { archetyp, stance_in_aktion }
+    'emotionaler_subtext',    // Objekt: { subtext }
+    'ueberzeugungsstil',       // Objekt: { primaer }
+    'zielgruppen_sprachfilter', // Objekt: { leser_profil, sprachbarrieren }
+    'vermeidungsprofil',       // Objekt: { nie_sagen, nie_tun, floskeln_filter }
+    'referenz_saetze',         // Objekt: { original, adaptiert }
+  ],
+  customer_context: [
+    // Kanonische Keys (EDITABLE_ROOT_KEYS backend): kernbotschaft, zielgruppe, expertise, werte
+    'kernbotschaft',
+    'zielgruppe',
+    'expertise',
+    'werte',
+  ],
+  audience_avatar: [
+    // Kanonische Keys aus p04.schema.json
+    'identitaet',              // Objekt: { rolle_und_alltag, selbstbild }
+    'innenwelt',               // Objekt: { innerer_monolog, unausgesprochene_angst }
+    'wunschbild',              // Objekt: { wunschzustand, wunschidentitaet }
+    'content_trigger',         // Objekt: { scroll_stopper, resonanz_saetze, abstoss_trigger }
+    'sprache_der_zielgruppe',  // Objekt: { redewendungen, ansprache }
+    'alltagsszenen',           // Objekt: { szenen, wiederkehrende_muster }
+    'blockaden',               // Objekt: { glaubenssaetze, denkfehler }
+    'ausloesemoment',          // Objekt: { trigger_events, emotional_tipping_point }
+  ],
+}
+
+const EDITABLE_PATHS_V2 = {
+  // Alt-Row-Keys (v2-Schema) — Übergang bis Daten-Migration abgeschlossen
+  voice_profile: [
+    'tonalitaet',
+    'kernthemen',
+    'stilprinzipien',
+    'schreibrhythmus',
+    'vermeidungsregeln',
+    // v2-Felder als Direktfelder (in kanonisch sind sie sub-keys von wortschatz)
     'signalwoerter',
     'verbotene_woerter',
     'intensitaetsmarker',
-    'erzaehlmuster',
-    'persoenlichkeits_stance',
-    'vermeidungsprofil',
   ],
-  customer_context: ['person', 'angebot', 'positionierung', 'kernbotschaft', 'expertise'],
-  audience_avatar: ['identitaet', 'content_trigger', 'sprache_der_zielgruppe'],
+  customer_context: ['person', 'angebot', 'positionierung', 'expertise'],
+  audience_avatar: [
+    'hauptperson',
+    'kernschmerzen',
+    'transformation',
+    'einwaende',
+    'kaufmotive',
+    'sprachmuster',
+  ],
+}
+
+// Erkennt ob ein Payload kanonisch (neue Rows) oder v2-förmig (Alt-Rows) ist.
+// Gibt 'canonical' | 'v2' | 'unknown' zurück.
+function detectRowSchema(profileType, payload) {
+  if (!payload || typeof payload !== 'object') return 'unknown'
+  // v2-distinktive Keys ZUERST prüfen: eine teil-migrierte/handeditierte Row kann
+  // sowohl v2- als auch kanonische Keys tragen — v2 hat Vorrang, damit ihre Felder
+  // nicht versteckt werden (#29-Review).
+  if (profileType === 'voice_profile') {
+    if ('tonalitaet' in payload || 'stilprinzipien' in payload) return 'v2'
+    if ('grundton' in payload) return 'canonical'
+  } else if (profileType === 'customer_context') {
+    if ('person' in payload || 'angebot' in payload || 'positionierung' in payload) return 'v2'
+    if ('kernbotschaft' in payload || 'zielgruppe' in payload) return 'canonical'
+  } else if (profileType === 'audience_avatar') {
+    if ('hauptperson' in payload || 'kernschmerzen' in payload) return 'v2'
+    if ('identitaet' in payload) return 'canonical'
+  }
+  return 'unknown'
+}
+
+// Gibt die passende EDITABLE_PATHS-Liste zurück: kanonisch für neue Rows, v2 für Alt-Rows.
+// Bei 'unknown' (unbekanntes Schema) Union beider Listen als Fallback.
+function getEditablePaths(profileType, payload) {
+  const schema = detectRowSchema(profileType, payload)
+  if (schema === 'canonical') return EDITABLE_PATHS_CANONICAL[profileType] || []
+  if (schema === 'v2') return EDITABLE_PATHS_V2[profileType] || []
+  // Fallback: Union beider Listen
+  const canonical = EDITABLE_PATHS_CANONICAL[profileType] || []
+  const v2 = EDITABLE_PATHS_V2[profileType] || []
+  return [...new Set([...canonical, ...v2])]
 }
 
 // Schutzschritt (#29, 2026-06-12): Feld-Editing read-only, bis ein Dokument-Editor
@@ -329,7 +412,7 @@ function FieldBlock({ profileType, fieldPath, value, editable, highlighted, onEd
 
 // ─── ProfilePanel ─────────────────────────────────────────────────────────────
 
-function ProfilePanel({ profileType, payload, comparePayload, editablePaths, onFieldSaved }) {
+function ProfilePanel({ profileType, payload, comparePayload, compareMode, onFieldSaved }) {
   const [editModal, setEditModal] = useState(null) // { fieldPath, value }
 
   if (!payload) {
@@ -339,6 +422,10 @@ function ProfilePanel({ profileType, payload, comparePayload, editablePaths, onF
       </div>
     )
   }
+
+  // Schema-adaptierte Editable-Paths: kanonisch für neue Rows, v2 für Alt-Rows.
+  // Im Vergleichsmodus (compareMode) keine Edits erlauben.
+  const editablePaths = compareMode ? [] : getEditablePaths(profileType, payload)
 
   function handleEdit(fieldPath, value) {
     setEditModal({ fieldPath, value })
@@ -637,10 +724,8 @@ function VoiceInsights() {
                 profileType={currentTab.profileKey}
                 payload={displayPayload}
                 comparePayload={diffPayload}
-                editablePaths={
-                  compareVersion !== null ? [] : EDITABLE_PATHS[currentTab.profileKey] || []
-                }
                 onFieldSaved={handleFieldSaved}
+                compareMode={compareVersion !== null}
               />
             )}
           </div>
