@@ -9,16 +9,19 @@
 - **PR #53** `knecht/fix-33-json` (P01/P03 JSON-Output) — Knecht, blockiert #32 Eric-E2E. **→ review & merge.**
 - **PR #54** `knecht/fix-47-ci-green` (CI main grün). **→ review & merge.**
 
+### ~~#42 — Content-Modell-Entscheid~~ ✅ ENTSCHIEDEN 2026-06-13 (Testmodus, s.u. Erledigt)
 ### #42 — Content-Modell-Entscheid (dringend, betrifft alle kreativen Pfade)
 Drei Realitäten: S6 = Sonnet-EU (Bedrock-Frankfurt) · kreative Pfade (ideation/questions) auf Gemini-Flash-Lite remappt · Seam-Bypässe = US-API (wird in #46 behoben).
 - **Entscheidung A:** Board sagt „Opus für Content" — bleibt es bei Sonnet-EU als Default (EU-Souveränität schlägt Board-Buchstabe), Opus nur als CONFIRM-Upgrade? **Empfehlung Architekt: ja.**
 - **Entscheidung B (dringender):** Der Gemini-Flash-Lite-Remap der kreativen Pfade revidieren (zurück auf ein stärkeres EU-Modell) oder bewusst bestätigen? **Empfehlung: revidieren** — widerspricht dem Board stärker als Sonnet-statt-Opus.
 
+### ~~#43 — Werte-Entität: neue DB-Tabelle~~ ✅ FREIGEGEBEN 2026-06-13 (anwenden nach Landing; s.u. Erledigt)
 ### #43 — Werte-Entität: **neue DB-Tabelle** `tenant_customer_values` (freigabe-robert)
 Konzept (`docs/CONCEPT-43-werte-entitaet.md`) + Plan (`docs/SPRINT-2-PLAN-43.md`) liegen vor.
 **Migration `backend/alembic/versions/053_customer_values.py` ist GESCHRIEBEN, aber NICHT angewandt** (Kopfkommentar `freigabe-robert`). Inhalt: CREATE TABLE `tenant_customer_values` (1:1-Zwilling von `tenant_voice_profile`/018 + project_id + COALESCE-Unique-Aktiv-Index) + `entity_type`-Spalte auf `voice_drift_observation` (für P17). **down_revision='049'** (aktuell höchste echte Migration).
 **→ Robert:** (1) Freigabe, die Migration auf Prod/Staging anzuwenden. (2) **Reihenfolge mit #26 klären:** #26 reserviert 050–052, ist aber noch nicht gebaut — wenn #26 vor #43 mergt, muss 053.down_revision auf '052' gebumpt werden (sonst doppelter Alembic-Head). Code (TABLE_MAP/Resolver/Regex) ist mergebar; nur das *Anwenden* der Migration wartet auf dich.
 
+### ~~#46 — Modell-Familienwechsel~~ ✅ ENTSCHIEDEN 2026-06-13 (mistral-small belassen, Switch später; s.u. Erledigt)
 ### #46 — Modell-Familienwechsel bei 2 von 3 Ex-Bypässen (Qualität validieren)
 Umgestellt (US-Calls eliminiert, Compliance gefixt):
 - `voice_drift_task` → **S6** (`bedrock/claude-sonnet-4-6@eu-central-1`) = **dasselbe Modell wie zuvor, nur EU-Region** → kein Qualitätsrisiko. ✅
@@ -34,7 +37,16 @@ Chris-Flags #36: (a) Board 4.6 „optional 2–3 Rückfragen VOR den Aufhängern
 SSH Port 10022 vs. self-hosted GitHub-Runner. **→ Richtung entscheiden.**
 
 ## ✅ Erledigt / entschieden
-- (noch nichts)
+- **2026-06-13 #42 Content-Modell:** **Testmodus zuerst.** Gemini-Flash-Lite (S1) bleibt für die
+  kreativen Pfade (ideation/questions) während Entwicklung/Test — Ziel ist erst „läuft die ganze Pipeline",
+  nicht Qualität. Umstellung auf Quality-Mode (Sonnet-EU/Mistral-Large) erst wenn MVP-Kern zu 100 % steht.
+  → Architektur-Folge: **Modell-Modus-Switch** (Testmodus/Produktivmodus/Benutzerdefiniert) in den
+  Frontend-Settings, korrekte Modelle je Modus hinterlegt (Issue für späteren Sprint, nicht jetzt).
+- **2026-06-13 #43 Migration 053:** **FREIGEGEBEN** zum Anwenden auf Staging/Prod — *nach* Landing von #43
+  auf main, mit Alembic-Head-Check (down_revision 049→052 bumpen, falls #26 zuerst landet). Schaltet
+  Werte-Trias + #41-Beobachter scharf.
+- **2026-06-13 #46 sensitive_detector:** Vorerst auf **mistral-small (S2)** belassen (Testmodus). Absicherung
+  ebenfalls über den geplanten Modell-Modus-Switch; A/B-Korpuslauf optional später.
 
 ---
 *Architekt trägt hier ein, sobald im autonomen Lauf eine Robert-Entscheidung auftaucht. Robert hakt ab oder antwortet inline.*

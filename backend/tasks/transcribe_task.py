@@ -12,6 +12,20 @@ from tasks.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 
+def _enqueue_transcript_observer(tenant_id, source_item_id) -> None:
+    """Stößt den P17 je-Transkript-Beobachter an (#41) — parallel zur Analyse, fail-open.
+
+    Der Beobachter schlägt inkrementelle Voice/Werte/Avatar-Updates vor (Board Bahn 5).
+    Ein Enqueue-Fehler darf den Transkriptions-Pfad nie blockieren.
+    """
+    try:
+        from tasks.p17_transcript_observer_task import observe_transcript
+
+        observe_transcript.delay(str(tenant_id), str(source_item_id))
+    except Exception as obs_err:
+        logger.warning("P17 observer enqueue failed for %s: %s", source_item_id, obs_err)
+
+
 @celery_app.task(name="tasks.transcribe_task.transcribe_item")
 def transcribe_item(item_id: str):
     """Transcribe a single source item — supports YouTube and Podcast."""
@@ -80,6 +94,8 @@ def transcribe_item(item_id: str):
             from tasks.generate_task import analyze_item
 
             analyze_item.delay(item_id)
+            # Parallel: P17 je-Transkript-Beobachter (#41)
+            _enqueue_transcript_observer(item.tenant_id, item.id)
             return {"item_id": item_id, "status": "transcribed", "source": f"{source_type}_api"}
         else:
             item.status = "transcription_failed"
@@ -132,10 +148,12 @@ def batch_transcribe(tenant_id: str | None = None):
                 from tasks.generate_task import analyze_item
 
                 analyze_item.delay(item.id)
+                # Parallel: P17 je-Transkript-Beobachter (#41)
+                _enqueue_transcript_observer(item.tenant_id, item.id)
             else:
                 item.status = "transcription_failed"
                 failed += 1
-                logger.warning(f"[{i+1}/{total}] FAILED: {item.title[:60]}")
+                logger.warning(f"[{i + 1}/{total}] FAILED: {item.title[:60]}")
 
             session.commit()
 
