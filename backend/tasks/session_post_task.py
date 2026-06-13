@@ -241,6 +241,55 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
     except Exception as exc:
         logger.warning("session_post_task: piece marker update failed: %s", type(exc).__name__)
 
+    # 6b. Quality-Gate — Final-Gate vor Versand (#38 Chunk 3).
+    #
+    #     branche: TODO (separater Follow-up) — aus Tenant-Profil/customer_context
+    #     lesen, sobald der branche-Schlüssel dort kanonisch verfügbar ist.
+    #     Bis dahin: Fallback auf _generic (konservativer Threshold).
+    #
+    #     Shadow-Mode (quality_gate_enforce=False, DEFAULT):
+    #       Gate läuft immer, Telemetrie wird geloggt, Versandverhalten UNVERÄNDERT.
+    #     Enforce-Mode (quality_gate_enforce=True):
+    #       not passed → Review-Queue-Pfad (wie geflaggt); passed → normal.
+    #     fail-open: jede Exception im Gate → Lauf weiter wie bisher, nie blockieren.
+    _gate_info: dict = {"score": None, "passed": None, "enforced": False}
+    try:
+        from config import settings as _settings
+        from services.quality_gate_stub import quality_gate_check as _qg_check
+
+        _branche = "_generic"  # TODO: aus Tenant-Profil lesen (#38 Follow-up)
+        _gate_result = _qg_check(final_post, _branche)
+        _gate_enforce = bool(getattr(_settings, "quality_gate_enforce", False))
+
+        logger.info(
+            "session_post_task: quality_gate score=%.1f passed=%s violations=%s "
+            "threshold=%.1f branche=%s enforce=%s (session=%s)",
+            _gate_result["score"],
+            _gate_result["passed"],
+            _gate_result["violations"],
+            _gate_result["threshold"],
+            _gate_result["branche"],
+            _gate_enforce,
+            session_id,
+        )
+
+        _gate_info = {
+            "score": _gate_result["score"],
+            "passed": _gate_result["passed"],
+            "enforced": _gate_enforce,
+        }
+
+        # Enforce-Mode: schlechter Post → in Review-Queue-Pfad routen (wie geflaggt)
+        if _gate_enforce and not _gate_result["passed"]:
+            flagged = True
+    except Exception as exc:
+        # fail-open: Gate-Fehler darf NIEMALS den Versandpfad blockieren
+        logger.warning(
+            "session_post_task: quality_gate raised — fail-open (session=%s): %s",
+            session_id,
+            type(exc).__name__,
+        )
+
     # 7. Post in den Chat. Geflaggt → NICHT roh senden (Review-Queue-Pfad #83).
     chat_id = _resolve_chat_id(tenant_id)
     if chat_id is None:
@@ -251,6 +300,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             "reason": "no_chat_link",
             "flagged_for_review": flagged,
             "p12_run_id": p12_run_id,
+            "quality_gate": _gate_info,
         }
 
     try:
@@ -273,6 +323,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             "reason": "send_failed",
             "flagged_for_review": flagged,
             "p12_run_id": p12_run_id,
+            "quality_gate": _gate_info,
         }
 
     logger.info(
@@ -287,6 +338,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
         "sent_kind": sent_kind,
         "flagged_for_review": flagged,
         "p12_run_id": p12_run_id,
+        "quality_gate": _gate_info,
     }
 
 
