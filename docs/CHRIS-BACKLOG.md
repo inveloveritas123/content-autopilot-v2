@@ -29,6 +29,12 @@ Der Loader (`prompt_loader._extract_system_prompt`) keyt eindeutig auf `^## Syst
 - Architekt-Confidence **hoch** (Loader keyt eindeutig auf die Headings). Alternative „Loader lernt
   Block-Konvention" **verworfen**: fragiler Spezialfall nur für diese eine Datei.
 - Output-Kontrakt (den der #41-Beobachter erwartet) unten — sollte in den `## User-Prompt`/Block-3-Teil.
+
+**✅ Getestete Proposal-Kopie liegt vor:** `docs/chris-proposals/P17-kundenkontext-update--ANGEPASST-v1.md`
+(Original **unangetastet**). Inhalt = Louis' Datei + 2 Loader-Überschriften (`## System-Prompt` vor Block 1,
+`## User-Prompt` mit `{context_json}`). **Per Loader-Logik verifiziert:** System-Prompt 0→**8039** Zeichen,
+User-Prompt 0→**276** Zeichen (mit `{context_json}`), Louis' Block-Wortlaut **unverändert**.
+→ **Chris muss nur diese 2 Überschriften freigeben**, dann werden sie 1:1 ins Original übernommen und #41 schaltet scharf.
 - **Output-Kontrakt, den der #41-Beobachter erwartet** (Bucket-Form bevorzugt):
   ```json
   {
