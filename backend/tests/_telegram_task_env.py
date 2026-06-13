@@ -70,46 +70,73 @@ def _stub(name: str) -> types.ModuleType:
 # sqlalchemy + Untermodule
 # ---------------------------------------------------------------------------
 
-# Defensiv: ein anderes Test-Modul kann sqlalchemy(-Untermodule) bereits
-# UNVOLLSTÄNDIG gestubbt haben (nur den Modul-Namen, ohne AsyncSession etc.).
-# Darum Attribute IMMER sicherstellen (nur setzen wenn fehlend → in CI mit echtem
-# sqlalchemy werden die echten Attribute nie überschrieben).
-_sq = _stub("sqlalchemy")  # get-or-create
-if not hasattr(_sq, "text"):
-    _sq.text = lambda q: q
-
-_sq_async = _stub("sqlalchemy.ext.asyncio")  # get-or-create
-if not hasattr(_sq_async, "AsyncSession"):
-    _sq_async.AsyncSession = MagicMock
-if not hasattr(_sq_async, "create_async_engine"):
-    _sq_async.create_async_engine = MagicMock()
-_stub("sqlalchemy.ext")  # get-or-create
-_sq_orm = _stub("sqlalchemy.orm")  # get-or-create
-if not hasattr(_sq_orm, "sessionmaker"):
-    _sq_orm.sessionmaker = MagicMock()
+# Echtes sqlalchemy importieren (ist im venv installiert). Ein Stub-Modul mit
+# nur 'text' wuerde provider_resolver.py brechen (braucht 'select') und
+# api/analytics.py (braucht 'func'). Python-Import-Mechanismus nutzt
+# sys.modules-Cache — wiederholte Imports sind Noops.
+import sqlalchemy
+import sqlalchemy.ext
+import sqlalchemy.ext.asyncio
+import sqlalchemy.orm  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # config.settings
 # ---------------------------------------------------------------------------
 
+# Echtes config.py bevorzugen (pydantic_settings liest ENV-Vars; alle fehlenden
+# Felder haben Defaults). Fallback-Stub nur wenn Import scheitert.
 if "config" not in sys.modules:
-    _cfg = _stub("config")
-    _cfg.settings = types.SimpleNamespace(
-        telegram_bot_token="test-token",
-        database_url="postgresql+asyncpg://t:t@localhost/t",
-        # default_tenant_key für services.crypto (decrypt_secret) — 32+ Zeichen
-        default_tenant_key="test-key-32-chars-padded-xxxxxxxx",
-    )
+    try:
+        import config as _cfg_real  # noqa: F401
+    except Exception:
+        _cfg = _stub("config")
+        _cfg.settings = types.SimpleNamespace(
+            telegram_bot_token="test-token",
+            database_url="postgresql+asyncpg://t:t@localhost/t",
+            litellm_base_url=None,
+            litellm_api_key=None,
+            requesty_api_key=None,
+            redis_url="redis://localhost:6379/0",
+            gemini_api_key="",
+            anthropic_api_key="",
+            telegram_admin_chat_id=None,
+            max_calls_per_tenant_per_hour=100,
+            # default_tenant_key für services.crypto (decrypt_secret) — 32+ Zeichen
+            default_tenant_key="test-key-32-chars-padded-xxxxxxxx",
+        )
 
 # ---------------------------------------------------------------------------
 # models.base
 # ---------------------------------------------------------------------------
 
+# models als Paket mit __path__ anlegen, damit Submodule (models.llm_provider,
+# models.llm_call_log, etc.) via normalen Import gefunden werden koennen.
 if "models" not in sys.modules:
-    _stub("models")
+    _m = _stub("models")
+    _m.__path__ = [os.path.join(_BACKEND_DIR, "models")]
+    _m.__package__ = "models"
 if "models.base" not in sys.modules:
     _mb = _stub("models.base")
     _mb.sync_session_factory = MagicMock()
+    _mb.async_session_factory = MagicMock()
+    _mb.Base = MagicMock()
+    _mb.async_engine = MagicMock()
+    _mb.sync_engine = MagicMock()
+
+# Models-Submodule vorab stubben: ohne diese Stubs würde Python beim Import
+# von api.analytics / services.provider_resolver die ECHTEN Dateien laden,
+# die `from .base import Base` machen. Mit Base=MagicMock() ergibt das dann
+# `class LLMCallLog(MagicMock())` → kaputte MagicMock-Klasse ohne Attribute.
+# MagicMock()-Instanzen auto-create Attribute → sqlfunc.date(LLMCallLog.created_at) ok.
+if "models.llm_call_log" not in sys.modules:
+    _mllc = _stub("models.llm_call_log")
+    _mllc.LLMCallLog = MagicMock()
+if "models.tenant" not in sys.modules:
+    _mten = _stub("models.tenant")
+    _mten.Tenant = MagicMock()
+if "models.llm_provider" not in sys.modules:
+    _mlp = _stub("models.llm_provider")
+    _mlp.LLMProvider = MagicMock()
 
 # ---------------------------------------------------------------------------
 # services — WICHTIG: NICHT als Plain-ModuleType stubben.
@@ -126,19 +153,27 @@ if "models.base" not in sys.modules:
 #      in sys.modules eintragen UND als Paketat­tribute registrieren.
 # ---------------------------------------------------------------------------
 
-# services.llm VOR services-Import stubben (str|None in llm.py bricht Py3.9)
+# services.llm — echtes Modul laden wenn moeglich (anthropic + google.generativeai
+# sind bereits in conftest.py gestubbt; str|None-Syntax ist auf Py3.10+ kein Problem).
+# Nur fehlende Stub-Attribute ergaenzen, damit @patch("services.llm.*") weiter klappt.
 if "services.llm" not in sys.modules:
-    _llm = _stub("services.llm")
-    _llm.llm_service = MagicMock()
+    try:
+        import services.llm as _llm_real  # noqa: F401
+    except Exception:
+        _llm = _stub("services.llm")
+        _llm.llm_service = MagicMock()
 
-    class _BudgetExceededError(Exception):
-        pass
+        class _BudgetExceededError(Exception):
+            pass
 
-    class _RateLimitExceededError(Exception):
-        pass
+        class _RateLimitExceededError(Exception):
+            pass
 
-    _llm.BudgetExceededError = _BudgetExceededError
-    _llm.RateLimitExceededError = _RateLimitExceededError
+        _llm.BudgetExceededError = _BudgetExceededError
+        _llm.RateLimitExceededError = _RateLimitExceededError
+        _llm.LLMService = MagicMock
+        _llm.set_llm_tenant = MagicMock()
+        _llm._maybe_send_global_cap_alert = MagicMock()
 
 # services.nextcloud VOR services-Import stubben
 if "services.nextcloud" not in sys.modules:
@@ -148,22 +183,56 @@ if "services.nextcloud" not in sys.modules:
 # Jetzt services als echtes Paket importieren (damit __path__ gesetzt ist)
 import services as _services_pkg
 
-# services.voice_transcription — telegram_task importiert es auf Modulebene
+# services.provider_resolver — als Stub + Paket-Attribut registrieren.
+# provider_resolver.py braucht models.llm_provider (DB-Modell) at module level;
+# in Unit-Tests nutzen wir MagicMock-Stubs. @patch("services.provider_resolver.*")
+# braucht das Modul als Attribut von services.
+if "services.provider_resolver" not in sys.modules:
+    _pr = _stub("services.provider_resolver")
+    _pr.get_active_provider = MagicMock(return_value=None)
+    _pr.track_cost = MagicMock()
+    # llm.py importiert diese Konstanten lazy aus provider_resolver.
+    # Werte entsprechen den ENV-Defaults aus provider_resolver.py.
+    _pr._DAILY_CAP_USD = 5.0
+    _pr._GLOBAL_CAP_USD = 20.0
+_services_pkg.provider_resolver = sys.modules["services.provider_resolver"]
+
+# services.voice_transcription — telegram_task importiert es auf Modulebene.
+# Das echte Modul hat keine Google/Whisper-Imports auf Modulebene → direkt
+# importierbar. telegram_task.py braucht aber 'transcribe_voice' (Compat-Wrapper
+# der im echten Modul fehlt) → MagicMock als Attribut ergaenzen.
 if "services.voice_transcription" not in sys.modules:
-    _vt = _stub("services.voice_transcription")
+    try:
+        import services.voice_transcription as _vt_real
 
-    class _TranscriptionError(Exception):
-        pass
+        if not hasattr(_vt_real, "transcribe_voice"):
+            _vt_real.transcribe_voice = MagicMock()
+    except Exception:
+        _vt = _stub("services.voice_transcription")
 
-    class _TranscriptionResult:
-        def __init__(self, text="", model_name="whisper", confidence=0.9):
-            self.text = text
-            self.model_name = model_name
-            self.confidence = confidence
+        class _TranscriptionError(Exception):
+            pass
 
-    _vt.TranscriptionError = _TranscriptionError
-    _vt.TranscriptionResult = _TranscriptionResult
-    _vt.transcribe_voice = MagicMock()
+        class _TranscriptionResult:
+            def __init__(
+                self,
+                text="",
+                model_name="whisper",
+                confidence=0.9,
+                model_id=None,
+                language_detected=None,
+                duration_sec=None,
+            ):
+                self.text = text
+                self.model_name = model_name or model_id or "whisper"
+                self.model_id = model_id or model_name or "whisper"
+                self.confidence = confidence
+                self.language_detected = language_detected or ""
+                self.duration_sec = duration_sec or 0.0
+
+        _vt.TranscriptionError = _TranscriptionError
+        _vt.TranscriptionResult = _TranscriptionResult
+        _vt.transcribe_voice = MagicMock()
 
 # Als Paket-Attribut registrieren (für @patch("services.voice_transcription.*"))
 _services_pkg.voice_transcription = sys.modules["services.voice_transcription"]
@@ -174,26 +243,37 @@ if "services.layer1_extraction" not in sys.modules:
     _l1.extract_intent_features = MagicMock()
 _services_pkg.layer1_extraction = sys.modules["services.layer1_extraction"]
 
-# services.layer2_routing — lazy in _route_inbound_message importiert
+# services.layer2_routing — echtes Modul laden (braucht nur models.base, bereits gestubbt).
+# test_layer2_routing.py importiert SecurityException + RoutingDecision direkt aus dem
+# echten Modul; ein reiner Stub-MagicMock wuerde die Routing-Logik-Tests brechen.
 if "services.layer2_routing" not in sys.modules:
-    _l2 = _stub("services.layer2_routing")
-    _l2.route_telegram_intent = MagicMock()
-    _l2.persist_routing_decision = MagicMock()
+    try:
+        import services.layer2_routing as _l2_real  # noqa: F401
+    except Exception:
+        _l2 = _stub("services.layer2_routing")
+        _l2.route_telegram_intent = MagicMock()
+        _l2.persist_routing_decision = MagicMock()
 _services_pkg.layer2_routing = sys.modules["services.layer2_routing"]
 
-# Sicherstellen, dass route_telegram_intent/persist_routing_decision/RoutingDecision
-# immer vorhanden sind (unabhängig davon, welches Testmodul den Stub zuerst anlegt).
-# RoutingDecision wird vom P09-Gate (#36) lazy importiert.
+# Attribute sicherstellen — falls Stub-Fallback aktiv oder echtes Modul unvollstaendig.
 _l2_mod = sys.modules["services.layer2_routing"]
 if not hasattr(_l2_mod, "persist_routing_decision"):
     _l2_mod.persist_routing_decision = MagicMock()
 if not hasattr(_l2_mod, "route_telegram_intent"):
     _l2_mod.route_telegram_intent = MagicMock()
 if not hasattr(_l2_mod, "RoutingDecision"):
+
     def _RoutingDecision(target, payload=None, reason=""):
         return types.SimpleNamespace(target=target, payload=payload or {}, reason=reason)
 
     _l2_mod.RoutingDecision = _RoutingDecision
+
+if not hasattr(_l2_mod, "SecurityException"):
+
+    class _SecurityException(Exception):
+        pass
+
+    _l2_mod.SecurityException = _SecurityException
 
 # services.p08_service — lazy in _route_inbound_message importiert
 if "services.p08_service" not in sys.modules:

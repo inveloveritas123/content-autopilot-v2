@@ -92,14 +92,18 @@ _services.cost_cap = sys.modules["services.cost_cap"]
 
 if "services.canonical_profiles" not in sys.modules:
     _cp = _stub("services.canonical_profiles")
-    _cp.TABLE_MAP = {
+    _cp.load_active_profiles = MagicMock(return_value={})
+# TABLE_MAP immer setzen (kein Guard): test_branche_resolution installiert einen
+# canonical_profiles-Stub OHNE TABLE_MAP, der dann hier schon in sys.modules steht.
+_cp_mod = sys.modules["services.canonical_profiles"]
+if not hasattr(_cp_mod, "TABLE_MAP"):
+    _cp_mod.TABLE_MAP = {
         "customer_context": "tenant_customer_context",
         "voice_profile": "tenant_voice_profile",
         "audience_avatar": "tenant_audience_avatar",
         "customer_values": "tenant_customer_values",
     }
-    _cp.load_active_profiles = MagicMock(return_value={})
-_services.canonical_profiles = sys.modules["services.canonical_profiles"]
+_services.canonical_profiles = _cp_mod
 
 if "services.pipeline_llm" not in sys.modules:
     _pllm = _stub("services.pipeline_llm")
