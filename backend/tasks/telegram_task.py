@@ -151,9 +151,7 @@ def _route_inbound_message(
         if log_id is not None:
             with sync_session_factory() as db:
                 guard_row = db.execute(
-                    text(
-                        "SELECT routed_to FROM telegram_message_log WHERE id = :id"
-                    ),
+                    text("SELECT routed_to FROM telegram_message_log WHERE id = :id"),
                     {"id": log_id},
                 ).fetchone()
             if guard_row is not None and guard_row[0] is not None:
@@ -191,9 +189,13 @@ def _route_inbound_message(
         if decision.target == "p08_response":
             from services.p08_service import p08_response
 
+            # #19: Roh-Transkript durchreichen → p08 persistiert es in
+            # bot_session.messages[*].user_transcript für die Post-Generierung
+            # (Schicht-3-Grenze bleibt in p08_response gewahrt).
             result = p08_response(
                 decision.payload["session_id"],
                 decision.payload["features"],
+                raw_transcript=text_content,
             )
             routing_info["p08_next_action"] = result.next_action
 
@@ -214,6 +216,25 @@ def _route_inbound_message(
                     routing_info["p08_message_sent"] = False
             else:
                 routing_info["p08_message_sent"] = False
+
+            # #19 — Session-Close → Post-Generierung asynchron triggern.
+            # Reihenfolge: erst Abschluss-Text (#17, oben), dann generierter
+            # Post (zweite Nachricht, aus session_post_task). Nur ein ECHTER
+            # active→closed-Übergang triggert (was_already_closed=False),
+            # damit Spät-/Doppel-Events auf eine geschlossene Session P12 nicht
+            # erneut feuern. Enqueue fail-open: ein Broker-/Enqueue-Fehler darf
+            # den Routing-Return NICHT kaputtmachen. E2: nur Exception-Typ.
+            if result.is_closed and not getattr(result, "was_already_closed", False):
+                try:
+                    from tasks.session_post_task import generate_post_from_session
+
+                    generate_post_from_session.apply_async(
+                        args=[str(decision.payload["session_id"]), tenant_id]
+                    )
+                    routing_info["post_generation_enqueued"] = True
+                except Exception as exc:
+                    logger.warning("post generation enqueue failed: %s", type(exc).__name__)
+                    routing_info["post_generation_enqueued"] = False
 
         return routing_info
     except Exception as exc:

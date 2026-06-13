@@ -557,6 +557,139 @@ class TestP08Response:
         assert result.is_closed is True
         assert result.next_action == "close"
 
+    # ----------------------------------------------------------------------
+    # #19 — Roh-Transkript-Persistenz + was_already_closed-Flag
+    # ----------------------------------------------------------------------
+
+    @patch("services.p08_service.sync_session_factory")
+    @patch("services.p08_service.call_pipeline_llm")
+    @patch("services.p08_service._load_p08_prompt")
+    def test_raw_transcript_stored_in_messages(
+        self, mock_load_prompt, mock_call_llm, mock_db_factory
+    ):
+        """#19a: raw_transcript landet als user_transcript im messages-UPDATE."""
+        TRANSCRIPT = "Meine ausfuehrliche Story ueber den Wendepunkt 2019."
+        prompt = MagicMock()
+        prompt.system_prompt = "system"
+        prompt.user_prompt_template = (
+            "mode={mode} topic={topic} voice_profile={voice_profile} "
+            "recent_messages={recent_messages} features_json={features_json} "
+            "question_index={question_index} max_questions={max_questions}"
+        )
+        mock_load_prompt.return_value = prompt
+        mock_call_llm.return_value = _make_llm_result("Naechste Frage?", next_action="vertiefen", quality="gold")
+
+        messages = [{"bot": "Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        session_row = _make_db_session_row(messages=messages, current_question_index=1)
+
+        def make_ctx(fetchone_val=None):
+            ctx = MagicMock()
+            ctx.__enter__ = MagicMock(return_value=ctx)
+            ctx.__exit__ = MagicMock(return_value=False)
+            ctx.execute.return_value.fetchone.return_value = fetchone_val
+            return ctx
+
+        update_ctx = make_ctx(None)
+        mock_db_factory.side_effect = [make_ctx(session_row), make_ctx(None), update_ctx]
+
+        p08_response(session_id="sess-1", features={"k": "v"}, raw_transcript=TRANSCRIPT)
+
+        # Den UPDATE-Aufruf mit dem msgs-JSON finden
+        found = False
+        for call in update_ctx.execute.call_args_list:
+            params = call[0][1] if len(call[0]) > 1 else {}
+            msgs = params.get("msgs")
+            if msgs and TRANSCRIPT in msgs:
+                payload = json.loads(msgs)
+                assert any(m.get("user_transcript") == TRANSCRIPT for m in payload)
+                found = True
+        assert found, "raw_transcript wurde nicht als user_transcript persistiert"
+
+    @patch("services.p08_service.sync_session_factory")
+    @patch("services.p08_service.call_pipeline_llm")
+    @patch("services.p08_service._load_p08_prompt")
+    def test_raw_transcript_never_in_prompt(
+        self, mock_load_prompt, mock_call_llm, mock_db_factory
+    ):
+        """#19a Schicht-3-Wächter: raw_transcript darf NIE in den P08-Prompt gelangen."""
+        SECRET = "GEHEIMER_ROHTEXT_DER_NICHT_AN_DAS_LLM_GEHT"
+        prompt = MagicMock()
+        prompt.system_prompt = "system"
+        prompt.user_prompt_template = (
+            "mode={mode} topic={topic} voice_profile={voice_profile} "
+            "recent_messages={recent_messages} features_json={features_json} "
+            "question_index={question_index} max_questions={max_questions}"
+        )
+        mock_load_prompt.return_value = prompt
+        mock_call_llm.return_value = _make_llm_result("Naechste Frage?")
+
+        messages = [{"bot": "Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        session_row = _make_db_session_row(messages=messages, current_question_index=1)
+
+        def make_ctx(fetchone_val=None):
+            ctx = MagicMock()
+            ctx.__enter__ = MagicMock(return_value=ctx)
+            ctx.__exit__ = MagicMock(return_value=False)
+            ctx.execute.return_value.fetchone.return_value = fetchone_val
+            return ctx
+
+        mock_db_factory.side_effect = [make_ctx(session_row), make_ctx(None), make_ctx(None)]
+
+        p08_response(session_id="sess-1", features={"key": "value"}, raw_transcript=SECRET)
+
+        user_content = mock_call_llm.call_args.kwargs["user_content"]
+        assert SECRET not in user_content
+
+    @patch("services.p08_service.sync_session_factory")
+    @patch("services.p08_service.call_pipeline_llm")
+    @patch("services.p08_service._load_p08_prompt")
+    def test_was_already_closed_false_on_real_close(
+        self, mock_load_prompt, mock_call_llm, mock_db_factory
+    ):
+        """#19: regulärer LLM-Close → was_already_closed=False (Trigger erlaubt)."""
+        prompt = MagicMock()
+        prompt.system_prompt = "system"
+        prompt.user_prompt_template = (
+            "mode={mode} topic={topic} voice_profile={voice_profile} "
+            "recent_messages={recent_messages} features_json={features_json} "
+            "question_index={question_index} max_questions={max_questions}"
+        )
+        mock_load_prompt.return_value = prompt
+        mock_call_llm.return_value = _make_llm_result("Danke, genug!", next_action="close", quality="gold")
+
+        messages = [{"bot": "Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        session_row = _make_db_session_row(messages=messages, current_question_index=1)
+
+        def make_ctx(fetchone_val=None):
+            ctx = MagicMock()
+            ctx.__enter__ = MagicMock(return_value=ctx)
+            ctx.__exit__ = MagicMock(return_value=False)
+            ctx.execute.return_value.fetchone.return_value = fetchone_val
+            return ctx
+
+        mock_db_factory.side_effect = [make_ctx(session_row), make_ctx(None), make_ctx(None)]
+
+        result = p08_response(session_id="sess-close", features={"x": 1}, raw_transcript="text")
+
+        assert result.is_closed is True
+        assert result.was_already_closed is False
+
+    @patch("services.p08_service.sync_session_factory")
+    def test_was_already_closed_true_on_closed_session(self, mock_db_factory):
+        """#19: Antwort auf bereits geschlossene Session → was_already_closed=True (kein Trigger)."""
+        session_row = _make_db_session_row(status="closed")
+
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        ctx.execute.return_value.fetchone.return_value = session_row
+        mock_db_factory.return_value = ctx
+
+        result = p08_response(session_id="closed-sess", features={"x": 1})
+
+        assert result.is_closed is True
+        assert result.was_already_closed is True
+
 
 class TestP08Close:
     @patch("services.p08_service.sync_session_factory")
