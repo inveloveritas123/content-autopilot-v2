@@ -294,6 +294,20 @@ _p09t_mod = sys.modules["tasks.p09_chat_ideas_task"]
 if not hasattr(_p09t_mod, "deliver_ideas_to_chat"):
     _p09t_mod.deliver_ideas_to_chat = MagicMock()
 
+# tasks.p13_variants_task — Lazy-Import im P13-Gate von _route_inbound_message
+# (#36 S3). Stub mit generate_variants_for_chat + _try_p13_variant_choice als MagicMock.
+if "tasks.p13_variants_task" not in sys.modules:
+    _p13t = _stub("tasks.p13_variants_task")
+    _p13t.generate_variants_for_chat = MagicMock()
+    _p13t._try_p13_variant_choice = MagicMock(return_value=False)
+# Als Paket-Attribut registrieren
+sys.modules["tasks"].p13_variants_task = sys.modules["tasks.p13_variants_task"]
+_p13t_mod = sys.modules["tasks.p13_variants_task"]
+if not hasattr(_p13t_mod, "generate_variants_for_chat"):
+    _p13t_mod.generate_variants_for_chat = MagicMock()
+if not hasattr(_p13t_mod, "_try_p13_variant_choice"):
+    _p13t_mod._try_p13_variant_choice = MagicMock(return_value=False)
+
 # ---------------------------------------------------------------------------
 # tasks.telegram_task — genau EINMAL laden; bei Wiederholungsimport wiederverwenden
 # ---------------------------------------------------------------------------

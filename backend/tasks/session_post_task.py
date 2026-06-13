@@ -100,11 +100,13 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
         return {"status": "error", "reason": "idempotency_gate_failed"}
 
     # 2. Session laden (Tenant-Scope im WHERE = E3-Mandantentrennung)
+    #    Bug-Fix #36/§2.3: topic_idea_id mitladen (vorher SELECT nur messages,status,mode).
+    #    topic_idea_id ist für Steering-Keys (_chosen_hook/_chosen_outline) nötig (Bug c).
     try:
         with sync_session_factory() as db:
             row = db.execute(
                 text(
-                    "SELECT messages, status, mode FROM bot_session "
+                    "SELECT messages, status, mode, topic_idea_id FROM bot_session "
                     "WHERE id = :id AND tenant_id = :tid LIMIT 1"
                 ),
                 {"id": session_id, "tid": tenant_id},
@@ -117,8 +119,11 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
         return {"status": "skipped", "reason": "session_not_found"}
 
     messages_raw, status, _mode = row[0], row[1], row[2]
+    # Check status before accessing optional 4th column (topic_idea_id)
     if status != "closed":
         return {"status": "skipped", "reason": "session_not_closed"}
+    # Bug-Fix #36/§2.3: topic_idea_id aus der Session lesen (4. Spalte im SELECT)
+    topic_idea_id = str(row[3]) if len(row) > 3 and row[3] is not None else None
 
     messages_list = (
         json.loads(messages_raw) if isinstance(messages_raw, str) else (messages_raw or [])
@@ -145,13 +150,48 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             type(exc).__name__,
         )
 
-    # 5. P12→P12b fahren — idea_id=None (nullable, B13). Lazy-Import wie
-    #    tasks.backtest_task (vermeidet FastAPI-Importlast/Zyklus im Worker).
+    # 5. P12→P12b fahren.
+    #    Bug-Fix #36/§2.3 (Bug c): wenn topic_idea_id gesetzt (targeted-Session via P13),
+    #    die gewählte Variante als Steering-Keys injizieren
+    #    (_chosen_hook / _chosen_outline, Muster api/ideas.py:1496-1499).
+    #    P12 packt answers 1:1 in den Prompt-Kontext (p12_task.py:377-383).
+    #    Lineage Idee→Post steht dann durchgängig (content_pieces.idea_id-FK).
+    effective_idea_id = None
+    if topic_idea_id:
+        effective_idea_id = topic_idea_id
+        try:
+            with sync_session_factory() as db:
+                idea_row = db.execute(
+                    text(
+                        "SELECT hook_suggestion, source_context->>'body_outline' AS body_outline "
+                        "FROM content_ideas "
+                        "WHERE id = CAST(:id AS uuid) AND tenant_id = :tid LIMIT 1"
+                    ),
+                    {"id": topic_idea_id, "tid": tenant_id},
+                ).fetchone()
+            if idea_row:
+                chosen_hook = idea_row[0] or ""
+                chosen_outline = idea_row[1] or ""
+                if chosen_hook:
+                    answers_list = [
+                        {"question_text": "_chosen_hook", "answer_text": chosen_hook}
+                    ] + answers_list
+                if chosen_outline:
+                    answers_list = [
+                        {"question_text": "_chosen_outline", "answer_text": chosen_outline}
+                    ] + answers_list
+        except Exception as exc:
+            logger.warning(
+                "session_post_task: steering key load failed (continuing): %s",
+                type(exc).__name__,
+            )
+
+    # Lazy-Import wie tasks.backtest_task (vermeidet FastAPI-Importlast/Zyklus im Worker).
     try:
         from api.ideas import _run_p12_p12b_pipeline
 
         pipeline_result = _run_p12_p12b_pipeline(
-            tenant_id, None, answers_list, voice_payload, avatar_payload
+            tenant_id, effective_idea_id, answers_list, voice_payload, avatar_payload
         )
     except Exception as exc:
         logger.warning("session_post_task: pipeline raised: %s", type(exc).__name__)
