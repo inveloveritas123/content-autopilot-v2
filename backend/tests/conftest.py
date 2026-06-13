@@ -50,17 +50,36 @@ if "celery" not in sys.modules:
             )
 
         def task(self, *a, **kw):
-            """Decorator: returns the function unchanged."""
+            """Decorator: adds .apply() that actually runs the function."""
+            _bind = kw.get("bind", False)
+
+            def _make_apply(fn):
+                def apply(*call_a, **call_kw):
+                    pos_args = call_kw.pop("args", call_a[0] if call_a else [])
+                    kw_args = call_kw.pop("kwargs", {})
+                    try:
+                        if _bind:
+                            fake_self = types.SimpleNamespace(
+                                request=types.SimpleNamespace(id="fake-task-id")
+                            )
+                            ret = fn(fake_self, *pos_args, **kw_args)
+                        else:
+                            ret = fn(*pos_args, **kw_args)
+                    except Exception as exc:
+                        ret = exc
+                    return types.SimpleNamespace(get=lambda r=ret: r, result=ret)
+
+                return apply
 
             def decorator(fn):
-                fn.apply = lambda *a, **kw: types.SimpleNamespace(get=lambda: None)
+                fn.apply = _make_apply(fn)
                 fn.apply_async = lambda *a, **kw: types.SimpleNamespace(id="fake-task-id")
                 return fn
 
             if len(a) == 1 and callable(a[0]):
                 # called without arguments: @celery_app.task
                 fn = a[0]
-                fn.apply = lambda *a, **kw: types.SimpleNamespace(get=lambda: None)
+                fn.apply = _make_apply(fn)
                 fn.apply_async = lambda *a, **kw: types.SimpleNamespace(id="fake-task-id")
                 return fn
             return decorator

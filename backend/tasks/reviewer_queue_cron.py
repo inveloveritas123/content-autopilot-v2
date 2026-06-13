@@ -62,12 +62,12 @@ def check_reviewer_queue_backlog():
         try:
             chat_id = int(settings.voicescriptor_chat_id)
             try:
-                from api.telegram import _send_telegram_message
+                from api.telegram import _send_admin_telegram_message
 
-                _send_telegram_message(chat_id, message)
+                _send_admin_telegram_message(chat_id, message)
             except ImportError:
                 logger.warning(
-                    "check_reviewer_queue_backlog: _send_telegram_message nicht verfügbar "
+                    "check_reviewer_queue_backlog: _send_admin_telegram_message nicht verfügbar "
                     "(api.telegram noch nicht deployed)"
                 )
         except (ValueError, TypeError):

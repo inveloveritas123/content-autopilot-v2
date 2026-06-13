@@ -52,10 +52,48 @@ def _record_bad_attempt(ip: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _send_telegram_message(chat_id: int, text_msg: str) -> None:
-    """Fire-and-forget: send a message via Telegram Bot API."""
+def _send_telegram_message(chat_id: int, text_msg: str, *, tenant_id: str) -> bool:
+    """Fire-and-forget: send a message via the TENANT's own Telegram Bot.
+
+    Verwendet ausschliesslich den per-Tenant-Token aus tenant_bot_config.
+    KEIN globaler Fallback. Wenn kein aktiver Bot-Token vorhanden → skip + False.
+    Token wird NIEMALS geloggt (E2/D3).
+
+    Nach erfolgreichem Send: telegram_last_active_at aktualisieren (best-effort).
+
+    Returns:
+        True bei erfolgreichem Send, False wenn skip oder Fehler.
+    """
+    from services.telegram_token_resolver import get_tenant_bot_token, update_last_active
+
+    token = get_tenant_bot_token(tenant_id)
+    if not token:
+        logger.info(
+            "_send_telegram_message: kein aktiver Bot für tenant %s, skip send", tenant_id
+        )
+        return False
+    try:
+        import httpx
+
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        httpx.post(url, json={"chat_id": chat_id, "text": text_msg}, timeout=5)
+        # best-effort timestamp update — fail-open
+        update_last_active(tenant_id)
+        return True
+    except Exception as e:
+        logger.warning("Failed to send Telegram message to %s: %s", chat_id, type(e).__name__)
+        return False
+
+
+def _send_admin_telegram_message(chat_id: int, text_msg: str) -> None:
+    """Fire-and-forget: Admin-Alert via GLOBALEM Bot-Token (settings.telegram_bot_token).
+
+    NUR für interne Admin-Alerts (reviewer_queue_cron, cost-cap-alerts).
+    NICHT für Projekt-/Tenant-Sends verwenden.
+    Token wird NIEMALS geloggt.
+    """
     if not settings.telegram_bot_token:
-        logger.warning("_send_telegram_message called but telegram_bot_token not configured")
+        logger.warning("_send_admin_telegram_message: telegram_bot_token not configured")
         return
     try:
         import httpx
@@ -63,7 +101,9 @@ def _send_telegram_message(chat_id: int, text_msg: str) -> None:
         url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
         httpx.post(url, json={"chat_id": chat_id, "text": text_msg}, timeout=5)
     except Exception as e:
-        logger.warning(f"Failed to send Telegram message to {chat_id}: {e}")
+        logger.warning(
+            "Failed to send admin Telegram message to %s: %s", chat_id, type(e).__name__
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +128,11 @@ def _handle_start_command(message: dict, token: str) -> None:
         ).fetchone()
 
         if row is None:
-            _send_telegram_message(chat_id, "Ungültiger Token.")
+            # tenant_id unbekannt → Token-Lookup nicht möglich.
+            # Sonderfall: Wir müssen den Token über den Link-Token selbst suchen.
+            # Da kein Tenant bekannt ist, nutzen wir den Admin-Token als Fallback
+            # für diese spezifische Fehler-Rückmeldung (kein PII, kein Content).
+            _send_admin_telegram_message(chat_id, "Ungültiger Token.")
             return
 
         tenant_id, linked_at = row[0], row[1]
@@ -100,7 +144,9 @@ def _handle_start_command(message: dict, token: str) -> None:
 
         if now - linked_at > timedelta(minutes=30):
             _send_telegram_message(
-                chat_id, "Link abgelaufen. Bitte generiere einen neuen Link im Dashboard."
+                chat_id,
+                "Link abgelaufen. Bitte generiere einen neuen Link im Dashboard.",
+                tenant_id=str(tenant_id),
             )
             return
 
@@ -139,6 +185,7 @@ def _handle_start_command(message: dict, token: str) -> None:
         chat_id,
         f"Verbunden mit {slug}. "
         "Ab sofort schicke ich dir Fragen und du kannst mir Sprachnachrichten zurückgeben.",
+        tenant_id=str(tenant_id),
     )
 
 
@@ -298,7 +345,9 @@ async def telegram_webhook(
 
     if link_row is None:
         chat_id: int = message.get("chat", {}).get("id", 0)
-        _send_telegram_message(
+        # tenant_id ist unbekannt — kein Tenant-Token verfügbar.
+        # Admin-Token für diese Onboarding-Rückmeldung (kein PII, kein Content).
+        _send_admin_telegram_message(
             chat_id,
             "Unbekannter User. Bitte verbinde dich erst über das Dashboard.",
         )
@@ -347,40 +396,56 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
 
     if cmd in ("/such", "/suche", "/erinner"):
         if not arg or len(arg) < 2:
-            _send_telegram_message(chat_id, "Bitte Suchanfrage angeben — z.B. /such Authentizität")
+            _send_telegram_message(
+                chat_id,
+                "Bitte Suchanfrage angeben — z.B. /such Authentizität",
+                tenant_id=tenant_id,
+            )
             return True
         try:
             results = _memory_search_sync(tenant_id, arg, limit=5)
         except Exception as exc:
             logger.warning("/such failed: %s", exc)
-            _send_telegram_message(chat_id, f"Suche fehlgeschlagen: {exc}")
+            _send_telegram_message(chat_id, f"Suche fehlgeschlagen: {exc}", tenant_id=tenant_id)
             return True
         if not results:
-            _send_telegram_message(chat_id, f"Keine Treffer für „{arg[:60]}“.")
+            _send_telegram_message(
+                chat_id,
+                f'Keine Treffer für „{arg[:60]}“.',
+                tenant_id=tenant_id,
+            )
             return True
-        lines = [f"Top {len(results)} Treffer für „{arg[:60]}“:"]
+        lines = [f'Top {len(results)} Treffer für „{arg[:60]}“:']
         for r in results:
             sim = r.get("similarity") or 0
             preview = (r.get("content_text") or "")[:200]
             tag = r.get("classification") or "—"
             lines.append(f"\n• {sim*100:.0f}% [{tag}] {preview}")
-        _send_telegram_message(chat_id, "\n".join(lines)[:4000])
+        _send_telegram_message(chat_id, "\n".join(lines)[:4000], tenant_id=tenant_id)
         return True
 
     if cmd in ("/notiz", "/note"):
         if not arg or len(arg) < 5:
             _send_telegram_message(
-                chat_id, "Bitte Notiz-Text angeben — z.B. /notiz Wertschätzung ist mir wichtig"
+                chat_id,
+                "Bitte Notiz-Text angeben — z.B. /notiz Wertschätzung ist mir wichtig",
+                tenant_id=tenant_id,
             )
             return True
         try:
             chunk_id = _memory_note_sync(tenant_id, arg)
             _send_telegram_message(
-                chat_id, f"✓ Notiz gespeichert (id: {chunk_id[:8]}…). Frag später mit /such danach."
+                chat_id,
+                f"✓ Notiz gespeichert (id: {chunk_id[:8]}…). Frag später mit /such danach.",
+                tenant_id=tenant_id,
             )
         except Exception as exc:
             logger.warning("/notiz failed: %s", exc)
-            _send_telegram_message(chat_id, f"Notiz konnte nicht gespeichert werden: {exc}")
+            _send_telegram_message(
+                chat_id,
+                f"Notiz konnte nicht gespeichert werden: {exc}",
+                tenant_id=tenant_id,
+            )
         return True
 
     if cmd in ("/help", "/hilfe"):
@@ -393,6 +458,7 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
                 "• /notiz <Text> — Manuelle Notiz speichern\n"
                 "• /help — diese Hilfe"
             ),
+            tenant_id=tenant_id,
         )
         return True
 
@@ -450,3 +516,56 @@ def _memory_note_sync(tenant_id: str, text_input: str) -> str:
             await engine.dispose()
 
     return asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# Inbound-Dispatch-Kontrakt (für den per-Tenant-Poller)
+# ---------------------------------------------------------------------------
+
+
+def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
+    """Speist einen rohen Telegram-Update für einen BEKANNTEN Tenant ein.
+
+    Wird vom per-Tenant-Poller (separater Subagent) mit (update, tenant_id)
+    aufgerufen. Implementiert:
+    - update_id-Deduplizierung (identisch zum Webhook-Pfad)
+    - Memory-Commands (/such, /notiz, /help)
+    - _store_and_dispatch für voice/photo/text
+
+    Bricht die bestehende Webhook-Logik NICHT — das sind parallele Einstiegspunkte
+    in denselben _store_and_dispatch-Pfad.
+
+    Args:
+        update:    Roher Telegram-Update-Dict (enthält "message" etc.).
+        tenant_id: Bereits aufgelöste, verifizierte Tenant-ID.
+    """
+    message: dict = update.get("message", {})
+    if not message:
+        return
+
+    # Determine message type
+    if message.get("voice"):
+        message_type = "voice"
+    elif message.get("photo"):
+        message_type = "photo"
+    else:
+        message_type = "text"
+
+    text_content: str = message.get("text", "") or ""
+    chat_id_for_dispatch: int = message.get("chat", {}).get("id", 0)
+
+    # Memory-Commands
+    if message_type == "text":
+        cmd_handled = _try_memory_command(tenant_id, chat_id_for_dispatch, text_content)
+        if cmd_handled:
+            return
+
+    # update_id-Deduplizierungs-Marker in payload injizieren
+    update_id = update.get("update_id")
+    if update_id is not None:
+        message["_update_id"] = update_id
+
+    try:
+        _store_and_dispatch(tenant_id, message, message_type)
+    except Exception as e:
+        logger.error("dispatch_inbound_update: _store_and_dispatch error: %s", type(e).__name__)

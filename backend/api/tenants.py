@@ -1,10 +1,15 @@
-import secrets
-from datetime import datetime
+from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+import json
+import logging
+import secrets
+import uuid
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -15,12 +20,34 @@ from services.nextcloud import nextcloud_client
 from services.tenant_export import TenantExportService
 from services.tenant_import import TenantImportService
 
+logger = logging.getLogger(__name__)
+
 _export_service = TenantExportService()
 _import_service = TenantImportService()
 
 _MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
 
 router = APIRouter()
+
+
+async def _get_tenant_raw(
+    x_api_key: str = Header(...),
+    db: AsyncSession = Depends(get_db),
+) -> Tenant:
+    """Like get_tenant but does NOT block on enabled=False.
+
+    Only used for the self-service resume endpoint so a paused tenant can
+    re-enable itself.  Auth (API key) is still enforced.
+    """
+    result = await db.execute(
+        select(Tenant).where(
+            (Tenant.api_key == x_api_key) | (Tenant.api_key_secondary == x_api_key)
+        )
+    )
+    tenant = result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return tenant
 
 
 class TenantCreate(BaseModel):
@@ -464,4 +491,105 @@ async def get_tenant_industry(tenant: Tenant = Depends(get_tenant)):
     return {
         "industry": tenant.industry,
         "industry_context": dict(tenant.industry_context or {}),
+    }
+
+
+# ── Self-service Automation Pause/Resume (Issue #89) ─────────────────────────
+
+
+@router.get("/tenants/me/automation-status")
+async def get_automation_status(
+    # Use _get_tenant_raw so paused tenants can still poll their own status.
+    tenant: Tenant = Depends(_get_tenant_raw),
+):
+    """Return current automation (kill-switch) state for this tenant."""
+    return {
+        "enabled": tenant.enabled,
+        "paused": not tenant.enabled,
+        "disabled_at": tenant.disabled_at.isoformat() if tenant.disabled_at else None,
+        "disabled_reason": tenant.disabled_reason,
+    }
+
+
+@router.post("/tenants/me/pause")
+async def pause_automation(
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Tenant pausiert seine eigene tägliche LLM-Automatik (Kill-Switch)."""
+    tenant_id = str(tenant.id)
+    now = datetime.now(timezone.utc)
+    try:
+        await db.execute(
+            text(
+                """UPDATE tenants
+                   SET enabled=false, disabled_at=:at,
+                       disabled_by='self', disabled_reason='dashboard-pause'
+                   WHERE id=:id"""
+            ),
+            {"at": now, "id": tenant_id},
+        )
+        await db.execute(
+            text(
+                """INSERT INTO setup_pipeline_run
+                       (id, tenant_id, stage, status, error_meta, created_at)
+                   VALUES (:id, :tid, 'kill_switch', 'disabled', :meta, NOW())"""
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "tid": tenant_id,
+                "meta": json.dumps({"action": "pause", "by": "self"}),
+            },
+        )
+        await db.commit()
+    except Exception:
+        logger.exception("Pause-Automation DB-Fehler für tenant %s", tenant_id)
+        raise HTTPException(status_code=500, detail="DB-Fehler beim Pausieren")
+    return {
+        "status": "paused",
+        "enabled": False,
+        "disabled_at": now.isoformat(),
+        "disabled_reason": "dashboard-pause",
+    }
+
+
+@router.post("/tenants/me/resume")
+async def resume_automation(
+    # _get_tenant_raw bypasses the enabled=False block so paused tenants can resume.
+    tenant: Tenant = Depends(_get_tenant_raw),
+    db: AsyncSession = Depends(get_db),
+):
+    """Tenant reaktiviert seine eigene tägliche LLM-Automatik."""
+    tenant_id = str(tenant.id)
+    try:
+        await db.execute(
+            text(
+                """UPDATE tenants
+                   SET enabled=true, disabled_at=null,
+                       disabled_by=null, disabled_reason=null
+                   WHERE id=:id"""
+            ),
+            {"id": tenant_id},
+        )
+        await db.execute(
+            text(
+                """INSERT INTO setup_pipeline_run
+                       (id, tenant_id, stage, status, error_meta, created_at)
+                   VALUES (:id, :tid, 'kill_switch', 'enabled', :meta, NOW())"""
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "tid": tenant_id,
+                "meta": json.dumps({"action": "resume", "by": "self"}),
+            },
+        )
+        await db.commit()
+    except Exception:
+        logger.exception("Resume-Automation DB-Fehler für tenant %s", tenant_id)
+        raise HTTPException(status_code=500, detail="DB-Fehler beim Reaktivieren")
+    return {
+        "status": "active",
+        "enabled": True,
+        "disabled_at": None,
+        "disabled_reason": None,
     }

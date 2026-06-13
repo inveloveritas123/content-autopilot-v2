@@ -33,8 +33,26 @@ Umgestellt (US-Calls eliminiert, Compliance gefixt):
 Der CHECK-Constraint `telegram_message_log.routed_to` (Migration 019:66) kennt die neuen Targets `p09`/`p13` nicht. Aktuell migrationsfrei auf `'p10'` gemappt (`_ROUTED_TO_MAP`) → Dedupe funktioniert, aber das Log ist semantisch unscharf (p09/p13 erscheinen als p10). **→ Robert: optionale Mini-Migration, die den CHECK um `'p09','p13'` erweitert** (dann Mapping entfernen). Klein, nicht dringend.
 Chris-Flags #36: (a) Board 4.6 „optional 2–3 Rückfragen VOR den Aufhängern" wurde als MVP übersprungen (die targeted-Session NACH der Wahl liefert die Rückfragen via Bahn 5) — Lesart bestätigen. (b) Text-Nummern 1/2/3 statt Telegram-Inline-Buttons.
 
-### #24 — Deploy-Pfad (mit Knecht)
-SSH Port 10022 vs. self-hosted GitHub-Runner. **→ Richtung entscheiden.**
+### #38 — Quality-Gate scharfschalten (`quality_gate_enforce`) — outward, wartet auf Robert
+Der Quality-Gate ist als Final-Gate vor dem Telegram-Versand verdrahtet (#38 Chunk 3), läuft aber im
+**Shadow-Mode** (Default `quality_gate_enforce=False`): score+log, **Versand unverändert**. Scharf
+(`=True`) → schlechte Posts gehen in den Review-Pfad statt raus. **→ Robert:** Aktivierung erst freigeben,
+wenn (a) Korpus erweitert (#80) + Chunk 2 gebaut **und** (b) du das outward-Verhalten willst. Nicht dringend.
+
+### ~~#24 — Deploy-Pfad~~ ✅ DEFERIERT 2026-06-13 (Robert)
+**Kein Entscheid nötig jetzt.** Beta läuft mit **manuellem Deploy** (Knecht auf dem Server: `git pull` +
+`docker compose build/up`). Auto-Deploy (Empfehlung: **self-hosted Runner**, kein Firewall-Loch) wird
+**später eingerichtet — relevant, wenn ein Entwickler übernimmt.** Damit ist Roberts Entscheid-Liste leer.
+
+### #97 — Telegram per-Projekt-Bot: Migration 055 anwenden + Runner deployen (NEU 2026-06-13)
+Feature gebaut + Security-Review GRÜN auf `arch/post-landing` (Token verschlüsselt, bind/revoke/last-active, Long-Polling). **→ Robert/Knecht:** (1) **Migration 055** (`055_telegram_per_project.py`, additiv, 9 nullable Spalten auf `tenant_bot_config`, down_revision='054') auf Staging/Prod **anwenden** — analog zu 053. (2) 🟣 **Runner:** den Polling-Prozess deployen — `python backend/telegram_runner.py` (Env `TELEGRAM_POLL_INTERVAL_SECONDS`) **oder** Celery-Beat mit `TELEGRAM_POLLING_ENABLED=true` (genau eine Variante). Passt auf den self-hosted Runner. Kein Selbst-Merge — wartet auf deine Freigabe.
+
+### #91 — Projekt-Isolation: Architektur-Entscheid (Robert) — NEU 2026-06-13
+Aktuell: **eine DB, row-level `tenant_id`-Isolation** (auch pgvector `memory_chunks`). Frage: reicht das, oder echte Trennung pro Projekt?
+- **A) Row-level (Status quo)** — `tenant_id` + `WHERE`-Filter überall, eine DB. Billig, schon gebaut, E3-Gate prüft Scoping. Risiko: Isolation hängt an korrekten Filtern (ein Query-Bug = Cross-Tenant-Leak). **Für internen Einsatz / keine echten Kundendaten ausreichend.**
+- **B) Schema-pro-Tenant** — ein Postgres-Schema je Projekt, `search_path` pro Session. Stärkere Eindämmung, eine DB/ein Backup. Mittlerer Umbau (Session/ORM setzt search_path, Migrationen × Schema). Sinnvoll **ab erstem echten externen Kunden**.
+- **C) DB-pro-Projekt** — physisch getrennte DB + Credentials. Stärkste Isolation, aber schwere Ops (Migrationen/Backups/Connection-Routing × N, kein geteiltes pgvector). **Overkill, bis ein Kunde physische Trennung verlangt.**
+- **Empfehlung Architekt:** A für MVP/intern belassen; B vormerken für ersten Echtkunden; C nur bei Compliance-Pflicht. **→ Robert entscheidet die Richtung** (steuert auch #88 Tenant-Switcher + Settings-Scope).
 
 ## ✅ Erledigt / entschieden
 - **2026-06-13 #42 Content-Modell:** **Testmodus zuerst.** Gemini-Flash-Lite (S1) bleibt für die

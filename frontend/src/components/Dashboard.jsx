@@ -16,6 +16,7 @@ import {
   CalendarDays,
   Flame,
   Play,
+  Pause,
   Target,
   Award,
   TrendingDown,
@@ -36,6 +37,9 @@ import {
   bulkArchiveIdeas,
   getIdeasSourceBreakdown,
   getBrandVoiceStatus,
+  getAutomationStatus,
+  pauseAutomation,
+  resumeAutomation,
 } from '../api'
 import ResearchFindings from './ResearchFindings'
 import TenantSwitcher from './TenantSwitcher'
@@ -756,9 +760,12 @@ export default function Dashboard() {
   const [ideaBreakdown, setIdeaBreakdown] = useState(null)
   const [cleaningUp, setCleaningUp] = useState(false)
   const [cleanupMsg, setCleanupMsg] = useState(null)
+  const [automationStatus, setAutomationStatus] = useState(null)
+  const [automationToggling, setAutomationToggling] = useState(false)
 
   useEffect(() => {
     loadAll()
+    loadAutomationStatus()
     // Auto-refresh every 30 seconds to pick up pipeline changes
     const interval = setInterval(() => loadAll(), 30000)
     return () => clearInterval(interval)
@@ -806,6 +813,38 @@ export default function Dashboard() {
     setLoading(false)
   }
 
+  async function loadAutomationStatus() {
+    try {
+      const s = await getAutomationStatus()
+      setAutomationStatus(s)
+    } catch {
+      // ignore — endpoint may not be deployed yet
+    }
+  }
+
+  async function handleAutomationToggle() {
+    if (!automationStatus) return
+    setAutomationToggling(true)
+    try {
+      const isPaused = automationStatus.paused
+      const result = isPaused ? await resumeAutomation() : await pauseAutomation()
+      setAutomationStatus({
+        enabled: result.enabled,
+        paused: !result.enabled,
+        disabled_at: result.disabled_at ?? null,
+        disabled_reason: result.disabled_reason ?? null,
+      })
+      if (isPaused) {
+        toast.success('Automatik wieder aktiv — Pipeline läuft.')
+      } else {
+        toast.warning('Automatik pausiert — Pipeline gestoppt.')
+      }
+    } catch (e) {
+      toast.error(e.message || 'Fehler beim Umschalten der Automatik')
+    }
+    setAutomationToggling(false)
+  }
+
   async function handleAutoPump() {
     setAutoPumping(true)
     setPumpResult(null)
@@ -843,6 +882,36 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-2">
           <TenantSwitcher />
+          {/* Automation Kill-Switch (Issue #89) */}
+          {automationStatus !== null && (
+            <button
+              onClick={handleAutomationToggle}
+              disabled={automationToggling}
+              title={
+                automationStatus.paused
+                  ? `Automatik pausiert seit ${automationStatus.disabled_at ? new Date(automationStatus.disabled_at).toLocaleString('de-DE') : '—'} — klicken zum Reaktivieren`
+                  : 'Tägliche LLM-Automatik pausieren'
+              }
+              className={`flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors disabled:opacity-60 ${
+                automationStatus.paused
+                  ? 'text-white bg-amber-500 border-amber-600 hover:bg-amber-600'
+                  : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {automationToggling ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+              ) : automationStatus.paused ? (
+                <Play className="w-3.5 h-3.5" />
+              ) : (
+                <Pause className="w-3.5 h-3.5" />
+              )}
+              {automationToggling
+                ? '…'
+                : automationStatus.paused
+                  ? 'Automatik starten'
+                  : 'Automatik pausieren'}
+            </button>
+          )}
           <button
             onClick={handleAutoPump}
             disabled={autoPumping}

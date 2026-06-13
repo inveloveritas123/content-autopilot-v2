@@ -228,7 +228,7 @@ class TestGeneratePostFromSession:
         assert len(answers_list) == 3
         assert call[0][3] == {"tone": "warm"}  # voice_payload
         assert call[0][4] == {"persona": "founder"}  # avatar_payload
-        send_mock.assert_called_once_with(4711, "FERTIGER POST")
+        send_mock.assert_called_once_with(4711, "FERTIGER POST", tenant_id="tenant-1")
 
     def test_flagged_post_not_sent_raw(self):
         gate_ctx = _make_ctx(None)

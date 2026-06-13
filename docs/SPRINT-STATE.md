@@ -83,13 +83,36 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 
 - ✅ **#37 Feedback-Loop fertig**: kein-aktive-Session + letzter Post (48h) + post_feedback-Intent → `regenerate_post_from_feedback` (neuer P12→P12b-Durchlauf mit Feedback im answers-Dict, Loop-Limit `TELEGRAM_FEEDBACK_MAX_ROUNDS`=2 migrationsfrei via content_pieces-COUNT, E3/fail-open). Mapping-Fix `voice_feedback_api→voice_feedback` (CHECK-Constraint 019:66). Cross-Model-Review GRÜN. 55 Tests beide Ordnungen grün. **Nebenbefund → neues Issue: layer1 cost-gate liest nicht-existente Tabelle `cost_tracking` (inert).**
 
-### Nächste Architekt-Items (alle per-File-TDD, dann fetch+rebase+push)
-- #36 Intent-Routing P09/P13 (opus, dep #16✅) · #41 P17-Beobachter (fable, dep #43✅) · #38 Quality-Gate (opus) · #22 P17-Prompt (sonnet) · cost_tracking-Fix (sonnet, neues Issue).
-- Sprint-2-Rest #29/#25/#26 (Schema) besser nach #33-Merge (Knecht).
+- ✅ **#41 P17 je-Transkript-Beobachter fertig** (Commit 2a4c025): additiver, transkript-getriebener Erzeuger von `voice_drift_observation`-Rows (`entity_type` voice/values/avatar) → speist den Drift-Decide-Pfad (#43 S4). `services/p17_observer_core.py` (dep-frei, 16 Tests Py3.9-grün) + `tasks/p17_transcript_observer_task.py` (Wiring: kill-switch, Idempotenz migrationsfrei via `suggested_changes->>'source_item_id'`, E3, cost-cap, EU-Seam; 9 Wiring-Tests beide Ordnungen grün) + `transcribe_task.py`-Trigger (parallel zu analyze_item, fail-open). **Seam-Teil von #41 war via #46 schon erfüllt.** **Grenze:** fail-open `skipped/prompt_unavailable` solange P17-System-Prompt leer (#22 → Chris). Scharf erst nach Migration 053 (Robert freigegeben, nach #43-Landing). `docs/SPRINT-3-PLAN-41.md`.
+
+### Robert-Entscheide 2026-06-13 (in ROBERT-BACKLOG → Erledigt)
+- **#42** Testmodus zuerst: kreative Pfade bleiben auf Gemini-Flash-Lite (S1), Quality-Mode erst wenn MVP-Kern 100%. **#46** sensitive_detector bleibt mistral-small (S2). → beides zentral über **Modell-Modus-Switch (Issue #72, späterer Sprint)**. **#43** Migration 053 **freigegeben** (anwenden nach Landing).
+- **Housekeeping offen (Robert):** PR #66 mergen, PR #55 schließen.
+
+- ✅ **#38 Chunk 1 fertig** (Commit 18513be): Stub→echter dep-freier Struktur-/Regel-Scorer (7 Signale + `config/quality_standards/*.yml`, Kontrakt stabil). Impl=Sonnet, Review=Opus (Cross-Model, PASS-WITH-NITS, Path-Traversal-Härtung). 74 Tests grün. **F1 0.27→1.0 — korpus-TRIVIAL** (Skelett), kein fertiger Gate → Korpus-Erweiterung = **Issue #80** (Daten). Plan `docs/SPRINT-3-PLAN-38.md`.
+
+### Subagenten-Arbeitsweise (Robert bekräftigt 2026-06-13)
+„Immer mit Subagenten + passendem Modell." → Impl delegieren (sonnet), Cross-Model-Review (fable/opus, ≠ Implementer; fable aktuell down → opus). Architekt-Hauptloop = Wiring/Entscheid/Review. Prompts/MD nie ohne Freigabe ändern → `docs/CHRIS-BACKLOG.md`. Originale in Louis-Übergabe `Import/Linkedin-Content-Autopilot/`.
+
+- ✅ **#38 Chunk 3 fertig** (Commit 01f78c1): Quality-Gate als Final-Gate in `session_post_task` (Block 6b) verdrahtet, **Shadow-Mode Default** (score+log, Versand unverändert). Enforce hinter Setting `quality_gate_enforce` (Default False, outward → **Robert-Freigabe zum Scharfschalten**). fail-open. Impl Sonnet → Review Opus (PASS). 15 Tests grün. branche=_generic (Follow-up-Issue).
+
+- ✅ **#81 branche-Auflösung fertig** (gepusht): `_resolve_branche` (customer_context → handwerk/recht/finanzen, fail-open _generic). Impl Sonnet → Review Opus. 36 Tests grün. Issue geschlossen.
+- ✅ **#22 P17-Prompt v1.1 angewandt aufs Original** (Robert-Freigabe, bc29724): #41-Prompt-Gate greift; docs/PROMPT-CHANGELOG.md. **P02/#39 weggelassen** (kein Prompt, unreferenziert). **PR #55 geschlossen**, **PR #66 war schon merged**.
+
+### ⛔ Unabhängige Architekt-Front ABGEARBEITET — Rest ist gated
+Buildbar-ohne-Abhängigkeit ist erledigt (#41, #38 Chunk 1+3, #22/P17, #81). Die großen MVP-Reste sind **gated**:
+- **#29/#25/#26 Schema** → brauchen `arch/weekloop`-Rebase auf `main` NACH der Knecht-Landung (#33 ist auf main, aber nicht auf weekloop) + **#26 neue Migrationen 050/051 = Robert**. Sonst Rework-Risiko.
+- **#20 E2E-Beweislauf** (Beta-Tor) → braucht gelandeten Code auf main + Test-Tenant (Knecht/Server).
+- **#38 Chunk 2** (semantisch) → Wert erst nach Korpus #80; niedrige Prio (Testmodus-first).
+- **#30 Modell-Pinning** → LLM-Config gesperrt → nur Policy-Ausnahme; braucht erst Untersuchung des F1-Gate-Mechanismus (Werkbank-Repo), nicht sauber delegierbar.
+**→ Größter Hebel jetzt: Knecht landet Stränge per-Issue → dann rebase ich weekloop → Schema + E2E.**
+- cost_tracking-Fix (sonnet) · Sprint-2-Rest #29/#25/#26 (Schema) nach #33-Landing (Knecht).
+- **Chris (blockiert Scharfschaltung):** #22 P17-Headings (#41), #39 P02-Prompt. **Robert-Housekeeping:** PR #66 mergen, #55 schließen. **Späterer Sprint:** #72 Modell-Modus-Switch.
 
 ---
 
 ## LOG (jüngste zuerst)
+- 2026-06-13 (autonom, arch/post-landing) — **#97 Telegram per-Projekt-Bot-Token KOMPLETT** (Robert-Request): pro Tenant eigener Bot-Token, verschlüsselt at-rest (Fernet, `services/crypto.py`, kein neuer Env-Key), bind/revoke/last-active (`api/telegram_bots.py`, E3), per-Tenant-Outbound (`_send_telegram_message(*, tenant_id)`, kein globaler Fallback — global nur Admin-Alerts), **Long-Polling-Runner** (`telegram_poller.py`/`telegram_poll_task.py`/`telegram_runner.py`, `dispatch_inbound_update`), Migration **055** (NICHT angewandt). 5 Sonnet-Subagenten → **Opus-Cross-Model-Security-Review GRÜN** (alle Nahtstellen + E2/D3/E3 verifiziert; Log-Redaction-Härtung angewandt). **Parallel erledigt:** #89 Tenant-Pause (Start/Stop-Button, self-service /pause+/resume+/automation-status, 10 Tests) + #29-Frontend (VoiceInsights kanonische Field-Map). Alle gepusht (eac6e86→f14e951, fetch+merge-main, **kein force-push**). Robert-Flags: Migration-055-Apply + Runner-Deploy (#97) + #91-Isolation in ROBERT-BACKLOG. **Knecht hat #20/#25 noch nicht beantwortet** (war auf CI/self-hosted-Runner-Infra) → bleiben geparkt.
 - 2026-06-13 (autonom) — **#36 Teil P13 fertig → #36 KOMPLETT**: eigene Idee → 3 Aufhänger (hook/story/these via p12_variants) → nummerierte Wahl im Chat → Wahl mündet via `p08_opener(mode=targeted, topic_idea_id)` in den bestehenden Bahn-5-Fluss (Board 4.7). Plus **3 latente Bugs gefixt**: (a) Kurztext-Bypass für Wahl „1/2/3", (b) p08_opener las nicht-existente Spalten topic_keyword/category → title/hook_suggestion/angle, (c) generate_post_from_session lädt topic_idea_id + Steering-Keys _chosen_hook/_chosen_outline → gewählter Aufhänger erreicht P12. 25 Tests + 93 Anti-Pollution beide Ordnungen grün, Cross-Model-Review (Opus) GRÜN (E3 idea tenant-scoped, E2 sauber). ROBERT/Chris-Flags in ROBERT-BACKLOG. **→ Bahn 4 (alle 3 Input-Pfade P07/P08/P09 + P13) komplett.**
 - 2026-06-13 (autonom) — **#36 Teil P09 fertig**: dep-freie Intent-Heuristik (`services/chat_intent_heuristics.py`) + Gate in `_route_inbound_message` (vor #37-Feedback-Pfad) + `tasks/p09_chat_ideas_task.py` (Top-5 Ideen in den Chat, on-demand-Ideation mit Cost-Cap-Vorcheck, E3/fail-open). Implementierung: sonnet-Subagent (vor Limit); **Tests + Fertigstellung + RoutingDecision-Helper-Fix: Architekt (Opus) selbst** (Subagent traf Limit vor Tests). 13 Tests + 68 Anti-Pollution beide Ordnungen grün, bestehende Routing-Tests regressionsfrei. **P13-Teil (S3) wurde bewusst zurückgezogen** (war dormant/untested) → frisch bauen. Plan: `docs/SPRINT-3-PLAN-36.md`.
 - 2026-06-13 (autonom) — **#37 Feedback-Loop** (M25, Konversationsschleife komplett) + **#65** Cost-Gate-Fix (daily_cost_tenant, +Py3.9-datetime-Fix) fertig & gepusht. Knecht parallel weiter am CI-Grünen (ruff/eslint). Branch-Disziplin: fetch+rebase vor jedem Push hält sauber. **Nächste Aktion: #36 Intent-Routing (P09 on-demand + P13 aus dem Chat), opus, dep #16✅** — danach #41 (P17, fable) / #38 (Quality-Gate, opus).

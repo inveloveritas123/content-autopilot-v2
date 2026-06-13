@@ -198,11 +198,19 @@ def run_p12c(
         async def _p12c_cap_check():
             _engine = create_async_engine(_s.database_url, pool_pre_ping=True)
             _Session = _sm(_engine, class_=AsyncSession, expire_on_commit=False)
+            _cap_exc = None
             try:
                 async with _Session() as _sess:
                     await CostCapMiddleware(_sess).check_and_record(tenant_id, est_cost)
+            except BaseException as _e:
+                _cap_exc = _e
             finally:
-                await _engine.dispose()
+                try:
+                    await _engine.dispose()
+                except Exception:
+                    pass
+            if _cap_exc is not None:
+                raise _cap_exc
 
         _asyncio.run(_p12c_cap_check())
     except CostCapExceeded:

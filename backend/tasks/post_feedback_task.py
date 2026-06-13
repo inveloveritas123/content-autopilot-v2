@@ -297,10 +297,13 @@ def regenerate_post_from_feedback(
             _send_telegram_message(
                 chat_id,
                 "Dein Post ist fertig, wartet aber noch auf eine kurze Review.",
+                tenant_id=tenant_id,
             )
             sent_kind = "review_notice"
         else:
-            _send_telegram_message(chat_id, final_post[:_TELEGRAM_MAX_CHARS])
+            _send_telegram_message(
+                chat_id, final_post[:_TELEGRAM_MAX_CHARS], tenant_id=tenant_id
+            )
             sent_kind = "post"
     except Exception as exc:
         logger.warning("post_feedback_task: telegram send failed: %s", type(exc).__name__)
@@ -360,6 +363,7 @@ def _send_limit_notice(tenant_id: str) -> None:
             chat_id,
             "Du hast das maximale Feedback-Limit für diesen Post erreicht. "
             "Wenn du einen ganz neuen Post möchtest, starte einfach eine neue Session.",
+            tenant_id=tenant_id,
         )
     except Exception as exc:
         logger.warning("post_feedback_task: limit notice send failed: %s", type(exc).__name__)
@@ -376,6 +380,7 @@ def _send_cost_notice(tenant_id: str) -> None:
         _send_telegram_message(
             chat_id,
             "Das Tageslimit ist leider erreicht — morgen geht's weiter!",
+            tenant_id=tenant_id,
         )
     except Exception as exc:
         logger.warning("post_feedback_task: cost notice send failed: %s", type(exc).__name__)

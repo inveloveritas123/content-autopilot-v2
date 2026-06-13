@@ -188,8 +188,15 @@ async def auto_trigger_pipeline(
                             )
                         if entrepreneur.get("target_audience"):
                             industry_parts.append(f"Zielgruppe: {entrepreneur['target_audience']}")
+                        # Kanonisch (Issue #29): grundton.charakterisierung (p03.schema.json:63)
+                        # Alt-Row-Fallback: tonalitaet.grundton (v2-Schema) → toleriert für Bestands-Rows
                         _tone_val = (
                             voice_profile.get("tone")
+                            or (
+                                voice_profile.get("grundton", {}).get("charakterisierung", "")
+                                if isinstance(voice_profile.get("grundton"), dict)
+                                else ""
+                            )
                             or (
                                 voice_profile.get("tonalitaet", {}).get("grundton", "")
                                 if isinstance(voice_profile.get("tonalitaet"), dict)
@@ -199,11 +206,27 @@ async def auto_trigger_pipeline(
                         )
                         if _tone_val:
                             industry_parts.append(f"Tonalität: {_tone_val}")
-                        _avoid_val = voice_profile.get("topics_avoid") or (
-                            voice_profile.get("vermeidungsregeln")
-                            if isinstance(voice_profile.get("vermeidungsregeln"), str | list)
+                        # Kanonisch (Issue #29): vermeidungsprofil.nie_sagen (p03.schema.json:218-233)
+                        # nie_sagen ist array of (string | {item, grund}) → Items extrahieren
+                        # Alt-Row-Fallback: vermeidungsregeln (v2-Schema, array of strings)
+                        _canonical_nie_sagen = (
+                            voice_profile.get("vermeidungsprofil", {}).get("nie_sagen")
+                            if isinstance(voice_profile.get("vermeidungsprofil"), dict)
                             else None
                         )
+                        if isinstance(_canonical_nie_sagen, list) and _canonical_nie_sagen:
+                            _avoid_items = [
+                                (e.get("item") or str(e)) if isinstance(e, dict) else str(e)
+                                for e in _canonical_nie_sagen
+                            ]
+                            _avoid_val = _avoid_items
+                        else:
+                            # Alt-Row-Fallback: vermeidungsregeln (v2-Schema)
+                            _avoid_val = voice_profile.get("topics_avoid") or (
+                                voice_profile.get("vermeidungsregeln")
+                                if isinstance(voice_profile.get("vermeidungsregeln"), str | list)
+                                else None
+                            )
                         if _avoid_val:
                             avoid = (
                                 _avoid_val

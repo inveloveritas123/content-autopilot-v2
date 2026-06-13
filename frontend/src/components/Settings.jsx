@@ -5,6 +5,7 @@ import { useToast } from './ui/Toast'
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card'
 import { Button } from './ui/Button'
 import LLMSettings from './LLMSettings'
+import TelegramBotSettings from './TelegramBotSettings'
 import IndustryAndHooks from './IndustryAndHooks'
 import { Badge } from './ui/Badge'
 import { Input, Textarea } from './ui/Input'
@@ -686,6 +687,9 @@ export default function Settings() {
           </CardContent>
         </Card>
       )}
+
+      {/* Telegram-Bot (pro Projekt) */}
+      <TelegramBotSettings />
 
       {/* Daten & Export */}
       <Card>

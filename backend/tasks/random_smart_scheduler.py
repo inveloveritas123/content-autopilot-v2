@@ -103,7 +103,7 @@ def _send_opening_question(tenant_id: str, question_text: str) -> None:
         if chat_id is not None:
             from api.telegram import _send_telegram_message
 
-            _send_telegram_message(int(chat_id), question_text)
+            _send_telegram_message(int(chat_id), question_text, tenant_id=tenant_id)
     except Exception as e:
         logger.warning(
             "_send_opening_question fehlgeschlagen fuer tenant %s: %s",

@@ -281,9 +281,16 @@ def test_skips_when_prompt_unavailable(monkeypatch):
 
 def test_pauses_on_cost_cap(monkeypatch):
     _set_session(monkeypatch, _FakeSession(transcript=TRANSCRIPT))
+    # Read CostCapExceeded at test-run time so it matches what the task's lazy
+    # import sees. The module-level name may be a stub captured at collection
+    # time, which diverges if another test later loads the real services.cost_cap.
+    _exc_class = sys.modules["services.cost_cap"].CostCapExceeded
 
     async def _raise_cost(*a, **k):
-        raise CostCapExceeded()
+        # Pass required positional args so this works for both the stub class
+        # (ignores extras via base Exception.__init__) and the real class
+        # CostCapExceeded(tenant_id, current_cost, cap).
+        raise _exc_class("tenant-1", 0.01, 0.001)
 
     monkeypatch.setattr(obs, "_run_cost_check", _raise_cost)
     res = _observe("tenant-1", "item-1")

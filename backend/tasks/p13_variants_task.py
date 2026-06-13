@@ -335,7 +335,7 @@ def _send_variants_message(tenant_id: str, idea_id: str, variants: list[dict]) -
     try:
         from api.telegram import _send_telegram_message
 
-        _send_telegram_message(chat_id, message)
+        _send_telegram_message(chat_id, message, tenant_id=tenant_id)
         return {
             "status": "ok",
             "sent": True,
@@ -551,7 +551,7 @@ def _start_targeted_session(tenant_id: str, idea_id: str) -> dict | None:
             try:
                 from api.telegram import _send_telegram_message
 
-                _send_telegram_message(chat_id, opener.question_text)
+                _send_telegram_message(chat_id, opener.question_text, tenant_id=tenant_id)
             except Exception as exc:
                 logger.warning(
                     "p13_task: opener send failed (session created): %s",
@@ -585,6 +585,7 @@ def _send_cost_notice(tenant_id: str) -> None:
         _send_telegram_message(
             chat_id,
             "Das Tageslimit ist leider erreicht — morgen geht's weiter!",
+            tenant_id=tenant_id,
         )
     except Exception as exc:
         logger.warning("p13_task: cost notice send failed: %s", type(exc).__name__)
@@ -601,6 +602,7 @@ def _send_no_variants_notice(tenant_id: str) -> None:
         _send_telegram_message(
             chat_id,
             "Hmm, die Varianten konnte ich gerade nicht generieren — versuch es gleich nochmal!",
+            tenant_id=tenant_id,
         )
     except Exception as exc:
         logger.warning("p13_task: no-variants notice send failed: %s", type(exc).__name__)

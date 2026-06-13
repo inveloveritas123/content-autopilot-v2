@@ -241,6 +241,10 @@ from api.telegram import router as telegram_router
 
 app.include_router(telegram_router, prefix="/api", tags=["Telegram"])
 
+from api.telegram_bots import router as telegram_bots_router
+
+app.include_router(telegram_bots_router, prefix="/api", tags=["TelegramBots"])
+
 from api.whatsapp import router as whatsapp_router
 
 app.include_router(whatsapp_router, prefix="/api", tags=["WhatsApp"])

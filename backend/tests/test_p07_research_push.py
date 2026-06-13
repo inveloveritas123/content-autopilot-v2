@@ -255,7 +255,7 @@ class TestPushResearchToTelegram:
             ),
             patch(
                 "api.telegram._send_telegram_message",
-                lambda cid, msg: captured.append(msg),
+                lambda cid, msg, **kwargs: captured.append(msg),
                 create=True,
             ),
         ):
@@ -290,7 +290,7 @@ class TestPushResearchToTelegram:
                 patch("models.base.sync_session_factory", return_value=session, create=True),
                 patch(
                     "api.telegram._send_telegram_message",
-                    lambda cid, msg: calls.append((cid, msg)),
+                    lambda cid, msg, **kwargs: calls.append((cid, msg)),
                     create=True,
                 ),
             ):

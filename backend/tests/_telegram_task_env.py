@@ -101,6 +101,8 @@ if "config" not in sys.modules:
             anthropic_api_key="",
             telegram_admin_chat_id=None,
             max_calls_per_tenant_per_hour=100,
+            # default_tenant_key für services.crypto (decrypt_secret) — 32+ Zeichen
+            default_tenant_key="test-key-32-chars-padded-xxxxxxxx",
         )
 
 # ---------------------------------------------------------------------------
@@ -293,9 +295,21 @@ if not hasattr(_api_pkg, "__path__"):
     _api_pkg.__path__ = [os.path.join(_BACKEND_DIR, "api")]
 if "api.telegram" not in sys.modules:
     _at = _stub("api.telegram")
-    _at._send_telegram_message = MagicMock()
+    # Neue Signatur: _send_telegram_message(chat_id, text, *, tenant_id) -> bool
+    _at._send_telegram_message = MagicMock(return_value=True)
+    _at._send_admin_telegram_message = MagicMock()
+    _at.dispatch_inbound_update = MagicMock()
 # Als Paket-Attribut registrieren (für @patch-Auflösung via getattr)
 sys.modules["api"].telegram = sys.modules["api.telegram"]
+
+# ---------------------------------------------------------------------------
+# services.telegram_token_resolver — Lazy-Import in api.telegram + telegram_task
+# ---------------------------------------------------------------------------
+if "services.telegram_token_resolver" not in sys.modules:
+    _ttr = _stub("services.telegram_token_resolver")
+    _ttr.get_tenant_bot_token = MagicMock(return_value="test-tenant-token")
+    _ttr.update_last_active = MagicMock()
+_services_pkg.telegram_token_resolver = sys.modules["services.telegram_token_resolver"]
 
 # ---------------------------------------------------------------------------
 # celery + tasks.celery_app
@@ -307,9 +321,36 @@ if "celery" not in sys.modules:
 
 class _FakeCeleryApp:
     def task(self, *a, **kw):
+        _bind = kw.get("bind", False)
+
+        def _make_apply(fn):
+            def apply(*call_a, **call_kw):
+                pos_args = call_kw.pop("args", call_a[0] if call_a else [])
+                kw_args = call_kw.pop("kwargs", {})
+                try:
+                    if _bind:
+                        fake_self = types.SimpleNamespace(
+                            request=types.SimpleNamespace(id="fake-task-id")
+                        )
+                        ret = fn(fake_self, *pos_args, **kw_args)
+                    else:
+                        ret = fn(*pos_args, **kw_args)
+                except Exception as exc:
+                    ret = exc
+                return types.SimpleNamespace(get=lambda r=ret: r, result=ret)
+
+            return apply
+
         def deco(fn):
+            fn.apply = _make_apply(fn)
+            fn.apply_async = lambda *a, **kw: types.SimpleNamespace(id="fake-task-id")
             return fn
 
+        if len(a) == 1 and callable(a[0]):
+            fn = a[0]
+            fn.apply = _make_apply(fn)
+            fn.apply_async = lambda *a, **kw: types.SimpleNamespace(id="fake-task-id")
+            return fn
         return deco
 
 
