@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from dependencies import get_db
+from models.tenant import Tenant
 
 router = APIRouter(prefix="/admin", tags=["admin-auth"])
 
@@ -190,6 +191,18 @@ def _mask_key(key: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _slugify_tenant(name: str) -> str:
+    """Leitet aus einem Tenant-Namen einen URL-sicheren Slug ab (≤64 Zeichen).
+
+    Gleiche Logik wie api/projects.py _slugify, aber auf 64 Zeichen begrenzt
+    (entspricht Tenant.slug String(64)).
+    """
+    slug = name.lower().strip()
+    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+    slug = re.sub(r"[\s-]+", "-", slug)
+    return slug[:64]
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -197,6 +210,11 @@ class LoginRequest(BaseModel):
 
 class SetApiKeyRequest(BaseModel):
     api_key: str
+
+
+class CreateTenantRequest(BaseModel):
+    name: str
+    slug: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -380,3 +398,92 @@ async def set_api_key(
     await db.commit()
 
     return {"api_key_masked": _mask_key(key)}
+
+
+@router.post("/users", status_code=201)
+async def create_tenant(
+    req: CreateTenantRequest,
+    _admin: str = Depends(require_admin_session),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Legt einen neuen Tenant (Benutzer) an und gibt den API-Key EINMALIG im Klartext zurück.
+
+    Validierung:
+    - name: non-empty, trim, ≤255 Zeichen
+    - api_key: secrets.token_urlsafe, ≤64 Zeichen, Unique per Retry (max 5 Versuche)
+    - slug: aus name abgeleitet (oder explizit übergeben), Unique per -2/-3/…-Suffix
+
+    Sicherheit:
+    - api_key wird NICHT geloggt (weder im Klartext noch maskiert).
+    - Bei dauerhafter Kollision nach 5 Versuchen → 500.
+    - Doppelter slug nach 5 Versuchen → 409.
+    """
+    name = req.name.strip() if req.name else ""
+    if not name:
+        raise HTTPException(status_code=422, detail="name darf nicht leer sein")
+    if len(name) > 255:
+        raise HTTPException(status_code=422, detail="name darf maximal 255 Zeichen haben")
+
+    # --- api_key generieren (bis zu 5 Versuche für Eindeutigkeit) ---
+    new_key: Optional[str] = None
+    for _ in range(5):
+        candidate = secrets.token_urlsafe(48)[:64]
+        dup = await db.execute(
+            text(
+                "SELECT 1 FROM tenants WHERE api_key = :k OR api_key_secondary = :k"
+            ),
+            {"k": candidate},
+        )
+        if not dup.fetchone():
+            new_key = candidate
+            break
+
+    if new_key is None:
+        raise HTTPException(
+            status_code=500, detail="API-Key-Generierung fehlgeschlagen (Kollision)"
+        )
+
+    # --- slug ableiten + Unique sicherstellen ---
+    base_slug = _slugify_tenant(req.slug if req.slug else name).strip("-")
+    if not base_slug:
+        base_slug = "tenant"
+
+    final_slug: Optional[str] = None
+    for attempt in range(5):
+        candidate_slug = base_slug if attempt == 0 else f"{base_slug}-{attempt + 1}"
+        candidate_slug = candidate_slug[:64]
+        dup_slug = await db.execute(
+            text("SELECT 1 FROM tenants WHERE slug = :s"),
+            {"s": candidate_slug},
+        )
+        if not dup_slug.fetchone():
+            final_slug = candidate_slug
+            break
+
+    if final_slug is None:
+        raise HTTPException(status_code=409, detail="Slug-Konflikt — bitte anderen Namen wählen")
+
+    # --- Tenant anlegen via ORM ---
+    tenant = Tenant(
+        name=name,
+        api_key=new_key,
+        slug=final_slug,
+        settings={},
+        enabled=True,
+    )
+    db.add(tenant)
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        # Bei unerwarteter DB-Unique-Verletzung trotz Retry-Prüfung → 409
+        raise HTTPException(status_code=409, detail="Tenant konnte nicht angelegt werden (Unique-Konflikt)")
+    await db.refresh(tenant)
+
+    # api_key EINMALIG im Klartext zurückgeben — NICHT loggen
+    return {
+        "id": str(tenant.id),
+        "name": tenant.name,
+        "slug": tenant.slug,
+        "api_key": new_key,
+    }

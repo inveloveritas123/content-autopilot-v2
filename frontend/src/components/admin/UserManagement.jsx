@@ -8,8 +8,9 @@ import {
   AlertCircle,
   Loader2,
   LogIn,
+  UserPlus,
 } from 'lucide-react'
-import { adminListUsers, adminRegenerateApiKey, adminSetApiKey, setApiKey } from '../../api'
+import { adminListUsers, adminRegenerateApiKey, adminSetApiKey, adminCreateUser, setApiKey } from '../../api'
 
 // localStorage-Key für den aktiven X-API-Key (gleicher Key wie main.jsx/tenant-init nutzt)
 const API_KEY_STORAGE = 'apiKey'
@@ -228,6 +229,134 @@ function SetKeyDialog({ userId, userName, onClose }) {
   )
 }
 
+// Dialog zum Anlegen eines neuen Tenant-Benutzers
+function CreateUserDialog({ onClose }) {
+  const [nameInput, setNameInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  // newKey wird nur einmalig angezeigt und danach aus dem State entfernt
+  const [newKey, setNewKey] = useState(null)
+  const [newUser, setNewUser] = useState(null)
+
+  async function handleCreate() {
+    const name = nameInput.trim()
+    if (!name) return
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await adminCreateUser(name)
+      // api_key einmalig aus der Response holen, dann nie wieder
+      setNewKey(data.api_key)
+      setNewUser({ id: data.id, name: data.name, slug: data.slug })
+      setNameInput('')
+    } catch (e) {
+      setError(e.message || 'Fehler beim Anlegen des Benutzers')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handleDone() {
+    setNewKey(null) // Key aus dem State entfernen
+    onClose(true)   // Liste neu laden
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-surface-border flex items-center gap-3">
+          <UserPlus className="w-5 h-5 text-teal-600 shrink-0" />
+          <h2 className="text-sm font-semibold text-ink">Neuen Benutzer anlegen</h2>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Phase 1: Name eingeben */}
+          {!newKey && (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-ink mb-1.5">
+                  Name des Tenants <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  autoComplete="off"
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
+                  placeholder="z.B. Acme GmbH"
+                  maxLength={255}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <p className="mt-1 text-xs text-ink-muted">
+                  Slug und API-Key werden automatisch generiert.
+                </p>
+              </div>
+
+              {error && (
+                <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  {error}
+                </div>
+              )}
+
+              <button
+                onClick={handleCreate}
+                disabled={loading || !nameInput.trim()}
+                className="w-full flex items-center justify-center gap-2 py-2 px-4 text-sm font-medium rounded-lg bg-primary-700 text-white hover:bg-primary-800 disabled:opacity-50 transition-colors"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                Benutzer anlegen
+              </button>
+            </>
+          )}
+
+          {/* Phase 2: API-Key einmalig anzeigen */}
+          {newKey && newUser && (
+            <>
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-800">
+                <Check className="inline w-4 h-4 mr-1" />
+                <strong>{newUser.name}</strong> wurde angelegt (Slug: <code className="font-mono">{newUser.slug}</code>).
+              </div>
+
+              {/* Warnung */}
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
+                <strong>Jetzt kopieren!</strong> Dieser API-Key wird nicht erneut angezeigt und ist ab sofort aktiv.
+              </div>
+
+              {/* Key-Anzeige + Copy */}
+              <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <code className="flex-1 text-xs font-mono text-ink break-all select-all">{newKey}</code>
+                <CopyButton text={newKey} />
+              </div>
+
+              <button
+                onClick={handleDone}
+                className="w-full flex items-center justify-center gap-2 py-2 px-4 text-sm font-medium rounded-lg bg-primary-700 text-white hover:bg-primary-800 transition-colors"
+              >
+                <Check className="w-4 h-4" />
+                Fertig — Key wurde gesichert
+              </button>
+            </>
+          )}
+        </div>
+
+        {!newKey && (
+          <div className="px-5 pb-4 flex justify-end">
+            <button
+              onClick={() => onClose(false)}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-gray-50 transition-colors"
+            >
+              Abbrechen
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function UserManagement() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -236,6 +365,7 @@ export default function UserManagement() {
   // Dialog-State
   const [regenerateTarget, setRegenerateTarget] = useState(null) // { id, name }
   const [setKeyTarget, setSetKeyTarget] = useState(null) // { id, name }
+  const [createUserOpen, setCreateUserOpen] = useState(false)
 
   const loadUsers = useCallback(() => {
     setLoading(true)
@@ -263,6 +393,11 @@ export default function UserManagement() {
     loadUsers()
   }
 
+  function handleCreateUserClose(didCreate) {
+    setCreateUserOpen(false)
+    if (didCreate) loadUsers()
+  }
+
   function handleUseAsContext(maskedKey, userId) {
     // Wir haben nur den masked Key hier — User muss regenerate nutzen für Klartext.
     // Daher nur Hinweis; echte Nutzung läuft über den Regenerate-Dialog.
@@ -274,6 +409,11 @@ export default function UserManagement() {
 
   return (
     <div>
+      {/* Create-User-Dialog */}
+      {createUserOpen && (
+        <CreateUserDialog onClose={handleCreateUserClose} />
+      )}
+
       {/* Regenerate-Dialog */}
       {regenerateTarget && (
         <NewKeyDialog
@@ -303,14 +443,23 @@ export default function UserManagement() {
             Tenant-Nutzer verwalten und API-Keys rotieren.
           </p>
         </div>
-        <button
-          onClick={loadUsers}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition-colors disabled:opacity-40"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Aktualisieren
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCreateUserOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-teal-700 text-white hover:bg-teal-600 transition-colors"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            Neuer Benutzer
+          </button>
+          <button
+            onClick={loadUsers}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition-colors disabled:opacity-40"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Aktualisieren
+          </button>
+        </div>
       </div>
 
       {/* Error */}

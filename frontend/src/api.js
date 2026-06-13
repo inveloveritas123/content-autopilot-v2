@@ -694,3 +694,5 @@ export const adminRegenerateApiKey = (id) =>
   adminRequest(`/admin/users/${id}/regenerate-api-key`, { method: 'POST' })
 export const adminSetApiKey = (id, key) =>
   adminRequest(`/admin/users/${id}/api-key`, { method: 'PUT', body: { api_key: key } })
+export const adminCreateUser = (name) =>
+  adminRequest('/admin/users', { method: 'POST', body: { name } })
