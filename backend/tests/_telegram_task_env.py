@@ -107,11 +107,19 @@ if "config" not in sys.modules:
 # models.base
 # ---------------------------------------------------------------------------
 
+# models als Paket mit __path__ anlegen, damit Submodule (models.llm_provider,
+# models.llm_call_log, etc.) via normalen Import gefunden werden koennen.
 if "models" not in sys.modules:
-    _stub("models")
+    _m = _stub("models")
+    _m.__path__ = [os.path.join(_BACKEND_DIR, "models")]
+    _m.__package__ = "models"
 if "models.base" not in sys.modules:
     _mb = _stub("models.base")
     _mb.sync_session_factory = MagicMock()
+    _mb.async_session_factory = MagicMock()
+    _mb.Base = MagicMock()
+    _mb.async_engine = MagicMock()
+    _mb.sync_engine = MagicMock()
 
 # ---------------------------------------------------------------------------
 # services — WICHTIG: NICHT als Plain-ModuleType stubben.
@@ -146,6 +154,9 @@ if "services.llm" not in sys.modules:
 
         _llm.BudgetExceededError = _BudgetExceededError
         _llm.RateLimitExceededError = _RateLimitExceededError
+        _llm.LLMService = MagicMock
+        _llm.set_llm_tenant = MagicMock()
+        _llm._maybe_send_global_cap_alert = MagicMock()
 
 # services.nextcloud VOR services-Import stubben
 if "services.nextcloud" not in sys.modules:
@@ -154,6 +165,16 @@ if "services.nextcloud" not in sys.modules:
 
 # Jetzt services als echtes Paket importieren (damit __path__ gesetzt ist)
 import services as _services_pkg
+
+# services.provider_resolver — als Stub + Paket-Attribut registrieren.
+# provider_resolver.py braucht models.llm_provider (DB-Modell) at module level;
+# in Unit-Tests nutzen wir MagicMock-Stubs. @patch("services.provider_resolver.*")
+# braucht das Modul als Attribut von services.
+if "services.provider_resolver" not in sys.modules:
+    _pr = _stub("services.provider_resolver")
+    _pr.get_active_provider = MagicMock(return_value=None)
+    _pr.track_cost = MagicMock()
+_services_pkg.provider_resolver = sys.modules["services.provider_resolver"]
 
 # services.voice_transcription — telegram_task importiert es auf Modulebene.
 # Das echte Modul hat keine Google/Whisper-Imports auf Modulebene → direkt

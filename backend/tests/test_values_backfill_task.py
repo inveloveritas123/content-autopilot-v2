@@ -776,41 +776,39 @@ def json_decode(s: str) -> dict:
 
 
 def _patch_canonical_imports(module):
-    """Setzt Stubs für lazy-imports von schema_transformer und canonical_wiring im Task-Modul.
+    """Setzt Stubs für lazy-imports von schema_transformer und canonical_wiring.
 
-    Da values_backfill_task.py services.schema_transformer und tasks.canonical_wiring
-    erst zur Laufzeit importiert (lazy, um dep-freien Test-Kern zu ermöglichen),
-    müssen wir die Stubs in sys.modules setzen BEVOR der Task sie importiert.
-
-    Anti-Pollution: Stubs nur wenn Modul noch nicht geladen (if not in sys.modules).
+    IMMER überschreiben (kein if-not-in-sys.modules-Guard): test_p03_linkedin_posts.py
+    lädt p03_task.py während der Kollektion, das services.schema_transformer und
+    tasks.canonical_wiring als ECHTE Module importiert. Der Guard würde greifen und
+    den echten sync_session_factory-MagicMock durchreichen → fetch_tenant_meta liefert
+    dann (MagicMock, None) statt (None, None) → re.sub-TypeError in _slugify().
     """
     import types
 
-    # schema_transformer — build_canonical_meta + finalize_canonical
-    if "services.schema_transformer" not in sys.modules:
-        _st = types.ModuleType("services.schema_transformer")
+    # schema_transformer — IMMER als Stub überschreiben
+    _st = types.ModuleType("services.schema_transformer")
 
-        def _build_canonical_meta(key, *, tenant_id, model, generated_at, **kwargs):
-            return {
-                "agentur_id": "zb",
-                "kunde_id": "test-tenant",
-                "prompt_version": f"{key}-v1.0",
-                "model": model,
-                "generated_at": generated_at,
-            }
+    def _build_canonical_meta(key, *, tenant_id, model, generated_at, **kwargs):
+        return {
+            "agentur_id": "zb",
+            "kunde_id": "test-tenant",
+            "prompt_version": f"{key}-v1.0",
+            "model": model,
+            "generated_at": generated_at,
+        }
 
-        def _finalize_canonical(key, doc, *, meta):
-            out = dict(doc) if isinstance(doc, dict) else {}
-            out["_meta"] = meta
-            return out, []
+    def _finalize_canonical(key, doc, *, meta):
+        out = dict(doc) if isinstance(doc, dict) else {}
+        out["_meta"] = meta
+        return out, []
 
-        _st.build_canonical_meta = _build_canonical_meta
-        _st.finalize_canonical = _finalize_canonical
-        sys.modules["services.schema_transformer"] = _st
+    _st.build_canonical_meta = _build_canonical_meta
+    _st.finalize_canonical = _finalize_canonical
+    sys.modules["services.schema_transformer"] = _st
 
-    # canonical_wiring — fetch_tenant_meta + now_iso
-    if "tasks.canonical_wiring" not in sys.modules:
-        _cw = types.ModuleType("tasks.canonical_wiring")
-        _cw.fetch_tenant_meta = lambda tenant_id: (None, None)
-        _cw.now_iso = lambda: "2026-06-13T00:00:00+00:00"
-        sys.modules["tasks.canonical_wiring"] = _cw
+    # canonical_wiring — IMMER als Stub überschreiben
+    _cw = types.ModuleType("tasks.canonical_wiring")
+    _cw.fetch_tenant_meta = lambda tenant_id: (None, None)
+    _cw.now_iso = lambda: "2026-06-13T00:00:00+00:00"
+    sys.modules["tasks.canonical_wiring"] = _cw
