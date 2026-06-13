@@ -85,8 +85,7 @@ if _existing is None or not hasattr(_existing, "_build_qa_pairs"):
 
 spt = sys.modules["tasks.session_post_task"]
 
-# Import clear_config_cache for test isolation
-
+from services.quality_gate_stub import clear_config_cache
 
 # ---------------------------------------------------------------------------
 # Helfer: load_active_profile mit gewünschtem branche-Wert mocken
