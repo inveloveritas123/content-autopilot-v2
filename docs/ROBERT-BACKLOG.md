@@ -33,6 +33,12 @@ Umgestellt (US-Calls eliminiert, Compliance gefixt):
 Der CHECK-Constraint `telegram_message_log.routed_to` (Migration 019:66) kennt die neuen Targets `p09`/`p13` nicht. Aktuell migrationsfrei auf `'p10'` gemappt (`_ROUTED_TO_MAP`) → Dedupe funktioniert, aber das Log ist semantisch unscharf (p09/p13 erscheinen als p10). **→ Robert: optionale Mini-Migration, die den CHECK um `'p09','p13'` erweitert** (dann Mapping entfernen). Klein, nicht dringend.
 Chris-Flags #36: (a) Board 4.6 „optional 2–3 Rückfragen VOR den Aufhängern" wurde als MVP übersprungen (die targeted-Session NACH der Wahl liefert die Rückfragen via Bahn 5) — Lesart bestätigen. (b) Text-Nummern 1/2/3 statt Telegram-Inline-Buttons.
 
+### #38 — Quality-Gate scharfschalten (`quality_gate_enforce`) — outward, wartet auf Robert
+Der Quality-Gate ist als Final-Gate vor dem Telegram-Versand verdrahtet (#38 Chunk 3), läuft aber im
+**Shadow-Mode** (Default `quality_gate_enforce=False`): score+log, **Versand unverändert**. Scharf
+(`=True`) → schlechte Posts gehen in den Review-Pfad statt raus. **→ Robert:** Aktivierung erst freigeben,
+wenn (a) Korpus erweitert (#80) + Chunk 2 gebaut **und** (b) du das outward-Verhalten willst. Nicht dringend.
+
 ### #24 — Deploy-Pfad (mit Knecht)
 SSH Port 10022 vs. self-hosted GitHub-Runner. **→ Richtung entscheiden.**
 

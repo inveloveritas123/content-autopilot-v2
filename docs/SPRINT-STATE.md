@@ -94,9 +94,10 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 ### Subagenten-Arbeitsweise (Robert bekräftigt 2026-06-13)
 „Immer mit Subagenten + passendem Modell." → Impl delegieren (sonnet), Cross-Model-Review (fable/opus, ≠ Implementer; fable aktuell down → opus). Architekt-Hauptloop = Wiring/Entscheid/Review. Prompts/MD nie ohne Freigabe ändern → `docs/CHRIS-BACKLOG.md`. Originale in Louis-Übergabe `Import/Linkedin-Content-Autopilot/`.
 
+- ✅ **#38 Chunk 3 fertig** (Commit 01f78c1): Quality-Gate als Final-Gate in `session_post_task` (Block 6b) verdrahtet, **Shadow-Mode Default** (score+log, Versand unverändert). Enforce hinter Setting `quality_gate_enforce` (Default False, outward → **Robert-Freigabe zum Scharfschalten**). fail-open. Impl Sonnet → Review Opus (PASS). 15 Tests grün. branche=_generic (Follow-up-Issue).
+
 ### Nächste Architekt-Items (alle per-File-TDD, dann fetch+rebase+push)
-- **#38 Chunk 3** (Final-Gate-Wiring in `session_post_task` vor `_send_telegram_message`) — **Shadow-Mode** (score+log, KEINE Verhaltensänderung; Blockieren erst nach Robert-Freigabe, da outward). Sonnet-Impl + Opus-Review.
-- #38 Chunk 2 (semantische LLM-Schicht) — Wert erst nach #80 (Korpus) messbar.
+- #38 Chunk 2 (semantische LLM-Schicht) — baubar, aber **Wert erst nach #80 (Korpus) messbar** → niedrige Prio (Testmodus-first: Pipeline-läuft > Qualität).
 - cost_tracking-Fix (sonnet) · Sprint-2-Rest #29/#25/#26 (Schema) nach #33-Landing (Knecht).
 - **Chris (blockiert Scharfschaltung):** #22 P17-Headings (#41), #39 P02-Prompt. **Robert-Housekeeping:** PR #66 mergen, #55 schließen. **Späterer Sprint:** #72 Modell-Modus-Switch.
 
