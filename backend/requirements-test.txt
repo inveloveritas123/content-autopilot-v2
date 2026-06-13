@@ -2,3 +2,7 @@
 # Installiert via CI in test jobs
 pytest>=8.0
 pytest-asyncio>=0.24
+sqlalchemy[asyncio]==2.0.*
+fastapi==0.115.*
+httpx==0.28.*
+jsonschema>=4.0
