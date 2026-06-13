@@ -85,6 +85,8 @@ if _existing is None or not hasattr(_existing, "_build_qa_pairs"):
 
 spt = sys.modules["tasks.session_post_task"]
 
+# Import clear_config_cache for test isolation
+
 
 # ---------------------------------------------------------------------------
 # Helfer: load_active_profile mit gewünschtem branche-Wert mocken
@@ -117,6 +119,10 @@ def _mock_lap_raises(exc_class=RuntimeError):
 
 class TestResolveBranche:
     """Unit-Tests für die _resolve_branche-Hilfsfunktion."""
+
+    def setup_method(self):
+        """Clear cache before each test for isolation."""
+        clear_config_cache()
 
     # ------------------------------------------------------------------
     # Direkte Branchen-Keys (exakter lower()-Match)

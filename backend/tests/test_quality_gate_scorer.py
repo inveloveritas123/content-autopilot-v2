@@ -24,9 +24,7 @@ import pathlib
 # File-Import des Scorers
 # ---------------------------------------------------------------------------
 
-_STUB_PATH = (
-    pathlib.Path(__file__).resolve().parent.parent / "services" / "quality_gate_stub.py"
-)
+_STUB_PATH = pathlib.Path(__file__).resolve().parent.parent / "services" / "quality_gate_stub.py"
 
 
 def _load_scorer():
@@ -35,10 +33,10 @@ def _load_scorer():
     mod = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod.quality_gate_check
+    return mod.quality_gate_check, mod.clear_config_cache
 
 
-quality_gate_check = _load_scorer()
+quality_gate_check, clear_config_cache = _load_scorer()
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
@@ -78,6 +76,10 @@ _GOOD_FINANZEN = (
 
 
 class TestLeerPost:
+    def setup_method(self):
+        """Clear cache before each test for isolation."""
+        clear_config_cache()
+
     def test_empty_string(self):
         result = quality_gate_check("", "_generic")
         assert result["passed"] is False
@@ -105,6 +107,10 @@ class TestLeerPost:
 
 
 class TestTooShort:
+    def setup_method(self):
+        """Clear cache before each test for isolation."""
+        clear_config_cache()
+
     def test_very_short_fails(self):
         result = quality_gate_check("Hallo Welt.", "_generic")
         assert result["passed"] is False
@@ -155,6 +161,10 @@ class TestTooShort:
 
 
 class TestExcessiveCaps:
+    def setup_method(self):
+        """Clear cache before each test for isolation."""
+        clear_config_cache()
+
     def test_full_caps_short_fails(self):
         text = "KLAGE JETZT!!! GELD ZURUECK!!!"
         result = quality_gate_check(text, "_generic")
@@ -191,6 +201,10 @@ class TestExcessiveCaps:
 
 
 class TestNoSentenceTerminators:
+    def setup_method(self):
+        """Clear cache before each test for isolation."""
+        clear_config_cache()
+
     def test_no_punctuation_short_fails(self):
         result = quality_gate_check("hallo welt das ist ein test", "_generic")
         assert result["passed"] is False
@@ -219,6 +233,10 @@ class TestNoSentenceTerminators:
 
 
 class TestRechtDisclaimer:
+    def setup_method(self):
+        """Clear cache before each test for isolation."""
+        clear_config_cache()
+
     def test_good_recht_with_disclaimer_passes(self):
         result = quality_gate_check(_GOOD_RECHT, "recht")
         assert result["passed"] is True
@@ -254,14 +272,11 @@ class TestRechtDisclaimer:
             "Anwalt konsultieren",
         ]
         for phrase in phrases_ok:
-            text = (
-                "Rechtliche Frage zu Mietrecht und Kuendigung. " * 10
-                + f"\n\n{phrase}."
-            )
+            text = "Rechtliche Frage zu Mietrecht und Kuendigung. " * 10 + f"\n\n{phrase}."
             result = quality_gate_check(text, "recht")
-            assert "missing_legal_disclaimer" not in result["violations"], (
-                f"Phrase '{phrase}' nicht erkannt"
-            )
+            assert (
+                "missing_legal_disclaimer" not in result["violations"]
+            ), f"Phrase '{phrase}' nicht erkannt"
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +285,10 @@ class TestRechtDisclaimer:
 
 
 class TestFinanzenDisclaimer:
+    def setup_method(self):
+        """Clear cache before each test for isolation."""
+        clear_config_cache()
+
     def test_good_finanzen_with_disclaimer_passes(self):
         result = quality_gate_check(_GOOD_FINANZEN, "finanzen")
         assert result["passed"] is True
@@ -306,13 +325,12 @@ class TestFinanzenDisclaimer:
         ]
         for phrase in phrases_ok:
             text = (
-                "Finanzielle Freiheit durch kluge Investitionen erreichen. " * 8
-                + f"\n\n{phrase}."
+                "Finanzielle Freiheit durch kluge Investitionen erreichen. " * 8 + f"\n\n{phrase}."
             )
             result = quality_gate_check(text, "finanzen")
-            assert "missing_financial_disclaimer" not in result["violations"], (
-                f"Phrase '{phrase}' nicht erkannt"
-            )
+            assert (
+                "missing_financial_disclaimer" not in result["violations"]
+            ), f"Phrase '{phrase}' nicht erkannt"
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +339,10 @@ class TestFinanzenDisclaimer:
 
 
 class TestPIIHeuristik:
+    def setup_method(self):
+        """Clear cache before each test for isolation."""
+        clear_config_cache()
+
     def test_family_name_flagged(self):
         text = (
             "Heute war ich bei Familie Mueller in Koeln und habe das Dach repariert. "
@@ -361,6 +383,10 @@ class TestPIIHeuristik:
 
 
 class TestBranchenThresholds:
+    def setup_method(self):
+        """Clear cache before each test for isolation."""
+        clear_config_cache()
+
     def test_generic_threshold(self):
         result = quality_gate_check("x", "_generic")
         assert result["threshold"] == 55.0
@@ -399,6 +425,10 @@ class TestBranchenThresholds:
 
 
 class TestHashtagSanity:
+    def setup_method(self):
+        """Clear cache before each test for isolation."""
+        clear_config_cache()
+
     def test_no_hashtags_ok(self):
         result = quality_gate_check(_GOOD_GENERIC, "_generic")
         assert "hashtag_spam" not in result["violations"]
@@ -421,6 +451,10 @@ class TestHashtagSanity:
 
 
 class TestRegression:
+    def setup_method(self):
+        """Clear cache before each test for isolation."""
+        clear_config_cache()
+
     def test_scorer_is_stateless(self):
         """Mehrfacher Aufruf mit gleichem Input liefert identisches Ergebnis."""
         text = _GOOD_GENERIC
@@ -449,6 +483,6 @@ class TestRegression:
         ]
         for text, branche in test_inputs:
             result = quality_gate_check(text, branche)
-            assert 0.0 <= result["score"] <= 100.0, (
-                f"Score {result['score']} ausserhalb [0,100] fuer [{branche}] text_len={len(text)}"
-            )
+            assert (
+                0.0 <= result["score"] <= 100.0
+            ), f"Score {result['score']} ausserhalb [0,100] fuer [{branche}] text_len={len(text)}"
