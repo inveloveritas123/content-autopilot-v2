@@ -25,8 +25,127 @@ import {
   ShieldAlert,
   Pencil,
   Sparkles,
+  Users,
 } from 'lucide-react'
 import { getProjects, createProject, deleteProject, updateProject } from '../api'
+
+// ─── Tenant-Switcher (Issue #88) ────────────────────────────────────────────
+// Liest VITE_TENANT_LIST aus der Build-Umgebung: JSON-Array [{label, key}, …].
+// Nur sichtbar wenn mindestens 2 Eintraege konfiguriert sind.
+// Keys kommen ausschliesslich aus .env.local (gitignored) — NIEMALS hartcoden!
+function parseTenantList() {
+  try {
+    const raw = import.meta.env.VITE_TENANT_LIST
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((t) => t && typeof t.label === 'string' && typeof t.key === 'string')
+  } catch {
+    return []
+  }
+}
+
+const TENANT_LIST = parseTenantList()
+const API_KEY_STORAGE = 'apiKey'
+
+function TenantSwitcher() {
+  const [open, setOpen] = useState(false)
+  const [switching, setSwitching] = useState(false)
+  const dropdownRef = useRef(null)
+
+  // Zeige nur wenn mind. 2 Tenants konfiguriert
+  if (TENANT_LIST.length < 2) return null
+
+  const currentKey = localStorage.getItem(API_KEY_STORAGE) || ''
+  const activeTenant = TENANT_LIST.find((t) => t.key === currentKey) || null
+  const activeLabel = activeTenant?.label ?? '—'
+
+  function handleSwitch(tenant) {
+    if (tenant.key === currentKey) {
+      setOpen(false)
+      return
+    }
+    setSwitching(true)
+    // Projekt-Keys des alten Tenants entfernen — verhindert "haengengebliebenes" Projekt
+    localStorage.removeItem('activeProjectId')
+    localStorage.removeItem('activeProjectName')
+    // Neuen Tenant-Key setzen
+    localStorage.setItem(API_KEY_STORAGE, tenant.key)
+    // Voller Reload — api.js liest den Key frisch, alle React-States/Caches werden verworfen
+    window.location.assign('/')
+  }
+
+  // Klick ausserhalb schliesst Dropdown
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setOpen((s) => !s)}
+        disabled={switching}
+        className="w-full flex items-center gap-2 px-3 py-2 min-h-[40px] rounded-lg hover:bg-gray-50 transition-colors group border border-surface-border"
+        title="Tenant wechseln"
+      >
+        <div className="w-5 h-5 rounded-md bg-amber-100 flex items-center justify-center shrink-0">
+          <Users className="w-3 h-3 text-amber-700" />
+        </div>
+        <span className="flex-1 text-left text-[11px] font-medium text-ink-muted truncate">
+          {switching ? 'Wechsle…' : activeLabel}
+        </span>
+        <ChevronDown
+          className={`w-3 h-3 text-ink-muted transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-surface-border rounded-xl shadow-lg z-50 py-1 overflow-hidden">
+          <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+            Tenant wechseln
+          </p>
+          {TENANT_LIST.map((t) => {
+            const isActive = t.key === currentKey
+            return (
+              <button
+                key={t.label}
+                onClick={() => handleSwitch(t)}
+                className={clsx(
+                  'w-full flex items-center gap-2 px-3 py-2 min-h-[40px] text-left hover:bg-gray-50 transition-colors',
+                  isActive && 'bg-amber-50'
+                )}
+              >
+                {isActive ? (
+                  <Check className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                ) : (
+                  <div className="w-3.5 h-3.5 shrink-0" />
+                )}
+                <span
+                  className={clsx(
+                    'text-xs truncate',
+                    isActive ? 'font-semibold text-amber-700' : 'text-ink'
+                  )}
+                >
+                  {t.label}
+                </span>
+              </button>
+            )
+          })}
+          <div className="border-t border-gray-100 mt-1 px-3 py-2">
+            <p className="text-[10px] text-ink-muted leading-relaxed">
+              Daten &amp; Einstellungen des neuen Tenants werden nach dem Wechsel geladen.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // #90 finale Zuordnung (Robert-Freigabe 2026-06-13); Admin/Tooling-Screens ins Admin-Tool #98 ausgelagert
 // mvp:true  = Kern-Flow (Setup/Speicher/Input/Output), immer sichtbar
@@ -331,6 +450,8 @@ export default function Layout({ children }) {
           </div>
           {/* Project Switcher */}
           <ProjectSwitcher />
+          {/* Tenant Switcher — nur sichtbar wenn VITE_TENANT_LIST mit ≥2 Eintraegen konfiguriert */}
+          <TenantSwitcher />
         </div>
 
         {/* Navigation */}
