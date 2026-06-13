@@ -844,7 +844,7 @@ async def wizard_synthesize_phase(
         parsed = await llm_service.complete_json(
             prompt=user_content,
             system=system_prompt,
-            model="claude-sonnet",
+            model="mistral/mistral-large-latest",
             purpose="onboarding",
         )
         # complete_json kann dict ODER list zurückgeben — wir akzeptieren list
