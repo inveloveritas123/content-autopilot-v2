@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>#90 — Modi MVP vs Features · Zuordnungs-Übersicht zur Freigabe</title>
+<style>
+  :root{ --teal:#0F766E; --teal-50:#f0fdfa; --teal-100:#ccfbf1; --amber:#d97706;
+         --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --mvp:#0F766E; --feat:#9ca3af; --border-amber:#fcd34d;}
+  *{box-sizing:border-box}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);
+       margin:0;background:#f9fafb;line-height:1.5}
+  header{background:var(--teal);color:#fff;padding:28px 32px}
+  header h1{margin:0 0 6px;font-size:22px}
+  header p{margin:0;opacity:.9;font-size:14px}
+  .wrap{max-width:1080px;margin:0 auto;padding:24px 32px 64px}
+  .legend{display:flex;gap:20px;flex-wrap:wrap;background:#fff;border:1px solid var(--line);
+          border-radius:12px;padding:14px 18px;margin:20px 0;font-size:13px}
+  .legend b{font-weight:600}
+  .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600}
+  .pill.mvp{background:var(--teal-100);color:var(--teal)}
+  .pill.feat{background:#f3f4f6;color:var(--muted)}
+  .pill.q{background:#fef3c7;color:var(--amber)}
+  h2{font-size:15px;margin:28px 0 8px;color:var(--teal);border-bottom:2px solid var(--teal-100);padding-bottom:6px}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{text-align:left;padding:10px 12px;font-size:13px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--teal-50);color:var(--teal);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+  tr:last-child td{border-bottom:none}
+  tr.q{background:#fffdf5}
+  td.chk{text-align:center;width:64px}
+  input[type=checkbox]{width:20px;height:20px;accent-color:var(--teal);cursor:pointer}
+  .scr{font-weight:600}
+  .route{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted)}
+  .why{color:var(--muted);font-size:12px}
+  .board{font-size:12px}
+  .count{font-size:13px;color:var(--muted);margin-top:8px}
+  .note{background:#fffbeb;border:1px solid var(--border-amber);border-radius:10px;padding:12px 16px;font-size:13px;margin:18px 0}
+  footer{color:var(--muted);font-size:12px;margin-top:32px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<header>
+  <h1>#90 — Zwei UI-Modi: <b>MVP</b> (schlank) vs <b>Features</b> (Voll-Stand)</h1>
+  <p>Architekt-Vorschlag zur Freigabe · Zuordnung jedes Nav-Elements nach Board-Farbsemantik (docs/FIGMA-SOLL-IST-MASTER.md) · Haken = im MVP sichtbar</p>
+</header>
+<div class="wrap">
+
+  <div class="legend">
+    <span><b>Regel:</b> Board GELB/ORANGE = Kern-Flow → MVP &nbsp;·&nbsp; BLAU (LinkedIn)/GRAU (P05/P06, optional) = später → Features</span>
+    <span><span class="pill mvp">✓ MVP</span> im schlanken Modus sichtbar</span>
+    <span><span class="pill feat">○ Feature</span> nur im Voll-Modus</span>
+    <span><span class="pill q">? offen</span> Grenzfall — bitte entscheiden</span>
+  </div>
+
+  <div class="note">
+    <b>Zum Durchspielen:</b> Die Haken sind klickbar (symbolisch, nichts wird gespeichert). Setz/entfern sie wie du es willst —
+    dann sag mir die Abweichungen, und ich schalte genau diese Zuordnung als finale Default-Konfiguration scharf.
+    <b>Der Knecht braucht kein Figma</b> — diese Matrix IST der vollständige strukturelle Abgleich.
+  </div>
+
+  <h2>Hauptnavigation</h2>
+  <table>
+    <tr><th class="chk">MVP</th><th>Screen</th><th>Board-Bezug</th><th>Begründung</th></tr>
+    <tr><td class="chk"><input type="checkbox" checked></td><td><span class="scr">Dashboard</span><br><span class="route">/</span></td><td class="board">Steuer-Konsole</td><td class="why">Übersicht + Start/Stop (Automatik). Kern.</td></tr>
+    <tr><td class="chk"><input type="checkbox" checked></td><td><span class="scr">Pipeline</span><br><span class="route">/pipeline</span></td><td class="board">Bahn 2 (Setup, gelb)</td><td class="why">Setup-/Verarbeitungs-Lauf. Kern-Flow.</td></tr>
+    <tr><td class="chk"><input type="checkbox" checked></td><td><span class="scr">Ideen</span><br><span class="route">/ideas</span></td><td class="board">Bahn 4 P09/P13 (gelb)</td><td class="why">Ideen/Aufhänger — Input-Pfad, Kern.</td></tr>
+    <tr><td class="chk"><input type="checkbox" checked></td><td><span class="scr">Posts</span><br><span class="route">/posts</span></td><td class="board">Bahn 5 Output (gelb)</td><td class="why">Erzeugte Posts. Kern-Output.</td></tr>
+    <tr><td class="chk"><input type="checkbox" checked></td><td><span class="scr">Einstellungen</span><br><span class="route">/settings</span></td><td class="board">Konfiguration</td><td class="why">API-Key, Telegram-Bot, Modus, Pause. Pflicht.</td></tr>
+    <tr class="q"><td class="chk"><input type="checkbox"></td><td><span class="scr">Quellen</span> <span class="pill q">?</span><br><span class="route">/sources</span></td><td class="board">Bahn 1.3 (Sammeln, „für Beta sekundär")</td><td class="why">YouTube/RSS-Monitoring. Board nennt es sekundär → eher Feature; flippen wenn du Quellen im MVP willst.</td></tr>
+    <tr class="q"><td class="chk"><input type="checkbox"></td><td><span class="scr">Posten</span> <span class="pill q">?</span><br><span class="route">/publish</span></td><td class="board">Bahn 5 / BLAU (LinkedIn)</td><td class="why">Publish-Queue. Output geht im Board in den Chat, nicht Auto-Publish → eher Feature.</td></tr>
+    <tr class="q"><td class="chk"><input type="checkbox"></td><td><span class="scr">Dialogue</span> <span class="pill q">?</span><br><span class="route">/dialogue</span></td><td class="board">Bahn 4/5 (läuft in Telegram)</td><td class="why">Dialog im Dashboard — Telegram ist der eigentliche Kanal → eher Feature.</td></tr>
+    <tr class="q"><td class="chk"><input type="checkbox"></td><td><span class="scr">Feedback</span> <span class="pill q">?</span><br><span class="route">/feedback</span></td><td class="board">Bahn 5.6 (Loop läuft in Telegram)</td><td class="why">Feedback-Statistik-Seite = Reporting → Feature. Der Loop selbst ist im Chat.</td></tr>
+    <tr><td class="chk"><input type="checkbox"></td><td><span class="scr">Kalender</span><br><span class="route">/calendar</span></td><td class="board">Nice-to-have</td><td class="why">Content-Kalender. Nicht im Kern-Flow.</td></tr>
+    <tr><td class="chk"><input type="checkbox"></td><td><span class="scr">Analytics</span><br><span class="route">/analytics</span></td><td class="board">BLAU (LinkedIn-Statistik)</td><td class="why">LinkedIn-abhängig → Board-konform später.</td></tr>
+    <tr><td class="chk"><input type="checkbox"></td><td><span class="scr">LLM Analytics</span><br><span class="route">/settings/analytics</span></td><td class="board">Werkzeug (Kosten)</td><td class="why">Kosten-Reporting. Werkzeug, nicht Produkt.</td></tr>
+  </table>
+
+  <h2>Brand Voice &amp; Speicher</h2>
+  <table>
+    <tr><th class="chk">MVP</th><th>Screen</th><th>Board-Bezug</th><th>Begründung</th></tr>
+    <tr><td class="chk"><input type="checkbox" checked></td><td><span class="scr">Brand Voice</span><br><span class="route">/brand-voice</span></td><td class="board">Bahn 2/3 (Voice, gelb/Kern-Asset)</td><td class="why">Voice-Profil — zentrales Asset (speist P12). Kern.</td></tr>
+    <tr><td class="chk"><input type="checkbox" checked></td><td><span class="scr">So liest KI mich</span><br><span class="route">/brand-voice/insights</span></td><td class="board">Bahn 3 (Voice-Anzeige)</td><td class="why">Transparenz aufs Voice-Profil. Teil des Kern-Assets.</td></tr>
+    <tr class="q"><td class="chk"><input type="checkbox" checked></td><td><span class="scr">Gedächtnis</span> <span class="pill q">?</span><br><span class="route">/memory</span></td><td class="board">Bahn 3 Speicher (Kern)</td><td class="why">Speicher ist eine eigene Bahn → MVP. Flippen, falls zu technisch fürs MVP.</td></tr>
+    <tr><td class="chk"><input type="checkbox"></td><td><span class="scr">Review-Queue</span><br><span class="route">/brand-voice/review-queue</span></td><td class="board">Bahn 5.7/5.8 (operativ)</td><td class="why">Drift-/Qualitäts-Review. Operativer Feinschliff → Feature.</td></tr>
+    <tr><td class="chk"><input type="checkbox"></td><td><span class="scr">Gedächtnis-Karte</span><br><span class="route">/memory/viz</span></td><td class="board">Visualisierung</td><td class="why">pgvector-Visualisierung. Nice-to-have → Feature.</td></tr>
+    <tr class="q"><td class="chk"><input type="checkbox"></td><td><span class="scr">Firmen-Profil</span> <span class="pill q">?</span><br><span class="route">/settings/company-profile</span></td><td class="board">Bahn 2 (Setup-Detail)</td><td class="why">Onboarding-Detail. Unter Einstellungen → eher Feature; flippen wenn Teil des MVP-Setups.</td></tr>
+    <tr class="q"><td class="chk"><input type="checkbox"></td><td><span class="scr">Recht auf Vergessen</span> <span class="pill q">?</span><br><span class="route">/settings/data-deletion</span></td><td class="board">DSGVO-Compliance</td><td class="why">Datenlöschung. Compliance — willst du es evtl. immer sichtbar? Default Feature.</td></tr>
+  </table>
+
+  <h2>Admin / Werkzeuge</h2>
+  <table>
+    <tr><th class="chk">MVP</th><th>Screen</th><th>Board-Bezug</th><th>Begründung</th></tr>
+    <tr><td class="chk"><input type="checkbox"></td><td><span class="scr">Modelle</span><br><span class="route">/admin/models/backtest</span></td><td class="board">Werkzeug (Admin)</td><td class="why">Modell-Backtest. Admin-Werkzeug → Feature.</td></tr>
+    <tr><td class="chk"><input type="checkbox"></td><td><span class="scr">Prompt-Studio</span><br><span class="route">/settings/prompt-studio</span></td><td class="board">Werkzeug (Chris)</td><td class="why">Prompt-Editor. Internes Werkzeug → Feature.</td></tr>
+  </table>
+
+  <div class="count">
+    <b>Vorschlag-Zusammenfassung:</b> 8&nbsp;× ✓ MVP fest · 6&nbsp;× ? Grenzfall (3 davon vorgeschlagen-an, 3 vorgeschlagen-aus) · Rest Feature.
+    MVP-Default schlank = <b>Dashboard · Pipeline · Ideen · Posts · Einstellungen · Brand Voice · So liest KI mich · Gedächtnis</b>.
+  </div>
+
+  <div class="note">
+    <b>Tiefe Routen</b> (Wizard, Drift-Review, Export/Import, Pipeline-Modelle) erscheinen nicht in der Hauptnav, sondern werden
+    aus ihren Eltern-Seiten erreicht — sie folgen automatisch der Sichtbarkeit ihres Bereichs. Kein eigenes Gating nötig.
+  </div>
+
+  <footer>
+    Architekt-Vorschlag · Mechanik (Modus-Flag <code>ui_mode</code> + Nav-Gating + Settings-Toggle) ist bereits gebaut und wartet
+    auf genau diese Freigabe. Nach deinem OK: finale Flags setzen → Opus-Review → Commit. · Quelle: docs/FIGMA-SOLL-IST-MASTER.md
+  </footer>
+</div>
+</body>
+</html>

@@ -74,6 +74,19 @@ class Settings(BaseSettings):
     whatsapp_verify_token: str | None = None
     whatsapp_app_secret: str | None = None  # für X-Hub-Signature-256-Verifikation
 
+    # Admin-Login (Issue #98 — Admin-Tool Port 8602)
+    # Werte kommen aus .env (Server), nie aus Git.
+    # ADMIN_USER: Benutzername für die Admin-Login-Seite
+    # ADMIN_PASSWORD: Passwort (Klartext in .env, nie loggen, nie in Code)
+    # ADMIN_SESSION_SECRET: HMAC-Schlüssel für signierte Session-Tokens
+    #   Wenn unset, wird der Secret aus default_tenant_key abgeleitet (weniger sicher).
+    admin_user: str | None = None
+    admin_password: str | None = None
+    admin_session_secret: str | None = None
+    # COOKIE_SECURE: Secure-Flag für Session-/CSRF-Cookies. Default False (HTTP-über-VPN);
+    #   auf true setzen, sobald hinter HTTPS deployt wird.
+    cookie_secure: bool = False
+
     class Config:
         env_file = ".env"
         extra = "ignore"

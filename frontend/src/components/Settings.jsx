@@ -11,6 +11,7 @@ import { Badge } from './ui/Badge'
 import { Input, Textarea } from './ui/Input'
 import { Dialog } from './ui/Dialog'
 import { useApi } from '../hooks/useApi'
+import { useUiMode } from '../hooks/useUiMode'
 import {
   getSettings,
   updateSettings,
@@ -25,6 +26,10 @@ import {
 export default function Settings() {
   const toast = useToast()
   const { data, loading, refetch } = useApi(getSettings)
+
+  // #90 UI-Modus: MVP vs Features
+  const { mode: uiMode, setMode: setUiMode } = useUiMode()
+  const [uiModeSaving, setUiModeSaving] = useState(false)
   const [localApiKey, setLocalApiKey] = useState(localStorage.getItem('apiKey') || '')
   const [tone, setTone] = useState('')
   const [language, setLanguage] = useState('')
@@ -257,9 +262,66 @@ export default function Settings() {
     },
   ]
 
+  // #90 Handler für Modus-Wechsel — aktualisiert Context sofort, kein Reload nötig
+  const handleUiModeChange = async (newMode) => {
+    if (newMode === uiMode) return
+    setUiModeSaving(true)
+    try {
+      await setUiMode(newMode)
+      toast.success(
+        newMode === 'mvp'
+          ? 'Ansicht auf MVP umgestellt — Navigation aktualisiert.'
+          : 'Ansicht auf Voll-Stand umgestellt — alle Features sichtbar.'
+      )
+    } catch (e) {
+      toast.error('Fehler beim Speichern des Modus: ' + e.message)
+    } finally {
+      setUiModeSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Einstellungen</h2>
+
+      {/* Oberflächen-Modus (Issue #90) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Oberflächen-Modus</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-gray-600">
+            <strong>MVP</strong> zeigt nur die Kern-Flows (Dashboard, Pipeline, Quellen, Ideen,
+            Posts, Posten, Brand Voice, Gedächtnis, Einstellungen). <strong>Features</strong> schaltet
+            den vollen Funktionsumfang frei (Dialogue, Kalender, Analytics, Admin-Tools usw.).
+          </p>
+          {/* Segmented Control: MVP | Features */}
+          <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+            {[
+              { value: 'mvp', label: 'MVP', desc: 'Schlank' },
+              { value: 'features', label: 'Features', desc: 'Voll-Stand' },
+            ].map(({ value, label, desc }) => (
+              <button
+                key={value}
+                disabled={uiModeSaving}
+                onClick={() => handleUiModeChange(value)}
+                className={[
+                  'px-5 py-2.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50',
+                  uiMode === value
+                    ? 'bg-primary-700 text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-50',
+                ].join(' ')}
+              >
+                {label}
+                <span className="ml-1.5 text-xs opacity-70">{desc}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400">
+            Modus wird pro Tenant gespeichert. Die Navigation passt sich sofort an — kein Reload nötig.
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Brand Voice Wizard CTA — replaces old v1 profile form */}
       <div className="rounded-xl border-2 border-primary-200 bg-primary-50 overflow-hidden shadow-sm">
