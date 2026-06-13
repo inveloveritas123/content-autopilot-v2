@@ -38,6 +38,7 @@ if _BACKEND_DIR not in sys.path:
 # Anti-Pollution: `if not in sys.modules`-Guard + AsyncSession/sessionmaker korrekt
 # ---------------------------------------------------------------------------
 
+
 def _stub(name: str) -> types.ModuleType:
     if name in sys.modules:
         return sys.modules[name]
@@ -96,7 +97,7 @@ if "services.nextcloud" not in sys.modules:
 
 # services als echtes Paket importieren (damit __path__ vorhanden ist,
 # was test_pipeline_llm.py braucht).
-import services as _services_pkg  # noqa: E402
+import services as _services_pkg
 
 # Stubs als Paket-Attribute registrieren
 _services_pkg.llm = sys.modules["services.llm"]
@@ -108,8 +109,10 @@ _services_pkg.nextcloud = sys.modules["services.nextcloud"]
 # Stattdessen: nur für das Laden von p12_task.py temporär überschreiben (patch.dict).
 # Sentinel-Objekte werden beim Laden verwendet.
 
+
 class _PipelineLLMStub:
     """Minimal-Stub für services.pipeline_llm beim p12_task-Load."""
+
     call_pipeline_llm = MagicMock()
     estimate_tier_cost = MagicMock(return_value=0.01)
     resolve_tier = MagicMock(return_value=("S6", {}))
@@ -163,6 +166,7 @@ class _FakeCeleryApp:
     def task(self, *a, **kw):
         def deco(fn):
             return fn
+
         return deco
 
 
@@ -178,6 +182,7 @@ if "tasks.celery_app" not in sys.modules:
 # ---------------------------------------------------------------------------
 # p12_pruning — dep-frei, direkt ladbar
 # ---------------------------------------------------------------------------
+
 
 def _load_pruning():
     p = os.path.join(_BACKEND_DIR, "tasks", "p12_pruning.py")
@@ -198,15 +203,19 @@ if "tasks.p12_pruning" not in sys.modules:
 # p12_task laden — builtins.open patchen damit _load_schema() kein .json liest
 # ---------------------------------------------------------------------------
 
+
 def _load_p12_task():
     import builtins
+
     _orig_open = builtins.open
 
     class _FakeJsonFile:
         def read(self, *a, **kw):
             return "{}"
+
         def __enter__(self):
             return self
+
         def __exit__(self, *a):
             pass
 
@@ -254,6 +263,7 @@ p12 = _load_p12_task()
 # Helfer — temporärer canonical_profiles-Stub für lazy Import-Tests
 # ---------------------------------------------------------------------------
 
+
 def _make_cp_stub(
     profiles_return: dict,
     active_profile_return=None,
@@ -288,6 +298,7 @@ def _run_load_active_profiles(tenant_id: str, cp_stub: types.ModuleType) -> tupl
 # Tests: _load_active_profiles — 4-Tupel
 # ---------------------------------------------------------------------------
 
+
 class TestLoadActiveProfilesFourTuple:
     """_load_active_profiles gibt ein 4-Tupel inkl. customer_values zurück."""
 
@@ -314,10 +325,10 @@ class TestLoadActiveProfilesFourTuple:
         cp = _make_cp_stub(_make_profiles_return(), active_profile_return=(values_payload, True))
         ctx, voice, avatar, values = _run_load_active_profiles("t-1", cp)
 
-        assert "person" in ctx     # customer_context
+        assert "person" in ctx  # customer_context
         assert "grundton" in voice  # voice_profile
         assert "identitaet" in avatar  # audience_avatar
-        assert "werte" in values   # customer_values
+        assert "werte" in values  # customer_values
 
     def test_no_values_in_table_returns_empty_dict(self):
         """load_active_profile für customer_values gibt ({}, False) → leeres Dict."""
@@ -330,16 +341,16 @@ class TestLoadActiveProfilesFourTuple:
 # Tests: Fail-open — Tabelle fehlt vor Migration 053
 # ---------------------------------------------------------------------------
 
+
 class TestLoadActiveProfilesFailOpen:
     """Fail-open: customer_values-Query wirft → leeres Dict, kein Crash."""
 
     def test_fail_open_on_table_missing(self):
         """Simuliert fehlende tenant_customer_values-Tabelle vor Migration."""
+
         def _raises_for_values(ptype, tenant_id, **kw):
             if ptype == "customer_values":
-                raise RuntimeError(
-                    'relation "tenant_customer_values" does not exist'
-                )
+                raise RuntimeError('relation "tenant_customer_values" does not exist')
             return {}, False
 
         cp = _make_cp_stub(_make_profiles_return(), active_profile_side_effect=_raises_for_values)
@@ -349,9 +360,7 @@ class TestLoadActiveProfilesFailOpen:
         assert len(result) == 4
         ctx, voice, avatar, values = result
         # Kein Crash — customer_values ist leer
-        assert values == {}, (
-            f"customer_values muss leer sein bei fehlendem Table, war: {values}"
-        )
+        assert values == {}, f"customer_values muss leer sein bei fehlendem Table, war: {values}"
         # Bestehende Profile unverändert
         assert "grundton" in voice
         assert "person" in ctx
@@ -369,12 +378,13 @@ class TestLoadActiveProfilesFailOpen:
         if pruned_values:
             context_payload["customer_values"] = pruned_values
 
-        assert "customer_values" not in context_payload, (
-            "Leere customer_values dürfen NICHT als Key in context_payload stehen"
-        )
+        assert (
+            "customer_values" not in context_payload
+        ), "Leere customer_values dürfen NICHT als Key in context_payload stehen"
 
     def test_voice_and_avatar_still_present_after_values_fail(self):
         """voice_profile/audience_avatar korrekt im Tuple auch wenn values fehlschlägt."""
+
         def _raises_always(ptype, tenant_id, **kw):
             raise RuntimeError("table missing")
 
@@ -388,6 +398,7 @@ class TestLoadActiveProfilesFailOpen:
 
     def test_any_exception_type_is_caught(self):
         """Auch unerwartete Exceptions (nicht nur RuntimeError) werden gefangen."""
+
         def _raises_value_error(ptype, tenant_id, **kw):
             raise ValueError("unexpected DB shape")
 
@@ -399,6 +410,7 @@ class TestLoadActiveProfilesFailOpen:
 # ---------------------------------------------------------------------------
 # Tests: _prune_for_p12 — 4-Tupel + prune_values
 # ---------------------------------------------------------------------------
+
 
 class TestPruneForP12FourTuple:
     """_prune_for_p12 gibt 4-Tupel inkl. gepruntem customer_values zurück."""
@@ -455,15 +467,14 @@ class TestPruneForP12FourTuple:
 # Tests: context_payload enthält customer_values wenn Werte vorhanden
 # ---------------------------------------------------------------------------
 
+
 class TestContextPayloadWithValues:
     """context_payload['customer_values'] wird gesetzt wenn pruned_values nicht leer."""
 
     def test_customer_values_in_payload_when_present(self):
         """Aktive Werte → 'customer_values'-Key in context_payload."""
         values_payload = {
-            "werte": [
-                {"wert": "Qualität", "status": "aktiv", "beschreibung": "Top-Arbeit."}
-            ],
+            "werte": [{"wert": "Qualität", "status": "aktiv", "beschreibung": "Top-Arbeit."}],
         }
         pruned_values = pp.prune_values(values_payload)
         context_payload: dict = {
@@ -507,6 +518,6 @@ class TestContextPayloadWithValues:
             assert pruned_values.get("werte") == []
         # Hauptsache: kein aktiver Wert gelangt in den Context
         for w in pruned_values.get("werte", []):
-            assert w.get("status", "aktiv") == "aktiv", (
-                "Nur aktive Werte dürfen im pruned_values stehen"
-            )
+            assert (
+                w.get("status", "aktiv") == "aktiv"
+            ), "Nur aktive Werte dürfen im pruned_values stehen"

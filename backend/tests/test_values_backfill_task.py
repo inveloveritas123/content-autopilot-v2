@@ -33,7 +33,7 @@ import os
 import sys
 import types
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -49,6 +49,7 @@ if _BACKEND_DIR not in sys.path:
 # ---------------------------------------------------------------------------
 # Anti-Pollution Stubs — NUR mit `if name not in sys.modules`-Guard
 # ---------------------------------------------------------------------------
+
 
 def _stub(name: str) -> types.ModuleType:
     if name in sys.modules:
@@ -79,9 +80,11 @@ if "tasks.celery_app" not in sys.modules:
 
     class _FakeCeleryApp:
         """Minimaler Celery-Stub: @celery_app.task(...)(fn) → fn (unveraendert)."""
+
         def task(self, *a, **kw):
             def deco(fn):
                 return fn
+
             return deco
 
     _ca.celery_app = _FakeCeleryApp()
@@ -144,6 +147,7 @@ _make_wert_entry = bt._make_wert_entry
 # Hilfs-Factories für Tests
 # ---------------------------------------------------------------------------
 
+
 def _chunk(id: str, content: str) -> dict:
     return {"id": id, "content_text": content, "created_at": "2026-01-01T10:00:00"}
 
@@ -180,7 +184,6 @@ def _make_db_execute(
             return [active_row] if active_row else []
         if "memory_chunks" in sql:
             # Tenant-Scope: nur Chunks mit passendem tenant_id liefern
-            t = params.get("t")
             return [c for c in _chunks if True]  # Fake: gibt alle zurück (Scope durch DB)
         if "tenant_customer_context" in sql:
             return _ctx
@@ -206,6 +209,7 @@ def _make_llm(werte: list[dict] | None = None, raises: Exception | None = None):
 # 1. N Chunks → kanonischer Payload mit Werte-Einträgen
 # ---------------------------------------------------------------------------
 
+
 class TestChunksToPayload:
     """Aus N 'werte'-memory_chunks entsteht ein Payload mit Werte-Einträgen."""
 
@@ -216,8 +220,20 @@ class TestChunksToPayload:
             _chunk("c3", "Vertrauen entsteht durch Verlässlichkeit."),
         ]
         llm_werte = [
-            {"wert": "Ehrlichkeit", "beschreibung": "Transparent in jedem Gespräch", "belege": ["Wir glauben an Ehrlichkeit"], "gewicht": 4, "status": "vorgeschlagen"},
-            {"wert": "Qualität", "beschreibung": "Qualität vor Schnelligkeit", "belege": ["Qualität ist wichtiger"], "gewicht": 4, "status": "vorgeschlagen"},
+            {
+                "wert": "Ehrlichkeit",
+                "beschreibung": "Transparent in jedem Gespräch",
+                "belege": ["Wir glauben an Ehrlichkeit"],
+                "gewicht": 4,
+                "status": "vorgeschlagen",
+            },
+            {
+                "wert": "Qualität",
+                "beschreibung": "Qualität vor Schnelligkeit",
+                "belege": ["Qualität ist wichtiger"],
+                "gewicht": 4,
+                "status": "vorgeschlagen",
+            },
         ]
         db_execute, write_calls = _make_db_execute(chunks_a=chunks)
         llm, llm_calls = _make_llm(werte=llm_werte)
@@ -225,7 +241,9 @@ class TestChunksToPayload:
         # schema_transformer + canonical_wiring müssen als Stubs im lazy-import stehen
         _patch_canonical_imports(bt)
 
-        result = asyncio.run(_backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm))
+        result = asyncio.run(
+            _backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm)
+        )
 
         assert result["status"] == "ok", f"Erwartet ok, erhalten: {result}"
         assert result["werte_count"] >= 1
@@ -235,9 +253,9 @@ class TestChunksToPayload:
         assert inserts, "Es muss einen INSERT geben"
         insert = inserts[0]
         # source ist literal im SQL-String (kein Bind-Param), daher SQL-String prüfen
-        assert "memory_promotion" in insert["sql"], (
-            "SQL muss 'memory_promotion' als source-Literal enthalten"
-        )
+        assert (
+            "memory_promotion" in insert["sql"]
+        ), "SQL muss 'memory_promotion' als source-Literal enthalten"
         # Payload enthält Werte
         payload = json_decode(insert["params"]["payload"])
         assert "werte" in payload
@@ -253,11 +271,14 @@ class TestChunksToPayload:
         llm, _ = _make_llm(werte=llm_werte)
         _patch_canonical_imports(bt)
 
-        result = asyncio.run(_backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm))
+        result = asyncio.run(
+            _backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm)
+        )
         assert result["status"] == "ok"
         inserts = [c for c in write_calls if "INSERT" in c["sql"]]
         assert inserts
         import json
+
         source_meta = json.loads(inserts[0]["params"]["source_meta"])
         assert "chunk_ids" in source_meta
         assert "c1" in source_meta["chunk_ids"]
@@ -269,23 +290,34 @@ class TestChunksToPayload:
         llm, _ = _make_llm(werte=llm_werte)
         _patch_canonical_imports(bt)
 
-        result = asyncio.run(_backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm))
+        result = asyncio.run(
+            _backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm)
+        )
         assert result["status"] == "ok"
         assert result["version"] == 1
 
     def test_version_increments_when_active_row_exists(self):
-        active = {"id": "old-row-id", "version": 5, "payload": {}, "source_meta": json_encode({"chunk_ids": []})}
+        active = {
+            "id": "old-row-id",
+            "version": 5,
+            "payload": {},
+            "source_meta": json_encode({"chunk_ids": []}),
+        }
         chunks = [_chunk("c-new", "Neue Erkenntnis zu Werten.")]
         llm_werte = [{"wert": "Innovation", "beschreibung": "...", "belege": [], "gewicht": 3}]
         db_execute, write_calls = _make_db_execute(chunks_a=chunks, active_row=active)
         llm, _ = _make_llm(werte=llm_werte)
         _patch_canonical_imports(bt)
 
-        result = asyncio.run(_backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm))
+        result = asyncio.run(
+            _backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm)
+        )
         assert result["status"] == "ok"
         assert result["version"] == 6  # version=5+1
         # Alte Row muss deaktiviert worden sein
-        updates = [c for c in write_calls if "UPDATE" in c["sql"] and "is_active = false" in c["sql"]]
+        updates = [
+            c for c in write_calls if "UPDATE" in c["sql"] and "is_active = false" in c["sql"]
+        ]
         assert updates, "Alte Row muss deaktiviert werden"
         assert updates[0]["params"]["id"] == "old-row-id"
 
@@ -293,6 +325,7 @@ class TestChunksToPayload:
 # ---------------------------------------------------------------------------
 # 2. Tenant-Scope
 # ---------------------------------------------------------------------------
+
 
 class TestTenantScope:
     """Chunks von Tenant B fließen NICHT in Tenant A's Werte."""
@@ -302,7 +335,9 @@ class TestTenantScope:
         chunks_a = [_chunk("a1", "Tenant A: Qualität ist alles.")]
         chunks_b = [_chunk("b1", "Tenant B: Geschwindigkeit zählt.")]
         llm_werte_a = [{"wert": "Qualität", "beschreibung": "A-Wert", "belege": [], "gewicht": 3}]
-        llm_werte_b = [{"wert": "Geschwindigkeit", "beschreibung": "B-Wert", "belege": [], "gewicht": 3}]
+        llm_werte_b = [
+            {"wert": "Geschwindigkeit", "beschreibung": "B-Wert", "belege": [], "gewicht": 3}
+        ]
 
         db_a, writes_a = _make_db_execute(chunks_a=chunks_a)
         db_b, writes_b = _make_db_execute(chunks_a=chunks_b)
@@ -316,8 +351,12 @@ class TestTenantScope:
         assert res_a["status"] == "ok"
         assert res_b["status"] == "ok"
 
-        payload_a = json_decode([c for c in writes_a if "INSERT" in c["sql"]][0]["params"]["payload"])
-        payload_b = json_decode([c for c in writes_b if "INSERT" in c["sql"]][0]["params"]["payload"])
+        payload_a = json_decode(
+            next(c for c in writes_a if "INSERT" in c["sql"])["params"]["payload"]
+        )
+        payload_b = json_decode(
+            next(c for c in writes_b if "INSERT" in c["sql"])["params"]["payload"]
+        )
 
         werte_names_a = {e["wert"] for e in payload_a.get("werte", [])}
         werte_names_b = {e["wert"] for e in payload_b.get("werte", [])}
@@ -341,20 +380,21 @@ class TestTenantScope:
         llm, _ = _make_llm(werte=[])
         _patch_canonical_imports(bt)
 
-        result = asyncio.run(
-            _backfill_tenant("my-unique-tenant-id", db_execute=_capturing_db_execute, llm_complete_json=llm)
+        asyncio.run(
+            _backfill_tenant(
+                "my-unique-tenant-id", db_execute=_capturing_db_execute, llm_complete_json=llm
+            )
         )
         # Alle SELECT-Calls müssen tenant_id 'my-unique-tenant-id' enthalten
         tenant_params = [p for p in received_params if not p["write"] and "t" in p["params"]]
         for p in tenant_params:
-            assert p["params"]["t"] == "my-unique-tenant-id", (
-                f"Falscher tenant_id in Query: {p}"
-            )
+            assert p["params"]["t"] == "my-unique-tenant-id", f"Falscher tenant_id in Query: {p}"
 
 
 # ---------------------------------------------------------------------------
 # 3. Idempotenz
 # ---------------------------------------------------------------------------
+
 
 class TestIdempotency:
     """Zweiter Lauf ohne neue Chunks → No-op (kein LLM-Call, keine neue Version)."""
@@ -373,7 +413,9 @@ class TestIdempotency:
         llm, llm_calls = _make_llm(werte=[])
         _patch_canonical_imports(bt)
 
-        result = asyncio.run(_backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm))
+        result = asyncio.run(
+            _backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm)
+        )
 
         assert result["status"] == "no_op", f"Erwartet no_op, erhalten: {result}"
         assert llm_calls[0] == 0, "Kein LLM-Call bei No-op"
@@ -398,7 +440,9 @@ class TestIdempotency:
         llm, llm_calls = _make_llm(werte=llm_werte)
         _patch_canonical_imports(bt)
 
-        result = asyncio.run(_backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm))
+        result = asyncio.run(
+            _backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm)
+        )
 
         assert result["status"] == "ok"
         assert llm_calls[0] == 1, "LLM muss bei neuem Chunk aufgerufen werden"
@@ -409,6 +453,7 @@ class TestIdempotency:
 # 4. Keine 'werte'-Chunks → sauberer No-op
 # ---------------------------------------------------------------------------
 
+
 class TestNoChunksNoOp:
     """Keine 'werte'-Chunks → sauberer No-op-Status, kein Crash."""
 
@@ -417,7 +462,9 @@ class TestNoChunksNoOp:
         llm, llm_calls = _make_llm(werte=[])
         _patch_canonical_imports(bt)
 
-        result = asyncio.run(_backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm))
+        result = asyncio.run(
+            _backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm)
+        )
 
         assert result["status"] == "no_op"
         assert llm_calls[0] == 0
@@ -438,12 +485,19 @@ class TestNoChunksNoOp:
 
     def test_no_chunks_but_active_row_returns_noop(self):
         """Aktive Row vorhanden, keine neuen Chunks → No-op."""
-        active = {"id": "row-id", "version": 1, "payload": {}, "source_meta": json_encode({"chunk_ids": []})}
+        active = {
+            "id": "row-id",
+            "version": 1,
+            "payload": {},
+            "source_meta": json_encode({"chunk_ids": []}),
+        }
         db_execute, write_calls = _make_db_execute(chunks_a=[], active_row=active)
         llm, llm_calls = _make_llm(werte=[])
         _patch_canonical_imports(bt)
 
-        result = asyncio.run(_backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm))
+        result = asyncio.run(
+            _backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm)
+        )
 
         assert result["status"] == "no_op"
         assert llm_calls[0] == 0
@@ -453,6 +507,7 @@ class TestNoChunksNoOp:
 # 5. Tabelle fehlt (vor Migration 053)
 # ---------------------------------------------------------------------------
 
+
 class TestTableMissing:
     """tenant_customer_values nicht vorhanden → No-op, kein Crash."""
 
@@ -461,7 +516,9 @@ class TestTableMissing:
         llm, _ = _make_llm()
         _patch_canonical_imports(bt)
 
-        result = asyncio.run(_backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm))
+        result = asyncio.run(
+            _backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm)
+        )
 
         assert result["status"] == "no_op"
         assert "table_missing" in result.get("reason", "")
@@ -472,9 +529,7 @@ class TestTableMissing:
         _patch_canonical_imports(bt)
 
         try:
-            result = asyncio.run(
-                _backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm)
-            )
+            asyncio.run(_backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm))
         except Exception as exc:
             pytest.fail(f"Exception bei fehlender Tabelle: {exc}")
 
@@ -483,6 +538,7 @@ class TestTableMissing:
 # 6. LLM-Fehler → Status 'error', kein Crash
 # ---------------------------------------------------------------------------
 
+
 class TestLlmError:
     def test_llm_exception_returns_error_status(self):
         chunks = [_chunk("c1", "Ehrlichkeit ist wichtig.")]
@@ -490,7 +546,9 @@ class TestLlmError:
         llm, _ = _make_llm(raises=RuntimeError("LLM timeout"))
         _patch_canonical_imports(bt)
 
-        result = asyncio.run(_backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm))
+        result = asyncio.run(
+            _backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm)
+        )
 
         assert result["status"] == "error"
         assert "llm_failed" in result.get("reason", "")
@@ -503,7 +561,9 @@ class TestLlmError:
         llm, _ = _make_llm(werte=[])  # LLM gibt [] zurück
         _patch_canonical_imports(bt)
 
-        result = asyncio.run(_backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm))
+        result = asyncio.run(
+            _backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm)
+        )
 
         # Setup-Seed wird als Fallback genutzt → ok
         assert result["status"] in ("ok", "no_op")
@@ -517,6 +577,7 @@ class TestLlmError:
 # ---------------------------------------------------------------------------
 # 7. Setup-Seed — Quelle B
 # ---------------------------------------------------------------------------
+
 
 class TestSetupSeed:
     def test_setup_seed_entry_has_aktiv_status(self):
@@ -541,16 +602,30 @@ class TestSetupSeed:
         chunks = [_chunk("c1", "Wir stehen für Qualität.")]
         ctx_payload = {"positionierung": {"werte_schwerpunkt": "Nachhaltigkeit"}}
         llm_werte = [
-            {"wert": "Nachhaltigkeit", "beschreibung": "Grüne Prinzipien", "belege": ["Nachhaltigkeit"], "gewicht": 4},
-            {"wert": "Qualität", "beschreibung": "Qualität first", "belege": ["Wir stehen für Qualität"], "gewicht": 3},
+            {
+                "wert": "Nachhaltigkeit",
+                "beschreibung": "Grüne Prinzipien",
+                "belege": ["Nachhaltigkeit"],
+                "gewicht": 4,
+            },
+            {
+                "wert": "Qualität",
+                "beschreibung": "Qualität first",
+                "belege": ["Wir stehen für Qualität"],
+                "gewicht": 3,
+            },
         ]
         db_execute, write_calls = _make_db_execute(chunks_a=chunks, context_payload=ctx_payload)
         llm, _ = _make_llm(werte=llm_werte)
         _patch_canonical_imports(bt)
 
-        result = asyncio.run(_backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm))
+        result = asyncio.run(
+            _backfill_tenant("tenant-A", db_execute=db_execute, llm_complete_json=llm)
+        )
         assert result["status"] == "ok"
-        payload = json_decode([c for c in write_calls if "INSERT" in c["sql"]][0]["params"]["payload"])
+        payload = json_decode(
+            next(c for c in write_calls if "INSERT" in c["sql"])["params"]["payload"]
+        )
         werte = payload.get("werte", [])
         # Setup-Eintrag (Nachhaltigkeit) sollte 'aktiv' haben
         setup_entries = [e for e in werte if e.get("wert", "").lower().startswith("nachhaltig")]
@@ -561,6 +636,7 @@ class TestSetupSeed:
 # ---------------------------------------------------------------------------
 # 8. _extract_setup_seed_entries — dep-freie Unit-Tests
 # ---------------------------------------------------------------------------
+
 
 class TestExtractSetupSeed:
     def test_full_canonical_payload(self):
@@ -590,6 +666,7 @@ class TestExtractSetupSeed:
 # 9. _merge_werte_with_provenance — dep-freie Unit-Tests
 # ---------------------------------------------------------------------------
 
+
 class TestMergeWerteWithProvenance:
     def _setup_entry(self, wert: str) -> dict:
         return _make_wert_entry(
@@ -603,7 +680,12 @@ class TestMergeWerteWithProvenance:
 
     def test_chunk_entry_gets_memory_chunk_provenance(self):
         llm_werte = [
-            {"wert": "Ehrlichkeit", "beschreibung": "Transparent sein", "belege": ["Belege"], "gewicht": 3}
+            {
+                "wert": "Ehrlichkeit",
+                "beschreibung": "Transparent sein",
+                "belege": ["Belege"],
+                "gewicht": 3,
+            }
         ]
         result = _merge_werte_with_provenance(llm_werte, chunk_rows=[], setup_entries=[])
         assert len(result) == 1
@@ -630,7 +712,12 @@ class TestMergeWerteWithProvenance:
 
     def test_belege_truncated_to_3(self):
         llm_werte = [
-            {"wert": "Test", "beschreibung": "...", "belege": ["b1", "b2", "b3", "b4", "b5"], "gewicht": 3}
+            {
+                "wert": "Test",
+                "beschreibung": "...",
+                "belege": ["b1", "b2", "b3", "b4", "b5"],
+                "gewicht": 3,
+            }
         ]
         result = _merge_werte_with_provenance(llm_werte, chunk_rows=[], setup_entries=[])
         assert len(result[0]["belege"]) <= 3
@@ -648,6 +735,7 @@ class TestMergeWerteWithProvenance:
 # ---------------------------------------------------------------------------
 # 10. _extract_known_chunk_ids_from_meta — dep-freie Unit-Tests
 # ---------------------------------------------------------------------------
+
 
 class TestExtractKnownChunkIds:
     def test_extracts_ids_from_source_meta(self):
@@ -672,13 +760,16 @@ class TestExtractKnownChunkIds:
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
 
+
 def json_encode(obj) -> str:
     import json
+
     return json.dumps(obj)
 
 
 def json_decode(s: str) -> dict:
     import json
+
     if isinstance(s, dict):
         return s
     return json.loads(s)

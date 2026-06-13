@@ -24,8 +24,8 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from dependencies import get_db, get_tenant, get_tenant_id
 from api.brand_voice_drift_helpers import apply_drift_changes, get_entity_table
+from dependencies import get_db, get_tenant, get_tenant_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -825,7 +825,7 @@ async def decide_drift_observation(
         active_vp_row = (
             await db.execute(
                 text(
-                    f"SELECT id, payload, version FROM {target_table} "  # noqa: S608 — Tabellenname aus Whitelist
+                    f"SELECT id, payload, version FROM {target_table} "
                     "WHERE tenant_id = :t AND is_active = true"
                 ),
                 {"t": str(auth_tenant_id)},
@@ -863,7 +863,7 @@ async def decide_drift_observation(
 
             await db.execute(
                 text(
-                    f"INSERT INTO {target_table} "  # noqa: S608 — Tabellenname aus Whitelist
+                    f"INSERT INTO {target_table} "
                     "(tenant_id, version, is_active, source, source_meta, payload, "
                     "prompt_version_hash, model_id) "
                     "VALUES (:tenant_id, :version, true, :drift_source, "
@@ -878,7 +878,7 @@ async def decide_drift_observation(
                 },
             )
             await db.execute(
-                text(f"UPDATE {target_table} SET is_active = false WHERE id = :id"),  # noqa: S608
+                text(f"UPDATE {target_table} SET is_active = false WHERE id = :id"),
                 {"id": old_vp_id},
             )
 

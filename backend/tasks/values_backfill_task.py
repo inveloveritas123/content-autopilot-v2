@@ -39,8 +39,6 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +55,7 @@ _CONSOLIDATION_SYSTEM = (
     "'gewicht' (1-5, default 3) und 'status' ('aktiv' für Setup-Einträge, "
     "'vorgeschlagen' für Chunk-Funde) hat.\n\n"
     "Dedupliziere ähnliche Werte. Halluziniere keine neuen Werte. "
-    "Antworte NUR mit {\"werte\": [...]}, kein Markdown."
+    'Antworte NUR mit {"werte": [...]}, kein Markdown.'
 )
 
 
@@ -110,7 +108,9 @@ def _extract_setup_seed_entries(context_payload: dict) -> list[dict]:
                     wert=ws.strip()[:120],
                     beschreibung=f"Setup-Eingabe: {ws.strip()[:200]}",
                     belege=[ws.strip()[:300]],
-                    quellen=[{"typ": "setup", "ref": "positionierung.werte_schwerpunkt", "datum": None}],
+                    quellen=[
+                        {"typ": "setup", "ref": "positionierung.werte_schwerpunkt", "datum": None}
+                    ],
                     gewicht=4,
                     status="aktiv",  # Vom Kunden selbst genannt → aktiv (§6.3)
                 )
@@ -157,7 +157,6 @@ def _merge_werte_with_provenance(
     Setup-Seeds behalten status='aktiv' und ihre Setup-Provenance.
     """
     result = []
-    setup_werte_names = {e["wert"].lower() for e in setup_entries}
 
     for entry in llm_werte:
         if not isinstance(entry, dict):
@@ -480,7 +479,7 @@ def _make_real_db_execute(engine, SessionMaker):
             rows = result.fetchall()
             # Rows als Dicts zurückgeben
             keys = list(result.keys()) if hasattr(result, "keys") else []
-            return [dict(zip(keys, row)) for row in rows]
+            return [dict(zip(keys, row, strict=False)) for row in rows]
 
     return _db_execute
 
@@ -492,11 +491,11 @@ def _make_real_db_execute(engine, SessionMaker):
 
 def run_values_backfill_sync(tenant_id: str) -> dict:
     """Synchroner Wrapper für den Celery-Task."""
-    from services.llm import llm_service
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker
 
     from config import settings
+    from services.llm import llm_service
 
     async def _run():
         engine = create_async_engine(settings.database_url, pool_pre_ping=True)
@@ -549,7 +548,9 @@ except ImportError:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Backfill tenant_customer_values aus memory_chunks")
+    parser = argparse.ArgumentParser(
+        description="Backfill tenant_customer_values aus memory_chunks"
+    )
     parser.add_argument("--tenant", required=False, help="Einzelner Tenant-ID")
     parser.add_argument(
         "--all-tenants",
