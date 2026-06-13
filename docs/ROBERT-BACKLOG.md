@@ -54,6 +54,14 @@ Aktuell: **eine DB, row-level `tenant_id`-Isolation** (auch pgvector `memory_chu
 - **C) DB-pro-Projekt** — physisch getrennte DB + Credentials. Stärkste Isolation, aber schwere Ops (Migrationen/Backups/Connection-Routing × N, kein geteiltes pgvector). **Overkill, bis ein Kunde physische Trennung verlangt.**
 - **Empfehlung Architekt:** A für MVP/intern belassen; B vormerken für ersten Echtkunden; C nur bei Compliance-Pflicht. **→ Robert entscheidet die Richtung** (steuert auch #88 Tenant-Switcher + Settings-Scope).
 
+### #98 — Admin-Tool: Infra + .env-Credential (NEU 2026-06-13)
+Code fertig auf `arch/post-landing` (Session-Login, API-Key/Nutzer-Verwaltung), Security-Review GRÜN. **→ Knecht/Runner (Infra):**
+1. Port **8602** öffnen + UFW VPN-only (wie 8601/8180).
+2. nginx: 8602 → App, Einstieg `/admin`.
+3. `.env`: `ADMIN_USER=admin`, `ADMIN_PASSWORD=zkb2026`, `ADMIN_SESSION_SECRET=<32+ zufällig>` (NIE in Git — D3).
+4. Bei späterem HTTPS: `COOKIE_SECURE=true`.
+**Hinweis (Hygiene, nicht blockierend):** der bestehende `ADMIN_TOKEN`-Default `"admin_backtest_2026"` (api/admin.py, csrf_middleware) sollte ebenfalls per .env überschrieben werden.
+
 ## ✅ Erledigt / entschieden
 - **2026-06-13 #42 Content-Modell:** **Testmodus zuerst.** Gemini-Flash-Lite (S1) bleibt für die
   kreativen Pfade (ideation/questions) während Entwicklung/Test — Ziel ist erst „läuft die ganze Pipeline",
