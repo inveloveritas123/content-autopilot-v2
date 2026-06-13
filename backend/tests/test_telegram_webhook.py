@@ -5,12 +5,15 @@ Run with: pytest backend/tests/test_telegram_webhook.py -v
 No DB required — all DB/HTTP calls are patched.
 """
 
+import importlib.util as _ilu
+import os
 import sys
 import types
-from datetime import datetime, timedelta, timezone as _tz
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
-UTC = _tz.utc  # datetime.UTC ist erst ab Python 3.11 verfügbar
+_BACKEND_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+
 
 # ---------------------------------------------------------------------------
 # Stubs for heavy dependencies not available in the test environment
@@ -59,8 +62,9 @@ _models_pkg.base = _fake_base_mod
 # (fastapi.routing würde doppelt importiert, isinstance-Checks schlagen fehl).
 # Stattdessen das bereits gecachte datetime-Modul mutieren.
 import datetime as _dt_mod
+
 if not hasattr(_dt_mod, "UTC"):
-    _dt_mod.UTC = _dt_mod.timezone.utc  # type: ignore[attr-defined]
+    _dt_mod.UTC = _dt_mod.UTC  # type: ignore[attr-defined]
 # sys.modules["datetime"] = _dt_mod  # NICHT! Bricht FastAPI
 
 # services.telegram_token_resolver — api.telegram importiert es lazy (in _send_telegram_message)
@@ -79,28 +83,19 @@ if "services.telegram_token_resolver" not in sys.modules:
 # Import the module under test with all heavy deps patched
 # ---------------------------------------------------------------------------
 
-with (
-    patch.dict("sys.modules", {"config": MagicMock(settings=_fake_settings)}),
-    patch("models.base.sync_session_factory", _fake_base_mod.sync_session_factory),
-):
-    # We import after patching sys.modules so the module picks up fake config
-    sys.modules["config"] = types.SimpleNamespace(settings=_fake_settings)
+# Immer einen frischen api.telegram-Modulstand laden — unabhängig davon ob ein
+# Stub (von _telegram_task_env) oder ein echter Stand (von test_telegram_outbound_
+# pertenant) in sys.modules steht. spec_from_file_location erzeugt eine eigene
+# Modulinstanz mit eigenem Router-Objekt; sys.modules-Aliase werden danach gesetzt.
+sys.modules["config"] = types.SimpleNamespace(settings=_fake_settings)
 
-    # Stub-Module aus _telegram_task_env (api, api.telegram) entfernen,
-    # damit der echte Import der FastAPI-App mit echtem Router stattfindet.
-    # Das stellt sicher dass der Test auch dann läuft, wenn er nach
-    # test_telegram_inbound_routing.py ausgeführt wird (welches _telegram_task_env
-    # importiert und damit api.telegram als leeren Stub setzt).
-    for _stale_key in ("api", "api.telegram"):
-        if _stale_key in sys.modules:
-            _mod = sys.modules[_stale_key]
-            # Nur entfernen wenn es ein leerer Stub ist (kein __file__)
-            if not getattr(_mod, "__file__", None):
-                del sys.modules[_stale_key]
-
-    import api.telegram as tg_module
-
-# Re-apply settings patch on the already-imported module
+_tg_spec = _ilu.spec_from_file_location(
+    "api.telegram",
+    os.path.join(_BACKEND_DIR, "api", "telegram.py"),
+)
+tg_module = _ilu.module_from_spec(_tg_spec)
+sys.modules["api.telegram"] = tg_module
+_tg_spec.loader.exec_module(tg_module)
 tg_module.settings = _fake_settings
 
 from fastapi import FastAPI

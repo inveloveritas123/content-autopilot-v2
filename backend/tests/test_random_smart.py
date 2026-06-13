@@ -39,9 +39,9 @@ def _make_config_row(
 class TestCronFiredInWindow:
     def test_cron_fired_in_window_true(self):
         """Cron '0 9 * * 1,4' should fire on Monday at 09:03 (local), fallback path."""
-        # Monday 09:03 local — weekday() == 0, hour == 9, minute == 3 < 5
+        # Monday 09:03 CEST (UTC+2 in April) = 07:03 UTC
         monday_09_03_local = datetime(2026, 4, 27, 9, 3, 0)
-        monday_09_03_utc = datetime(2026, 4, 27, 9, 3, 0, tzinfo=UTC)
+        monday_09_03_utc = datetime(2026, 4, 27, 7, 3, 0, tzinfo=UTC)
 
         with patch("tasks.random_smart_scheduler._CRONITER_AVAILABLE", False):
             with patch("tasks.random_smart_scheduler.datetime") as mock_dt:
