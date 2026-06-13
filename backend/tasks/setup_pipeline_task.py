@@ -256,12 +256,17 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
                 "tenant_audience_avatar",
             ]:
                 if project_id is None:
+                    # Two sequential statements: deactivate first, then activate.
+                    # CTE-in-one-statement fails on partial unique indexes because
+                    # PostgreSQL CTEs don't expose their changes to the outer UPDATE.
                     session.execute(
                         text(
-                            f"WITH deactivate AS ("
-                            f"  UPDATE {table} SET is_active=false"
-                            f"  WHERE tenant_id=:t AND project_id IS NULL"
-                            f") "
+                            f"UPDATE {table} SET is_active=false WHERE tenant_id=:t AND project_id IS NULL"
+                        ),
+                        {"t": tenant_id},
+                    )
+                    session.execute(
+                        text(
                             f"UPDATE {table} SET is_active=true "
                             f"WHERE tenant_id=:t AND project_id IS NULL "
                             f"AND version=(SELECT MAX(version) FROM {table} WHERE tenant_id=:t AND project_id IS NULL)"
@@ -271,10 +276,12 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
                 else:
                     session.execute(
                         text(
-                            f"WITH deactivate AS ("
-                            f"  UPDATE {table} SET is_active=false"
-                            f"  WHERE tenant_id=:t AND project_id=:pid"
-                            f") "
+                            f"UPDATE {table} SET is_active=false WHERE tenant_id=:t AND project_id=:pid"
+                        ),
+                        {"t": tenant_id, "pid": project_id},
+                    )
+                    session.execute(
+                        text(
                             f"UPDATE {table} SET is_active=true "
                             f"WHERE tenant_id=:t AND project_id=:pid "
                             f"AND version=(SELECT MAX(version) FROM {table} WHERE tenant_id=:t AND project_id=:pid)"
