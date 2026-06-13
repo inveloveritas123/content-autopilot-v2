@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     max_calls_per_tenant_per_hour: int = 200
     max_calls_global_per_hour: int = 1000
 
+    # Quality-Gate (#38 Chunk 3) — Final-Gate vor Telegram-Versand.
+    # False (Shadow-Mode, Default): Gate läuft immer, loggt Telemetrie, blockiert NIE.
+    # True (Enforce-Mode): bei not passed → Review-Queue-Pfad statt Roh-Versand.
+    # ENV: QUALITY_GATE_ENFORCE=true aktiviert den Enforce-Modus.
+    quality_gate_enforce: bool = False
+
     # Telegram Bot (Content-Autopilot)
     telegram_bot_token: str | None = None
     telegram_admin_chat_id: str | None = None  # TELEGRAM_ADMIN_CHAT_ID env var
