@@ -56,7 +56,9 @@ class TestProcessTextRouting:
 
         payload = {"text": "Das ist eine ausführliche Antwort auf deine Frage."}
         # #56: sync_session_factory wird für Guard-SELECT gebraucht → (None,) = noch nicht geroutet
-        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+        with patch(
+            "tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)
+        ):
             result = tt._process_text("log-1", "tenant-1", payload)
 
         assert result["status"] == "ok"
@@ -64,8 +66,14 @@ class TestProcessTextRouting:
         assert result["routed_to"] == "p08_response"
         assert result["p08_next_action"] == "vertiefen"
         assert result["bot_session_id"] == "sess-1"
-        # p08_response genau einmal mit (session_id, features)
-        mock_p08.assert_called_once_with("sess-1", {"k": "v"})
+        # p08_response genau einmal mit (session_id, features, raw_transcript).
+        # #19: text_content wird als raw_transcript durchgereicht (Schicht-3:
+        # p08 persistiert es in der Session, nie in den Prompt).
+        mock_p08.assert_called_once_with(
+            "sess-1",
+            {"k": "v"},
+            raw_transcript="Das ist eine ausführliche Antwort auf deine Frage.",
+        )
 
     @patch("services.p08_service.p08_response")
     @patch("services.layer1_extraction.extract_intent_features")
@@ -79,7 +87,9 @@ class TestProcessTextRouting:
         mock_load_session.return_value = None
 
         payload = {"text": "Irgendeine Notiz die lang genug ist."}
-        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+        with patch(
+            "tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)
+        ):
             result = tt._process_text("log-2", "tenant-1", payload)
 
         assert result["status"] == "ok"
@@ -103,7 +113,9 @@ class TestProcessTextRouting:
         mock_route.return_value = make_decision("reviewer_queue", {})
 
         payload = {"text": "Eine spontane Idee die lang genug ist."}
-        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+        with patch(
+            "tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)
+        ):
             result = tt._process_text("log-3", "tenant-1", payload)
 
         assert result["status"] == "ok"
@@ -124,7 +136,9 @@ class TestProcessTextRouting:
         mock_extract.side_effect = RuntimeError("layer1 boom")
 
         payload = {"text": "Antwort die einen Routing-Fehler auslöst."}
-        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+        with patch(
+            "tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)
+        ):
             result = tt._process_text("log-4", "tenant-1", payload)
 
         # Chunk-Ergebnis bleibt intakt, kein Crash, kein routed_to
@@ -153,7 +167,9 @@ class TestProcessTextRouting:
         mock_p08.side_effect = RuntimeError("p08 boom")
 
         payload = {"text": "Antwort, deren p08-Verarbeitung crasht."}
-        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+        with patch(
+            "tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)
+        ):
             result = tt._process_text("log-5", "tenant-1", payload)
 
         assert result["status"] == "ok"
@@ -204,7 +220,9 @@ class TestProcessVoiceRouting:
 
         payload = {"voice": {"file_id": "f1", "duration": 12, "mime_type": "audio/ogg"}}
         # #56: Guard-SELECT für log_id="log-v" → (None,) = noch nicht geroutet
-        with patch("tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)):
+        with patch(
+            "tasks.telegram_task.sync_session_factory", return_value=make_guard_db_mock(None)
+        ):
             result = tt._process_voice("log-v", "tenant-1", payload)
 
         assert result["status"] == "ok"
@@ -341,3 +359,149 @@ class TestFollowupMessageSend:
         assert result["routed_to"] == "reviewer_queue"
         assert "p08_message_sent" not in result
         send_mock.assert_not_called()
+
+
+class TestClosePostGenerationTrigger:
+    """#19: Echter Session-Close → session_post_task wird enqueued.
+
+    Nur ein active→closed-Übergang (is_closed=True, was_already_closed=False)
+    triggert apply_async. Spät-/Doppel-Events auf eine bereits geschlossene
+    Session (was_already_closed=True) triggern NICHT. Enqueue ist fail-open.
+    """
+
+    def _run_route(self, p08_result):
+        """Fährt _route_inbound_message und gibt (result, gen_task_mock) zurück.
+
+        generate_post_from_session wird komplett durch einen MagicMock ersetzt
+        (dessen .apply_async automatisch existiert) — robust unabhängig davon,
+        ob das echte Task-Modul oder der Env-Stub in sys.modules liegt.
+        """
+        import sys
+
+        gen_task_mock = MagicMock()
+        with (
+            patch.object(tt, "_load_active_session", return_value=active_session()),
+            patch.object(
+                sys.modules["services.layer1_extraction"],
+                "extract_intent_features",
+                return_value=make_extraction("answer_to_question"),
+            ),
+            patch.object(
+                sys.modules["services.layer2_routing"],
+                "route_telegram_intent",
+                return_value=make_decision(
+                    "p08_response", {"session_id": "sess-1", "features": {"k": "v"}}
+                ),
+            ),
+            patch.object(
+                sys.modules["services.p08_service"],
+                "p08_response",
+                return_value=p08_result,
+            ),
+            # chat_id/Send sind für den Trigger irrelevant — neutralisieren.
+            patch.object(tt, "_resolve_chat_id", return_value=4711),
+            patch.object(sys.modules["api.telegram"], "_send_telegram_message", MagicMock()),
+            patch.object(
+                sys.modules["tasks.session_post_task"],
+                "generate_post_from_session",
+                gen_task_mock,
+            ),
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+        ):
+            result = tt._route_inbound_message("tenant-1", "Meine Antwort", log_id="log-19")
+        return result, gen_task_mock
+
+    def test_close_triggers_post_task_once(self):
+        """Echter Close (was_already_closed=False) → apply_async genau 1× mit (session_id, tenant_id)."""
+        p08_result = make_p08_result(
+            next_action="close",
+            message="Danke!",
+            is_closed=True,
+            was_already_closed=False,
+        )
+
+        result, gen_task = self._run_route(p08_result)
+
+        assert result is not None
+        assert result.get("post_generation_enqueued") is True
+        gen_task.apply_async.assert_called_once_with(args=["sess-1", "tenant-1"])
+
+    def test_already_closed_does_not_trigger(self):
+        """Spät-Event auf geschlossene Session (was_already_closed=True) → kein Enqueue."""
+        p08_result = make_p08_result(
+            next_action="close",
+            message="Session beendet.",
+            is_closed=True,
+            was_already_closed=True,
+        )
+
+        result, gen_task = self._run_route(p08_result)
+
+        assert result is not None
+        gen_task.apply_async.assert_not_called()
+        assert "post_generation_enqueued" not in result
+
+    def test_followup_does_not_trigger(self):
+        """Vertiefen (is_closed=False) → kein Post-Task enqueued."""
+        p08_result = make_p08_result(
+            next_action="vertiefen",
+            message="Frage 2?",
+            is_closed=False,
+        )
+
+        result, gen_task = self._run_route(p08_result)
+
+        assert result is not None
+        gen_task.apply_async.assert_not_called()
+
+    def test_enqueue_failure_fail_open(self):
+        """apply_async wirft → routing_info bleibt intakt, kein Raise."""
+        p08_result = make_p08_result(
+            next_action="close",
+            message="Danke!",
+            is_closed=True,
+            was_already_closed=False,
+        )
+
+        result, gen_task = self._run_route_with_crash(p08_result)
+
+        assert result is not None
+        assert result.get("routed_to") == "p08_response"
+        assert result.get("post_generation_enqueued") is False
+
+    def _run_route_with_crash(self, p08_result):
+        """Wie _run_route, aber apply_async wirft (fail-open-Test)."""
+        import sys
+
+        gen_task_mock = MagicMock()
+        gen_task_mock.apply_async.side_effect = RuntimeError("broker down")
+        with (
+            patch.object(tt, "_load_active_session", return_value=active_session()),
+            patch.object(
+                sys.modules["services.layer1_extraction"],
+                "extract_intent_features",
+                return_value=make_extraction("answer_to_question"),
+            ),
+            patch.object(
+                sys.modules["services.layer2_routing"],
+                "route_telegram_intent",
+                return_value=make_decision(
+                    "p08_response", {"session_id": "sess-1", "features": {"k": "v"}}
+                ),
+            ),
+            patch.object(
+                sys.modules["services.p08_service"],
+                "p08_response",
+                return_value=p08_result,
+            ),
+            patch.object(tt, "_resolve_chat_id", return_value=4711),
+            patch.object(sys.modules["api.telegram"], "_send_telegram_message", MagicMock()),
+            patch.object(
+                sys.modules["tasks.session_post_task"],
+                "generate_post_from_session",
+                gen_task_mock,
+            ),
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+        ):
+            result = tt._route_inbound_message("tenant-1", "Meine Antwort", log_id="log-19")
+        return result, gen_task_mock

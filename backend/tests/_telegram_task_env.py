@@ -49,6 +49,7 @@ if _BACKEND_DIR not in sys.path:
 # Interner Stub-Helfer — nur wenn noch nicht in sys.modules
 # ---------------------------------------------------------------------------
 
+
 def _stub(name: str) -> types.ModuleType:
     """Stub-Modul nur anlegen, wenn noch nicht in sys.modules."""
     if name in sys.modules:
@@ -207,6 +208,15 @@ if "tasks.celery_app" not in sys.modules:
     _ca = _stub("tasks.celery_app")
     _ca.celery_app = _FakeCeleryApp()
 
+# tasks.session_post_task — Lazy-Import im Close-Zweig von _route_inbound_message
+# (#19). Stub mit generate_post_from_session als MagicMock, damit Tests den
+# Enqueue (apply_async) via patch beobachten/auslösen können.
+if "tasks.session_post_task" not in sys.modules:
+    _spt = _stub("tasks.session_post_task")
+    _spt.generate_post_from_session = MagicMock()
+# Als Paket-Attribut registrieren (für @patch-Auflösung via getattr)
+sys.modules["tasks"].session_post_task = sys.modules["tasks.session_post_task"]
+
 # ---------------------------------------------------------------------------
 # tasks.telegram_task — genau EINMAL laden; bei Wiederholungsimport wiederverwenden
 # ---------------------------------------------------------------------------
@@ -248,14 +258,29 @@ def make_decision(target: str, payload: dict | None = None) -> types.SimpleNames
     return types.SimpleNamespace(target=target, payload=payload or {})
 
 
-def make_p08_result(next_action: str = "vertiefen") -> types.SimpleNamespace:
-    """Erzeugt einen P08Result-Namespace für Tests."""
+def make_p08_result(
+    next_action: str = "vertiefen",
+    message: str = "Erzähl mir mehr.",
+    is_closed: bool = False,
+    quality: str = "gold",
+    session_id: str = "sess-1",
+    was_already_closed: bool = False,
+) -> types.SimpleNamespace:
+    """Erzeugt einen P08Result-Namespace für Tests.
+
+    Alle Felder sind überschreibbar, damit Tests Folgefrage- und Abschluss-
+    Szenarien (is_closed=True, message='Danke!') direkt parametrisieren können.
+    was_already_closed (#19) steuert den Post-Generierungs-Trigger: nur ein
+    echter active→closed-Übergang (is_closed=True, was_already_closed=False)
+    enqueued den session_post_task.
+    """
     return types.SimpleNamespace(
         next_action=next_action,
-        message="Erzähl mir mehr.",
-        quality="gold",
-        session_id="sess-1",
-        is_closed=False,
+        message=message,
+        quality=quality,
+        session_id=session_id,
+        is_closed=is_closed,
+        was_already_closed=was_already_closed,
     )
 
 

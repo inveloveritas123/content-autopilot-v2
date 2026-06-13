@@ -30,7 +30,7 @@ Ziel: Telegram-Konversationsschleife vollständig (Antwort→Folgefrage→Post i
 |---|---|---|---|---|---|
 | S1.1 | #17 | Folgefrage/Abschluss per Telegram zurück + Limit 2–3 | sonnet | #16 ✅ | ☐ offen |
 | S1.2 | #18 | Idempotenz gegen Doppel-Verarbeitung (update_id-Dedupe) | sonnet | #16 | ✅ fertig (2-Schicht: routed_to-Guard + update_id-Dedupe) |
-| S1.3 | #19 | [BLOCKER] Post-Generierung an Session-Abschluss + Post im Chat (M24-Kern-Gap) | opus | #17 | ☐ offen |
+| S1.3 | #19 | [BLOCKER] Post-Generierung an Session-Abschluss + Post im Chat (M24-Kern-Gap) | opus | #17 | ✅ fertig (session_post_task, P12→P12b→Chat, 3-fach idempotent, E3-Scope) |
 | S1.4 | #46 | Letzte Seam-Bypässe (voice_drift/md_converter/sensitive_detector) auf EU-Router | sonnet | — | ✅ fertig (lokal 99 Tests grün; sensitive_detector-Modellwahl → Robert) |
 | S1.5 | #22 | P17 lädt mit leerem System-Prompt (Heading-Fix) | sonnet | — | ☐ offen |
 | S1.6 | #30 | Modell-Pinning: -latest-Modelle pinnen oder Policy-Ausnahme | haiku | — | ☐ offen |
