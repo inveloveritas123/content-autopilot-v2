@@ -1,0 +1,36 @@
+# Quality-Standards fuer Branche: handwerk
+# Issue #38 Chunk 1 — Struktur-/Regel-Scorer
+
+threshold: 60.0
+
+# Laengen-Baender
+length:
+  min_chars: 200
+  ideal_min: 350
+  ideal_max: 2000
+  max_chars: 3000
+
+# Caps-Ratio
+caps:
+  max_ratio: 0.30
+
+# Hashtag-Sanity
+hashtags:
+  max_count: 10
+  min_count: 0
+
+# CTA wuenschenswert (Handwerker sollen Engagement foerdern)
+cta:
+  required: false
+
+# Kein gesetzlicher Disclaimer noetig
+disclaimer:
+  required: false
+
+# Gewichte
+weights:
+  length: 35
+  structure: 25
+  cta_hook: 15
+  caps_ok: 15
+  hashtag_ok: 10

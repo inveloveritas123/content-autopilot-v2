@@ -1,0 +1,37 @@
+# Quality-Standards fuer Branche: _generic
+# Gueltig fuer Posts ohne spezifische Branchenregeln.
+# Issue #38 Chunk 1 — Struktur-/Regel-Scorer
+
+threshold: 55.0
+
+# Laengen-Baender (Zeichen)
+length:
+  min_chars: 200          # Unter dieser Grenze: too_short violation
+  ideal_min: 350          # Unter ideal: leichter Abzug
+  ideal_max: 2000         # Ueber ideal: leichter Abzug
+  max_chars: 3000         # Ueber max: zu lang violation
+
+# Caps-Ratio: Anteil Grossbuchstaben an allen Alphabetzeichen
+caps:
+  max_ratio: 0.30         # Ueber 30%: excessive_caps violation
+
+# Hashtag-Sanity
+hashtags:
+  max_count: 10           # Mehr als 10: hashtag_spam violation
+  min_count: 0            # Keine Pflicht-Hashtags fuer _generic
+
+# CTA / Hook-Signale (mindestens eines wuenschenswert)
+cta:
+  required: false         # Keine harte Pflicht fuer _generic
+
+# Disclaimer-Pflicht
+disclaimer:
+  required: false
+
+# Gewichte fuer Score-Berechnung (Summe = 100)
+weights:
+  length: 35
+  structure: 25           # Satzzeichen, Zeilenumbrueche
+  cta_hook: 15
+  caps_ok: 15
+  hashtag_ok: 10
