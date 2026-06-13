@@ -1,4 +1,4 @@
-"""Tests fuer Random-Smart-Modus Scheduler und Config-Service (Issue #66)."""
+"""Tests fuer Random-Smart-Modus Scheduler und Config-Service (Issue #66, #20)."""
 
 import sys
 from datetime import UTC, datetime, timedelta
@@ -276,3 +276,64 @@ class TestRandomSmartConfig:
         assert config["random_smart_schedule_cron"] == "0 9 1,15 * *"
         assert config["random_smart_paused_until"] == future
         assert config["tenant_timezone"] == "America/New_York"
+
+
+# ---------------------------------------------------------------------------
+# _send_opening_question — Seam2 return-path tests (Issue #20)
+# ---------------------------------------------------------------------------
+
+
+class TestSendOpeningQuestion:
+    """_send_opening_question: DB-lookup → _send_telegram_message (Seam2 Rückweg)."""
+
+    def _make_chat_db(self, chat_id_val):
+        """Return ctx where fetchone() yields (chat_id,) or None."""
+        row = MagicMock()
+        row.__getitem__ = lambda self, i: chat_id_val
+        ctx = _make_db_ctx(fetchone_val=row if chat_id_val is not None else None)
+        return ctx
+
+    @patch("tasks.random_smart_scheduler.sync_session_factory")
+    def test_sends_message_when_active_link_found(self, mock_factory):
+        """Happy Path: aktiver Link → _send_telegram_message wird genau einmal aufgerufen."""
+        mock_factory.return_value = self._make_chat_db(chat_id_val=99001)
+
+        mock_send = MagicMock(return_value=True)
+        with patch.dict(
+            sys.modules,
+            {"api.telegram": MagicMock(_send_telegram_message=mock_send)},
+        ):
+            from tasks.random_smart_scheduler import _send_opening_question
+
+            _send_opening_question("tenant-x", "Was war dein erster Schritt?")
+
+        mock_send.assert_called_once_with(
+            99001, "Was war dein erster Schritt?", tenant_id="tenant-x"
+        )
+
+    @patch("tasks.random_smart_scheduler.sync_session_factory")
+    def test_no_send_when_no_active_link(self, mock_factory):
+        """Edge Case: kein aktiver Telegram-Link → kein HTTP-Call, kein Crash."""
+        mock_factory.return_value = self._make_chat_db(chat_id_val=None)
+
+        mock_send = MagicMock()
+        with patch.dict(
+            sys.modules,
+            {"api.telegram": MagicMock(_send_telegram_message=mock_send)},
+        ):
+            from tasks.random_smart_scheduler import _send_opening_question
+
+            _send_opening_question("tenant-no-link", "Frage?")
+
+        mock_send.assert_not_called()
+
+    @patch("tasks.random_smart_scheduler.sync_session_factory")
+    def test_fail_open_on_db_error(self, mock_factory):
+        """DB-Fehler → kein Raise (fail-open), Warnung geloggt."""
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(side_effect=RuntimeError("DB down"))
+        mock_factory.return_value = ctx
+
+        from tasks.random_smart_scheduler import _send_opening_question
+
+        _send_opening_question("tenant-db-err", "Frage?")  # muss schweigen
