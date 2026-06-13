@@ -39,8 +39,10 @@ Der Quality-Gate ist als Final-Gate vor dem Telegram-Versand verdrahtet (#38 Chu
 (`=True`) → schlechte Posts gehen in den Review-Pfad statt raus. **→ Robert:** Aktivierung erst freigeben,
 wenn (a) Korpus erweitert (#80) + Chunk 2 gebaut **und** (b) du das outward-Verhalten willst. Nicht dringend.
 
-### #24 — Deploy-Pfad (mit Knecht)
-SSH Port 10022 vs. self-hosted GitHub-Runner. **→ Richtung entscheiden.**
+### ~~#24 — Deploy-Pfad~~ ✅ DEFERIERT 2026-06-13 (Robert)
+**Kein Entscheid nötig jetzt.** Beta läuft mit **manuellem Deploy** (Knecht auf dem Server: `git pull` +
+`docker compose build/up`). Auto-Deploy (Empfehlung: **self-hosted Runner**, kein Firewall-Loch) wird
+**später eingerichtet — relevant, wenn ein Entwickler übernimmt.** Damit ist Roberts Entscheid-Liste leer.
 
 ## ✅ Erledigt / entschieden
 - **2026-06-13 #42 Content-Modell:** **Testmodus zuerst.** Gemini-Flash-Lite (S1) bleibt für die
