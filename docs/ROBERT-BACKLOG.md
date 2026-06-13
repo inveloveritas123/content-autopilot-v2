@@ -26,6 +26,10 @@ Umgestellt (US-Calls eliminiert, Compliance gefixt):
 - `sensitive_detector` (PII-/Sensibilitäts-**Klassifikation**) → **S2** (`mistral-small`, EU): Modell-Familienwechsel. **Qualitätsrelevant** — die Trefferqualität der PII-Erkennung kann sich ändern.
 - **→ Robert-Entscheid:** `sensitive_detector` bei mistral-small belassen (günstig) **oder** auf **S6** (Claude-EU, näher am alten Haiku-Verhalten) heben? Empfehlung Architekt: kurzer A/B-Korpuslauf (Knecht) gegen bekannte PII-Beispiele, dann entscheiden. Kein Blocker für den Merge — der US-Leak ist so oder so behoben.
 
+### #36 — routed_to-CHECK-Mini-Migration (nicht blockierend)
+Der CHECK-Constraint `telegram_message_log.routed_to` (Migration 019:66) kennt die neuen Targets `p09`/`p13` nicht. Aktuell migrationsfrei auf `'p10'` gemappt (`_ROUTED_TO_MAP`) → Dedupe funktioniert, aber das Log ist semantisch unscharf (p09/p13 erscheinen als p10). **→ Robert: optionale Mini-Migration, die den CHECK um `'p09','p13'` erweitert** (dann Mapping entfernen). Klein, nicht dringend.
+Chris-Flags #36: (a) Board 4.6 „optional 2–3 Rückfragen VOR den Aufhängern" wurde als MVP übersprungen (die targeted-Session NACH der Wahl liefert die Rückfragen via Bahn 5) — Lesart bestätigen. (b) Text-Nummern 1/2/3 statt Telegram-Inline-Buttons.
+
 ### #24 — Deploy-Pfad (mit Knecht)
 SSH Port 10022 vs. self-hosted GitHub-Runner. **→ Richtung entscheiden.**
 

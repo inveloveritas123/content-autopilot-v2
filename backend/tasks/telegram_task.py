@@ -202,11 +202,94 @@ def _route_inbound_message(
                 )
                 return {"routed_to": guard_row[0], "deduped": True}
 
+        # #36 Gate 2 — P13-Choice: Pending-Marker + strenges Choice-Pattern (≤40 Zeichen).
+        # VOR Gate 3 (aktive Session): zwischen Varianten-Nachricht und Wahl kann der
+        # random_smart-Scheduler eine Session öffnen — „2" darf nicht als p08-Antwort landen.
+        # Strenge Länge (≤40 Zeichen) macht Fehlgriffe auf echte Interview-Antworten
+        # praktisch unmöglich; lange Antworten fallen durch zu Gate 3.
+        try:
+            from tasks.p13_variants_task import _try_p13_variant_choice
+
+            choice_result = _try_p13_variant_choice(tenant_id, text_content)
+            if choice_result and isinstance(choice_result, dict):
+                if log_id is not None:
+                    from services.layer2_routing import (
+                        RoutingDecision,
+                        persist_routing_decision,
+                    )
+
+                    _p13_dec = RoutingDecision("p13_variants", {}, "p13_choice")
+                    persist_routing_decision(log_id, _p13_dec)
+                return choice_result
+        except Exception as exc:
+            logger.warning("p13 choice gate failed: %s", type(exc).__name__)
+            # Fail-open: weiter mit normalem Flow
+
         session = _load_active_session(tenant_id)
         if session is None:
+            # #36 Gate 4 — P09-Heuristik: vor _resolve_last_post, damit der
+            # 48h-Feedback-Pfad (#37) Ideen-Anfragen nicht frisst.
+            # Deterministisch, kein LLM-Call (dep-freie Heuristik).
+            try:
+                from services.chat_intent_heuristics import is_idea_request
+                from tasks.p09_chat_ideas_task import deliver_ideas_to_chat
+
+                if is_idea_request(text_content):
+                    deliver_ideas_to_chat.apply_async(
+                        args=[tenant_id, text_content[:500], log_id]
+                    )
+                    if log_id is not None:
+                        # Persist-Marker (at-most-once, Dedup-Guard); fail-open wenn
+                        # CHECK-Constraint den p10-Mapped-Wert ablehnt.
+                        from services.layer2_routing import (
+                            RoutingDecision,
+                            persist_routing_decision,
+                        )
+
+                        _dec = RoutingDecision("p09_ideation", {}, "p09_heuristic")
+                        persist_routing_decision(log_id, _dec)
+                    return {"routed_to": "p09_ideation", "p09_enqueued": True}
+            except Exception as exc:
+                logger.warning("p09 heuristic gate failed: %s", type(exc).__name__)
+                # Fail-open: weiter mit normalem Flow
+
             # #37 — Feedback-Zweig: kein aktives Session-Objekt, aber letzter Post vorhanden?
             last_post = _resolve_last_post(tenant_id)
             if last_post is None:
+                # #36 Gate 6 — Own-Idea-Vorfilter: hält heutiges LLM-Kostenprofil —
+                # kein Layer1-Call für reine Memory-Inputs.
+                # Nur bei is_own_idea-Treffer → Layer1 → Layer2 (spontaneous_idea ohne
+                # Session → p13_variants). Kein Treffer → Memory-Default wie bisher.
+                try:
+                    from services.chat_intent_heuristics import is_own_idea
+                    from services.layer1_extraction import extract_intent_features
+                    from services.layer2_routing import (
+                        persist_routing_decision,
+                        route_telegram_intent,
+                    )
+                    from tasks.p13_variants_task import generate_variants_for_chat
+
+                    if is_own_idea(text_content):
+                        extraction = extract_intent_features(
+                            transcript=text_content,
+                            tenant_id=tenant_id,
+                            session_state="no_session",
+                        )
+                        decision = route_telegram_intent(
+                            extraction, tenant_id, current_session=None
+                        )
+                        if log_id is not None:
+                            persist_routing_decision(log_id, decision)
+                        if decision.target == "p13_variants":
+                            generate_variants_for_chat.apply_async(
+                                args=[tenant_id, text_content[:1000], log_id]
+                            )
+                            return {"routed_to": "p13_variants", "p13_enqueued": True}
+                        # reviewer_queue / flagged → Marker bereits gesetzt, kein Chat-Spam
+                        return {"routed_to": decision.target}
+                except Exception as exc:
+                    logger.warning("p13 own-idea gate failed: %s", type(exc).__name__)
+                    # Fail-open: Memory-Default
                 return None  # Verhalten wie bisher: keine Session, kein Post → None
 
             from services.layer1_extraction import extract_intent_features
@@ -232,6 +315,18 @@ def _route_inbound_message(
                 except Exception as exc:
                     logger.warning("feedback regen enqueue failed: %s", type(exc).__name__)
                     return {"routed_to": "voice_feedback_api", "regen_enqueued": False}
+            if decision.target == "p13_variants":
+                # #36 Gate 5 — P13-Zweig im last_post-Kontext
+                try:
+                    from tasks.p13_variants_task import generate_variants_for_chat
+
+                    generate_variants_for_chat.apply_async(
+                        args=[tenant_id, text_content[:1000], log_id]
+                    )
+                    return {"routed_to": "p13_variants", "p13_enqueued": True}
+                except Exception as exc:
+                    logger.warning("p13 variants enqueue failed: %s", type(exc).__name__)
+                    return {"routed_to": "p13_variants", "p13_enqueued": False}
             # Andere Targets: Routing-Marker setzen, kein Chat-Spam
             return {"routed_to": decision.target}
 
@@ -577,6 +672,19 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
     if not text_content:
         return {"status": "skipped", "reason": "empty_text"}
     if len(text_content) < 10:
+        # #36 S4 Kurztext-Bypass: „2" als Varianten-Wahl hat len<10 und würde
+        # hier normalerweise gestoppt. Wenn ein Pending-Marker existiert und
+        # der Text ein gültiges Choice-Token ist, durchlassen.
+        # Billig: 1 tenant-scoped SELECT nur wenn Pending-Marker vorhanden;
+        # ohne Treffer → too_short wie bisher.
+        try:
+            from tasks.p13_variants_task import _try_p13_variant_choice
+
+            choice_result = _try_p13_variant_choice(tenant_id, text_content)
+            if choice_result and isinstance(choice_result, dict):
+                return {"status": "ok", **choice_result}
+        except Exception:
+            pass  # fail-open: too_short wie bisher
         return {"status": "skipped", "reason": "too_short"}
 
     # channel-Erkennung: WhatsApp-Adapter schreibt _channel='whatsapp' ins payload
