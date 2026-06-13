@@ -69,7 +69,11 @@ if "services.quality_gate_stub" not in sys.modules:
             "branche": "_generic",
         }
     )
+    _qgs.clear_config_cache = MagicMock()
 _services_pkg.quality_gate_stub = sys.modules["services.quality_gate_stub"]
+# _telegram_task_env may have created the stub without clear_config_cache — add it if missing.
+if not hasattr(_services_pkg.quality_gate_stub, "clear_config_cache"):
+    _services_pkg.quality_gate_stub.clear_config_cache = MagicMock()
 
 # session_post_task: das ECHTE Modul laden.
 _existing = sys.modules.get("tasks.session_post_task")
@@ -85,7 +89,7 @@ if _existing is None or not hasattr(_existing, "_build_qa_pairs"):
 
 spt = sys.modules["tasks.session_post_task"]
 
-from services.quality_gate_stub import clear_config_cache
+clear_config_cache = _services_pkg.quality_gate_stub.clear_config_cache
 
 # ---------------------------------------------------------------------------
 # Helfer: load_active_profile mit gewünschtem branche-Wert mocken

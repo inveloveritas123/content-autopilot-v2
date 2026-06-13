@@ -79,9 +79,10 @@ jobs:
           set -euo pipefail
           rsync -a --delete \
             --exclude='.git' \
-            --exclude='frontend/node_modules' \
-            --exclude='frontend/dist' \
-            --exclude='data' \
+            --exclude='/.env' \
+            --exclude='/frontend/node_modules' \
+            --exclude='/frontend/dist' \
+            --exclude='/data' \
             "$GITHUB_WORKSPACE/" /opt/content-autopilot-v2/
 
       - name: Frontend bauen
