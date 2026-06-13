@@ -188,7 +188,7 @@ def _load_branche_config(branche: str) -> dict[str, Any]:
 # Regex: PII-Heuristik — einfache Namensmuster (Grossbuchstabe + Kleinbuchstaben)
 # und Ortsmuster (z.B. "in Berlin", "bei Familie", "Herr/Frau X")
 _PII_PATTERNS = [
-    re.compile(r"\bFamilie\s+[A-Z][a-z]+\b"),           # "Familie Mueller"
+    re.compile(r"\bFamilie\s+[A-Z][a-z]+\b"),  # "Familie Mueller"
     re.compile(r"\b(Herr|Frau|Dr\.|Prof\.)\s+[A-Z][a-z]+\b"),  # "Herr Schmidt"
     re.compile(r"\b[A-Z][a-z]+(?:strasse|straße|str\.|weg|gasse|platz)\b"),  # Strassennamen
 ]
@@ -338,9 +338,7 @@ def _hashtag_score(text: str, max_count: int) -> tuple[float, list[str]]:
     return 1.0, violations
 
 
-def _disclaimer_score(
-    text: str, disclaimer_cfg: dict[str, Any]
-) -> tuple[float, list[str]]:
+def _disclaimer_score(text: str, disclaimer_cfg: dict[str, Any]) -> tuple[float, list[str]]:
     """Score-Anteil fuer Branchen-Disclaimer (0..1) + Violations."""
     required = disclaimer_cfg.get("required", False)
     if not required:
@@ -388,6 +386,11 @@ def _pii_heuristic_check(text: str) -> list[str]:
 
 # Cache fuer geladene Configs (Lifetime des Python-Prozesses)
 _config_cache: dict[str, dict[str, Any]] = {}
+
+
+def clear_config_cache() -> None:
+    """Test-Hilfsfunktion: Cache leeren fuer saubere Test-Isolation."""
+    _config_cache.clear()
 
 
 def _get_config(branche: str) -> dict[str, Any]:
