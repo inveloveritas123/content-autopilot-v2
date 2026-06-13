@@ -213,6 +213,11 @@ export const getVoiceProfile = () => request('/tenants/me/voice-profile').catch(
 export const updateVoiceProfile = (dimensions) =>
   request('/tenants/me/voice-profile', { method: 'PATCH', body: { dimensions } })
 
+// Automation Kill-Switch (Issue #89)
+export const getAutomationStatus = () => request('/tenants/me/automation-status')
+export const pauseAutomation = () => request('/tenants/me/pause', { method: 'POST' })
+export const resumeAutomation = () => request('/tenants/me/resume', { method: 'POST' })
+
 export async function downloadTenantDataExport(format = 'zip') {
   const resp = await fetch(
     `${API_BASE}/tenants/me/data-export?format=${encodeURIComponent(format)}`,
@@ -617,3 +622,10 @@ export function getThrottleStatus(adminToken, tenantId) {
     headers: { 'X-Admin-Token': adminToken },
   })
 }
+
+// Telegram-Bot (pro Projekt/Tenant)
+export const getTelegramBot = () => request('/tenants/me/telegram-bot')
+export const setTelegramBot = (token) =>
+  request('/tenants/me/telegram-bot', { method: 'POST', body: { token } })
+export const revokeTelegramBot = () =>
+  request('/tenants/me/telegram-bot', { method: 'DELETE' })

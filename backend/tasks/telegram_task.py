@@ -372,7 +372,7 @@ def _route_inbound_message(
                         _send_telegram_message,
                     )  # Lazy-Import wie scheduler.py:104
 
-                    _send_telegram_message(chat_id, result.message)
+                    _send_telegram_message(chat_id, result.message, tenant_id=tenant_id)
                     routing_info["p08_message_sent"] = True
                 except Exception as exc:
                     logger.warning("p08 message send failed: %s", type(exc).__name__)
@@ -406,14 +406,24 @@ def _route_inbound_message(
         return None
 
 
-def _telegram_get_file(file_id: str) -> bytes | None:
-    """Lädt Audio/Photo-Bytes vom Telegram-Server.
+def _telegram_get_file(file_id: str, tenant_id: str) -> bytes | None:
+    """Lädt Audio/Photo-Bytes vom Telegram-Server via per-Tenant-Bot-Token.
 
     Telegram-API: getFile(file_id) → file_path → GET file_path.
+    Token wird NIEMALS geloggt (E2/D3).
+
+    Args:
+        file_id:   Telegram file_id aus dem Update-Payload.
+        tenant_id: Tenant-ID zum Token-Lookup via get_tenant_bot_token.
     """
-    token = settings.telegram_bot_token
+    from services.telegram_token_resolver import get_tenant_bot_token
+
+    token = get_tenant_bot_token(tenant_id)
     if not token:
-        logger.warning("TELEGRAM_BOT_TOKEN nicht konfiguriert — getFile skipped")
+        logger.warning(
+            "_telegram_get_file: kein aktiver Bot-Token für tenant %s — getFile skipped",
+            tenant_id,
+        )
         return None
     try:
         with httpx.Client(timeout=20) as client:
@@ -431,7 +441,7 @@ def _telegram_get_file(file_id: str) -> bytes | None:
                 return None
             return r2.content
     except (httpx.TimeoutException, httpx.RequestError) as exc:
-        logger.warning("Telegram-getFile-Network-Error: %s", exc)
+        logger.warning("Telegram-getFile-Network-Error: %s", type(exc).__name__)
         return None
 
 
@@ -537,7 +547,7 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         logger.warning("voice ohne file_id, log_id=%s", log_id)
         return {"status": "error", "reason": "no_file_id"}
 
-    audio_bytes = _telegram_get_file(file_id)
+    audio_bytes = _telegram_get_file(file_id, tenant_id)
     if not audio_bytes:
         return {"status": "error", "reason": "download_failed"}
 
@@ -599,7 +609,7 @@ def _process_photo(log_id: str, tenant_id: str, payload: dict) -> dict:
     if not file_id:
         return {"status": "error", "reason": "no_file_id"}
 
-    image_bytes = _telegram_get_file(file_id)
+    image_bytes = _telegram_get_file(file_id, tenant_id)
     if not image_bytes:
         return {"status": "error", "reason": "download_failed"}
 

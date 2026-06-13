@@ -443,8 +443,15 @@ async def dialogue_generate_post(
             prompt_parts.append(f"  Antwort: {qa['answer']}")
             prompt_parts.append("")
 
+        # Kanonisch (Issue #29): grundton.charakterisierung (p03.schema.json:63)
+        # Alt-Row-Fallback: tonalitaet.grundton (v2-Schema) → toleriert für Bestands-Rows
         _tone = (
             voice_profile.get("tone")
+            or (
+                voice_profile.get("grundton", {}).get("charakterisierung", "")
+                if isinstance(voice_profile.get("grundton"), dict)
+                else ""
+            )
             or (
                 voice_profile.get("tonalitaet", {}).get("grundton", "")
                 if isinstance(voice_profile.get("tonalitaet"), dict)
@@ -486,8 +493,15 @@ async def dialogue_generate_post(
                 "source": item.title,
                 "answered_questions": len(answered_qas),
                 "format": format,
+                # Kanonisch (Issue #29): grundton.charakterisierung (p03.schema.json:63)
+                # Alt-Row-Fallback: tonalitaet.grundton (v2-Schema) → toleriert für Bestands-Rows
                 "voice": (
                     voice_profile.get("tone")
+                    or (
+                        voice_profile.get("grundton", {}).get("charakterisierung", "")
+                        if isinstance(voice_profile.get("grundton"), dict)
+                        else ""
+                    )
                     or (
                         voice_profile.get("tonalitaet", {}).get("grundton", "")
                         if isinstance(voice_profile.get("tonalitaet"), dict)

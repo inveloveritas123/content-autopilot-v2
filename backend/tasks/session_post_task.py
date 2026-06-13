@@ -384,10 +384,13 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             _send_telegram_message(
                 chat_id,
                 "Dein Post ist fertig, wartet aber noch auf eine kurze Review.",
+                tenant_id=tenant_id,
             )
             sent_kind = "review_notice"
         else:
-            _send_telegram_message(chat_id, final_post[:_TELEGRAM_MAX_CHARS])
+            _send_telegram_message(
+                chat_id, final_post[:_TELEGRAM_MAX_CHARS], tenant_id=tenant_id
+            )
             sent_kind = "post"
     except Exception as exc:
         logger.warning("session_post_task: telegram send failed: %s", type(exc).__name__)

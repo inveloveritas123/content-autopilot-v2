@@ -263,7 +263,7 @@ def _send_ideas_message(tenant_id: str, ideas: list[dict]) -> dict:
     try:
         from api.telegram import _send_telegram_message
 
-        _send_telegram_message(chat_id, message)
+        _send_telegram_message(chat_id, message, tenant_id=tenant_id)
         return {"status": "ok", "sent": True, "ideas_count": len(ideas)}
     except Exception as exc:
         logger.warning("p09_task: telegram send failed: %s", type(exc).__name__)
@@ -300,6 +300,7 @@ def _send_cost_notice(tenant_id: str) -> None:
         _send_telegram_message(
             chat_id,
             "Das Tageslimit ist leider erreicht — morgen geht's weiter!",
+            tenant_id=tenant_id,
         )
     except Exception as exc:
         logger.warning("p09_task: cost notice send failed: %s", type(exc).__name__)
@@ -317,6 +318,7 @@ def _send_no_sources_notice(tenant_id: str) -> None:
             chat_id,
             "Noch keine analysierten Quellen — füge im Dashboard eine Quelle hinzu "
             "oder erzähl mir deine eigene Idee.",
+            tenant_id=tenant_id,
         )
     except Exception as exc:
         logger.warning("p09_task: no-sources notice send failed: %s", type(exc).__name__)

@@ -65,17 +65,51 @@ def _sanitize_value(v: Any) -> Any:
 # Allow-List editierbarer Felder pro Profil-Typ
 # ---------------------------------------------------------------------------
 
+# UNION kanonisch ∪ v2 (Issue #29, Architekt-Review 2026-06-13).
+# Während der graduellen Schema-Umstellung existieren BEIDE Row-Formen nebeneinander:
+# neue Rows kanonisch (Louis-Schema), Alt-Rows v2-förmig — es gibt (noch) KEINE Daten-
+# Migration v2→kanonisch. Damit Alt-Rows editierbar bleiben UND neue Rows die kanonischen
+# Keys nutzen, erlaubt die Allow-List BEIDE Sätze. Die v2-Keys werden entfernt, sobald
+# eine Daten-Migration alle Rows kanonisch gemacht hat.
+# Kanonisch↔v2 (Beleg p03/p04.schema.json): grundton↔tonalitaet (p03:61),
+# vermeidungsprofil↔vermeidungsregeln (p03:218), satzarchitektur↔stilprinzipien/
+# schreibrhythmus (lossy), identitaet↔hauptperson (p04:63), innenwelt↔kernschmerzen
+# (p04:73), wunschbild↔transformation (p04:90), content_trigger↔einwaende/kaufmotive
+# (p04:98, lossy), sprache_der_zielgruppe↔sprachmuster (p04:121); wortschatz/kernthemen
+# ohne Umbenennung (kernthemen: nur v2, kein kanon. Pendant — bleibt für Alt-Rows editierbar).
 EDITABLE_ROOT_KEYS: dict[str, list[str]] = {
     "customer_context": ["kernbotschaft", "zielgruppe", "expertise", "werte"],
     "voice_profile": [
+        # kanonisch (p03.schema.json)
+        "grundton",
+        "satzarchitektur",
+        "wortschatz",
+        "erzaehlmuster",
+        "emotionaler_ausdruck",
+        "persoenlichkeits_stance",
+        "emotionaler_subtext",
+        "ueberzeugungsstil",
+        "zielgruppen_sprachfilter",
+        "vermeidungsprofil",
+        "referenz_saetze",
+        # v2-Alt-Rows (Übergang — entfernen nach Daten-Migration)
         "tonalitaet",
         "kernthemen",
         "stilprinzipien",
-        "wortschatz",
         "schreibrhythmus",
         "vermeidungsregeln",
     ],
     "audience_avatar": [
+        # kanonisch (p04.schema.json)
+        "identitaet",
+        "innenwelt",
+        "wunschbild",
+        "content_trigger",
+        "sprache_der_zielgruppe",
+        "alltagsszenen",
+        "blockaden",
+        "ausloesemoment",
+        # v2-Alt-Rows (Übergang — entfernen nach Daten-Migration)
         "hauptperson",
         "kernschmerzen",
         "transformation",

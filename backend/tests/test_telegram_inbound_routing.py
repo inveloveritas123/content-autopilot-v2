@@ -299,7 +299,7 @@ class TestFollowupMessageSend:
 
         assert result is not None
         assert result["p08_message_sent"] is True
-        send_mock.assert_called_once_with(4711, "Frage 2?")
+        send_mock.assert_called_once_with(4711, "Frage 2?", tenant_id="tenant-1")
 
     def test_close_message_sent(self):
         """Session-Abschluss (is_closed=True) → Abschluss-Text wird gesendet."""
@@ -314,7 +314,9 @@ class TestFollowupMessageSend:
 
         assert result is not None
         assert result["p08_message_sent"] is True
-        send_mock.assert_called_once_with(9999, "Danke! Ich habe genug Material gesammelt.")
+        send_mock.assert_called_once_with(
+            9999, "Danke! Ich habe genug Material gesammelt.", tenant_id="tenant-1"
+        )
 
     def test_no_chat_link_no_send(self):
         """Kein aktiver tenant_telegram_link → kein Send, p08_message_sent False, kein Raise."""
