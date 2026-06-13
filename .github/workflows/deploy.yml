@@ -32,7 +32,7 @@ permissions:
 jobs:
   gate:
     name: CI-Gate (Tests + Lint gruen fuer diesen Commit?)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, kolonie]
     # workflow_run: nur weitermachen, wenn der ausloesende Lauf selbst gruen war
     if: >-
       github.event_name == 'workflow_dispatch' ||
