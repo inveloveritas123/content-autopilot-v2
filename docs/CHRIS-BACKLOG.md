@@ -62,8 +62,17 @@ P02-Pfad wartet auf den Prompt-Wortlaut (Website-Quelle → Kontext). **Chris:**
 
 ---
 
-## ✅ Abgestimmt / freigegeben
-- (noch nichts)
+## ✅ Abgestimmt / erledigt / weggelassen (2026-06-13)
+- **#22 P17-Headings — ERLEDIGT** (Robert: Chris-Freigabe nicht nötig). 2 Loader-Überschriften ins
+  Original (Commit bc29724), versioniert in `docs/PROMPT-CHANGELOG.md`. #41-Prompt-Gate greift.
+- **#39 / P02-Prompt — WEGGELASSEN** (Robert): P02 gab es nie (nicht bei Louis), wird nirgends im Code
+  referenziert → kein Prompt nötig, Feature deferiert.
+- **#36 / #44 — non-blocking:** Lesarten (4.6/4.7) + neue Phasen laufen mit board-konformen Defaults;
+  Verfeinerung jederzeit möglich, **blockiert nichts**. Robert: „eigentlich nichts von Chris zu entscheiden."
+
+## 🟡 Workflow für künftige Prompt-Anpassungen (Robert-Wunsch)
+Anpassungen an Prompts werden **versioniert im GH** geführt: Änderung in `content-truth/prompts/…`,
+Eintrag in `docs/PROMPT-CHANGELOG.md` (Version + Datum + exakte Änderung), Commit `[arch] fix(prompt)…`.
 
 ---
 *Architekt trägt hier ein, sobald ein Prompt-/MD-Punkt Chris-Abstimmung braucht. Originale werden NICHT
