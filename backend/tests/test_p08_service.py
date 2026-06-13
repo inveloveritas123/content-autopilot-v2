@@ -48,13 +48,12 @@ if "google" not in sys.modules:
 if "google.generativeai" not in sys.modules:
     _stub_mod("google.generativeai")
 
-# sqlalchemy — not installed in test venv, must be fully stubbed
-# p08_service uses: from sqlalchemy import text
-if "sqlalchemy" not in sys.modules:
-    _sq = _stub_mod("sqlalchemy")
-    _sq.text = lambda q: q  # minimal stub: text() returns query string
+# sqlalchemy — installiert (requirements.txt), real import klappt.
+# Kein Stub noetig; p08_service.py nutzt 'from sqlalchemy import text' direkt.
 
-# services.llm (imported by services/__init__.py — uses str|None syntax)
+# services.llm (imported by services/__init__.py)
+# anthropic ist ebenfalls installiert, daher kein Stub noetig — spaetere Tests
+# (test_auto_cache_toggle, test_throttle_adversarial) bekommen dann das echte Modul.
 if "services.llm" not in sys.modules:
     _llm = _stub_mod("services.llm")
 
@@ -125,7 +124,7 @@ _pl_mod = _ilu.module_from_spec(_pl_spec)
 sys.modules["services.pipeline_llm"] = _pl_mod
 _pl_spec.loader.exec_module(_pl_mod)
 
-from services.pipeline_llm import (  # noqa: E402
+from services.pipeline_llm import (
     MODEL_PER_PROMPT,
     PROMPT_MAX_TOKENS,
     PipelineLLMResult,
@@ -145,18 +144,19 @@ _p08_spec.loader.exec_module(_p08_mod)
 
 # Register p08_service as attribute of the services package so @patch("services.p08_service.*")
 # can resolve the target via getattr(services_package, 'p08_service').
-import services as _svc_pkg  # noqa: E402
+import services as _svc_pkg
+
 _svc_pkg.p08_service = _p08_mod
 
 # Pollution-Schutz (analog zu test_pipeline_llm.py):
 # Stubs die NUR fuer den Import von p08_service benoetigt wurden, entfernen.
-# So koennen spaetere Test-Module (z.B. test_pipeline_llm.py) die echten Module laden.
+# So koennen spaetere Test-Module die echten Module laden.
 # NICHT entfernen:
 #   - services.p08_service, services.pipeline_llm — von @patch benoetigt
-#   - services.llm — pipeline_llm.py re-exportiert BudgetExceededError daraus;
-#     wenn wir es loeschen, wuerden spaetere Importe von pipeline_llm die echte
-#     services.llm laden (die anthropic/config braucht) und crashen.
-_DO_NOT_REMOVE = {"services.p08_service", "services.pipeline_llm", "services.llm"}
+#   - services.llm wird ENTFERNT: pipeline_llm hat BudgetExceededError bereits gebunden;
+#     spaetere Tests (test_auto_cache_toggle etc.) koennen das echte services.llm laden,
+#     da anthropic installiert ist.
+_DO_NOT_REMOVE = {"services.p08_service", "services.pipeline_llm"}
 for _n in list(_STUBBED_HERE):
     if _n not in _DO_NOT_REMOVE:
         sys.modules.pop(_n, None)
@@ -218,13 +218,15 @@ class TestBoardCompliance:
     def test_max_questions_targeted_is_board_compliant(self):
         """MAX_QUESTIONS_TARGETED muss == 3 sein (Board 5.2: max 2–3 Rückfragen, Issue #17)."""
         from services import p08_service as _p08_svc
-        assert _p08_svc.MAX_QUESTIONS_TARGETED == 3, (
-            f"MAX_QUESTIONS_TARGETED ist {_p08_svc.MAX_QUESTIONS_TARGETED}, erwartet 3 (Board 5.2)"
-        )
+
+        assert (
+            _p08_svc.MAX_QUESTIONS_TARGETED == 3
+        ), f"MAX_QUESTIONS_TARGETED ist {_p08_svc.MAX_QUESTIONS_TARGETED}, erwartet 3 (Board 5.2)"
 
     def test_max_questions_random_smart_unchanged(self):
         """MAX_QUESTIONS_RANDOM_SMART bleibt 3 (nicht von #17 betroffen)."""
         from services import p08_service as _p08_svc
+
         assert _p08_svc.MAX_QUESTIONS_RANDOM_SMART == 3
 
 
@@ -238,23 +240,23 @@ class TestStaticGuard:
         """p08_service.py must not contain 'import anthropic' or 'anthropic.Anthropic'."""
         p08_path = Path(__file__).resolve().parent.parent / "services" / "p08_service.py"
         source = p08_path.read_text(encoding="utf-8")
-        assert "import anthropic" not in source, (
-            "p08_service.py darf kein direktes 'import anthropic' enthalten"
-        )
-        assert "anthropic.Anthropic" not in source, (
-            "p08_service.py darf kein 'anthropic.Anthropic' enthalten"
-        )
+        assert (
+            "import anthropic" not in source
+        ), "p08_service.py darf kein direktes 'import anthropic' enthalten"
+        assert (
+            "anthropic.Anthropic" not in source
+        ), "p08_service.py darf kein 'anthropic.Anthropic' enthalten"
 
     def test_no_literal_model_id_in_p08_service(self):
         """p08_service.py must not contain a hardcoded Anthropic model-ID string."""
         p08_path = Path(__file__).resolve().parent.parent / "services" / "p08_service.py"
         source = p08_path.read_text(encoding="utf-8")
-        assert "claude-sonnet-4-6-2" not in source, (
-            "p08_service.py darf keine literale Anthropic Modell-ID enthalten"
-        )
-        assert "ANTHROPIC_MODEL_ID" not in source, (
-            "ANTHROPIC_MODEL_ID muss aus p08_service.py entfernt worden sein"
-        )
+        assert (
+            "claude-sonnet-4-6-2" not in source
+        ), "p08_service.py darf keine literale Anthropic Modell-ID enthalten"
+        assert (
+            "ANTHROPIC_MODEL_ID" not in source
+        ), "ANTHROPIC_MODEL_ID muss aus p08_service.py entfernt worden sein"
 
     def test_p08_uses_seam_import(self):
         """p08_service.py must import call_pipeline_llm from services.pipeline_llm."""
@@ -406,7 +408,14 @@ class TestP08Response:
         mock_load_prompt.return_value = prompt
         mock_call_llm.return_value = _make_llm_result("Welches Produkt hat am meisten ueberrascht?")
 
-        messages = [{"bot": "Erste Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        messages = [
+            {
+                "bot": "Erste Frage?",
+                "user_features_summary": None,
+                "category": "targeted",
+                "question_index": 1,
+            }
+        ]
 
         def make_ctx(fetchone_val=None):
             ctx = MagicMock()
@@ -416,7 +425,12 @@ class TestP08Response:
             return ctx
 
         session_row = _make_db_session_row(messages=messages)
-        mock_db_factory.side_effect = [make_ctx(session_row), make_ctx(None), make_ctx(None), make_ctx(None)]
+        mock_db_factory.side_effect = [
+            make_ctx(session_row),
+            make_ctx(None),
+            make_ctx(None),
+            make_ctx(None),
+        ]
 
         p08_response(session_id="sess-1", features=features)
 
@@ -437,8 +451,17 @@ class TestP08Response:
 
         #17: MAX_QUESTIONS_TARGETED is now 3 (Board 5.2). Test uses index=3 (>= 3) to trigger.
         """
-        messages = [{"bot": "Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
-        session_row = _make_db_session_row(mode="targeted", messages=messages, current_question_index=3)
+        messages = [
+            {
+                "bot": "Frage?",
+                "user_features_summary": None,
+                "category": "targeted",
+                "question_index": 1,
+            }
+        ]
+        session_row = _make_db_session_row(
+            mode="targeted", messages=messages, current_question_index=3
+        )
 
         ctx = MagicMock()
         ctx.__enter__ = MagicMock(return_value=ctx)
@@ -476,9 +499,18 @@ class TestP08Response:
             "question_index={question_index} max_questions={max_questions}"
         )
         mock_load_prompt.return_value = prompt
-        mock_call_llm.return_value = _make_llm_result("Danke, das reicht.", next_action="vertiefen", quality="leer")
+        mock_call_llm.return_value = _make_llm_result(
+            "Danke, das reicht.", next_action="vertiefen", quality="leer"
+        )
 
-        messages = [{"bot": "Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        messages = [
+            {
+                "bot": "Frage?",
+                "user_features_summary": None,
+                "category": "targeted",
+                "question_index": 1,
+            }
+        ]
         session_row = _make_db_session_row(messages=messages, current_question_index=1)
 
         def make_ctx(fetchone_val=None):
@@ -518,9 +550,18 @@ class TestP08Response:
             "question_index={question_index} max_questions={max_questions}"
         )
         mock_load_prompt.return_value = prompt
-        mock_call_llm.return_value = _make_llm_result("Sehr interessant! Erzaehl mehr.", next_action="vertiefen", quality="gold")
+        mock_call_llm.return_value = _make_llm_result(
+            "Sehr interessant! Erzaehl mehr.", next_action="vertiefen", quality="gold"
+        )
 
-        messages = [{"bot": "Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        messages = [
+            {
+                "bot": "Frage?",
+                "user_features_summary": None,
+                "category": "targeted",
+                "question_index": 1,
+            }
+        ]
         session_row = _make_db_session_row(messages=messages, current_question_index=1)
 
         def make_ctx(fetchone_val=None):
@@ -577,9 +618,18 @@ class TestP08Response:
             "question_index={question_index} max_questions={max_questions}"
         )
         mock_load_prompt.return_value = prompt
-        mock_call_llm.return_value = _make_llm_result("Naechste Frage?", next_action="vertiefen", quality="gold")
+        mock_call_llm.return_value = _make_llm_result(
+            "Naechste Frage?", next_action="vertiefen", quality="gold"
+        )
 
-        messages = [{"bot": "Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        messages = [
+            {
+                "bot": "Frage?",
+                "user_features_summary": None,
+                "category": "targeted",
+                "question_index": 1,
+            }
+        ]
         session_row = _make_db_session_row(messages=messages, current_question_index=1)
 
         def make_ctx(fetchone_val=None):
@@ -608,9 +658,7 @@ class TestP08Response:
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.call_pipeline_llm")
     @patch("services.p08_service._load_p08_prompt")
-    def test_raw_transcript_never_in_prompt(
-        self, mock_load_prompt, mock_call_llm, mock_db_factory
-    ):
+    def test_raw_transcript_never_in_prompt(self, mock_load_prompt, mock_call_llm, mock_db_factory):
         """#19a Schicht-3-Wächter: raw_transcript darf NIE in den P08-Prompt gelangen."""
         SECRET = "GEHEIMER_ROHTEXT_DER_NICHT_AN_DAS_LLM_GEHT"
         prompt = MagicMock()
@@ -623,7 +671,14 @@ class TestP08Response:
         mock_load_prompt.return_value = prompt
         mock_call_llm.return_value = _make_llm_result("Naechste Frage?")
 
-        messages = [{"bot": "Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        messages = [
+            {
+                "bot": "Frage?",
+                "user_features_summary": None,
+                "category": "targeted",
+                "question_index": 1,
+            }
+        ]
         session_row = _make_db_session_row(messages=messages, current_question_index=1)
 
         def make_ctx(fetchone_val=None):
@@ -655,9 +710,18 @@ class TestP08Response:
             "question_index={question_index} max_questions={max_questions}"
         )
         mock_load_prompt.return_value = prompt
-        mock_call_llm.return_value = _make_llm_result("Danke, genug!", next_action="close", quality="gold")
+        mock_call_llm.return_value = _make_llm_result(
+            "Danke, genug!", next_action="close", quality="gold"
+        )
 
-        messages = [{"bot": "Frage?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        messages = [
+            {
+                "bot": "Frage?",
+                "user_features_summary": None,
+                "category": "targeted",
+                "question_index": 1,
+            }
+        ]
         session_row = _make_db_session_row(messages=messages, current_question_index=1)
 
         def make_ctx(fetchone_val=None):
@@ -784,7 +848,14 @@ class TestP08DbFailure:
         mock_load_prompt.return_value = prompt
         mock_call_llm.return_value = _make_llm_result("Weiter so!", quality="silber")
 
-        messages = [{"bot": "Hallo?", "user_features_summary": None, "category": "targeted", "question_index": 1}]
+        messages = [
+            {
+                "bot": "Hallo?",
+                "user_features_summary": None,
+                "category": "targeted",
+                "question_index": 1,
+            }
+        ]
         session_row = _make_db_session_row(messages=messages, current_question_index=1)
 
         session_ctx = MagicMock()

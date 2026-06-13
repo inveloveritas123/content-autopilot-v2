@@ -92,12 +92,25 @@ if not hasattr(_sq_orm, "sessionmaker"):
 # config.settings
 # ---------------------------------------------------------------------------
 
+# Echtes config.py bevorzugen (pydantic_settings liest ENV-Vars; alle fehlenden
+# Felder haben Defaults). Fallback-Stub nur wenn Import scheitert.
 if "config" not in sys.modules:
-    _cfg = _stub("config")
-    _cfg.settings = types.SimpleNamespace(
-        telegram_bot_token="test-token",
-        database_url="postgresql+asyncpg://t:t@localhost/t",
-    )
+    try:
+        import config as _cfg_real  # noqa: F401
+    except Exception:
+        _cfg = _stub("config")
+        _cfg.settings = types.SimpleNamespace(
+            telegram_bot_token="test-token",
+            database_url="postgresql+asyncpg://t:t@localhost/t",
+            litellm_base_url=None,
+            litellm_api_key=None,
+            requesty_api_key=None,
+            redis_url="redis://localhost:6379/0",
+            gemini_api_key="",
+            anthropic_api_key="",
+            telegram_admin_chat_id=None,
+            max_calls_per_tenant_per_hour=100,
+        )
 
 # ---------------------------------------------------------------------------
 # models.base
@@ -124,19 +137,24 @@ if "models.base" not in sys.modules:
 #      in sys.modules eintragen UND als Paketat­tribute registrieren.
 # ---------------------------------------------------------------------------
 
-# services.llm VOR services-Import stubben (str|None in llm.py bricht Py3.9)
+# services.llm — echtes Modul laden wenn moeglich (anthropic + google.generativeai
+# sind bereits in conftest.py gestubbt; str|None-Syntax ist auf Py3.10+ kein Problem).
+# Nur fehlende Stub-Attribute ergaenzen, damit @patch("services.llm.*") weiter klappt.
 if "services.llm" not in sys.modules:
-    _llm = _stub("services.llm")
-    _llm.llm_service = MagicMock()
+    try:
+        import services.llm as _llm_real  # noqa: F401
+    except Exception:
+        _llm = _stub("services.llm")
+        _llm.llm_service = MagicMock()
 
-    class _BudgetExceededError(Exception):
-        pass
+        class _BudgetExceededError(Exception):
+            pass
 
-    class _RateLimitExceededError(Exception):
-        pass
+        class _RateLimitExceededError(Exception):
+            pass
 
-    _llm.BudgetExceededError = _BudgetExceededError
-    _llm.RateLimitExceededError = _RateLimitExceededError
+        _llm.BudgetExceededError = _BudgetExceededError
+        _llm.RateLimitExceededError = _RateLimitExceededError
 
 # services.nextcloud VOR services-Import stubben
 if "services.nextcloud" not in sys.modules:
@@ -146,22 +164,42 @@ if "services.nextcloud" not in sys.modules:
 # Jetzt services als echtes Paket importieren (damit __path__ gesetzt ist)
 import services as _services_pkg
 
-# services.voice_transcription — telegram_task importiert es auf Modulebene
+# services.voice_transcription — telegram_task importiert es auf Modulebene.
+# Das echte Modul hat keine Google/Whisper-Imports auf Modulebene → direkt
+# importierbar. telegram_task.py braucht aber 'transcribe_voice' (Compat-Wrapper
+# der im echten Modul fehlt) → MagicMock als Attribut ergaenzen.
 if "services.voice_transcription" not in sys.modules:
-    _vt = _stub("services.voice_transcription")
+    try:
+        import services.voice_transcription as _vt_real
 
-    class _TranscriptionError(Exception):
-        pass
+        if not hasattr(_vt_real, "transcribe_voice"):
+            _vt_real.transcribe_voice = MagicMock()
+    except Exception:
+        _vt = _stub("services.voice_transcription")
 
-    class _TranscriptionResult:
-        def __init__(self, text="", model_name="whisper", confidence=0.9):
-            self.text = text
-            self.model_name = model_name
-            self.confidence = confidence
+        class _TranscriptionError(Exception):
+            pass
 
-    _vt.TranscriptionError = _TranscriptionError
-    _vt.TranscriptionResult = _TranscriptionResult
-    _vt.transcribe_voice = MagicMock()
+        class _TranscriptionResult:
+            def __init__(
+                self,
+                text="",
+                model_name="whisper",
+                confidence=0.9,
+                model_id=None,
+                language_detected=None,
+                duration_sec=None,
+            ):
+                self.text = text
+                self.model_name = model_name or model_id or "whisper"
+                self.model_id = model_id or model_name or "whisper"
+                self.confidence = confidence
+                self.language_detected = language_detected or ""
+                self.duration_sec = duration_sec or 0.0
+
+        _vt.TranscriptionError = _TranscriptionError
+        _vt.TranscriptionResult = _TranscriptionResult
+        _vt.transcribe_voice = MagicMock()
 
 # Als Paket-Attribut registrieren (für @patch("services.voice_transcription.*"))
 _services_pkg.voice_transcription = sys.modules["services.voice_transcription"]
@@ -188,6 +226,7 @@ if not hasattr(_l2_mod, "persist_routing_decision"):
 if not hasattr(_l2_mod, "route_telegram_intent"):
     _l2_mod.route_telegram_intent = MagicMock()
 if not hasattr(_l2_mod, "RoutingDecision"):
+
     def _RoutingDecision(target, payload=None, reason=""):
         return types.SimpleNamespace(target=target, payload=payload or {}, reason=reason)
 
