@@ -56,6 +56,7 @@ TIER_PRICING: dict[str, dict[str, float]] = {
 # für einmalige Setup-Calls pro Kunde).
 MODEL_PER_PROMPT: dict[str, str] = {
     "P01": "S6",
+    "P02": "S1",  # Website-Analyse — Flash-Lite reicht; kein Frontier nötig (Issue #39)
     "P03": "S6",
     "P04": "S6",
     "P08": "S6",  # Conversation Q&A — Frontier-Qualität, CONFIRM-pflichtig (Issue #15)
@@ -72,6 +73,7 @@ MODEL_PER_PROMPT: dict[str, str] = {
 # Per-Prompt max_tokens — übernommen aus den bisherigen Task-Konstanten.
 PROMPT_MAX_TOKENS: dict[str, int] = {
     "P01": 8192,  # Unternehmerportrait-JSON — P03-Prompt spezifiziert max_tokens=8192
+    "P02": 2000,  # Website-Analyse — kompakte JSON-Zusammenfassung (Issue #39)
     "P03": 8192,  # Voice-Profil-JSON (12 Dimensionen) — P03-Prompt spezifiziert max_tokens=8192
     "P04": 8192,  # Audience-Avatar-JSON — analog zu P01/P03
     "P08": 512,  # Conversation turns — kurze JSON-Antworten (next_action/message/quality)
