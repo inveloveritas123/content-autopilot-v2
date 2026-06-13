@@ -74,7 +74,9 @@ def score_analysis(analysis: dict) -> dict:
         nonlocal score, max_score
         max_score += weight
         val = analysis.get(field)
-        if isinstance(val, list) and len(val) >= min_len or isinstance(val, str) and len(val) >= 10:
+        if (isinstance(val, list) and len(val) >= min_len) or (
+            isinstance(val, str) and len(val) >= 10
+        ):
             score += weight
             return len(val)
         elif val and not isinstance(val, list | str):
@@ -174,7 +176,7 @@ def score_post_generation(post_text: str) -> dict:
 
     return {
         "completeness_score": round(length_score, 1),
-        "accuracy_score": round(structure_score, 1),
+        "accuracy_score": float(structure_score),
         "overall_score": round(overall, 1),
         "details": {
             "char_count": char_count,

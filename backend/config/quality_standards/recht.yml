@@ -1,0 +1,50 @@
+# Quality-Standards fuer Branche: recht
+# Rechts-Posts erfordern bei laengeren Posts einen Disclaimer-Hinweis.
+# Issue #38 Chunk 1 — Struktur-/Regel-Scorer
+
+threshold: 65.0
+
+# Laengen-Baender
+length:
+  min_chars: 200
+  ideal_min: 400
+  ideal_max: 2000
+  max_chars: 3000
+
+# Caps-Ratio
+caps:
+  max_ratio: 0.30
+
+# Hashtag-Sanity
+hashtags:
+  max_count: 10
+  min_count: 0
+
+# CTA wuenschenswert
+cta:
+  required: false
+
+# Disclaimer-Pflicht fuer laengere Posts (ab min_chars_for_disclaimer Zeichen)
+disclaimer:
+  required: true
+  min_chars_for_disclaimer: 400
+  # Erkennungs-Phrasen (lowercase)
+  phrases:
+    - "keine rechtsberatung"
+    - "kein rechtsberatung"
+    - "stellt keine rechtsberatung"
+    - "keine juristische"
+    - "nur zur information"
+    - "individuelle beratung"
+    - "anwalt konsultieren"
+    - "fachanwalt"
+    - "rechtsanwalt hinzuziehen"
+
+# Gewichte
+weights:
+  length: 30
+  structure: 20
+  cta_hook: 10
+  caps_ok: 15
+  hashtag_ok: 5
+  disclaimer: 20

@@ -40,6 +40,80 @@ logger = logging.getLogger(__name__)
 # Telegram-Hardlimit 4096 Zeichen — defensiv kappen.
 _TELEGRAM_MAX_CHARS = 4000
 
+# Bekannte Branchen-Keys (Quality-Gate-Schwellenwerte sind daran gebunden).
+_KNOWN_BRANCHEN = frozenset({"handwerk", "recht", "finanzen"})
+
+# Tolerantes Teilstring-Mapping: Schlüsselwort (lower) → Branchen-Key.
+# Reihenfolge spielt keine Rolle (dict-Reihenfolge nur für Lesbarkeit).
+_BRANCHE_KEYWORDS: list[tuple[str, str]] = [
+    # Recht / Anwalt / Kanzlei / Steuer
+    ("recht", "recht"),
+    ("anwalt", "recht"),
+    ("kanzlei", "recht"),
+    ("notar", "recht"),
+    ("jur", "recht"),          # juridisch, juristisch
+    # Finanzen / Steuer / Versicherung / Berater
+    ("finanz", "finanzen"),
+    ("steuer", "finanzen"),
+    ("versicher", "finanzen"),
+    ("invest", "finanzen"),
+    ("bank", "finanzen"),
+    # Handwerk / Bau / Gewerk
+    ("handwerk", "handwerk"),
+    ("bau", "handwerk"),
+    ("gewerk", "handwerk"),
+    ("installat", "handwerk"),  # Installation, Installateur
+    ("elektriker", "handwerk"),
+    ("sanitär", "handwerk"),
+]
+
+
+def _resolve_branche(tenant_id: str) -> str:
+    """Löst den Branchen-Key für den Quality-Gate auf.
+
+    Lädt customer_context-Profil, extrahiert ``branche`` und normalisiert
+    auf einen bekannten Branchen-Key ("handwerk" | "recht" | "finanzen").
+    Alles unbekannte / leere / fehlende → "_generic".
+
+    fail-open: jede Exception → "_generic" (darf den Versandpfad nie stören).
+    """
+    try:
+        from services.canonical_profiles import load_active_profile
+
+        payload, _ = load_active_profile("customer_context", tenant_id)
+        raw = payload.get("branche") if isinstance(payload, dict) else None
+
+        # branche kann str, list, dict oder None sein — str-Normalisierung
+        if isinstance(raw, list):
+            # nimm erstes nicht-leeres Element
+            raw = next((x for x in raw if isinstance(x, str) and x.strip()), None)
+        elif isinstance(raw, dict):
+            # z.B. {"name": "Handwerk"} → wert aus "name" oder erstem value
+            raw = raw.get("name") or (next(iter(raw.values()), None) if raw else None)
+
+        if not isinstance(raw, str) or not raw.strip():
+            return "_generic"
+
+        normalized = raw.strip().lower()
+
+        # Exakter Treffer auf bekannten Key
+        if normalized in _KNOWN_BRANCHEN:
+            return normalized
+
+        # Toleranter Teilstring-Match (Reihenfolge wie in _BRANCHE_KEYWORDS)
+        for keyword, branche_key in _BRANCHE_KEYWORDS:
+            if keyword in normalized:
+                return branche_key
+
+        return "_generic"
+
+    except Exception as exc:
+        logger.debug(
+            "session_post_task: _resolve_branche failed — falling back to _generic: %s",
+            type(exc).__name__,
+        )
+        return "_generic"
+
 
 def _build_qa_pairs(messages: list) -> list[dict]:
     """Baut Q/A-Paare aus bot_session.messages für den P12-Input.
@@ -241,6 +315,55 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
     except Exception as exc:
         logger.warning("session_post_task: piece marker update failed: %s", type(exc).__name__)
 
+    # 6b. Quality-Gate — Final-Gate vor Versand (#38 Chunk 3, #81 branche-Auflösung).
+    #
+    #     branche: _resolve_branche(tenant_id) lädt customer_context-Profil und
+    #     normalisiert auf einen bekannten Key ("handwerk"|"recht"|"finanzen");
+    #     Fallback "_generic" bei Fehler/unbekanntem Wert (fail-open).
+    #
+    #     Shadow-Mode (quality_gate_enforce=False, DEFAULT):
+    #       Gate läuft immer, Telemetrie wird geloggt, Versandverhalten UNVERÄNDERT.
+    #     Enforce-Mode (quality_gate_enforce=True):
+    #       not passed → Review-Queue-Pfad (wie geflaggt); passed → normal.
+    #     fail-open: jede Exception im Gate → Lauf weiter wie bisher, nie blockieren.
+    _gate_info: dict = {"score": None, "passed": None, "enforced": False}
+    try:
+        from config import settings as _settings
+        from services.quality_gate_stub import quality_gate_check as _qg_check
+
+        _branche = _resolve_branche(tenant_id)
+        _gate_result = _qg_check(final_post, _branche)
+        _gate_enforce = bool(getattr(_settings, "quality_gate_enforce", False))
+
+        logger.info(
+            "session_post_task: quality_gate score=%.1f passed=%s violations=%s "
+            "threshold=%.1f branche=%s enforce=%s (session=%s)",
+            _gate_result["score"],
+            _gate_result["passed"],
+            _gate_result["violations"],
+            _gate_result["threshold"],
+            _gate_result["branche"],
+            _gate_enforce,
+            session_id,
+        )
+
+        _gate_info = {
+            "score": _gate_result["score"],
+            "passed": _gate_result["passed"],
+            "enforced": _gate_enforce,
+        }
+
+        # Enforce-Mode: schlechter Post → in Review-Queue-Pfad routen (wie geflaggt)
+        if _gate_enforce and not _gate_result["passed"]:
+            flagged = True
+    except Exception as exc:
+        # fail-open: Gate-Fehler darf NIEMALS den Versandpfad blockieren
+        logger.warning(
+            "session_post_task: quality_gate raised — fail-open (session=%s): %s",
+            session_id,
+            type(exc).__name__,
+        )
+
     # 7. Post in den Chat. Geflaggt → NICHT roh senden (Review-Queue-Pfad #83).
     chat_id = _resolve_chat_id(tenant_id)
     if chat_id is None:
@@ -251,6 +374,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             "reason": "no_chat_link",
             "flagged_for_review": flagged,
             "p12_run_id": p12_run_id,
+            "quality_gate": _gate_info,
         }
 
     try:
@@ -273,6 +397,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             "reason": "send_failed",
             "flagged_for_review": flagged,
             "p12_run_id": p12_run_id,
+            "quality_gate": _gate_info,
         }
 
     logger.info(
@@ -287,6 +412,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
         "sent_kind": sent_kind,
         "flagged_for_review": flagged,
         "p12_run_id": p12_run_id,
+        "quality_gate": _gate_info,
     }
 
 
