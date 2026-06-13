@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "tenant_customer_values — Kanonisches Werte-Schema (Issue #43)",
+  "type": "object",
+  "properties": {
+    "werte": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "wert": {"type": "string"},
+          "beschreibung": {"type": "string"},
+          "belege": {"type": "array", "items": {"type": "string"}},
+          "gewicht": {"type": "integer", "minimum": 1, "maximum": 5},
+          "status": {"type": "string", "enum": ["aktiv", "vorgeschlagen", "archiviert"]},
+          "quellen": {"type": "array"}
+        },
+        "required": ["wert", "beschreibung"]
+      }
+    },
+    "_meta": {"type": "object"}
+  },
+  "required": ["werte"]
+}

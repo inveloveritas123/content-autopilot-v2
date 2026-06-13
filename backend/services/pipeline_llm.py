@@ -71,9 +71,9 @@ MODEL_PER_PROMPT: dict[str, str] = {
 
 # Per-Prompt max_tokens — übernommen aus den bisherigen Task-Konstanten.
 PROMPT_MAX_TOKENS: dict[str, int] = {
-    "P01": 2048,
-    "P03": 2000,
-    "P04": 2048,
+    "P01": 8192,  # Unternehmerportrait-JSON — P03-Prompt spezifiziert max_tokens=8192
+    "P03": 8192,  # Voice-Profil-JSON (12 Dimensionen) — P03-Prompt spezifiziert max_tokens=8192
+    "P04": 8192,  # Audience-Avatar-JSON — analog zu P01/P03
     "P08": 512,  # Conversation turns — kurze JSON-Antworten (next_action/message/quality)
     "P12": 2000,
     "P12B": 2000,
@@ -81,7 +81,7 @@ PROMPT_MAX_TOKENS: dict[str, int] = {
     "SENSITIVE_DETECT": 512,
     "MD_CONVERT_P03": 2000,
     "LAYER1": 512,  # Kompaktes JSON (5 Felder) — gleiche Größenordnung wie P08
-    "VOICE_FALLBACK": 2000,  # Fallback-Voice-Profil JSON (sprache/ton/kommunikationsstil/werte — P03-strukturiert)
+    "VOICE_FALLBACK": 8192,  # Fallback-Voice-Profil JSON — P03-strukturiert, gleiche Größe
 }
 
 
@@ -388,7 +388,9 @@ def call_pipeline_llm(
     last_error: Exception | None = None
     for attempt in range(max_retries):
         try:
-            with httpx.Client(timeout=120) as client:
+            with httpx.Client(
+                timeout=300
+            ) as client:  # 300s für große Prompts (P03: 31K input + 8K output)
                 resp = client.post(
                     f"{base_url}/chat/completions",
                     json=request_body,

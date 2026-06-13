@@ -155,5 +155,6 @@ celery_app.conf.include = [
     "tasks.cost_alert_task",
     "tasks.reembed_task",
     "tasks.drift_monitor_task",
+    "tasks.values_backfill_task",
     "api.wizard",
 ]
