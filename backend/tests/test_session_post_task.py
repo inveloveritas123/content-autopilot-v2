@@ -88,9 +88,12 @@ def _make_ctx(fetchone_val=None):
     return ctx
 
 
-def _closed_session_row(messages):
-    """(messages, status, mode)-Tuple wie der SELECT in session_post_task."""
-    return (messages, "closed", "random_smart")
+def _closed_session_row(messages, topic_idea_id=None):
+    """(messages, status, mode, topic_idea_id)-Tuple wie der SELECT in session_post_task.
+
+    Bug-Fix #36/§2.3: topic_idea_id als 4. Spalte hinzugefügt.
+    """
+    return (messages, "closed", "random_smart", topic_idea_id)
 
 
 _SESSION_MESSAGES = [

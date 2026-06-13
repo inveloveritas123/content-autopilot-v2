@@ -21,6 +21,10 @@ ALLOWED_TARGETS = frozenset(
         "close_friendly",
         "reviewer_queue",
         "paused",
+        # P09 (on-demand Ideen in den Chat) — Issue #36 S1
+        "p09_ideation",
+        # P13 (eigene Idee → 3 Aufhänger → Varianten-Wahl) — Issue #36 S3
+        "p13_variants",
     }
 )
 
@@ -75,7 +79,19 @@ def route_telegram_intent(
             "active_session_response",
         )
 
-    # 4. Spontane Content-Idee
+    # 4a. Spontane Content-Idee OHNE aktive Session → P13 (Board 4.6, Issue #36 S3)
+    #     Regel VOR Regel 4b: current_session is None = keine aktive Session.
+    if extraction_result.intent == "spontaneous_idea" and current_session is None:
+        return RoutingDecision(
+            "p13_variants",
+            {
+                "features": extraction_result.extracted_features,
+                "tenant_id": tenant_id,
+            },
+            "own_idea_to_variants",
+        )
+
+    # 4b. Spontane Content-Idee MIT aktiver Session → p10 (bestehende Regel #16 unverändert)
     if extraction_result.intent == "spontaneous_idea":
         return RoutingDecision(
             "p10_extract_post_kernel",
@@ -129,6 +145,11 @@ _ROUTED_TO_MAP = {
     "p10_extract_post_kernel": "p10",
     "help_response": "help",
     "close_friendly": "close",
+    # P09/P13: neue Targets → 'p10' (CHECK-Constraint-kompatibel, migrationsfrei).
+    # Semantische Unschärfe im Log dokumentiert (ROBERT-Flag #36/§4.2).
+    # Saubere Lösung: Mini-Migration um 'p09','p13' im CHECK zu erweitern.
+    "p09_ideation": "p10",
+    "p13_variants": "p10",
     # 'p08_response', 'reviewer_queue', 'paused' bleiben unverändert /
     # 'paused' ist nicht im Constraint (fail-open eingebaut).
 }

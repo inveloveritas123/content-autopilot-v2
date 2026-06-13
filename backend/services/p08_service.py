@@ -221,19 +221,27 @@ def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> O
         if topic_idea_id:
             try:
                 with sync_session_factory() as s:
+                    # Bug-Fix #36/§2.3: ursprünglich las der SELECT nicht-existente
+                    # Spalten topic_keyword + category (kein ORM-Feld, keine Migration).
+                    # Jetzt: title, hook_suggestion, angle — alle verifiziert in
+                    # models/content_idea.py:39-44. Das echte Thema + Aufhänger fließen
+                    # so in die Opener-Frage ein.
                     row = s.execute(
                         text(
-                            "SELECT title, topic_keyword, category FROM content_ideas "
+                            "SELECT title, hook_suggestion, angle FROM content_ideas "
                             "WHERE id = :id AND tenant_id = :tid LIMIT 1"
                         ),
                         {"id": topic_idea_id, "tid": tenant_id},
                     ).fetchone()
                     if row:
-                        topic = row[0] or row[1] or "Dein Thema"
+                        # Bevorzuge hook_suggestion (Aufhänger) als Topic-Beschreibung,
+                        # Fallback auf title, dann Generic.
+                        topic = row[1] or row[0] or "Dein Thema"
+                        # angle als category (z.B. 'manual', 'howto', 'story')
                         if row[2]:
                             category = row[2]
             except Exception as e:
-                logger.warning(f"[P08] content_ideas-Load fehlgeschlagen: {e}")
+                logger.warning(f"[P08] content_ideas-Load fehlgeschlagen: {type(e).__name__}")
     elif mode == "random_smart":
         category = _select_random_category(tenant_id)
         topic = category
