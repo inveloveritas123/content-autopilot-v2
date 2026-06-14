@@ -47,8 +47,10 @@ PROMPT_PATHS: dict[str, str] = {
     "P13": "prompts/P13-hook-varianten.md",
     "P15": "prompts/P15-eigene-idee.md",
     "P16": "prompts/P16-post-ueberarbeitung.md",
-    # P17 ausgelassen: nutzt Block-1/2/3-Struktur statt ## System-Prompt / ## User-Prompt
-    # → prompt_health meldet WEIRD/leer. Kein aktiver P17-Runner. Re-add nach Heading-Fix.
+    # P17 reaktiviert (Issue #41/#20): Heading-Fix #22 gelandet (## System-Prompt Z.35,
+    # ## User-Prompt Z.241) → Loader liefert nicht-leeren System-Prompt. Ohne diese
+    # Registrierung war der Beobachter komplett tot (KeyError). Tier S2 (pipeline_llm).
+    "P17": "prompts/P17-kundenkontext-update.md",
     "fragenkatalog": "rules/fragenkatalog.md",
     "hookmaster": "rules/hookmaster.md",
 }
