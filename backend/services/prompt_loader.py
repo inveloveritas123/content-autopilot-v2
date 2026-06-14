@@ -51,6 +51,9 @@ PROMPT_PATHS: dict[str, str] = {
     # ## User-Prompt Z.241) → Loader liefert nicht-leeren System-Prompt. Ohne diese
     # Registrierung war der Beobachter komplett tot (KeyError). Tier S2 (pipeline_llm).
     "P17": "prompts/P17-kundenkontext-update.md",
+    # VOICE_DRIFT wird NICHT über content-truth/PromptLoader geladen.
+    # Die Prompt-Datei liegt v2-intern in backend/prompts/voice_drift_detector.md
+    # und wird direkt via _load_backend_prompt() in tasks/voice_drift_task.py gelesen.
     "fragenkatalog": "rules/fragenkatalog.md",
     "hookmaster": "rules/hookmaster.md",
 }
