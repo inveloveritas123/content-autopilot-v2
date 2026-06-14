@@ -48,6 +48,30 @@ def _stub(name: str) -> types.ModuleType:
 
 # conftest.py setzt bereits: anthropic, google, google.generativeai, celery
 
+
+# services.tenant_export / tenant_import: echten Import ZUERST, VOR allen models-Stubs.
+# Wenn das hier klappt (CI-Docker: openpyxl + sqlalchemy + models echte Pakete),
+# liegt das echte Modul in sys.modules und test_tenant_export_formats.py bleibt grün.
+# Schlägt es fehl (lokale Dev ohne openpyxl), wird weiter unten ein Stub gesetzt.
+def _load_service_direct(qual_name: str) -> bool:
+    """Lade services/<module>.py direkt per importlib, ohne services/__init__ zu triggern."""
+    if qual_name in sys.modules:
+        return True
+    _p = pathlib.Path(__file__).parent.parent / "services" / f"{qual_name.split('.')[-1]}.py"
+    try:
+        _spec = importlib.util.spec_from_file_location(qual_name, _p)
+        _m = importlib.util.module_from_spec(_spec)
+        sys.modules[qual_name] = _m
+        _spec.loader.exec_module(_m)
+        return True
+    except Exception:
+        sys.modules.pop(qual_name, None)
+        return False
+
+
+_load_service_direct("services.tenant_export")
+_load_service_direct("services.tenant_import")
+
 # httpx, redis
 _stub("httpx")
 _stub("redis")
