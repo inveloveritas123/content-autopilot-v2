@@ -126,20 +126,39 @@ _pr_mod = _stub("services.provider_resolver")
 _pr_mod.get_active_provider = MagicMock(return_value=None)
 _services_pkg.provider_resolver = _pr_mod
 
-# services.kill_switch — always create a FRESH stub module, never reuse existing.
-# test_kill_switch.py runs before us (k < p alphabetically) and installs the REAL
-# services.kill_switch. _stub() would return that real module; overwriting its
-# .KillSwitchTriggered and .check_kill_switch would corrupt test_kill_switch tests
-# (real check_kill_switch uses its module globals to look up KillSwitchTriggered).
-_ks_mod = types.ModuleType("services.kill_switch")
-sys.modules["services.kill_switch"] = _ks_mod
+# services.kill_switch — careful handling of the real module.
+#
+# Execution order: test_kill_switch.py (k) runs BEFORE us (p).
+# Its module-level code imports the REAL check_kill_switch, KillSwitchTriggered,
+# is_tenant_enabled as LOCAL name bindings — those bindings are unaffected by
+# any later attribute overwrites on the module object itself.
+#
+# We must NOT:
+#   - force-replace sys.modules["services.kill_switch"] with a fresh stub
+#     (test_kill_switch tests use `patch("services.kill_switch.sync_session_factory")`
+#      which resolves through sys.modules — would fail if stub is there)
+#   - overwrite .KillSwitchTriggered
+#     (p02_task lazily imports KillSwitchTriggered and catches it;
+#      test methods must raise the SAME class, so we use the real one)
+#
+# We MUST:
+#   - overwrite .check_kill_switch with MagicMock so p02_task's lazy import
+#     gets a controllable mock (test_kill_switch.py's local binding to the real
+#     function is unaffected by this attribute overwrite)
+_ks_mod = sys.modules.get("services.kill_switch")
+if _ks_mod is None:
+    _ks_mod = types.ModuleType("services.kill_switch")
+    sys.modules["services.kill_switch"] = _ks_mod
 
+    class _KillSwitchTriggered(Exception):
+        pass
 
-class _KillSwitchTriggered(Exception):
-    pass
+    _ks_mod.KillSwitchTriggered = _KillSwitchTriggered
+else:
+    # Real module already in sys.modules — use its KillSwitchTriggered so that
+    # p02_task's `except KillSwitchTriggered:` catches what we raise in tests.
+    _KillSwitchTriggered = _ks_mod.KillSwitchTriggered
 
-
-_ks_mod.KillSwitchTriggered = _KillSwitchTriggered
 _ks_mod.check_kill_switch = MagicMock()  # Default: kein Trigger
 _services_pkg.kill_switch = _ks_mod
 
