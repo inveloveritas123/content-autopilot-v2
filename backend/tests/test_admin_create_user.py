@@ -126,6 +126,8 @@ class _FakeSettings:
     telegram_admin_chat_id: str | None = None
     telegram_webhook_secret: str | None = None
     telegram_bot_username: str | None = None
+    max_calls_per_tenant_per_hour: int = 200
+    max_calls_global_per_hour: int = 1000
 
 
 # --- config: minimaler Stub mit den benötigten Feldern ---
@@ -163,6 +165,8 @@ if "config" not in sys.modules:
         telegram_admin_chat_id: str | None = None
         telegram_webhook_secret: str | None = None
         telegram_bot_username: str | None = None
+        max_calls_per_tenant_per_hour: int = 200
+        max_calls_global_per_hour: int = 1000
 
     _cfg.settings = _FakeSettings()
     sys.modules["config"] = _cfg

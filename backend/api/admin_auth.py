@@ -24,13 +24,10 @@ import json
 import re
 import secrets
 import time
-import uuid
-from datetime import datetime, timezone
-from typing import Optional
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
@@ -65,9 +62,7 @@ def _session_secret() -> bytes:
     if settings.admin_session_secret:
         return settings.admin_session_secret.encode()
     # Fallback-Ableitung — kein echtes Secret in Code/Git
-    derived = hashlib.sha256(
-        (settings.default_tenant_key + "-admin-session").encode()
-    ).digest()
+    derived = hashlib.sha256((settings.default_tenant_key + "-admin-session").encode()).digest()
     return derived
 
 
@@ -90,7 +85,7 @@ def _make_session(user: str) -> str:
     return f"{b64}.{sig}"
 
 
-def _verify_session(cookie: str) -> Optional[str]:
+def _verify_session(cookie: str) -> str | None:
     """Verifiziert einen Session-Token konstant-zeitig.
 
     Rückgabe: username (str) wenn gültig, None wenn ungültig/abgelaufen/manipuliert.
@@ -214,7 +209,7 @@ class SetApiKeyRequest(BaseModel):
 
 class CreateTenantRequest(BaseModel):
     name: str
-    slug: Optional[str] = None
+    slug: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -236,9 +231,7 @@ async def admin_login(req: LoginRequest, response: Response) -> dict:
     configured_password = settings.admin_password
 
     if not configured_user or not configured_password:
-        raise HTTPException(
-            status_code=503, detail="Admin-Login nicht konfiguriert"
-        )
+        raise HTTPException(status_code=503, detail="Admin-Login nicht konfiguriert")
 
     # Konstant-zeitige Vergleiche — IMMER BEIDE auswerten, kein early-return
     user_ok = hmac.compare_digest(req.username.encode(), configured_user.encode())
@@ -287,9 +280,7 @@ async def list_admin_users(
     BEWUSST CROSS-TENANT: Admin sieht alle Tenants. Kein Klartext-Key.
     """
     rows = await db.execute(
-        text(
-            "SELECT id, name, api_key, enabled, created_at FROM tenants ORDER BY created_at"
-        )
+        text("SELECT id, name, api_key, enabled, created_at FROM tenants ORDER BY created_at")
     )
     tenants = []
     for r in rows.fetchall():
@@ -317,22 +308,18 @@ async def regenerate_api_key(
     Eindeutigkeit wird per Wiederholungsversuch sichergestellt (max 5 Versuche).
     """
     # Tenant existiert?
-    row = await db.execute(
-        text("SELECT id FROM tenants WHERE id = :id"), {"id": tenant_id}
-    )
+    row = await db.execute(text("SELECT id FROM tenants WHERE id = :id"), {"id": tenant_id})
     t = row.fetchone()
     if not t:
         raise HTTPException(status_code=404, detail="Tenant nicht gefunden")
 
     # Neuen Key generieren (bis zu 5 Versuche für Eindeutigkeit)
-    new_key: Optional[str] = None
+    new_key: str | None = None
     for _ in range(5):
         candidate = secrets.token_urlsafe(48)[:64]  # ≤64 Zeichen
         # Eindeutigkeitsprüfung (primary + secondary Key)
         dup = await db.execute(
-            text(
-                "SELECT 1 FROM tenants WHERE api_key = :k OR api_key_secondary = :k"
-            ),
+            text("SELECT 1 FROM tenants WHERE api_key = :k OR api_key_secondary = :k"),
             {"k": candidate},
         )
         if not dup.fetchone():
@@ -375,17 +362,13 @@ async def set_api_key(
         )
 
     # Tenant existiert?
-    row = await db.execute(
-        text("SELECT id FROM tenants WHERE id = :id"), {"id": tenant_id}
-    )
+    row = await db.execute(text("SELECT id FROM tenants WHERE id = :id"), {"id": tenant_id})
     if not row.fetchone():
         raise HTTPException(status_code=404, detail="Tenant nicht gefunden")
 
     # Eindeutigkeit prüfen (andere Tenants)
     dup = await db.execute(
-        text(
-            "SELECT 1 FROM tenants WHERE (api_key = :k OR api_key_secondary = :k) AND id != :id"
-        ),
+        text("SELECT 1 FROM tenants WHERE (api_key = :k OR api_key_secondary = :k) AND id != :id"),
         {"k": key, "id": tenant_id},
     )
     if dup.fetchone():
@@ -425,13 +408,11 @@ async def create_tenant(
         raise HTTPException(status_code=422, detail="name darf maximal 255 Zeichen haben")
 
     # --- api_key generieren (bis zu 5 Versuche für Eindeutigkeit) ---
-    new_key: Optional[str] = None
+    new_key: str | None = None
     for _ in range(5):
         candidate = secrets.token_urlsafe(48)[:64]
         dup = await db.execute(
-            text(
-                "SELECT 1 FROM tenants WHERE api_key = :k OR api_key_secondary = :k"
-            ),
+            text("SELECT 1 FROM tenants WHERE api_key = :k OR api_key_secondary = :k"),
             {"k": candidate},
         )
         if not dup.fetchone():
@@ -448,7 +429,7 @@ async def create_tenant(
     if not base_slug:
         base_slug = "tenant"
 
-    final_slug: Optional[str] = None
+    final_slug: str | None = None
     for attempt in range(5):
         candidate_slug = base_slug if attempt == 0 else f"{base_slug}-{attempt + 1}"
         candidate_slug = candidate_slug[:64]
@@ -477,7 +458,9 @@ async def create_tenant(
     except Exception:
         await db.rollback()
         # Bei unerwarteter DB-Unique-Verletzung trotz Retry-Prüfung → 409
-        raise HTTPException(status_code=409, detail="Tenant konnte nicht angelegt werden (Unique-Konflikt)")
+        raise HTTPException(
+            status_code=409, detail="Tenant konnte nicht angelegt werden (Unique-Konflikt)"
+        )
     await db.refresh(tenant)
 
     # api_key EINMALIG im Klartext zurückgeben — NICHT loggen

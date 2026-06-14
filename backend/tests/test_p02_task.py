@@ -126,8 +126,13 @@ _pr_mod = _stub("services.provider_resolver")
 _pr_mod.get_active_provider = MagicMock(return_value=None)
 _services_pkg.provider_resolver = _pr_mod
 
-# services.kill_switch
-_ks_mod = _stub("services.kill_switch")
+# services.kill_switch — always create a FRESH stub module, never reuse existing.
+# test_kill_switch.py runs before us (k < p alphabetically) and installs the REAL
+# services.kill_switch. _stub() would return that real module; overwriting its
+# .KillSwitchTriggered and .check_kill_switch would corrupt test_kill_switch tests
+# (real check_kill_switch uses its module globals to look up KillSwitchTriggered).
+_ks_mod = types.ModuleType("services.kill_switch")
+sys.modules["services.kill_switch"] = _ks_mod
 
 
 class _KillSwitchTriggered(Exception):
@@ -335,7 +340,7 @@ class TestRunP02Success:
             patch.object(p02, "_load_p02_prompt_if_available", return_value="SYSTEM_PROMPT"),
             patch("asyncio.run"),
         ):
-            result = p02.run_p02(None, "tenant-xyz", website_url="https://example.com")
+            p02.run_p02(None, "tenant-xyz", website_url="https://example.com")
 
         # LLM aufgerufen mit prompt_key='P02'
         llm_mock.assert_called_once()

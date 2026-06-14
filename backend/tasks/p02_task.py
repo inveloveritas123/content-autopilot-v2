@@ -31,7 +31,6 @@ from __future__ import annotations  # Py3.9: str | None Syntax
 import datetime
 import json
 import logging
-import os
 import uuid
 
 import httpx
@@ -133,10 +132,11 @@ def _save_website_context(tenant_id: str, context: dict) -> None:
     Verwendet jsonb_set → kein Überschreiben anderer Settings-Keys.
     Tenant-gescopt (E3-konform). Fail-open: DB-Fehler → nur Warning, kein Crash.
     """
-    from models.base import sync_session_factory
     from sqlalchemy import text
 
-    generated_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    from models.base import sync_session_factory
+
+    generated_at = datetime.datetime.now(datetime.UTC).isoformat()
     payload = {**context, "generated_at": generated_at}
 
     try:
@@ -208,7 +208,9 @@ def run_p02(
         return {"status": "aborted", "reason": "tenant_disabled"}
 
     run_id = str(uuid.uuid4())
-    logger.info("p02 run_id=%s tenant=%s url=%s project=%s", run_id, tenant_id, website_url, project_id)
+    logger.info(
+        "p02 run_id=%s tenant=%s url=%s project=%s", run_id, tenant_id, website_url, project_id
+    )
 
     # ------------------------------------------------------------------
     # 3. Cost-Cap-Vorcheck (fail-open: Fehler beim Check → weiter)
@@ -245,7 +247,9 @@ def run_p02(
 
     except Exception as cap_err:
         # Fail-open: Cost-Cap-Check schlägt fehl → weiter (kein Block)
-        logger.warning("p02 run_id=%s: cost-cap check fehlgeschlagen (fail-open): %s", run_id, cap_err)
+        logger.warning(
+            "p02 run_id=%s: cost-cap check fehlgeschlagen (fail-open): %s", run_id, cap_err
+        )
 
     # ------------------------------------------------------------------
     # 4. Website fetchen
@@ -255,7 +259,9 @@ def run_p02(
         logger.info("p02 run_id=%s tenant=%s: fetch fehlgeschlagen → skip", run_id, tenant_id)
         return {"run_id": run_id, "status": "skipped", "reason": "fetch_failed"}
 
-    logger.info("p02 run_id=%s: %d Zeichen Website-Text für %s", run_id, len(website_text), website_url)
+    logger.info(
+        "p02 run_id=%s: %d Zeichen Website-Text für %s", run_id, len(website_text), website_url
+    )
 
     # ------------------------------------------------------------------
     # 5. Prompt laden (content-truth falls vorhanden, sonst Platzhalter)
@@ -267,8 +273,7 @@ def run_p02(
     # ------------------------------------------------------------------
     try:
         user_content = (
-            f"Website-URL: {website_url}\n\n"
-            f"<website_text>{website_text}</website_text>"
+            f"Website-URL: {website_url}\n\n" f"<website_text>{website_text}</website_text>"
         )
         res = call_pipeline_llm(
             prompt_key="P02",

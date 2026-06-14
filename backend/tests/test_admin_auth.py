@@ -133,6 +133,10 @@ if "config" not in sys.modules:
         telegram_admin_chat_id: str | None = None
         telegram_webhook_secret: str | None = None
         telegram_bot_username: str | None = None
+        # Throttle fields (needed when _FakeSettings lands in config.settings
+        # and test_throttle_adversarial.py does patch.object(settings, ...))
+        max_calls_per_tenant_per_hour: int = 200
+        max_calls_global_per_hour: int = 1000
 
     _cfg.settings = _FakeSettings()
     sys.modules["config"] = _cfg
