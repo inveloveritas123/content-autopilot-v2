@@ -5,8 +5,6 @@ import json
 import logging
 from contextvars import ContextVar
 
-import anthropic
-import google.generativeai as genai
 import httpx
 
 from config import settings
@@ -120,20 +118,13 @@ class LLMService:
         self._litellm_base_url = settings.litellm_base_url
         self._litellm_api_key = settings.litellm_api_key
 
-        # Only init direct clients if NOT using LiteLLM
-        if not self._litellm_base_url:
-            if settings.gemini_api_key and settings.gemini_api_key != "not-needed-using-litellm":
-                genai.configure(api_key=settings.gemini_api_key)
-            if (
-                settings.anthropic_api_key
-                and settings.anthropic_api_key != "not-needed-using-litellm"
-            ):
-                self._anthropic = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-            else:
-                self._anthropic = None
-        else:
-            self._anthropic = None
+        if self._litellm_base_url:
             logger.info(f"LLM Service using LiteLLM proxy at {self._litellm_base_url}")
+        else:
+            logger.warning(
+                "LLM Service: LITELLM_BASE_URL not set — all LLM calls will fail-closed (E1/EU-Policy). "
+                "Set LITELLM_BASE_URL to the EU-routing proxy."
+            )
 
     def _resolve_model(
         self, model: str, purpose: str | None = None, routing_override: dict | None = None
@@ -209,16 +200,17 @@ class LLMService:
             try:
                 if self._litellm_base_url:
                     return await self._litellm(prompt, system, model, purpose=purpose)
-                elif model.startswith("gemini"):
-                    return await self._gemini(prompt, system, model)
-                elif model.startswith("claude"):
-                    return await self._claude(prompt, system, model)
                 else:
-                    raise ValueError(f"Unknown model: {model}")
+                    raise RuntimeError(
+                        "LITELLM_BASE_URL erforderlich — kein Direct-SDK/US-Fallback (E1/EU-Policy). "
+                        "Setze LITELLM_BASE_URL auf den EU-Routing-Proxy."
+                    )
             except BudgetExceededError:
                 raise  # No retry for budget exceeded — it won't help
             except RateLimitExceededError:
                 raise  # No retry for rate-limit exceeded — it won't help
+            except RuntimeError:
+                raise  # No retry for config errors (e.g. missing LITELLM_BASE_URL)
             except Exception as e:
                 last_error = e
                 wait = 2**attempt
@@ -255,26 +247,6 @@ class LLMService:
                 lines = lines[:-1]
             text = "\n".join(lines)
         return json.loads(text)
-
-    async def _gemini(self, prompt: str, system: str | None, model: str = "gemini-flash") -> str:
-        model_name = "gemini-2.0-flash" if "flash" in model else "gemini-2.0-flash"
-        gmodel = genai.GenerativeModel(
-            model_name=model_name,
-            system_instruction=system,
-        )
-        response = await asyncio.to_thread(gmodel.generate_content, prompt)
-        return response.text
-
-    async def _claude(self, prompt: str, system: str | None, model: str = "claude-sonnet") -> str:
-        if not self._anthropic:
-            raise ValueError("Anthropic API key not configured")
-        model_id = "claude-sonnet-4-20250514"
-        messages = [{"role": "user", "content": prompt}]
-        kwargs = {"model": model_id, "max_tokens": 4096, "messages": messages}
-        if system:
-            kwargs["system"] = system
-        response = await self._anthropic.messages.create(**kwargs)
-        return response.content[0].text
 
     async def _litellm(
         self, prompt: str, system: str | None, model: str, purpose: str | None = None
