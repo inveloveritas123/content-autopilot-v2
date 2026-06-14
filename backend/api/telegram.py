@@ -316,6 +316,20 @@ async def telegram_webhook(
     from_user: dict = message.get("from", {})
     telegram_user_id: int = from_user.get("id", 0)
 
+    # Handle /start bare (no token) → Onboarding-Hinweis
+    if text_content.strip() in ("/start", "/start@zkb_content_autopilot_bot"):
+        chat_id_start: int = message.get("chat", {}).get("id", 0)
+        _send_admin_telegram_message(
+            chat_id_start,
+            "👋 Willkommen beim Content Autopilot!\n\n"
+            "Um dich zu verbinden:\n"
+            "1. Gehe im Dashboard auf Einstellungen → Telegram\n"
+            "2. Klicke auf 'Verbindungslink generieren'\n"
+            "3. Sende den generierten /start-Link hier\n\n"
+            "Schreib /help für eine Übersicht der Befehle.",
+        )
+        return {"ok": True}
+
     # Handle /start <token>
     if text_content.startswith("/start "):
         token_arg = text_content[len("/start ") :].strip()
@@ -325,6 +339,31 @@ async def telegram_webhook(
             except Exception as e:
                 logger.error(f"_handle_start_command error: {e}")
         return {"ok": True}
+
+    # Handle /help for unknown users (before tenant resolution)
+    if text_content.strip() in ("/help", "/hilfe"):
+        chat_id_help: int = message.get("chat", {}).get("id", 0)
+        # Quick check if user is linked — if yes, let _try_memory_command handle it
+        try:
+            with sync_session_factory() as db:
+                linked = db.execute(
+                    text(
+                        "SELECT 1 FROM tenant_telegram_link "
+                        "WHERE telegram_user_id = :uid AND status = 'active'"
+                    ),
+                    {"uid": telegram_user_id},
+                ).fetchone()
+        except Exception:
+            linked = None
+        if not linked:
+            _send_admin_telegram_message(
+                chat_id_help,
+                "📋 Content Autopilot — Befehle:\n\n"
+                "/start — Verbindung herstellen (Token aus Dashboard)\n"
+                "/help — Diese Hilfe\n\n"
+                "Noch nicht verbunden? Gehe ins Dashboard → Einstellungen → Telegram.",
+            )
+            return {"ok": True}
 
     # Tenant resolution for all other messages
     link_row = None
