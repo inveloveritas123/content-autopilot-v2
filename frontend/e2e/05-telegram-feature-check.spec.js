@@ -27,32 +27,56 @@ test('TG-2: Token-Input ist Passwort-Feld (Pentester — kein Klartext)', async 
   await page.route('**/*sse*', route => route.abort().catch(() => {}))
   await page.goto('/settings', { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(2000)
-  // Token-Feld muss type=password haben
-  const tokenInput = page.locator('input[placeholder*="oken"], input[placeholder*="ot"]').first()
-  if (await tokenInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+  // Korrekter Placeholder laut TelegramBotSettings.jsx Z.230: "123456789:ABCDefGhIjKlmNoPQRsTUVwxyz"
+  const tokenInput = page.locator('input[placeholder*="123456"], input[type="password"][placeholder*="Bot"]').first()
+  const botVerbinden = page.locator('button:has-text("Bot verbinden")').first()
+  const tokenWiderrufen = page.locator('button:has-text("Token widerrufen")').first()
+
+  if (await tokenInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+    // Bot NICHT konfiguriert: Form mit Token-Input sichtbar
     await expect(tokenInput).toHaveAttribute('type', 'password')
+    console.log('TG-2: Token-Input type=password ✓ (kein Bot konfiguriert)')
+  } else if (await tokenWiderrufen.isVisible({ timeout: 3000 }).catch(() => false)) {
+    // Bot konfiguriert: Status-View aktiv → kein Token-Input (expected)
+    console.log('TG-2: Bot bereits konfiguriert (Status-View) — Token-Input korrekt versteckt ✓')
+    await expect(tokenWiderrufen).toBeVisible()
   } else {
-    // Kein Token-Feld sichtbar = kein Bot konfiguriert, erwarte Hinweistext
+    // Fallback: Telegram-Sektion sichtbar prüfen
     await expect(page.locator('text=Telegram').first()).toBeVisible()
-    console.log('TG-2: Kein Token-Input sichtbar (kein Bot konfiguriert) — OK')
+    console.log('TG-2: Telegram-Sektion sichtbar, Status unbekannt')
   }
 })
 
-test('TG-3: Leeres Token → Connect-Button disabled (Bug-Tester)', async ({ page }) => {
+test('TG-3: Telegram-Bot-Verbindungs-State korrekt (Bug-Tester)', async ({ page }) => {
   await page.route('**/*events*', route => route.abort().catch(() => {}))
   await page.route('**/*sse*', route => route.abort().catch(() => {}))
   await page.goto('/settings', { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(2000)
-  const connectBtn = page.locator('button:has-text("Verbind"), button:has-text("Connect"), button:has-text("Speich")').first()
-  if (await connectBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-    const isDisabled = await connectBtn.isDisabled()
-    console.log('TG-3: Connect-Button disabled bei leerem Token:', isDisabled)
-    // DAU-Check: Tooltip vorhanden?
-    const title = await connectBtn.getAttribute('title')
-    const ariaLabel = await connectBtn.getAttribute('aria-label')
+
+  const botVerbinden = page.locator('button:has-text("Bot verbinden")').first()
+  const tokenWiderrufen = page.locator('button:has-text("Token widerrufen")').first()
+
+  const hasConnectBtn = await botVerbinden.isVisible({ timeout: 3000 }).catch(() => false)
+  const hasRevokeBtn = await tokenWiderrufen.isVisible({ timeout: 3000 }).catch(() => false)
+
+  if (hasConnectBtn) {
+    // Kein Bot → "Bot verbinden"-Button muss bei leerem Input disabled sein
+    await expect(botVerbinden).toBeDisabled({ timeout: 3000 })
+    console.log('TG-3: "Bot verbinden" disabled bei leerem Token ✓')
+    // UX-Prüfung: aria-label/title für DAU?
+    const title = await botVerbinden.getAttribute('title')
+    const ariaLabel = await botVerbinden.getAttribute('aria-label')
     if (!title && !ariaLabel) {
-      console.warn('UX-Befund: Disabled Connect-Button ohne Tooltip — DAU weiß nicht warum')
+      console.warn('UX-BUG: "Bot verbinden"-Button kein title/aria-label — Backlog-Item')
     }
+  } else if (hasRevokeBtn) {
+    // Bot konfiguriert → Status-View, "Token widerrufen" sichtbar ✓
+    await expect(tokenWiderrufen).toBeVisible()
+    console.log('TG-3: Bot konfiguriert — Status-View + "Token widerrufen" sichtbar ✓')
+  } else {
+    // Weder Verbinden noch Widerrufen → Telegram-Sektion prüfen
+    await expect(page.locator('text=Telegram').first()).toBeVisible()
+    console.warn('TG-3: Telegram-State unklar — weder Connect noch Revoke Button sichtbar')
   }
 })
 
@@ -65,9 +89,10 @@ test('MM-1: Modell-Modus Sektion in Settings sichtbar', async ({ page }) => {
   await page.route('**/*sse*', route => route.abort().catch(() => {}))
   await page.goto('/settings', { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(2000)
-  const modeSection = page.locator('text=Testmodus, text=Modell-Modus, text=Produktiv').first()
+  const modeSection = page.getByText('KI-Qualitätsmodus').or(page.getByText('Testmodus')).or(page.getByText('Produktivmodus')).first()
   const visible = await modeSection.isVisible({ timeout: 5000 }).catch(() => false)
-  console.log('MM-1: Modell-Modus-Sektion sichtbar:', visible)
+  console.log('MM-1: KI-Qualitätsmodus-Sektion sichtbar:', visible)
+  if (!visible) console.warn('MM-1: KI-Qualitätsmodus nicht sichtbar — Bot möglicherweise nicht konfiguriert')
   await page.screenshot({ path: 'test-results/mm-1-model-mode.png', fullPage: true })
   await expect(page).not.toHaveURL(/error/)
 })
