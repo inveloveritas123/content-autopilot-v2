@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 schema_transformer.py — Transformer-Schicht zwischen v2-DB-Payload und kanonischem Schema.
 
@@ -24,6 +26,7 @@ Autoren-Übergabe:
 Stand: 2026-06-12
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -912,28 +915,107 @@ def _build_meta(prompt_key: str, meta: dict) -> dict:
 def _resolve_prompt_version(prompt_key: str, raw: str) -> str:
     """Versucht, einen Hash oder freien String in eine semantische Version umzuwandeln.
 
-    Falls der raw-Wert bereits dem Muster 'p0X-v...' entspricht → direkt verwenden.
-    Sonst → 'legacy' (plus log-Hinweis für spätere Hash-Tabelle).
+    Reihenfolge:
+    1. Leer/None → '<key>-legacy'.
+    2. Bereits semantische Version ('^p0[0-9]+-v...' oder '^values-v...') → direkt.
+    3. Hash == SHA-256 des aktuellen Prompt-Files für prompt_key → '<key>-v1.0'.
+       (fail-open: Datei nicht lesbar / unbekannter Schlüssel → weiter zu 4.)
+    4. Unbekannter Hash → '<key>-legacy'.
 
-    OFFEN: Vollständige bekannte Hash-Tabelle ergänzen wenn historische Runs
-    analysiert wurden (GitHub-Issue gemäß P4-Plan Stufe iv).
+    INVARIANTE: Rows mit altem/unbekanntem Hash bleiben 'legacy' (is_canonical=False).
+    NICHT-implementiert: historische Hash→Version-Mappings (= Robert/DEFERIERT, Issue #26).
     """
     if not raw:
         return f"{prompt_key}-legacy"
 
-    # Prüfe ob bereits eine semantische Version
-    if re.match(r"^p0[0-9]+-v[0-9]+\.[0-9]+$", raw):
+    # Prüfe ob bereits eine semantische Version (beide Namensräume: p0X + values)
+    if re.match(r"^(p0[0-9]+|values)-v[0-9]+\.[0-9]+$", raw):
         return raw
 
-    # Bekannte Hashes → semantische Version
-    # OFFEN: Aus produktiven setup_pipeline_run-Rows ermitteln und hier eintragen.
-    _KNOWN_HASHES: dict[str, str] = {}
-
-    if raw in _KNOWN_HASHES:
-        return _KNOWN_HASHES[raw]
+    # Aktuellen Prompt-SHA prüfen (lazy, gecacht, fail-open)
+    current_sha = _get_current_prompt_sha(prompt_key)
+    if current_sha and raw == current_sha:
+        resolved = f"{prompt_key}-{_CURRENT_PROMPT_VERSION}"
+        logger.debug(
+            "prompt_version_hash '%s' für %s matcht aktuellen Prompt-SHA → %s",
+            raw[:16],
+            prompt_key,
+            resolved,
+        )
+        return resolved
 
     logger.debug("prompt_version_hash '%s' für %s unbekannt → 'legacy'", raw[:16], prompt_key)
     return f"{prompt_key}-legacy"
+
+
+# Aktuelle semantische Vertragsversion für neue Prompt-SHA-Matches.
+# Zentral definiert — beim Bump des Prompts hier erhöhen UND content-truth commiten.
+_CURRENT_PROMPT_VERSION: str = "v1.0"
+
+# Prompt-Key → Relativer Pfad unter content-truth/ (spiegelt PROMPT_PATHS in prompt_loader).
+# Nur die drei nativen Schreibpfad-Prompts (P01/P03/P04).
+_PROMPT_RELATIVE_PATHS: dict[str, str] = {
+    "p01": "prompts/P01-kundenkontext-extraktion.md",
+    "p03": "prompts/P03-voice-analyse.md",
+    "p04": "prompts/P04-kundenavatar-vertiefung.md",
+}
+
+# Prozess-Level-Cache: prompt_key → SHA-256-Hex (einmal berechnet, nie invalidiert).
+# Akzeptierbar: Prompt-Files ändern sich nur bei Deployments.
+_PROMPT_SHA_CACHE: dict[str, str] = {}
+
+
+def _get_current_prompt_sha(prompt_key: str) -> str | None:
+    """Gibt den SHA-256-Hex des aktuellen Prompt-Files zurück. Fail-open: None.
+
+    Nutzt einen Prozess-Level-Cache (ein Lese-IO pro Prompt-Key pro Prozess-Start).
+    Unbekannte prompt_keys oder nicht-lesbare Dateien → None (kein Absturz).
+    """
+    cached = _PROMPT_SHA_CACHE.get(prompt_key)
+    if cached is not None:
+        return cached
+
+    rel_path = _PROMPT_RELATIVE_PATHS.get(prompt_key)
+    if rel_path is None:
+        return None
+
+    # Basis-Verzeichnis: CONTENT_TRUTH_BASE_PATH oder Fallback analog _get_content_truth_schemas_dir
+    base = _get_content_truth_base_dir()
+    file_path = base / rel_path
+    try:
+        raw_bytes = file_path.read_bytes()
+        sha = hashlib.sha256(raw_bytes).hexdigest()
+        _PROMPT_SHA_CACHE[prompt_key] = sha
+        logger.debug("_get_current_prompt_sha(%s): %s (aus %s)", prompt_key, sha[:16], file_path)
+        return sha
+    except OSError as exc:
+        logger.debug(
+            "_get_current_prompt_sha(%s): Datei nicht lesbar (%s) → fail-open",
+            prompt_key,
+            exc,
+        )
+        return None
+
+
+def _get_content_truth_base_dir() -> Path:
+    """Gibt das content-truth-Basisverzeichnis zurück (ohne '/schemas'-Suffix).
+
+    Analog zu _get_content_truth_schemas_dir() — wiederverwendet dieselbe
+    Env-Variable und Config-Quelle, gibt aber das Basisverzeichnis zurück.
+    """
+    env_path = os.environ.get("CONTENT_TRUTH_BASE_PATH", "").strip()
+    if env_path:
+        return Path(env_path)
+
+    try:
+        from config import settings  # type: ignore
+
+        return Path(settings.content_truth_base_path)
+    except Exception:
+        pass
+
+    # Fallback: relativ zu dieser Datei → backend/../content-truth
+    return Path(__file__).parent.parent.parent / "content-truth"
 
 
 # ---------------------------------------------------------------------------
