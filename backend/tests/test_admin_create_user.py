@@ -202,11 +202,14 @@ elif not hasattr(sys.modules["models"], "__path__"):
     sys.modules["models"].__package__ = "models"
 
 if "models.base" not in sys.modules:
-    _mb = types.ModuleType("models.base")
-    _mb.async_session_factory = None
-    _mb.sync_session_factory = None  # needed by tasks/p03_task.py etc.
-    _mb.Base = object
-    sys.modules["models.base"] = _mb
+    try:
+        import models.base as _mb
+    except Exception:
+        _mb = types.ModuleType("models.base")
+        _mb.async_session_factory = None
+        _mb.sync_session_factory = None
+        _mb.Base = object
+        sys.modules["models.base"] = _mb
 
 # Tenant-Stub — leichtes Objekt das die nötigen Felder hat
 # Always patch Tenant even if models.tenant already exists (test_admin_auth.py

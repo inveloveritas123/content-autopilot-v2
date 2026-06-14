@@ -35,28 +35,34 @@ def _stub(name: str) -> types.ModuleType:
     return sys.modules[name]
 
 
-# sqlalchemy core + ext
+# sqlalchemy core + ext — only stub missing attrs; never overwrite real sqlalchemy.
+# Real sqlalchemy (installed in CI) has `create_engine`; stubs don't.
 _sa = _stub("sqlalchemy")
-_sa.func = MagicMock()
-_sa.select = MagicMock()
-_sa.text = lambda sql: sql
-_sa.Boolean = MagicMock()
-_sa.DateTime = MagicMock()
-_sa.String = MagicMock()
-_sa.Text = MagicMock()
+if not hasattr(_sa, "create_engine"):
+    _sa.func = MagicMock()
+    _sa.select = MagicMock()
+    _sa.text = lambda sql: sql
+    _sa.Boolean = MagicMock()
+    _sa.DateTime = MagicMock()
+    _sa.String = MagicMock()
+    _sa.Text = MagicMock()
 _sa_ext = _stub("sqlalchemy.ext")
 _sa_ext_async = _stub("sqlalchemy.ext.asyncio")
-_sa_ext_async.AsyncSession = MagicMock()
+if not hasattr(_sa_ext_async, "create_async_engine"):
+    _sa_ext_async.AsyncSession = MagicMock()
 _sa_orm = _stub("sqlalchemy.orm")
-_sa_orm.Mapped = MagicMock()
-_sa_orm.mapped_column = MagicMock()
-_sa_orm.relationship = MagicMock()
+if not hasattr(_sa_orm, "Session"):
+    _sa_orm.Mapped = MagicMock()
+    _sa_orm.mapped_column = MagicMock()
+    _sa_orm.relationship = MagicMock()
 _sa_orm.attributes = _stub("sqlalchemy.orm.attributes")
-_sa_orm.attributes.flag_modified = MagicMock()
+if not hasattr(_sa_orm.attributes, "get_history"):
+    _sa_orm.attributes.flag_modified = MagicMock()
 _sa_dialects = _stub("sqlalchemy.dialects")
 _sa_pg = _stub("sqlalchemy.dialects.postgresql")
-_sa_pg.JSONB = MagicMock()
-_sa_pg.UUID = MagicMock()
+if not hasattr(_sa_pg, "ARRAY"):
+    _sa_pg.JSONB = MagicMock()
+    _sa_pg.UUID = MagicMock()
 
 # pydantic
 if "pydantic" not in sys.modules:
@@ -121,10 +127,14 @@ sys.modules["models.content_performance"].ContentPerformance = MagicMock()
 sys.modules["services.nextcloud"].nextcloud_client = MagicMock()
 sys.modules["services.tenant_export"].TenantExportService = MagicMock(return_value=MagicMock())
 sys.modules["services.tenant_import"].TenantImportService = MagicMock(return_value=MagicMock())
-sys.modules["services.llm"].set_llm_tenant = MagicMock()
-sys.modules["services.llm"].PURPOSE_MAX_TOKENS = {}
-sys.modules["services.llm"].PURPOSE_MODEL_MAP = {}
-sys.modules["services.llm"].REQUESTY_MODELS = {}
+# Only install stub attributes when services.llm is a stub (not the real module).
+# Real module has _tenant_id_ctx; overwriting set_llm_tenant on the real module
+# breaks test_cost_cap (ContextVar propagation).
+if not hasattr(sys.modules.get("services.llm"), "_tenant_id_ctx"):
+    sys.modules["services.llm"].set_llm_tenant = MagicMock()
+    sys.modules["services.llm"].PURPOSE_MAX_TOKENS = {}
+    sys.modules["services.llm"].PURPOSE_MODEL_MAP = {}
+    sys.modules["services.llm"].REQUESTY_MODELS = {}
 
 # ── Jetzt erst importieren ────────────────────────────────────────────────────
 from api.tenants import (

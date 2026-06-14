@@ -174,20 +174,38 @@ elif not hasattr(sys.modules["models"], "__path__"):
     sys.modules["models"].__package__ = "models"
 
 if "models.base" not in sys.modules:
-    _mb = types.ModuleType("models.base")
-    _mb.async_session_factory = None
-    _mb.sync_session_factory = None  # needed by tasks/p03_task.py etc.
-    _mb.Base = object
-    sys.modules["models.base"] = _mb
+    try:
+        import models.base as _mb
+    except Exception:
+        _mb = types.ModuleType("models.base")
+        _mb.async_session_factory = None
+        _mb.sync_session_factory = None
+        _mb.Base = object
+        sys.modules["models.base"] = _mb
 
 if "models.tenant" not in sys.modules:
-    _mt = types.ModuleType("models.tenant")
+    try:
+        import models.tenant as _mt
+    except Exception:
+        _mt = types.ModuleType("models.tenant")
 
-    class _FakeTenant:
-        pass
+        class _FakeTenant:
+            pass
 
-    _mt.Tenant = _FakeTenant
-    sys.modules["models.tenant"] = _mt
+        _mt.Tenant = _FakeTenant
+        sys.modules["models.tenant"] = _mt
+
+# Pre-import model submodules so _telegram_task_env.py (loaded by
+# test_idempotency_routing.py) cannot overwrite them with MagicMock() stubs.
+# _telegram_task_env guards: `if "models.X" not in sys.modules` — if we put
+# the real module here first, those guards pass safely.
+for _mdl_name in ("models.llm_call_log", "models.llm_provider", "models.company_profile"):
+    if _mdl_name not in sys.modules:
+        try:
+            _ilu = __import__("importlib")
+            _ilu.import_module(_mdl_name)
+        except Exception:
+            pass  # If import fails, leave sys.modules alone (don't install bad stub)
 
 # --- dependencies stub ---
 if "dependencies" not in sys.modules:

@@ -96,35 +96,32 @@ if not hasattr(_cfg_mod, "settings") or not hasattr(_cfg_mod.settings, "database
 
 # ---------------------------------------------------------------------------
 # models.base — sync_session_factory Stub
+# __path__ setzen damit Submodul-Imports (z.B. models.company_profile) gegen
+# das echte Filesystem aufgelöst werden und andere Tests nicht brechen.
 # ---------------------------------------------------------------------------
 _models_pkg = _stub("models")
+if not hasattr(_models_pkg, "__path__"):
+    _models_pkg.__path__ = [os.path.join(_BACKEND_DIR, "models")]
+    _models_pkg.__package__ = "models"
 _models_base = _stub("models.base")
-_models_base.sync_session_factory = MagicMock()
+if not hasattr(_models_base, "sync_session_factory"):
+    _models_base.sync_session_factory = MagicMock()
 _models_pkg.base = _models_base
 
 # ---------------------------------------------------------------------------
 # services-Paket und Submodule
+# NICHT stubben: services.llm, services.model_policy, services.provider_resolver
+# — diese Module werden von services.pipeline_llm gebraucht, das wir KOMPLETT
+#   stubben. Direkt-Stubs würden sys.modules für test_cost_cap, test_pipeline_llm,
+#   test_auto_cache_toggle, test_throttle_adversarial korrumpieren.
 # ---------------------------------------------------------------------------
 _services_pkg = sys.modules.get("services")
 if _services_pkg is None or not isinstance(_services_pkg, types.ModuleType):
     _services_pkg = types.ModuleType("services")
     sys.modules["services"] = _services_pkg
-
-# services.llm — BudgetExceededError
-_llm_mod = _stub("services.llm")
-_BudgetExceededError = type("BudgetExceededError", (Exception,), {})
-_llm_mod.BudgetExceededError = _BudgetExceededError
-_services_pkg.llm = _llm_mod
-
-# services.model_policy
-_mp_mod = _stub("services.model_policy")
-_mp_mod.get_override = MagicMock(return_value=None)
-_services_pkg.model_policy = _mp_mod
-
-# services.provider_resolver
-_pr_mod = _stub("services.provider_resolver")
-_pr_mod.get_active_provider = MagicMock(return_value=None)
-_services_pkg.provider_resolver = _pr_mod
+if not hasattr(_services_pkg, "__path__"):
+    _services_pkg.__path__ = [os.path.join(_BACKEND_DIR, "services")]
+    _services_pkg.__package__ = "services"
 
 # services.kill_switch — careful handling of the real module.
 #
@@ -210,14 +207,34 @@ _fake_celery = MagicMock()
 
 
 def _fake_task_decorator(*args, **kwargs):
+    _bind = kwargs.get("bind", False)
+
+    def _make_apply(fn):
+        def apply(*call_a, **call_kw):
+            pos_args = call_kw.pop("args", call_a[0] if call_a else [])
+            kw_args = call_kw.pop("kwargs", {})
+            try:
+                if _bind:
+                    fake_self = types.SimpleNamespace(
+                        request=types.SimpleNamespace(id="fake-task-id")
+                    )
+                    ret = fn(fake_self, *pos_args, **kw_args)
+                else:
+                    ret = fn(*pos_args, **kw_args)
+            except Exception as exc:
+                ret = exc
+            return types.SimpleNamespace(get=lambda r=ret: r, result=ret)
+
+        return apply
+
     def decorator(fn):
-        fn.apply = lambda *a, **kw: types.SimpleNamespace(get=lambda: None)
+        fn.apply = _make_apply(fn)
         fn.apply_async = lambda *a, **kw: types.SimpleNamespace(id="fake-task-id")
         return fn
 
     if len(args) == 1 and callable(args[0]):
         fn = args[0]
-        fn.apply = lambda *a, **kw: types.SimpleNamespace(get=lambda: None)
+        fn.apply = _make_apply(fn)
         fn.apply_async = lambda *a, **kw: types.SimpleNamespace(id="fake-task-id")
         return fn
     return decorator
