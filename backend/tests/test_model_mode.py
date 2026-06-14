@@ -98,6 +98,7 @@ if "fastapi" not in sys.modules:
         def _noop_decorator(self, *a, **kw):
             def decorator(fn):
                 return fn
+
             if len(a) == 1 and callable(a[0]):
                 return a[0]
             return decorator
@@ -146,18 +147,25 @@ if not hasattr(_llm_stub, "llm_service"):
     _llm_stub.BudgetExceededError = type("BudgetExceededError", (Exception,), {})
 
 _stub("services.nextcloud").nextcloud_client = MagicMock()
-_stub("services.tenant_export").TenantExportService = MagicMock(return_value=MagicMock())
-_stub("services.tenant_import").TenantImportService = MagicMock(return_value=MagicMock())
+_te = _stub("services.tenant_export")
+if not hasattr(_te, "TenantExportService"):
+    _te.TenantExportService = MagicMock(return_value=MagicMock())
+_ti = _stub("services.tenant_import")
+if not hasattr(_ti, "TenantImportService"):
+    _ti.TenantImportService = MagicMock(return_value=MagicMock())
 
 _th = _stub("services.throttle")
-_th.RateLimitExceededError = type("RateLimitExceededError", (Exception,), {})
-_th.check_and_record_throttle = MagicMock(return_value=(True, 0, 0))
+if not hasattr(_th, "RateLimitExceededError"):
+    _th.RateLimitExceededError = type("RateLimitExceededError", (Exception,), {})
+if not hasattr(_th, "check_and_record_throttle"):
+    _th.check_and_record_throttle = MagicMock(return_value=(True, 0, 0))
 
 _pr = _stub("services.provider_resolver")
-_pr.get_active_provider = MagicMock(return_value=None)
-_pr.track_cost = MagicMock()
-_pr._DAILY_CAP_USD = 5.0
-_pr._GLOBAL_CAP_USD = 50.0
+if not hasattr(_pr, "get_active_provider"):
+    _pr.get_active_provider = MagicMock(return_value=None)
+    _pr.track_cost = MagicMock()
+    _pr._DAILY_CAP_USD = 5.0
+    _pr._GLOBAL_CAP_USD = 50.0
 
 _stub("dependencies").get_db = MagicMock()
 _stub("dependencies").get_tenant = MagicMock()
@@ -202,10 +210,12 @@ _lm_spec.loader.exec_module(_lm_module)
 _resolve_litellm_model = _lm_module._resolve_litellm_model
 REQUESTY_MODELS: dict = _lm_module.REQUESTY_MODELS
 
+
 # PURPOSE_MODEL_MAP: per AST aus llm.py lesen (nur ein Dict-Literal, sicher)
 def _read_purpose_model_map() -> dict:
     """Liest PURPOSE_MODEL_MAP direkt aus llm.py (nur Dict-Literal, kein Import)."""
     import ast
+
     llm_src = (_BACKEND_DIR / "services" / "llm.py").read_text()
     tree = ast.parse(llm_src)
     for node in ast.walk(tree):
@@ -218,7 +228,9 @@ def _read_purpose_model_map() -> dict:
                         pass
     return {}
 
+
 PURPOSE_MODEL_MAP: dict = _read_purpose_model_map()
+
 
 # _resolve_model_logic: Replika von LLMService._resolve_model (nur der KEY-Teil).
 # KEY-INVARIANTE (Opus-Review #72): gibt IMMER einen KEY zurück, nie einen
@@ -332,17 +344,17 @@ class TestInvarianteTestmodus:
         """INVARIANTE A (explizit): testmodus-litellm_model == vertex/gemini-2.5-flash-lite@europe-central2."""
         key = _resolve_model_logic("claude-sonnet", purpose, None, mode="testmodus")
         litellm_model, task = _resolve_litellm_model(key, None)
-        assert litellm_model == "vertex/gemini-2.5-flash-lite@europe-central2", (
-            f"purpose='{purpose}': erwartet Gemini-Flash-Lite, bekam {litellm_model!r}"
-        )
+        assert (
+            litellm_model == "vertex/gemini-2.5-flash-lite@europe-central2"
+        ), f"purpose='{purpose}': erwartet Gemini-Flash-Lite, bekam {litellm_model!r}"
         assert task == "creative"
 
     def test_testmodus_key_ist_claude_sonnet(self):
         """KEY-INVARIANTE explizit: testmodus → KEY 'claude-sonnet' (nicht aufgelöster String)."""
         key = CREATIVE_MODEL_BY_MODE["testmodus"]
-        assert key == "claude-sonnet", (
-            f"CREATIVE_MODEL_BY_MODE['testmodus'] muss KEY 'claude-sonnet' sein, nicht {key!r}"
-        )
+        assert (
+            key == "claude-sonnet"
+        ), f"CREATIVE_MODEL_BY_MODE['testmodus'] muss KEY 'claude-sonnet' sein, nicht {key!r}"
         # Und dieser KEY muss in REQUESTY_MODELS existieren
         assert key in REQUESTY_MODELS, f"KEY {key!r} fehlt in REQUESTY_MODELS"
 
@@ -391,18 +403,18 @@ class TestProduktivmodus:
     def test_produktiv_liefert_bedrock_s6_key(self, purpose):
         """produktiv → KEY 'claude-sonnet-eu' (nicht direkt der Bedrock-String)."""
         key = _resolve_model_logic("claude-sonnet", purpose, None, mode="produktiv")
-        assert key == "claude-sonnet-eu", (
-            f"purpose='{purpose}': erwartet KEY 'claude-sonnet-eu', bekam {key!r}"
-        )
+        assert (
+            key == "claude-sonnet-eu"
+        ), f"purpose='{purpose}': erwartet KEY 'claude-sonnet-eu', bekam {key!r}"
 
     @pytest.mark.parametrize("purpose", sorted(CREATIVE_PURPOSES))
     def test_produktiv_litellm_model_ist_bedrock(self, purpose):
         """ECHTER _litellm-Pfad: KEY 'claude-sonnet-eu' → bedrock/claude-sonnet-4-6@eu-central-1."""
         key = _resolve_model_logic("claude-sonnet", purpose, None, mode="produktiv")
         litellm_model, task = _resolve_litellm_model(key, None)
-        assert litellm_model == "bedrock/claude-sonnet-4-6@eu-central-1", (
-            f"purpose='{purpose}': erwartet Bedrock-S6, bekam {litellm_model!r}"
-        )
+        assert (
+            litellm_model == "bedrock/claude-sonnet-4-6@eu-central-1"
+        ), f"purpose='{purpose}': erwartet Bedrock-S6, bekam {litellm_model!r}"
         assert task == "creative", f"purpose='{purpose}': erwartet task='creative', bekam {task!r}"
 
     @pytest.mark.parametrize("purpose", sorted(CREATIVE_PURPOSES))
@@ -418,9 +430,9 @@ class TestProduktivmodus:
         key = _resolve_model_logic("claude-sonnet", purpose, None, mode="produktiv")
         litellm_model, task = _resolve_litellm_model(key, provider)
         # Auch mit aktivem Provider muss der KEY-Lookup greifen (nicht provider["model_name"])
-        assert litellm_model == "bedrock/claude-sonnet-4-6@eu-central-1", (
-            f"provider aktiv, purpose='{purpose}': KEY-Lookup muss greifen, bekam {litellm_model!r}"
-        )
+        assert (
+            litellm_model == "bedrock/claude-sonnet-4-6@eu-central-1"
+        ), f"provider aktiv, purpose='{purpose}': KEY-Lookup muss greifen, bekam {litellm_model!r}"
         assert task == "creative"
 
     def test_produktiv_key_ist_claude_sonnet_eu(self):
@@ -454,7 +466,6 @@ class TestProduktivmodus:
 
 
 class TestRoutingOverridePraezedenz:
-
     def test_override_schlaegt_testmodus(self):
         override = {"ideation": "my-custom-model"}
         result = _resolve_model_logic("claude-sonnet", "ideation", override, mode="testmodus")
@@ -467,8 +478,12 @@ class TestRoutingOverridePraezedenz:
 
     def test_override_nur_fuer_betroffenen_purpose(self):
         override = {"ideation": "my-custom-model"}
-        result_ideation = _resolve_model_logic("claude-sonnet", "ideation", override, mode="produktiv")
-        result_questions = _resolve_model_logic("claude-sonnet", "questions", override, mode="produktiv")
+        result_ideation = _resolve_model_logic(
+            "claude-sonnet", "ideation", override, mode="produktiv"
+        )
+        result_questions = _resolve_model_logic(
+            "claude-sonnet", "questions", override, mode="produktiv"
+        )
         assert result_ideation == "my-custom-model"
         # questions hat keinen override → Modus greift → KEY "claude-sonnet-eu"
         assert result_questions == CREATIVE_MODEL_BY_MODE["produktiv"]  # = "claude-sonnet-eu"
@@ -498,7 +513,12 @@ class TestResolveLitellmModel:
 
     def test_claude_sonnet_mit_provider_gibt_gemini(self):
         """KEY-LOOKUP schlägt provider['model_name'] — KEY-Invariante gilt auch mit Provider."""
-        provider = {"model_name": "provider-default", "base_url": "x", "api_key": "k", "provider_id": 1}
+        provider = {
+            "model_name": "provider-default",
+            "base_url": "x",
+            "api_key": "k",
+            "provider_id": 1,
+        }
         litellm_model, task = _resolve_litellm_model("claude-sonnet", provider)
         assert litellm_model == "vertex/gemini-2.5-flash-lite@europe-central2"
         assert task == "creative"
@@ -512,7 +532,12 @@ class TestResolveLitellmModel:
 
     def test_claude_sonnet_eu_mit_provider_gibt_bedrock(self):
         """KEY-LOOKUP schlägt auch hier provider['model_name']."""
-        provider = {"model_name": "provider-default", "base_url": "x", "api_key": "k", "provider_id": 1}
+        provider = {
+            "model_name": "provider-default",
+            "base_url": "x",
+            "api_key": "k",
+            "provider_id": 1,
+        }
         litellm_model, task = _resolve_litellm_model("claude-sonnet-eu", provider)
         assert litellm_model == "bedrock/claude-sonnet-4-6@eu-central-1"
         assert task == "creative"
@@ -525,7 +550,12 @@ class TestResolveLitellmModel:
         assert task == "analysis"
 
     def test_gemini_flash_mit_provider(self):
-        provider = {"model_name": "provider-default", "base_url": "x", "api_key": "k", "provider_id": 1}
+        provider = {
+            "model_name": "provider-default",
+            "base_url": "x",
+            "api_key": "k",
+            "provider_id": 1,
+        }
         litellm_model, task = _resolve_litellm_model("gemini-flash", provider)
         assert litellm_model == "vertex/gemini-2.5-flash-lite@europe-central2"
         assert task == "analysis"
@@ -552,7 +582,12 @@ class TestResolveLitellmModel:
         assert litellm_model == "unknown-model"  # passthrough
 
     def test_unbekannter_key_mit_provider_nutzt_provider_model_name(self):
-        provider = {"model_name": "provider-model", "base_url": "x", "api_key": "k", "provider_id": 1}
+        provider = {
+            "model_name": "provider-model",
+            "base_url": "x",
+            "api_key": "k",
+            "provider_id": 1,
+        }
         litellm_model, task = _resolve_litellm_model("totally-unknown", provider)
         assert task == "all"
         assert litellm_model == "provider-model"
@@ -562,7 +597,6 @@ class TestResolveLitellmModel:
 
 
 class TestGetTenantModelMode:
-
     def test_kein_tenant_id_gibt_testmodus(self):
         assert get_tenant_model_mode(None) == DEFAULT_MODEL_MODE
         assert get_tenant_model_mode("") == DEFAULT_MODEL_MODE
@@ -580,20 +614,22 @@ class TestGetTenantModelMode:
         class _FailCM:
             def __enter__(self):
                 raise RuntimeError("connection refused")
+
             def __exit__(self, *a):
                 return False
 
         monkeypatch.setattr(mb, "sync_session_factory", lambda: _FailCM())
         result = get_tenant_model_mode("some-real-id")
-        assert result == DEFAULT_MODEL_MODE, (
-            f"DB-Fehler → Fallback 'testmodus' erwartet, bekam '{result}'"
-        )
+        assert (
+            result == DEFAULT_MODEL_MODE
+        ), f"DB-Fehler → Fallback 'testmodus' erwartet, bekam '{result}'"
 
     def test_gültige_modi_werden_akzeptiert(self, monkeypatch):
         """Wenn DB einen gültigen Modus zurückgibt → wird er zurückgegeben."""
         import models.base as mb
 
         for expected_mode in VALID_MODEL_MODES:
+
             class _MockCM:
                 def __enter__(self_):
                     class _MockSession:
@@ -601,35 +637,42 @@ class TestGetTenantModelMode:
                             class _Row:
                                 def fetchone(self___):
                                     return ({"model_mode": expected_mode},)
+
                             return _Row()
+
                     return _MockSession()
+
                 def __exit__(self_, *a):
                     return False
 
             monkeypatch.setattr(mb, "sync_session_factory", lambda: _MockCM())
             result = get_tenant_model_mode("some-id")
-            assert result == expected_mode, f"Modus '{expected_mode}' wurde nicht korrekt zurückgegeben"
+            assert (
+                result == expected_mode
+            ), f"Modus '{expected_mode}' wurde nicht korrekt zurückgegeben"
 
 
 # ── 9. API-Endpoints ──────────────────────────────────────────────────────────
 
 
 class TestModelModeApi:
-
     def test_get_model_mode_default_testmodus(self):
         from api.tenants import get_model_mode
+
         tenant = _make_tenant(settings_data={})
         result = asyncio.run(get_model_mode(tenant=tenant))
         assert result["model_mode"] == "testmodus"
 
     def test_get_model_mode_liest_aus_settings(self):
         from api.tenants import get_model_mode
+
         tenant = _make_tenant(settings_data={"model_mode": "produktiv"})
         result = asyncio.run(get_model_mode(tenant=tenant))
         assert result["model_mode"] == "produktiv"
 
     def test_get_model_mode_ungültiger_wert_fällt_auf_testmodus(self):
         from api.tenants import get_model_mode
+
         tenant = _make_tenant(settings_data={"model_mode": "hack-modus"})
         result = asyncio.run(get_model_mode(tenant=tenant))
         assert result["model_mode"] == "testmodus"
@@ -645,11 +688,16 @@ class TestModelModeApi:
     @pytest.mark.parametrize("mode", sorted(VALID_MODEL_MODES))
     def test_put_model_mode_gültige_werte(self, mode):
         from api.tenants import set_model_mode
+
         tenant = _make_tenant(settings_data={})
         db = AsyncMock()
-        result = asyncio.run(set_model_mode(
-            data=self._make_mode_data(mode), tenant=tenant, db=db,
-        ))
+        result = asyncio.run(
+            set_model_mode(
+                data=self._make_mode_data(mode),
+                tenant=tenant,
+                db=db,
+            )
+        )
         assert result["model_mode"] == mode
         db.commit.assert_awaited_once()
 
@@ -657,6 +705,7 @@ class TestModelModeApi:
     def test_put_model_mode_422_bei_ungültigem_wert(self, invalid_mode):
         """Ungültige Werte (die auch nach .lower() nicht in VALID_MODEL_MODES) → 422."""
         from api.tenants import set_model_mode
+
         tenant = _make_tenant(settings_data={})
         db = AsyncMock()
         data = self._make_mode_data(invalid_mode)
@@ -666,6 +715,7 @@ class TestModelModeApi:
 
     def test_put_model_mode_leerer_string_422(self):
         from api.tenants import set_model_mode
+
         tenant = _make_tenant(settings_data={})
         db = AsyncMock()
         data = self._make_mode_data("")
@@ -675,16 +725,22 @@ class TestModelModeApi:
 
     def test_put_schreibt_korrekt_und_erhält_andere_settings(self):
         from api.tenants import set_model_mode
+
         tenant = _make_tenant(settings_data={"tone": "professionell"})
         db = AsyncMock()
-        asyncio.run(set_model_mode(
-            data=self._make_mode_data("produktiv"), tenant=tenant, db=db,
-        ))
+        asyncio.run(
+            set_model_mode(
+                data=self._make_mode_data("produktiv"),
+                tenant=tenant,
+                db=db,
+            )
+        )
         assert tenant.settings["model_mode"] == "produktiv"
         assert tenant.settings.get("tone") == "professionell"
 
     def test_get_gibt_valid_modes_zurück(self):
         from api.tenants import get_model_mode
+
         tenant = _make_tenant(settings_data={})
         result = asyncio.run(get_model_mode(tenant=tenant))
         assert "valid_modes" in result
@@ -695,7 +751,6 @@ class TestModelModeApi:
 
 
 class TestE3Mandantentrennung:
-
     def _make_mode_data(self, mode: str):
         data = MagicMock()
         data.model_mode = mode
@@ -703,6 +758,7 @@ class TestE3Mandantentrennung:
 
     def test_e3_schreibt_nur_eigene_tenant_settings(self):
         from api.tenants import set_model_mode
+
         own_id = uuid.UUID("11111111-1111-1111-1111-111111111111")
         other_id_str = "22222222-2222-2222-2222-222222222222"
 
@@ -710,20 +766,25 @@ class TestE3Mandantentrennung:
         tenant.id = own_id
         db = AsyncMock()
 
-        asyncio.run(set_model_mode(
-            data=self._make_mode_data("produktiv"), tenant=tenant, db=db,
-        ))
+        asyncio.run(
+            set_model_mode(
+                data=self._make_mode_data("produktiv"),
+                tenant=tenant,
+                db=db,
+            )
+        )
 
         # Kein direktes SQL → db.execute wird nicht aufgerufen
         # (set_model_mode schreibt in tenant.settings und committet nur)
         for call in db.execute.call_args_list:
             call_str = str(call)
-            assert other_id_str not in call_str, (
-                f"Fremde Tenant-ID {other_id_str} in DB-Call — E3-Verletzung!"
-            )
+            assert (
+                other_id_str not in call_str
+            ), f"Fremde Tenant-ID {other_id_str} in DB-Call — E3-Verletzung!"
 
     def test_e3_get_liest_nur_aus_dependency_tenant(self):
         from api.tenants import get_model_mode
+
         tenant = _make_tenant(settings_data={"model_mode": "produktiv"})
         result = asyncio.run(get_model_mode(tenant=tenant))
         assert result["model_mode"] == "produktiv"
@@ -733,16 +794,15 @@ class TestE3Mandantentrennung:
 
 
 class TestSetupPfadUnberührt:
-
     def test_pipeline_llm_keine_model_mode_imports(self):
         """pipeline_llm.py importiert services.model_mode NICHT."""
         pipeline_llm_path = _BACKEND_DIR / "services" / "pipeline_llm.py"
         if not pipeline_llm_path.exists():
             pytest.skip("pipeline_llm.py nicht gefunden")
         source = pipeline_llm_path.read_text()
-        assert "model_mode" not in source, (
-            "INVARIANTE VERLETZT: pipeline_llm.py wurde durch dieses Feature geändert!"
-        )
+        assert (
+            "model_mode" not in source
+        ), "INVARIANTE VERLETZT: pipeline_llm.py wurde durch dieses Feature geändert!"
 
     def test_llm_py_resolve_model_hat_model_mode_integration(self):
         """services/llm.py enthält die model_mode-Integration."""
@@ -759,18 +819,17 @@ class TestSetupPfadUnberührt:
             pytest.skip("pipeline_llm.py nicht gefunden")
         source = pipeline_llm_path.read_text()
         assert '"S6"' in source or "'S6'" in source, "TIER_MODELS['S6'] nicht in pipeline_llm.py"
-        assert "bedrock/claude-sonnet-4-6@eu-central-1" in source, (
-            "S6-Modell-String 'bedrock/claude-sonnet-4-6@eu-central-1' fehlt in pipeline_llm.py"
-        )
+        assert (
+            "bedrock/claude-sonnet-4-6@eu-central-1" in source
+        ), "S6-Modell-String 'bedrock/claude-sonnet-4-6@eu-central-1' fehlt in pipeline_llm.py"
 
 
 # ── 12. Konstanten-Konsistenz ─────────────────────────────────────────────────
 
 
 class TestKonstanten:
-
     def test_valid_modes_vollständig(self):
-        assert VALID_MODEL_MODES == frozenset({"testmodus", "produktiv", "benutzerdefiniert"})
+        assert frozenset({"testmodus", "produktiv", "benutzerdefiniert"}) == VALID_MODEL_MODES
 
     def test_default_ist_testmodus(self):
         assert DEFAULT_MODEL_MODE == "testmodus"
@@ -785,17 +844,17 @@ class TestKonstanten:
     def test_alle_creative_keys_in_requesty_models(self):
         """Alle kreativen KEYs müssen in REQUESTY_MODELS auflösbar sein."""
         for key in CREATIVE_MODEL_KEYS:
-            assert key in REQUESTY_MODELS, (
-                f"CREATIVE_MODEL_KEY '{key}' fehlt in REQUESTY_MODELS — KEY-Invariante verletzt"
-            )
+            assert (
+                key in REQUESTY_MODELS
+            ), f"CREATIVE_MODEL_KEY '{key}' fehlt in REQUESTY_MODELS — KEY-Invariante verletzt"
 
     def test_creative_model_by_mode_werte_sind_keys_nicht_strings(self):
         """KEY-INVARIANTE: CREATIVE_MODEL_BY_MODE-Werte müssen KEYs aus REQUESTY_MODELS sein (oder None)."""
         for mode, key in CREATIVE_MODEL_BY_MODE.items():
             if key is not None:
-                assert key in REQUESTY_MODELS, (
-                    f"CREATIVE_MODEL_BY_MODE['{mode}'] = {key!r} ist kein gültiger REQUESTY_MODELS-KEY"
-                )
+                assert (
+                    key in REQUESTY_MODELS
+                ), f"CREATIVE_MODEL_BY_MODE['{mode}'] = {key!r} ist kein gültiger REQUESTY_MODELS-KEY"
 
     def test_creative_purposes_sind_teilmenge_von_purpose_model_map(self):
         for p in CREATIVE_PURPOSES:
@@ -803,9 +862,9 @@ class TestKonstanten:
 
     def test_alle_creative_purposes_zeigen_auf_claude_sonnet(self):
         for p in CREATIVE_PURPOSES:
-            assert PURPOSE_MODEL_MAP[p] == "claude-sonnet", (
-                f"Purpose '{p}' zeigt nicht auf 'claude-sonnet' in PURPOSE_MODEL_MAP"
-            )
+            assert (
+                PURPOSE_MODEL_MAP[p] == "claude-sonnet"
+            ), f"Purpose '{p}' zeigt nicht auf 'claude-sonnet' in PURPOSE_MODEL_MAP"
 
     def test_drei_modi_in_creative_model_by_mode(self):
         assert set(CREATIVE_MODEL_BY_MODE.keys()) == VALID_MODEL_MODES
@@ -821,6 +880,6 @@ class TestKonstanten:
 
     def test_resolve_creative_model_nicht_mehr_vorhanden(self):
         """Toter Code resolve_creative_model wurde entfernt (Opus-Review #72)."""
-        assert not hasattr(_mm_module, "resolve_creative_model"), (
-            "resolve_creative_model sollte entfernt sein (toter Code laut Opus-Review #72)"
-        )
+        assert not hasattr(
+            _mm_module, "resolve_creative_model"
+        ), "resolve_creative_model sollte entfernt sein (toter Code laut Opus-Review #72)"
