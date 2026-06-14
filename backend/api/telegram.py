@@ -68,9 +68,7 @@ def _send_telegram_message(chat_id: int, text_msg: str, *, tenant_id: str) -> bo
 
     token = get_tenant_bot_token(tenant_id)
     if not token:
-        logger.info(
-            "_send_telegram_message: kein aktiver Bot für tenant %s, skip send", tenant_id
-        )
+        logger.info("_send_telegram_message: kein aktiver Bot für tenant %s, skip send", tenant_id)
         return False
     try:
         import httpx
@@ -101,9 +99,7 @@ def _send_admin_telegram_message(chat_id: int, text_msg: str) -> None:
         url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
         httpx.post(url, json={"chat_id": chat_id, "text": text_msg}, timeout=5)
     except Exception as e:
-        logger.warning(
-            "Failed to send admin Telegram message to %s: %s", chat_id, type(e).__name__
-        )
+        logger.warning("Failed to send admin Telegram message to %s: %s", chat_id, type(e).__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -276,12 +272,14 @@ async def telegram_webhook(
     Receives Telegram Update objects. Auth via secret header only (no API key).
     Always returns 200 {"ok": True} so Telegram does not retry.
     """
-    # Use X-Forwarded-For if present (behind reverse proxy), else direct client IP
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        client_ip = forwarded_for.split(",")[0].strip()
-    else:
-        client_ip = request.client.host if request.client else "unknown"
+    # Vertrauenswürdige Client-IP: nginx setzt X-Real-IP auf $remote_addr (nicht spoofbar).
+    # X-Forwarded-For wird ebenfalls auf $remote_addr gesetzt (nginx.v2.conf) — dient nur
+    # als Fallback falls ein älterer Proxy-Pfad genutzt wird.
+    client_ip = (
+        request.headers.get("X-Real-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or (request.client.host if request.client else "unknown")
+    )
 
     # Rate-limit check (before verifying secret to prevent timing oracle)
     if _is_rate_limited(client_ip):
@@ -411,11 +409,11 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
         if not results:
             _send_telegram_message(
                 chat_id,
-                f'Keine Treffer für „{arg[:60]}“.',
+                f"Keine Treffer für „{arg[:60]}“.",
                 tenant_id=tenant_id,
             )
             return True
-        lines = [f'Top {len(results)} Treffer für „{arg[:60]}“:']
+        lines = [f"Top {len(results)} Treffer für „{arg[:60]}“:"]
         for r in results:
             sim = r.get("similarity") or 0
             preview = (r.get("content_text") or "")[:200]

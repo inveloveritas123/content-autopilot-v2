@@ -18,8 +18,56 @@ from models import Tenant, async_session_factory
 logger = logging.getLogger(__name__)
 
 
+def _validate_critical_secrets() -> None:
+    """Startup-Pflicht: kritische Sicherheitslücken durch unsichere Defaults blockieren.
+
+    Wirft RuntimeError wenn ein Default-Wert in Produktion aktiv wäre.
+    Wird VOR jeder anderen Startup-Logik ausgeführt.
+    """
+    import os
+
+    # Nur in Produktions-Umgebungen erzwingen (CI/test darf Defaults nutzen)
+    is_prod = os.environ.get("ENVIRONMENT", "").lower() in ("production", "prod", "staging")
+    if not is_prod:
+        return
+
+    errors = []
+
+    if settings.default_tenant_key in ("default-key", "", None):
+        errors.append(
+            "DEFAULT_TENANT_KEY ist 'default-key' (unsicherer Default). "
+            "Setze eine zufällige 32+-Zeichen-Zeichenkette als Env-Var."
+        )
+
+    if not settings.telegram_webhook_secret:
+        errors.append(
+            "TELEGRAM_WEBHOOK_SECRET ist nicht gesetzt. "
+            "Setze ein zufälliges 32+-Zeichen-Secret für den Webhook-Endpunkt."
+        )
+    elif len(settings.telegram_webhook_secret) < 32:
+        errors.append(
+            f"TELEGRAM_WEBHOOK_SECRET ist zu kurz ({len(settings.telegram_webhook_secret)} Zeichen). "
+            "Mindestlänge: 32 Zeichen."
+        )
+
+    if not settings.admin_session_secret:
+        errors.append(
+            "ADMIN_SESSION_SECRET ist nicht gesetzt. " "Setze ein zufälliges 64+-Zeichen-Secret."
+        )
+
+    if errors:
+        msg = "STARTUP ABGEBROCHEN — kritische Sicherheits-Configs fehlen:\n" + "\n".join(
+            f"  • {e}" for e in errors
+        )
+        logger.critical(msg)
+        raise RuntimeError(msg)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Kritische Secrets vor jeder anderen Logik prüfen
+    _validate_critical_secrets()
+
     # Run alembic migrations on startup
     import subprocess
 

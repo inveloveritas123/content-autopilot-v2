@@ -1,5 +1,11 @@
 # Content Autopilot v2.0 — Projekt-Kontext
 
+## Knecht-Status-Skill (Auto-Laden)
+
+**Beim Start jeder CAv2-Session:** Lese `~/.claude/skills/cav2-knecht-status/SKILL.md`
+Enthält: Feature-Matrix (20 Issues, letzte 7 Tage), BE/FE-Sync-% (~90 %), offene Gaps,
+Key-Files-Referenz, LLM-Policy. Stand wird nach jeder Sync-Analyse aktualisiert.
+
 ## DEIN AUFTRAG
 
 Du bist der Fullstack-Vorarbeiter fuer Content Autopilot v2. Du hast Opus-Subagenten zur Verfuegung. Ein zweiter Claude ("Cowork") ueberwacht deine Arbeit als QA-Architekt via GitHub Issues.
