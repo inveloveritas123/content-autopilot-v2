@@ -1,0 +1,17 @@
+# WERKBANK F1 Model-Pinning — projektlokale Policy-Ausnahmen (Option 3 Hybrid)
+# Entscheid Robert 2026-06-14: Hilfs-Tiers (S2-S5 Mistral) bleiben rollend.
+# Frontier + Hot-Path (S1/S6) sind gepinnt.
+#
+# Format: eine Modell-ID pro Zeile (exakt wie im Code). Zeilen mit # = Kommentar.
+
+# S2 — Default Chat, einfache Analyse (Hilfs-Tier, bewusst rollend)
+mistral/mistral-small-latest
+
+# S3 — Einfacher Code, Templates (Hilfs-Tier, bewusst rollend)
+mistral/devstral-small-latest
+
+# S4 — Premium-Analyse, Voice Profile (Hilfs-Tier, bewusst rollend)
+mistral/mistral-large-latest
+
+# S5 — Komplexer Code (Hilfs-Tier, CONFIRM nötig, bewusst rollend)
+mistral/devstral-latest
