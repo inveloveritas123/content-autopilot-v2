@@ -90,11 +90,9 @@ test('MM-1: Modell-Modus Sektion in Settings sichtbar', async ({ page }) => {
   await page.goto('/settings', { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(2000)
   const modeSection = page.getByText('KI-Qualitätsmodus').or(page.getByText('Testmodus')).or(page.getByText('Produktivmodus')).first()
-  const visible = await modeSection.isVisible({ timeout: 5000 }).catch(() => false)
-  console.log('MM-1: KI-Qualitätsmodus-Sektion sichtbar:', visible)
-  if (!visible) console.warn('MM-1: KI-Qualitätsmodus nicht sichtbar — Bot möglicherweise nicht konfiguriert')
   await page.screenshot({ path: 'test-results/mm-1-model-mode.png', fullPage: true })
-  await expect(page).not.toHaveURL(/error/)
+  await expect(modeSection).toBeVisible({ timeout: 5000 })
+  console.log('MM-1: KI-Qualitätsmodus-Sektion sichtbar ✓')
 })
 
 test('MM-2: GET /api/tenants/me/model-mode liefert 200 (Pentester)', async ({ page, request }) => {
@@ -104,12 +102,10 @@ test('MM-2: GET /api/tenants/me/model-mode liefert 200 (Pentester)', async ({ pa
     failOnStatusCode: false,
   })
   console.log('MM-2: /api/tenants/me/model-mode Status:', resp.status())
-  expect([200, 404]).toContain(resp.status()) // 404 wenn Feature noch nicht deployed
-  if (resp.status() === 200) {
-    const body = await resp.json()
-    console.log('MM-2: Response:', JSON.stringify(body))
-    expect(body).toHaveProperty('model_mode')
-  }
+  expect(resp.status()).toBe(200)
+  const body = await resp.json()
+  console.log('MM-2: Response:', JSON.stringify(body))
+  expect(body).toHaveProperty('model_mode')
 })
 
 test('MM-3: Keine JS-Fehler auf Settings-Seite (DAU-User)', async ({ page }) => {
@@ -138,8 +134,10 @@ test('AP-1: /admin lädt Login-Seite (kein 404)', async ({ page }) => {
   // Login-Form oder Redirect erwartet, kein 500er
   const notFound = await page.locator('text=404').isVisible({ timeout: 2000 }).catch(() => false)
   expect(notFound).toBe(false)
-  const serverError = await page.locator('text=500, text=Internal Server Error').isVisible({ timeout: 2000 }).catch(() => false)
-  expect(serverError).toBe(false)
+  const has500 = await page.locator('text=500').isVisible({ timeout: 2000 }).catch(() => false)
+  const hasServerError = await page.locator('text=Internal Server Error').isVisible({ timeout: 2000 }).catch(() => false)
+  expect(has500).toBe(false)
+  expect(hasServerError).toBe(false)
   console.log('AP-1: Admin-Seite URL:', page.url())
 })
 
