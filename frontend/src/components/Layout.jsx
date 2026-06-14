@@ -423,6 +423,59 @@ function NavGroup({ items, isMvp }) {
   })
 }
 
+// #90 Segmented Switch: MVP ⇄ Features — prominent im Sidebar-Header auf jeder Seite.
+// Fail-open: während `loading` ist der Switch neutral (disabled), zeigt aber immer.
+// Tooltip erklärt den Unterschied. Keine neue Lib nötig.
+function UiModeSwitch() {
+  const { mode, loading, setMode } = useUiMode()
+  const [saving, setSaving] = useState(false)
+
+  const handleSwitch = async (newMode) => {
+    if (newMode === mode || saving || loading) return
+    setSaving(true)
+    try {
+      await setMode(newMode)
+    } catch {
+      // setMode schlägt fehl → ignorieren, mode bleibt unverändert (fail-open)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const disabled = loading || saving
+
+  return (
+    <div
+      className="flex rounded-lg border border-surface-border overflow-hidden"
+      title="MVP = schlanke Kern-Ansicht · Features = Voll-Stand"
+    >
+      {[
+        { value: 'mvp', label: 'MVP' },
+        { value: 'features', label: 'Features' },
+      ].map(({ value, label }) => {
+        const isActive = !loading && mode === value
+        return (
+          <button
+            key={value}
+            onClick={() => handleSwitch(value)}
+            disabled={disabled}
+            className={clsx(
+              'flex-1 px-2.5 py-1.5 text-[11px] font-semibold transition-colors focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed',
+              isActive
+                ? 'bg-primary-700 text-white'
+                : loading
+                  ? 'bg-gray-50 text-gray-300'
+                  : 'bg-white text-ink-muted hover:bg-gray-50 hover:text-ink'
+            )}
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function Layout({ children }) {
   // #90 Route-Guard-Entscheidung: NUR Nav-Gating, kein harter Route-Block.
   // Begründung: MVP soll aufräumen, nicht sperren. Wer eine MVP-false-Route per
@@ -437,7 +490,7 @@ export default function Layout({ children }) {
       <aside className="w-64 bg-white border-r border-surface-border flex flex-col shrink-0">
         {/* Brand Header */}
         <div className="px-4 py-4 border-b border-surface-border">
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-2">
             <div className="w-8 h-8 rounded-lg bg-primary-700 flex items-center justify-center shrink-0">
               <span className="text-white font-bold text-sm">ZB</span>
             </div>
@@ -447,6 +500,10 @@ export default function Layout({ children }) {
                 Mach's doch gleich richtig.
               </p>
             </div>
+          </div>
+          {/* MVP ⇄ Features Switch (#90) — prominent, 1-Klick, jede Seite */}
+          <div className="mb-2">
+            <UiModeSwitch />
           </div>
           {/* Project Switcher */}
           <ProjectSwitcher />
