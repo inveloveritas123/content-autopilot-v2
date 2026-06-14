@@ -147,12 +147,22 @@ if not hasattr(_llm_stub, "llm_service"):
     _llm_stub.BudgetExceededError = type("BudgetExceededError", (Exception,), {})
 
 _stub("services.nextcloud").nextcloud_client = MagicMock()
-_te = _stub("services.tenant_export")
-if not hasattr(_te, "TenantExportService"):
-    _te.TenantExportService = MagicMock(return_value=MagicMock())
-_ti = _stub("services.tenant_import")
-if not hasattr(_ti, "TenantImportService"):
-    _ti.TenantImportService = MagicMock(return_value=MagicMock())
+
+# tenant_export / tenant_import: echten Import bevorzugen damit
+# test_tenant_export_formats.py die echte Klasse bekommt (kein sys.modules-Poison).
+# Stub nur als Fallback wenn openpyxl o.ä. fehlt.
+if "services.tenant_export" not in sys.modules:
+    try:
+        import services.tenant_export
+    except Exception:
+        _te = _stub("services.tenant_export")
+        _te.TenantExportService = MagicMock(return_value=MagicMock())
+if "services.tenant_import" not in sys.modules:
+    try:
+        import services.tenant_import  # noqa: F401
+    except Exception:
+        _ti = _stub("services.tenant_import")
+        _ti.TenantImportService = MagicMock(return_value=MagicMock())
 
 _th = _stub("services.throttle")
 if not hasattr(_th, "RateLimitExceededError"):
