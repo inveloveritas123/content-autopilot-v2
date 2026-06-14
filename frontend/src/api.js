@@ -218,6 +218,13 @@ export const getAutomationStatus = () => request('/tenants/me/automation-status'
 export const pauseAutomation = () => request('/tenants/me/pause', { method: 'POST' })
 export const resumeAutomation = () => request('/tenants/me/resume', { method: 'POST' })
 
+// UI-Modus: MVP vs Features (Issue #90)
+// GET → { mode: "mvp" | "features" }
+// PUT → { mode } → { mode }
+export const getUiMode = () => request('/tenants/me/ui-mode')
+export const setUiMode = (mode) =>
+  request('/tenants/me/ui-mode', { method: 'PUT', body: { mode } })
+
 export async function downloadTenantDataExport(format = 'zip') {
   const resp = await fetch(
     `${API_BASE}/tenants/me/data-export?format=${encodeURIComponent(format)}`,
@@ -629,3 +636,63 @@ export const setTelegramBot = (token) =>
   request('/tenants/me/telegram-bot', { method: 'POST', body: { token } })
 export const revokeTelegramBot = () =>
   request('/tenants/me/telegram-bot', { method: 'DELETE' })
+
+// ── Admin-Session API (#98) ──────────────────────────────────────────────────
+// Diese Endpunkte nutzen HttpOnly-Cookie `admin_session` statt X-API-Key.
+// credentials:'include' ist erforderlich damit der Browser das Cookie mitsendet.
+// State-ändernde Calls (POST/PUT) brauchen X-CSRF-Token (Double-Submit-Cookie).
+// CSRF-Middleware exemptiert Requests MIT X-API-Key — admin-Calls haben keinen,
+// daher müssen wir den Token explizit holen und im Header mitsenden.
+
+async function getAdminCsrfToken() {
+  // GET /api/csrf-token setzt csrf_token-Cookie und gibt {csrf_token} zurück.
+  const resp = await fetch(`${API_BASE}/csrf-token`, { credentials: 'include' })
+  if (!resp.ok) throw new Error('CSRF-Token konnte nicht geladen werden')
+  const data = await resp.json()
+  return data.csrf_token
+}
+
+async function adminRequest(path, options = {}) {
+  const { method = 'GET', body } = options
+  const url = `${API_BASE}${path}`
+  const headers = {}
+  if (body) headers['Content-Type'] = 'application/json'
+
+  // Für state-ändernde Methoden CSRF-Token holen
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    const csrfToken = await getAdminCsrfToken()
+    headers['X-CSRF-Token'] = csrfToken
+  }
+
+  const resp = await fetch(url, {
+    method,
+    headers,
+    credentials: 'include', // HttpOnly-Cookie admin_session mitsenden
+    body: body ? JSON.stringify(body) : undefined,
+  })
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: resp.statusText }))
+    let msg = err.detail
+    if (typeof msg !== 'string') {
+      msg = (err.detail && (err.detail.message || err.detail.error)) || JSON.stringify(err.detail)
+    }
+    const e = new Error(msg || 'Admin API Error')
+    e.status = resp.status
+    e.detail = err.detail
+    throw e
+  }
+  return resp.json()
+}
+
+export const adminSession = () => adminRequest('/admin/session')
+export const adminLogin = (username, password) =>
+  adminRequest('/admin/login', { method: 'POST', body: { username, password } })
+export const adminLogout = () => adminRequest('/admin/logout', { method: 'POST' })
+export const adminListUsers = () => adminRequest('/admin/users')
+export const adminRegenerateApiKey = (id) =>
+  adminRequest(`/admin/users/${id}/regenerate-api-key`, { method: 'POST' })
+export const adminSetApiKey = (id, key) =>
+  adminRequest(`/admin/users/${id}/api-key`, { method: 'PUT', body: { api_key: key } })
+export const adminCreateUser = (name) =>
+  adminRequest('/admin/users', { method: 'POST', body: { name } })
