@@ -62,6 +62,17 @@
     <b>Ehrliche Beta-Einschätzung:</b> Das Produkt ist <b>feature-complete gebaut</b> und unit-/integration-CI-grün — aber der <b>durchgehende E2E-Beweislauf am Server</b> (echtes Eric-Transkript → Setup → Chat-Schleife → Post im Chat, <b>#20</b>) ist noch <b>nicht gefahren</b>. „Stabile Beta" = #20 grün. Das ist Knecht-geführt; ich liefere code-seitige Blocker sofort zu.
   </div>
 
+  <h2>Sprint-Phasen — Figma-Restweg (Board §5 = Wahrheit)</h2>
+  <table>
+    <tr><th>Phase</th><th>gebaut</th><th>Status / was offen ist</th></tr>
+    <tr><td><b>A — Telegram-Konversationsschleife</b> (Beta-Kern, Bahn 4+5)<br><span class="ref">#15/#16/#17/#18/#19/#20</span></td><td class="st s-ok">100%</td><td class="why">Alle gebaut + gelandet (#15–#19 closed). <b>Offen: NUR #20 E2E-Server-Beweis</b> = das Beta-Tor.</td></tr>
+    <tr><td><b>B — Setup-Pipeline real</b> (Bahn 2)<br><span class="ref">#33/#32/#43/#44/#29/#40/#25/#26</span></td><td class="st s-ok">~90%</td><td class="why">Kern done (P01/P03/P04-JSON #33, Werte-Entität #43, 8 Phasen #44, kanon. Reader #29, Voice-Fallback #40). Offen: <b>#25 Alt-Row-Zählung (Knecht)</b> + <b>#26 _meta-Politur (defer, Migr. 056+)</b> — nicht Beta-blockierend.</td></tr>
+    <tr><td><b>C — Board-Vervollständigung</b> (Bahn 4/5 Restflüsse)<br><span class="ref">#35/#36/#37/#41/#38/#39/#30</span></td><td class="st s-ok">~95%</td><td class="why">P07-Push #35, Intent-Routing #36, Feedback-Loop #37, P17-Beobachter #41 (+reaktiviert PR #103), Quality-Gate #38 (Shadow). Offen: <b>#30 Policy-Doc (Knecht)</b>, #39 P02 (inert/deferiert).</td></tr>
+    <tr><td><b>Operator/UX-Welle</b> (Robert-Request, post-board)<br><span class="ref">#88/#89/#90/#91/#97/#98</span></td><td class="st s-ok">100%</td><td class="why">#88/#89/#97 gelandet, #91 entschieden (row-level). Offen: <b>#90/#98/#39 in PR #104 → Merge + Deploy</b>.</td></tr>
+    <tr><td><b>⏸ Später</b> (Board grau/blau, bewusst nach Beta)</td><td class="st s-later">n/a</td><td class="why">LinkedIn-API (Posts/Statistik/P06), P05-Cron + Extra-Challenge, WhatsApp-Kanal, Content-Arten-Tagging. Nicht in der Beta-%-Basis.</td></tr>
+  </table>
+  <div class="note crit"><b>Fazit Phasen:</b> Jede <b>Bau</b>-Phase ist ~95–100% fertig. Das einzige echte Beta-Tor ist <b>#20 E2E-Server-Beweis + Deploy</b> (PR #104/#103 mergen → deploy → Text-E2E grün). „Noch offen" = Beweis &amp; Deploy, kaum noch Code.</div>
+
   <h2>Bahn 1 — Briefing / Sammeln</h2>
   <table><tr><th>Item</th><th>Status</th><th>Ref</th></tr>
     <tr><td>1.1 Sammeln via Chat (Voice→Transkript→Memory)</td><td class="st s-ok">erledigt+verif.</td><td class="ref">produktiv</td></tr>
