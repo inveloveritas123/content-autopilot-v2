@@ -3,13 +3,19 @@ Voice-Drift-Detector (Issue #76).
 
 Workflow:
 1. Beat-Job check_drift_triggers: prüft alle Tenants auf 10er-Post-Schwelle
-2. run_voice_drift: lädt aktives Voice-Profil + letzte 10 Posts, ruft Anthropic,
-   schreibt voice_drift_observation, sendet WS-Push
+2. run_voice_drift: lädt aktives Voice-Profil + letzte 10 Posts, ruft den
+   EU-Router-Seam (call_pipeline_llm, Tier S6/Bedrock-Frankfurt),
+   schreibt voice_drift_observation, sendet WS-Push.
+
+E1-Konformität: kein direkter Anthropic-SDK-Call mehr (Issue #111).
 """
+
+from __future__ import annotations  # Python 3.9: list | None Syntax
 
 import asyncio
 import json
 import logging
+import os
 import uuid
 import uuid as uuid_module
 
@@ -17,17 +23,57 @@ import httpx
 from sqlalchemy import text
 
 from models.base import sync_session_factory
-from services.prompt_loader import get_default_prompt_loader
+from services.prompt_loader import LoadedPrompt, _extract_system_prompt, _extract_user_prompt
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
-ANTHROPIC_MODEL_ID = "claude-sonnet-4-6-20251022"  # dated alias, gepinnt
-ANTHROPIC_PRICING_KEY = "claude-sonnet-4-6"  # Pricing-Key fuer cost_cap.py (ohne Datum-Suffix)
+ANTHROPIC_PRICING_KEY = "claude-sonnet-4-6"  # Pricing-Key fuer cost_cap.py pre-flight check (S6 entspricht diesem Modell)
 
 # Geschätzte Token-Kosten für Cost-Cap-Check (~4000 input, 512 output)
 _ESTIMATED_INPUT_TOKENS = 4000
 _ESTIMATED_OUTPUT_TOKENS = 512
+
+# Pfad zum v2-internen Prompt (relativ zu diesem Modul: tasks/ → backend/ → prompts/)
+_VOICE_DRIFT_PROMPT_PATH = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "prompts", "voice_drift_detector.md")
+)
+
+
+# ---------------------------------------------------------------------------
+# Prompt-Lader (v2-intern, NICHT content-truth)
+# ---------------------------------------------------------------------------
+
+
+def _load_backend_prompt(path: str) -> LoadedPrompt:
+    """Laedt voice_drift_detector.md direkt aus backend/prompts/ (v2-intern).
+
+    Verwendet _extract_system_prompt und _extract_user_prompt aus prompt_loader
+    (reines String-Parsing, pfad-unabhaengig).
+    Fail-open: Datei nicht lesbar → RuntimeError (wird vom Task als status='failed' behandelt).
+    """
+    import hashlib
+    from datetime import UTC, datetime
+
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = fh.read()
+    except OSError as exc:
+        raise RuntimeError(f"_load_backend_prompt: Datei nicht lesbar: {path!r} — {exc}") from exc
+
+    raw_bytes = raw.encode("utf-8")
+    system_prompt = _extract_system_prompt(raw)
+    user_prompt_template = _extract_user_prompt(raw)
+    sha = hashlib.sha256(raw_bytes).hexdigest()
+
+    return LoadedPrompt(
+        content=raw,
+        system_prompt=system_prompt,
+        user_prompt_template=user_prompt_template,
+        sha=sha,
+        loaded_at=datetime.now(UTC),
+        source_path=path,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -282,10 +328,9 @@ def run_voice_drift(
         user_feedback = [{"text": row[1] or "", "field": row[2] or ""} for row in feedback_rows]
 
         # ------------------------------------------------------------------
-        # 6. Prompt laden
+        # 6. Prompt laden — direkt aus backend/prompts/ (v2-intern, NICHT content-truth)
         # ------------------------------------------------------------------
-        loader = get_default_prompt_loader()
-        loaded = loader.load("VOICE_DRIFT")
+        loaded = _load_backend_prompt(_VOICE_DRIFT_PROMPT_PATH)
         logger.debug("run_voice_drift: prompt sha=%s geladen", loaded.sha[:12])
         if "{context_json}" not in loaded.user_prompt_template:
             raise ValueError(
@@ -305,49 +350,37 @@ def run_voice_drift(
         user_prompt = loaded.user_prompt_template.replace("{context_json}", context_json)
 
         # ------------------------------------------------------------------
-        # 8. Anthropic-Call mit cache_control: ephemeral auf System-Prompt
+        # 8. LLM-Call über EU-Router-Seam (E1: kein direkter Anthropic-SDK-Call)
+        #    Tier S6 = bedrock/claude-sonnet-4-6@eu-central-1 (Bedrock Frankfurt)
         # ------------------------------------------------------------------
-        import anthropic
+        from services.pipeline_llm import call_pipeline_llm
 
-        from config import settings
-
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-
-        response = client.messages.create(
-            model=ANTHROPIC_MODEL_ID,
-            max_tokens=1024,
-            system=[
-                {
-                    "type": "text",
-                    "text": loaded.system_prompt,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": user_prompt}],
+        llm_result = call_pipeline_llm(
+            prompt_key="VOICE_DRIFT",
+            system_prompt=loaded.system_prompt,
+            user_content=user_prompt,
+            tenant_id=tenant_id,
         )
 
-        raw_text = response.content[0].text
+        raw_text = llm_result.text
         logger.debug(
-            "run_voice_drift: tenant=%s Anthropic-Antwort erhalten (%d Zeichen)",
+            "run_voice_drift: tenant=%s LLM-Antwort erhalten (%d Zeichen)",
             tenant_id,
             len(raw_text),
         )
 
-        # Token-Nutzung (best-effort)
-        try:
-            usage = response.usage
-            input_tokens = usage.input_tokens or _ESTIMATED_INPUT_TOKENS
-            output_tokens = usage.output_tokens or _ESTIMATED_OUTPUT_TOKENS
-            cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
-            logger.info(
-                "run_voice_drift: tenant=%s input=%d output=%d cache_read=%d",
-                tenant_id,
-                input_tokens,
-                output_tokens,
-                cache_read,
-            )
-        except Exception:
-            input_tokens, output_tokens = _ESTIMATED_INPUT_TOKENS, _ESTIMATED_OUTPUT_TOKENS
+        # Token-Nutzung aus PipelineLLMResult
+        input_tokens = llm_result.input_tokens or _ESTIMATED_INPUT_TOKENS
+        output_tokens = llm_result.output_tokens or _ESTIMATED_OUTPUT_TOKENS
+        cache_read = llm_result.cache_read_tokens
+        logger.info(
+            "run_voice_drift: tenant=%s input=%d output=%d cache_read=%d cost=%.6f USD",
+            tenant_id,
+            input_tokens,
+            output_tokens,
+            cache_read,
+            llm_result.cost_usd,
+        )
 
         # ------------------------------------------------------------------
         # 9. Output parsen — erwartete Struktur:
