@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -92,13 +94,10 @@ PURPOSE_MODEL_MAP = {
     "onboarding": "claude-sonnet",
 }
 
-# Requesty.ai model strings (direct, EU-region)
-# Cost targets: gemini-2.5-flash-lite $0.075/1M (all tasks — mistral-medium DISABLED, caused $20 runaway)
-REQUESTY_MODELS = {
-    "gemini-flash": "vertex/gemini-2.5-flash-lite@europe-central2",  # Analysis: cheap, EU-hosted
-    "claude-sonnet": "vertex/gemini-2.5-flash-lite@europe-central2",  # Creative: remapped to Gemini (mistral-medium disabled 2026-05-03 — caused $20 budget overrun in one day)
-    "gpt-4o-mini": "openai/gpt-4.1-mini",
-}
+# ── REQUESTY_MODELS und _resolve_litellm_model kommen aus llm_mapping.py ───────
+# Dort leben sie dep-frei (kein httpx, kein sqlalchemy) → in Py3.9-Tests direkt
+# importierbar ohne Stubs. llm.py re-exportiert sie für Abwärtskompatibilität.
+from services.llm_mapping import REQUESTY_MODELS, _resolve_litellm_model  # noqa: F401
 
 # Per-purpose max_tokens to prevent runaway token costs
 PURPOSE_MAX_TOKENS = {
@@ -142,9 +141,18 @@ class LLMService:
         """Resolve model name from purpose or explicit model string.
 
         routing_override: tenant-level dict {purpose: model_key} — takes precedence over global map.
+
+        Präzedenz (Issue #72 — Modell-Modus-Switch):
+          1. routing_override[purpose]         — expliziter Tenant-Override (höchste Prio, immer)
+          2. model_mode 'produktiv'            — Quality-EU-Modell für kreative Pfade
+          3. model_mode 'testmodus'/'benutzerdefiniert' — aktuelles Verhalten (Gemini-Remap)
+          4. Kein Kontext / fail-open          — 'testmodus' = aktuelles Verhalten
+
+        Das Setup (P01/P03/P04/P12 via pipeline_llm) ist NICHT betroffen — es
+        läuft über call_pipeline_llm(), nicht über diesen Seam.
         """
         if purpose:
-            # Tenant routing override takes precedence
+            # Ebene 1: Tenant routing override — höchste Priorität, immer gewinnen
             if routing_override and purpose in routing_override:
                 resolved = routing_override[purpose]
                 logger.info(f"LLM routing (tenant override): purpose={purpose} → model={resolved}")
@@ -152,6 +160,35 @@ class LLMService:
             if purpose in PURPOSE_MODEL_MAP:
                 resolved = PURPOSE_MODEL_MAP[purpose]
                 logger.info(f"LLM routing: purpose={purpose} → model={resolved}")
+                # Ebene 2/3: Modus-Switch nur für kreative Pfade (Seam B)
+                # Nur wenn resolved == "claude-sonnet" (der Gemini-Remap-Key)
+                try:
+                    from services.model_mode import (
+                        CREATIVE_MODEL_KEYS,
+                        CREATIVE_MODEL_BY_MODE,
+                        DEFAULT_MODEL_MODE,
+                        VALID_MODEL_MODES,
+                        get_tenant_model_mode,
+                    )
+
+                    if resolved in CREATIVE_MODEL_KEYS:
+                        tenant_id = _tenant_id_ctx.get()
+                        mode = get_tenant_model_mode(tenant_id)
+                        mode_key = CREATIVE_MODEL_BY_MODE.get(mode)
+                        if mode_key is not None:
+                            # KEY-INVARIANTE (Opus-Review #72):
+                            # Gibt IMMER einen KEY zurück, niemals einen aufgelösten String.
+                            # 'testmodus' → "claude-sonnet"     → Gemini via REQUESTY_MODELS (bit-identisch)
+                            # 'produktiv' → "claude-sonnet-eu"  → Bedrock-Frankfurt via REQUESTY_MODELS
+                            logger.info(
+                                f"LLM routing (model_mode={mode}): purpose={purpose} "
+                                f"→ {resolved} → key={mode_key}"
+                            )
+                            return mode_key
+                        # 'benutzerdefiniert' → None → kein Override, weiter mit resolved
+                except Exception as _exc:
+                    # Fail-open: Modus-Switch-Fehler darf Calls nicht blockieren
+                    logger.debug(f"model_mode resolution failed (fail-open): {_exc}")
                 return resolved
         return model
 
@@ -328,32 +365,23 @@ class LLMService:
             pass  # Throttle check failure must not block calls (fail-open)
 
         # Try DB-configured provider first
-        task = (
-            "analysis"
-            if model in ("gemini-flash",)
-            else "creative"
-            if model in ("claude-sonnet",)
-            else "all"
-        )
+        # NOTE: task must be derived BEFORE calling get_active_provider so the
+        # correct provider is selected. _resolve_litellm_model is a pure helper
+        # that also gives us litellm_model — no duplication, no divergence.
+        # We call it twice (once with provider=None for task, once with real provider)
+        # but the function is pure/cheap so that is fine.
+        _, task = _resolve_litellm_model(model, None)
         provider = get_active_provider(task=task)
         purpose_task = purpose or task  # For cost tracking
 
+        litellm_model, _ = _resolve_litellm_model(model, provider)
         if provider:
             base_url = provider["base_url"]
             api_key = provider["api_key"]
-            # Map internal model names to provider model strings
-            litellm_model = REQUESTY_MODELS.get(model, provider["model_name"])
-            if model == "claude-sonnet":
-                litellm_model = REQUESTY_MODELS.get(
-                    "claude-sonnet", "anthropic/claude-sonnet-4-20250514"
-                )
-            elif model == "gemini-flash":
-                litellm_model = REQUESTY_MODELS.get("gemini-flash", "google/gemini-2.0-flash-exp")
         else:
             # Fallback to env config
             base_url = self._litellm_base_url or "https://router.requesty.ai/v1"
             api_key = self._litellm_api_key or ""
-            litellm_model = REQUESTY_MODELS.get(model, model)
 
         messages = []
         if system:
