@@ -21,6 +21,8 @@ import {
   refreshIdeasWithProfile,
   getLlmRouting,
   getLLMCostHistory,
+  getModelMode,
+  setModelMode,
 } from '../api'
 
 export default function Settings() {
@@ -54,6 +56,10 @@ export default function Settings() {
   const [entIndustry, setEntIndustry] = useState('')
   const [entSpecialization, setEntSpecialization] = useState('')
   const [entAudience, setEntAudience] = useState('')
+
+  // Modell-Modus-Switch (Issue #72)
+  const [modelMode, setModelModeState] = useState('testmodus')
+  const [modelModeSaving, setModelModeSaving] = useState(false)
 
   // NC Browser
   const [showBrowser, setShowBrowser] = useState(false)
@@ -94,6 +100,26 @@ export default function Settings() {
       setEntAudience(ent.target_audience || '')
     }
   }, [data])
+
+  // Modell-Modus beim Start laden
+  useEffect(() => {
+    getModelMode()
+      .then((r) => setModelModeState(r.model_mode || 'testmodus'))
+      .catch(() => setModelModeState('testmodus'))
+  }, [])
+
+  const handleSaveModelMode = async (mode) => {
+    setModelModeSaving(true)
+    try {
+      await setModelMode(mode)
+      setModelModeState(mode)
+      toast.success('Modell-Modus gespeichert!')
+    } catch (e) {
+      toast.error('Fehler: ' + e.message)
+    } finally {
+      setModelModeSaving(false)
+    }
+  }
 
   const handleSaveApiKey = () => {
     setApiKey(localApiKey)
@@ -781,6 +807,89 @@ export default function Settings() {
           <Link to="/settings/pipeline-models">
             <Button variant="secondary">Zu Modell-Hoheit</Button>
           </Link>
+        </CardContent>
+      </Card>
+
+      {/* Modell-Modus-Switch (Issue #72) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>KI-Qualitaetsmodus</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Steuert welches Modell fuer kreative Aufgaben (Ideation, Fragen, Posts) verwendet wird.
+            Analysepfade (Transkription, Tagging, Scoring) sind in jedem Modus unveraendert.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {[
+              {
+                key: 'testmodus',
+                label: 'Testmodus',
+                desc: 'Standard: Gemini Flash Lite (guenstig, ~$0.075/1M)',
+                badge: 'Standard',
+                badgeClass: 'bg-blue-100 text-blue-700',
+                border: 'border-blue-400',
+              },
+              {
+                key: 'produktiv',
+                label: 'Produktivmodus',
+                desc: 'Anthropic Claude Sonnet via Bedrock EU (Qualitaet, hoehere Kosten ~$3/1M)',
+                badge: 'Hoehere Kosten',
+                badgeClass: 'bg-amber-100 text-amber-700',
+                border: 'border-amber-400',
+              },
+              {
+                key: 'benutzerdefiniert',
+                label: 'Benutzerdefiniert',
+                desc: 'Platzhalter fuer kuenftige per-Aufgabe-Konfiguration (verhalt wie Testmodus)',
+                badge: 'Demnachst',
+                badgeClass: 'bg-gray-100 text-gray-600',
+                border: 'border-gray-300',
+              },
+            ].map((opt) => (
+              <button
+                key={opt.key}
+                disabled={modelModeSaving}
+                onClick={() => handleSaveModelMode(opt.key)}
+                className={`text-left p-4 rounded-xl border-2 transition-all focus:outline-none focus:ring-2 focus:ring-primary-400 ${
+                  modelMode === opt.key
+                    ? `${opt.border} bg-white dark:bg-gray-900 shadow-md`
+                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-semibold text-sm text-gray-800 dark:text-gray-100">
+                    {opt.label}
+                  </span>
+                  {modelMode === opt.key && (
+                    <span className="text-[10px] font-bold text-primary-600 uppercase tracking-wide">
+                      Aktiv
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{opt.desc}</p>
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${opt.badgeClass}`}>
+                  {opt.badge}
+                </span>
+              </button>
+            ))}
+          </div>
+          {modelMode === 'produktiv' && (
+            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1">
+                Kostenhinweis Produktivmodus
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Kreative Pfade (Ideation, Smart-Fragen, Post-Generierung) laufen auf{' '}
+                <code className="font-mono">bedrock/claude-sonnet-4-6@eu-central-1</code> (Bedrock
+                Frankfurt, EU-souveraen). Kosten ca. $3/1M Input-Token statt $0.075 im Testmodus —
+                ca. 40x teurer fuer kreative Aufgaben. Analysepfade bleiben unveraendert.
+              </p>
+            </div>
+          )}
+          {modelModeSaving && (
+            <p className="text-xs text-gray-400 animate-pulse">Wird gespeichert...</p>
+          )}
         </CardContent>
       </Card>
 

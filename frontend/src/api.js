@@ -696,3 +696,8 @@ export const adminSetApiKey = (id, key) =>
   adminRequest(`/admin/users/${id}/api-key`, { method: 'PUT', body: { api_key: key } })
 export const adminCreateUser = (name) =>
   adminRequest('/admin/users', { method: 'POST', body: { name } })
+
+// Modell-Modus-Switch (Issue #72)
+export const getModelMode = () => request('/tenants/me/model-mode')
+export const setModelMode = (model_mode) =>
+  request('/tenants/me/model-mode', { method: 'PUT', body: { model_mode } })

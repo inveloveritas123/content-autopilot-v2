@@ -635,3 +635,60 @@ async def resume_automation(
         "disabled_at": None,
         "disabled_reason": None,
     }
+
+
+# ── Issue #72: Modell-Modus-Switch (Testmodus / Produktiv / Benutzerdefiniert) ──
+
+
+class ModelModeUpdate(BaseModel):
+    model_mode: str
+
+
+@router.get("/tenants/me/model-mode")
+async def get_model_mode(tenant: Tenant = Depends(get_tenant)):
+    """Gibt den aktuellen Modell-Modus für kreative LLM-Pfade zurück.
+
+    Default: 'testmodus' (bit-identisches aktuelles Routing — Gemini Flash).
+    E3: Liest ausschließlich aus dem eigenen Tenant (get_tenant-Dependency).
+    """
+    from services.model_mode import DEFAULT_MODEL_MODE, VALID_MODEL_MODES
+
+    settings_data = tenant.settings or {}
+    mode = settings_data.get("model_mode", DEFAULT_MODEL_MODE)
+    if mode not in VALID_MODEL_MODES:
+        mode = DEFAULT_MODEL_MODE
+    return {"model_mode": mode, "valid_modes": sorted(VALID_MODEL_MODES)}
+
+
+@router.put("/tenants/me/model-mode")
+async def set_model_mode(
+    data: ModelModeUpdate,
+    tenant: Tenant = Depends(get_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Setzt den Modell-Modus für kreative LLM-Pfade dieses Tenants.
+
+    Gültige Werte: 'testmodus', 'produktiv', 'benutzerdefiniert'.
+    422 bei ungültigem Wert.
+
+    E3: Schreibt ausschließlich in den eigenen Tenant (get_tenant-Dependency).
+    Sicherheits-Invariante: Default 'testmodus' → bit-identisches aktuelles Routing.
+    """
+    from services.model_mode import DEFAULT_MODEL_MODE, VALID_MODEL_MODES
+
+    mode = (data.model_mode or "").strip().lower()
+    if mode not in VALID_MODEL_MODES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Ungültiger model_mode '{mode}'. "
+                f"Gültige Werte: {sorted(VALID_MODEL_MODES)}"
+            ),
+        )
+    current = tenant.settings or {}
+    current["model_mode"] = mode
+    tenant.settings = current
+    flag_modified(tenant, "settings")
+    await db.commit()
+    logger.info("model_mode für tenant %s auf '%s' gesetzt", str(tenant.id), mode)
+    return {"model_mode": mode}
