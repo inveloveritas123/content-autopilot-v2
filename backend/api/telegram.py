@@ -591,10 +591,40 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
     text_content: str = message.get("text", "") or ""
     chat_id_for_dispatch: int = message.get("chat", {}).get("id", 0)
 
-    # Memory-Commands
+    # Memory-Commands + Silent-Drop-Schutz für Text
     if message_type == "text":
         cmd_handled = _try_memory_command(tenant_id, chat_id_for_dispatch, text_content)
         if cmd_handled:
+            return
+
+        stripped = text_content.strip()
+        cmd_only = stripped.lower().split()[0].split("@")[0] if stripped.startswith("/") else ""
+
+        # /start für bereits verbundenen User → Bestätigung statt silent drop
+        if cmd_only == "/start":
+            _send_telegram_message(
+                chat_id_for_dispatch,
+                "✅ Du bist bereits verbunden!\n\nSchick mir Gedanken, Sprachnachrichten oder Fotos — ich behalte alles im Gedächtnis.\n\n/help zeigt alle Kommandos.",
+                tenant_id=tenant_id,
+            )
+            return
+
+        # Unbekanntes Kommando → Hinweis
+        if stripped.startswith("/"):
+            _send_telegram_message(
+                chat_id_for_dispatch,
+                "❓ Unbekanntes Kommando. Tippe /help für alle verfügbaren Befehle.",
+                tenant_id=tenant_id,
+            )
+            return
+
+        # Zu kurzer Text → Hinweis statt stilles Drop
+        if len(stripped) < 10:
+            _send_telegram_message(
+                chat_id_for_dispatch,
+                "💬 Zu kurz fürs Gedächtnis. Schreib einfach einen ganzen Satz!",
+                tenant_id=tenant_id,
+            )
             return
 
     # update_id-Deduplizierungs-Marker in payload injizieren
