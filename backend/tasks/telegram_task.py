@@ -235,9 +235,7 @@ def _route_inbound_message(
                 from tasks.p09_chat_ideas_task import deliver_ideas_to_chat
 
                 if is_idea_request(text_content):
-                    deliver_ideas_to_chat.apply_async(
-                        args=[tenant_id, text_content[:500], log_id]
-                    )
+                    deliver_ideas_to_chat.apply_async(args=[tenant_id, text_content[:500], log_id])
                     if log_id is not None:
                         # Persist-Marker (at-most-once, Dedup-Guard); fail-open wenn
                         # CHECK-Constraint den p10-Mapped-Wert ablehnt.
@@ -566,7 +564,7 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
     if not transcript:
         return {"status": "error", "reason": "empty_transcript"}
 
-    _update_log_transcript(log_id, transcript, result.model_name or "unknown", result.confidence)
+    _update_log_transcript(log_id, transcript, result.model_id or "unknown", result.confidence)
 
     channel = payload.get("_channel") or "telegram"
     source_type = "voice_whatsapp" if channel == "whatsapp" else "voice_telegram"
@@ -574,7 +572,7 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         "telegram_message_id": payload.get("message_id") or payload.get("id"),
         "duration_sec": duration,
         "transcription_confidence": round(min(max(result.confidence, 0), 1), 2),
-        "transcription_model": result.model_name,
+        "transcription_model": result.model_id,
         "channel": channel,
     }
     try:
@@ -584,6 +582,22 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
     except Exception as exc:
         logger.warning("store_voice_chunk failed: %s", exc)
         return {"status": "transcribed_no_chunk", "reason": str(exc)[:120]}
+
+    # Bestätigung an den Nutzer senden
+    chat_id_voice = (payload.get("chat") or {}).get("id")
+    if chat_id_voice and channel == "telegram":
+        preview = transcript[:80].rstrip()
+        suffix = "…" if len(transcript) > 80 else ""
+        try:
+            from api.telegram import _send_telegram_message
+
+            _send_telegram_message(
+                chat_id_voice,
+                f"🎤 Gespeichert: „{preview}{suffix}“",
+                tenant_id=tenant_id,
+            )
+        except Exception:
+            pass
 
     result_dict = {
         "status": "ok",
@@ -720,4 +734,18 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
     routing_info = _route_inbound_message(tenant_id, text_content, log_id=log_id)
     if routing_info:
         result_dict.update(routing_info)
+    elif channel == "telegram":
+        # Kein Routing-Gate hat gegriffen → Memory-Default → Bestätigung senden
+        chat_id = (payload.get("chat") or {}).get("id")
+        if chat_id:
+            try:
+                from api.telegram import _send_telegram_message
+
+                _send_telegram_message(
+                    chat_id,
+                    "✅ Gespeichert im Gedächtnis.",
+                    tenant_id=tenant_id,
+                )
+            except Exception:
+                pass
     return result_dict

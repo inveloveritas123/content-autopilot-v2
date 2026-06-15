@@ -378,13 +378,6 @@ def _ensure_pipeline_llm_in_sysmods():
 # ===========================================================================
 
 
-@pytest.mark.skip(
-    reason=(
-        "voice_drift_task.py nutzt noch anthropic.Anthropic() direkt — EU-Router-Migration "
-        "für diesen Task ist auf main noch nicht gelandet (arch/weekloop Issue #46 ausstehend). "
-        "Tests werden reaktiviert sobald die Migration merged ist."
-    )
-)
 class TestVoiceDriftSeam:
     """(a) call_pipeline_llm wird aufgerufen, (b) JSON-Parsing funktioniert."""
 
