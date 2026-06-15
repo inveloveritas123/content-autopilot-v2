@@ -33,23 +33,23 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 TIER_MODELS: dict[str, str] = {
-    "S1": "vertex/gemini-2.5-flash-lite@europe-north1",  # EU-Region (Finnland); direktes google/ ist auf EU-Router 404
+    "S1": "vertex/gemini-2.5-flash@europe-north1",  # EU-Region (Finnland); Flash (ohne Lite) — bessere Qualität, Robert-Entscheid 2026-06-15 (#115)
     "S2": "mistral/mistral-small-latest",
     "S3": "mistral/devstral-small-latest",
     "S4": "mistral/mistral-large-latest",
     "S5": "mistral/devstral-latest",  # CONFIRM-pflichtig
-    "S6": "bedrock/claude-sonnet-4-6@eu-central-1",  # CONFIRM-pflichtig — Freigabe Robert (P5); EU-souverän via Bedrock-Frankfurt (direktes anthropic/ ist policy-geblockt)
+    "S6": "vertex/gemini-2.5-flash@europe-north1",  # Bedrock-EU gibt 400 (#115) → Gemini-Flash als Übergangslösung; robert-Entscheid 2026-06-15
 }
 
 # Pricing pro Tier ($/1M Tokens) — für Kosten-Schätzung und Actual-Cost.
 # S6 entspricht cost_cap._ANTHROPIC_PRICING["claude-sonnet-4-6"] ($3/$15).
 TIER_PRICING: dict[str, dict[str, float]] = {
-    "S1": {"input": 0.075, "output": 0.30},
+    "S1": {"input": 0.30, "output": 1.25},  # Gemini Flash (ohne Lite) — EU-Vertex
     "S2": {"input": 0.10, "output": 0.30},
     "S3": {"input": 0.10, "output": 0.30},
     "S4": {"input": 2.00, "output": 6.00},
     "S5": {"input": 0.40, "output": 2.00},
-    "S6": {"input": 3.00, "output": 15.00},
+    "S6": {"input": 0.30, "output": 1.25},  # Gemini Flash als S6-Übergangslösung (#115)
 }
 
 # Per-Prompt-Default-Tier — portiert von ADR-0008 (Qualität > Kosten

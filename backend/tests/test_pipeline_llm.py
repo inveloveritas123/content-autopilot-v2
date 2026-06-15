@@ -270,14 +270,14 @@ class TestEstimateTierCost:
     """Tests für die Kosten-Schätzfunktion."""
 
     def test_s6_cost_calculation(self):
-        """S6-Kosten: $3/1M input + $15/1M output."""
+        """S6-Kosten: $0.30/1M input + $1.25/1M output (Gemini Flash nach #115)."""
         cost = estimate_tier_cost("S6", 1_000_000, 1_000_000)
-        assert abs(cost - (3.0 + 15.0)) < 0.0001
+        assert abs(cost - (0.30 + 1.25)) < 0.0001
 
     def test_s1_cost_calculation(self):
-        """S1-Kosten: $0.075/1M input + $0.30/1M output."""
+        """S1-Kosten: $0.30/1M input + $1.25/1M output (Gemini Flash)."""
         cost = estimate_tier_cost("S1", 1_000_000, 1_000_000)
-        assert abs(cost - (0.075 + 0.30)) < 0.0001
+        assert abs(cost - (0.30 + 1.25)) < 0.0001
 
     def test_zero_tokens_returns_zero(self):
         cost = estimate_tier_cost("S6", 0, 0)
@@ -289,9 +289,9 @@ class TestEstimateTierCost:
         assert cost == pytest.approx(5.0 + 20.0, rel=0.01)
 
     def test_p03_typical_tokens(self):
-        """Typischer P03-Call: 3000 input + 1500 output mit S6."""
+        """Typischer P03-Call: 3000 input + 1500 output mit S6 (Gemini Flash nach #115)."""
         cost = estimate_tier_cost("S6", 3000, 1500)
-        expected = (3000 * 3.0 + 1500 * 15.0) / 1_000_000
+        expected = (3000 * 0.30 + 1500 * 1.25) / 1_000_000
         assert abs(cost - expected) < 1e-9
 
 
@@ -713,12 +713,12 @@ class TestResolveModel:
     def test_policy_file_override_applied(self, monkeypatch, tmp_path):
         monkeypatch.setenv("MODEL_POLICY_PATH", str(tmp_path / "policy.json"))
         model_policy._CACHE.update(mtime=None, data=None, path=None)
-        model_policy.set_override("P03", "vertex/gemini-2.5-flash-lite@europe-north1")
+        model_policy.set_override("P03", "vertex/gemini-2.5-flash@europe-north1")
         res = resolve_model("P03")
         assert res["source"] == "policy"
-        assert res["effective_model"] == "vertex/gemini-2.5-flash-lite@europe-north1"
-        # Diese Modell-ID ist S1 → Reverse-Lookup setzt Pricing-Tier S1
-        assert res["effective_tier"] == "S1"
+        assert res["effective_model"] == "vertex/gemini-2.5-flash@europe-north1"
+        # Diese Modell-ID ist S1/S6 (beide gleich nach #115-Upgrade) → Pricing-Tier gesetzt
+        assert res["effective_tier"] in ("S1", "S6")
 
     def test_explicit_override_beats_policy(self, monkeypatch, tmp_path):
         monkeypatch.setenv("MODEL_POLICY_PATH", str(tmp_path / "policy.json"))
