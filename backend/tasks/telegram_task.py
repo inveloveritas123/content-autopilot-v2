@@ -564,7 +564,7 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
     if not transcript:
         return {"status": "error", "reason": "empty_transcript"}
 
-    _update_log_transcript(log_id, transcript, result.model_name or "unknown", result.confidence)
+    _update_log_transcript(log_id, transcript, result.model_id or "unknown", result.confidence)
 
     channel = payload.get("_channel") or "telegram"
     source_type = "voice_whatsapp" if channel == "whatsapp" else "voice_telegram"
@@ -572,7 +572,7 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         "telegram_message_id": payload.get("message_id") or payload.get("id"),
         "duration_sec": duration,
         "transcription_confidence": round(min(max(result.confidence, 0), 1), 2),
-        "transcription_model": result.model_name,
+        "transcription_model": result.model_id,
         "channel": channel,
     }
     try:
