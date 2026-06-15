@@ -208,7 +208,7 @@ class TestProcessVoiceRouting:
         TRANSCRIPT = "Das ist die gesprochene Antwort auf die Bot-Frage."
         mock_get_file.return_value = b"audio-bytes"
         mock_transcribe.return_value = types.SimpleNamespace(
-            text=TRANSCRIPT, model_name="whisper", confidence=0.95
+            text=TRANSCRIPT, model_id="whisper", confidence=0.95
         )
         mock_run.return_value = "voice-chunk-1"
         mock_load_session.return_value = active_session()
