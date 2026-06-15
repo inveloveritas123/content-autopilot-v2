@@ -6,6 +6,7 @@ POST /api/telegram/webhook  — receives Telegram Updates (open, secret-header a
 
 import hmac
 import logging
+import secrets
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -435,20 +436,11 @@ async def generate_telegram_link(
     Upserts a pending token row for this tenant (ON CONFLICT: overwrite token + reset status).
     Returns a deeplink using the tenant's own bot username (if configured).
     """
-    import secrets as _token_gen
-
     tenant_id = str(tenant.id)
-    token = _token_gen.token_urlsafe(24)
+    token = secrets.token_urlsafe(24)
     expires_at = datetime.now(UTC) + timedelta(minutes=30)
 
-    # Cleanup stale pending tokens for this tenant
-    await db.execute(
-        text("DELETE FROM tenant_telegram_link " "WHERE tenant_id = :tid AND status = 'pending'"),
-        {"tid": tenant_id},
-    )
-
-    # Insert fresh pending row (telegram_user_id=0, telegram_chat_id=0 as placeholder)
-    # ON CONFLICT: overwrite token + reset status if row already exists
+    # Upsert: ON CONFLICT ersetzt Token atomisch (kein separates DELETE nötig)
     await db.execute(
         text(
             "INSERT INTO tenant_telegram_link "

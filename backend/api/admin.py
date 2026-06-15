@@ -226,7 +226,6 @@ async def force_publish_content(req: ForcePublishRequest, db=Depends(get_db)):
 
 class CreateTenantRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
-    settings: dict = Field(default_factory=dict)
 
     @field_validator("name")
     @classmethod
@@ -245,9 +244,9 @@ async def create_tenant(req: CreateTenantRequest):
     slug = slug_base or "tenant"
 
     async with async_session_factory() as db:
-        for attempt in range(3):
+        for attempt in range(2):  # max 2 Versuche: original slug, dann mit UUID-Suffix
+            current_slug = slug if attempt == 0 else f"{slug[:48]}-{tenant_id[:8]}"
             try:
-                current_slug = slug if attempt == 0 else f"{slug}-{tenant_id[:8]}"
                 await db.execute(
                     text(
                         "INSERT INTO tenants (id, name, slug, api_key, enabled, created_at) "
@@ -274,18 +273,16 @@ async def create_tenant(req: CreateTenantRequest):
             except IntegrityError as exc:
                 await db.rollback()
                 constraint = str(exc.orig) if exc.orig else str(exc)
-                if "slug" not in constraint and attempt >= 1:
+                if "uq_tenants_slug" not in constraint:
+                    logger.error("IntegrityError beim Tenant-Anlegen (non-slug): %s", constraint)
                     raise HTTPException(
-                        status_code=409,
-                        detail="Tenant konnte nicht angelegt werden (Constraint-Fehler).",
+                        status_code=409, detail="Tenant konnte nicht angelegt werden."
                     )
-                if attempt == 2:
+                if attempt == 1:
                     raise HTTPException(
-                        status_code=409,
-                        detail=f"Slug-Konflikt nach {attempt + 1} Versuchen.",
+                        status_code=409, detail="Slug-Konflikt, bitte anderen Namen wählen."
                     )
-                # Nächster Attempt mit Suffix
-                continue
+        raise HTTPException(status_code=500, detail="Unerwarteter Fehler beim Tenant-Anlegen.")
 
 
 class TenantDisableRequest(BaseModel):
