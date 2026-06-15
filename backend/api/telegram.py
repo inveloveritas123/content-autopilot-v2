@@ -358,10 +358,16 @@ async def telegram_webhook(
         if not linked:
             _send_admin_telegram_message(
                 chat_id_help,
-                "📋 Content Autopilot — Befehle:\n\n"
-                "/start — Verbindung herstellen (Token aus Dashboard)\n"
-                "/help — Diese Hilfe\n\n"
-                "Noch nicht verbunden? Gehe ins Dashboard → Einstellungen → Telegram.",
+                "🤖 Content-Autopilot — KI-Ghostwriter für LinkedIn\n\n"
+                "Du bist noch nicht verbunden.\n\n"
+                "So verbindest du dich:\n"
+                "1. Öffne das Dashboard\n"
+                "2. Gehe zu Einstellungen → Telegram\n"
+                "3. Kopiere deinen persönlichen Token\n"
+                "4. Schick ihn hier mit: /start <Token>\n\n"
+                "Danach kannst du Sprachnachrichten, Texte und Fotos schicken — "
+                "ich baue daraus LinkedIn-Posts in deiner Stimme.\n\n"
+                "/help — Diese Übersicht",
             )
             return {"ok": True}
 
@@ -489,11 +495,29 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
         _send_telegram_message(
             chat_id,
             (
-                "Verfügbare Kommandos:\n"
-                "• Voice/Photo/Text → Gedächtnis\n"
-                "• /such <Begriff> — Semantische Suche\n"
-                "• /notiz <Text> — Manuelle Notiz speichern\n"
-                "• /help — diese Hilfe"
+                "🤖 Content-Autopilot — dein KI-Ghostwriter für LinkedIn\n\n"
+                "Ich lerne dich kennen und verwandle deine Gedanken in "
+                "authentische LinkedIn-Posts in deiner eigenen Stimme.\n\n"
+                "─────────────────────────\n"
+                "📥 Was du mir schicken kannst\n"
+                "• 🎙 Sprachnachricht — wird transkribiert & gespeichert\n"
+                "• 💬 Text — direkt ins Gedächtnis\n"
+                "• 📸 Foto — Inhalt wird erkannt & gespeichert\n\n"
+                "─────────────────────────\n"
+                "💡 Proaktiver Dialog (Mo + Do, 9 Uhr)\n"
+                "Ich stelle dir eine Frage zu deinen Werten, Erfahrungen "
+                "oder aktuellen Themen. Deine Antwort (Text oder Voice) "
+                "fließt direkt in deinen Content-Pool.\n\n"
+                "─────────────────────────\n"
+                "🔍 Befehle\n"
+                "• /such <Begriff> — Semantische Suche im Gedächtnis\n"
+                "• /notiz <Text> — Schnelle Notiz manuell speichern\n"
+                "• /help — Diese Übersicht\n\n"
+                "─────────────────────────\n"
+                "✨ Was dabei entsteht\n"
+                "Aus allem, was du teilst, entstehen LinkedIn-Posts — "
+                "kuratiert im Dashboard, nie automatisch veröffentlicht.\n\n"
+                "🔒 Alle Daten laufen über EU-Server (DSGVO-konform)."
             ),
             tenant_id=tenant_id,
         )

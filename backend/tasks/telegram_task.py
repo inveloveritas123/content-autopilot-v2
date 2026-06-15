@@ -583,6 +583,22 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         logger.warning("store_voice_chunk failed: %s", exc)
         return {"status": "transcribed_no_chunk", "reason": str(exc)[:120]}
 
+    # Bestätigung an den Nutzer senden
+    chat_id_voice = (payload.get("chat") or {}).get("id")
+    if chat_id_voice and channel == "telegram":
+        preview = transcript[:80].rstrip()
+        suffix = "…" if len(transcript) > 80 else ""
+        try:
+            from api.telegram import _send_telegram_message
+
+            _send_telegram_message(
+                chat_id_voice,
+                f"🎤 Gespeichert: „{preview}{suffix}"",
+                tenant_id=tenant_id,
+            )
+        except Exception:
+            pass
+
     result_dict = {
         "status": "ok",
         "transcript_chars": len(transcript),
