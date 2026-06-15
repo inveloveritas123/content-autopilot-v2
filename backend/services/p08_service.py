@@ -88,7 +88,10 @@ def _load_p08_prompt():
         from services.prompt_loader import get_default_prompt_loader
 
         loader = get_default_prompt_loader()
-        return loader.load("P08")
+        loaded = loader.load("P08")
+        if not loaded.user_prompt_template:
+            raise ValueError("user_prompt_template leer (Section-Header-Mismatch in Prompt-Datei?)")
+        return loaded
     except Exception as e:
         logger.warning(f"[P08] PromptLoader fehlgeschlagen, nutze lokalen Fallback: {e}")
 
