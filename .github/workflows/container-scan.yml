@@ -103,7 +103,7 @@ jobs:
           github.event_name == 'schedule' &&
           steps.check-critical.outputs.critical_count != '0' &&
           steps.check-critical.outputs.critical_count != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const count = '${{ steps.check-critical.outputs.critical_count }}';
