@@ -593,7 +593,7 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
 
             _send_telegram_message(
                 chat_id_voice,
-                f"🎤 Gespeichert: „{preview}{suffix}"",
+                f"🎤 Gespeichert: „{preview}{suffix}“",
                 tenant_id=tenant_id,
             )
         except Exception:
