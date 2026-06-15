@@ -68,9 +68,7 @@ def _send_telegram_message(chat_id: int, text_msg: str, *, tenant_id: str) -> bo
 
     token = get_tenant_bot_token(tenant_id)
     if not token:
-        logger.info(
-            "_send_telegram_message: kein aktiver Bot für tenant %s, skip send", tenant_id
-        )
+        logger.info("_send_telegram_message: kein aktiver Bot für tenant %s, skip send", tenant_id)
         return False
     try:
         import httpx
@@ -101,9 +99,7 @@ def _send_admin_telegram_message(chat_id: int, text_msg: str) -> None:
         url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
         httpx.post(url, json={"chat_id": chat_id, "text": text_msg}, timeout=5)
     except Exception as e:
-        logger.warning(
-            "Failed to send admin Telegram message to %s: %s", chat_id, type(e).__name__
-        )
+        logger.warning("Failed to send admin Telegram message to %s: %s", chat_id, type(e).__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -276,12 +272,14 @@ async def telegram_webhook(
     Receives Telegram Update objects. Auth via secret header only (no API key).
     Always returns 200 {"ok": True} so Telegram does not retry.
     """
-    # Use X-Forwarded-For if present (behind reverse proxy), else direct client IP
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        client_ip = forwarded_for.split(",")[0].strip()
-    else:
-        client_ip = request.client.host if request.client else "unknown"
+    # Vertrauenswürdige Client-IP: nginx setzt X-Real-IP auf $remote_addr (nicht spoofbar).
+    # X-Forwarded-For wird ebenfalls auf $remote_addr gesetzt (nginx.v2.conf) — dient nur
+    # als Fallback falls ein älterer Proxy-Pfad genutzt wird.
+    client_ip = (
+        request.headers.get("X-Real-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or (request.client.host if request.client else "unknown")
+    )
 
     # Rate-limit check (before verifying secret to prevent timing oracle)
     if _is_rate_limited(client_ip):
@@ -318,6 +316,20 @@ async def telegram_webhook(
     from_user: dict = message.get("from", {})
     telegram_user_id: int = from_user.get("id", 0)
 
+    # Handle /start bare (no token) → Onboarding-Hinweis
+    if text_content.strip() in ("/start", "/start@zkb_content_autopilot_bot"):
+        chat_id_start: int = message.get("chat", {}).get("id", 0)
+        _send_admin_telegram_message(
+            chat_id_start,
+            "👋 Willkommen beim Content Autopilot!\n\n"
+            "Um dich zu verbinden:\n"
+            "1. Gehe im Dashboard auf Einstellungen → Telegram\n"
+            "2. Klicke auf 'Verbindungslink generieren'\n"
+            "3. Sende den generierten /start-Link hier\n\n"
+            "Schreib /help für eine Übersicht der Befehle.",
+        )
+        return {"ok": True}
+
     # Handle /start <token>
     if text_content.startswith("/start "):
         token_arg = text_content[len("/start ") :].strip()
@@ -327,6 +339,37 @@ async def telegram_webhook(
             except Exception as e:
                 logger.error(f"_handle_start_command error: {e}")
         return {"ok": True}
+
+    # Handle /help for unknown users (before tenant resolution)
+    if text_content.strip() in ("/help", "/hilfe"):
+        chat_id_help: int = message.get("chat", {}).get("id", 0)
+        # Quick check if user is linked — if yes, let _try_memory_command handle it
+        try:
+            with sync_session_factory() as db:
+                linked = db.execute(
+                    text(
+                        "SELECT 1 FROM tenant_telegram_link "
+                        "WHERE telegram_user_id = :uid AND status = 'active'"
+                    ),
+                    {"uid": telegram_user_id},
+                ).fetchone()
+        except Exception:
+            linked = None
+        if not linked:
+            _send_admin_telegram_message(
+                chat_id_help,
+                "🤖 Content-Autopilot — KI-Ghostwriter für LinkedIn\n\n"
+                "Du bist noch nicht verbunden.\n\n"
+                "So verbindest du dich:\n"
+                "1. Öffne das Dashboard\n"
+                "2. Gehe zu Einstellungen → Telegram\n"
+                "3. Kopiere deinen persönlichen Token\n"
+                "4. Schick ihn hier mit: /start <Token>\n\n"
+                "Danach kannst du Sprachnachrichten, Texte und Fotos schicken — "
+                "ich baue daraus LinkedIn-Posts in deiner Stimme.\n\n"
+                "/help — Diese Übersicht",
+            )
+            return {"ok": True}
 
     # Tenant resolution for all other messages
     link_row = None
@@ -411,11 +454,11 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
         if not results:
             _send_telegram_message(
                 chat_id,
-                f'Keine Treffer für „{arg[:60]}“.',
+                f"Keine Treffer für „{arg[:60]}“.",
                 tenant_id=tenant_id,
             )
             return True
-        lines = [f'Top {len(results)} Treffer für „{arg[:60]}“:']
+        lines = [f"Top {len(results)} Treffer für „{arg[:60]}“:"]
         for r in results:
             sim = r.get("similarity") or 0
             preview = (r.get("content_text") or "")[:200]
@@ -452,11 +495,29 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
         _send_telegram_message(
             chat_id,
             (
-                "Verfügbare Kommandos:\n"
-                "• Voice/Photo/Text → Gedächtnis\n"
-                "• /such <Begriff> — Semantische Suche\n"
-                "• /notiz <Text> — Manuelle Notiz speichern\n"
-                "• /help — diese Hilfe"
+                "🤖 Content-Autopilot — dein KI-Ghostwriter für LinkedIn\n\n"
+                "Ich lerne dich kennen und verwandle deine Gedanken in "
+                "authentische LinkedIn-Posts in deiner eigenen Stimme.\n\n"
+                "─────────────────────────\n"
+                "📥 Was du mir schicken kannst\n"
+                "• 🎙 Sprachnachricht — wird transkribiert & gespeichert\n"
+                "• 💬 Text — direkt ins Gedächtnis\n"
+                "• 📸 Foto — Inhalt wird erkannt & gespeichert\n\n"
+                "─────────────────────────\n"
+                "💡 Proaktiver Dialog (Mo + Do, 9 Uhr)\n"
+                "Ich stelle dir eine Frage zu deinen Werten, Erfahrungen "
+                "oder aktuellen Themen. Deine Antwort (Text oder Voice) "
+                "fließt direkt in deinen Content-Pool.\n\n"
+                "─────────────────────────\n"
+                "🔍 Befehle\n"
+                "• /such <Begriff> — Semantische Suche im Gedächtnis\n"
+                "• /notiz <Text> — Schnelle Notiz manuell speichern\n"
+                "• /help — Diese Übersicht\n\n"
+                "─────────────────────────\n"
+                "✨ Was dabei entsteht\n"
+                "Aus allem, was du teilst, entstehen LinkedIn-Posts — "
+                "kuratiert im Dashboard, nie automatisch veröffentlicht.\n\n"
+                "🔒 Alle Daten laufen über EU-Server (DSGVO-konform)."
             ),
             tenant_id=tenant_id,
         )
@@ -554,10 +615,40 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
     text_content: str = message.get("text", "") or ""
     chat_id_for_dispatch: int = message.get("chat", {}).get("id", 0)
 
-    # Memory-Commands
+    # Memory-Commands + Silent-Drop-Schutz für Text
     if message_type == "text":
         cmd_handled = _try_memory_command(tenant_id, chat_id_for_dispatch, text_content)
         if cmd_handled:
+            return
+
+        stripped = text_content.strip()
+        cmd_only = stripped.lower().split()[0].split("@")[0] if stripped.startswith("/") else ""
+
+        # /start für bereits verbundenen User → Bestätigung statt silent drop
+        if cmd_only == "/start":
+            _send_telegram_message(
+                chat_id_for_dispatch,
+                "✅ Du bist bereits verbunden!\n\nSchick mir Gedanken, Sprachnachrichten oder Fotos — ich behalte alles im Gedächtnis.\n\n/help zeigt alle Kommandos.",
+                tenant_id=tenant_id,
+            )
+            return
+
+        # Unbekanntes Kommando → Hinweis
+        if stripped.startswith("/"):
+            _send_telegram_message(
+                chat_id_for_dispatch,
+                "❓ Unbekanntes Kommando. Tippe /help für alle verfügbaren Befehle.",
+                tenant_id=tenant_id,
+            )
+            return
+
+        # Zu kurzer Text → Hinweis statt stilles Drop
+        if len(stripped) < 10:
+            _send_telegram_message(
+                chat_id_for_dispatch,
+                "💬 Zu kurz fürs Gedächtnis. Schreib einfach einen ganzen Satz!",
+                tenant_id=tenant_id,
+            )
             return
 
     # update_id-Deduplizierungs-Marker in payload injizieren
