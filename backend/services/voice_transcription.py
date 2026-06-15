@@ -2,8 +2,8 @@
 Voice Transcription Adapter — für Telegram-Sprachnachrichten (OGG-Opus).
 
 Strategie:
-1. Primary: Gemini Flash Audio API (kostengünstig, DSGVO-konform wenn EU-Routing)
-2. Fallback: faster-whisper lokal (wenn Gemini schlägt fehl oder Confidence < 0.7)
+1. Primary: Gemini Flash via EU-Router (kostengünstig, DSGVO-konform)
+2. Fallback: faster-whisper lokal (wenn Router schlägt fehl oder Confidence < 0.7)
    - Achtung: faster-whisper ist optional (nicht überall installiert); graceful fallback
 
 DSGVO: Audio-Bytes werden NIE persistiert — nur das Transkript.
@@ -16,9 +16,11 @@ import os
 import tempfile
 from dataclasses import dataclass
 
+import httpx
+
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = "gemini-2.0-flash"
+_EU_VOICE_MODEL = "vertex/gemini-2.5-flash-lite@europe-north1"
 _ACCEPTED_MIME_TYPES = {"audio/ogg", "audio/ogg; codecs=opus", "audio/opus"}
 
 
@@ -73,8 +75,6 @@ def transcribe_with_gemini(
     mime_type: str = "audio/ogg",
     language_hint: str = "de",
 ) -> TranscriptionResult:
-    import google.generativeai as genai
-
     from config import settings
 
     try:
@@ -84,33 +84,64 @@ def transcribe_with_gemini(
     except Exception as e:
         logger.debug("CostCap check skipped: %s", type(e).__name__)
 
-    api_key = settings.gemini_api_key
-    if not api_key:
-        raise TranscriptionError("Gemini API key nicht konfiguriert")
+    base_url = settings.litellm_base_url
+    if not base_url:
+        raise TranscriptionError("LiteLLM-Router nicht konfiguriert (LITELLM_BASE_URL fehlt)")
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(GEMINI_MODEL)
+    api_key = (
+        getattr(settings, "litellm_api_key", None)
+        or getattr(settings, "requesty_api_key", None)
+        or ""
+    )
 
-    system_prompt = (
+    audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+    data_uri = f"data:{mime_type};base64,{audio_b64}"
+
+    prompt = (
         f"Transcribe the following audio. Return ONLY the transcription text, "
         f"no explanation. Language hint: {language_hint}"
     )
-    audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
-    part = {"inline_data": {"data": audio_b64, "mime_type": mime_type}}
+    payload = {
+        "model": _EU_VOICE_MODEL,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": data_uri}},
+                ],
+            }
+        ],
+        "max_tokens": 4096,
+    }
 
     try:
-        response = model.generate_content([system_prompt, part])
+        with httpx.Client(timeout=120) as client:
+            resp = client.post(
+                f"{base_url}/chat/completions",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            resp.raise_for_status()
+            result = resp.json()
+    except httpx.HTTPStatusError as exc:
+        raise TranscriptionError(
+            f"Router HTTP {exc.response.status_code}: {exc.response.text[:200]}"
+        ) from exc
     except Exception as exc:
-        raise TranscriptionError(f"Gemini API Fehler: {exc}") from exc
+        raise TranscriptionError(f"Router-Fehler: {exc}") from exc
 
-    text = (response.text or "").strip()
+    text = (((result.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
     if not text:
-        raise TranscriptionError("Gemini hat leere Antwort zurückgegeben")
+        raise TranscriptionError("Leere Transkription vom Router")
 
     return TranscriptionResult(
         text=text,
         confidence=0.85,
-        model_id=GEMINI_MODEL,
+        model_id=_EU_VOICE_MODEL,
         language_detected=language_hint,
         duration_sec=_get_ogg_duration(audio_bytes),
     )
