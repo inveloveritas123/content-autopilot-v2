@@ -2,15 +2,21 @@
 
 import hashlib
 import json
+import logging
 import os
+import re
 import secrets
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from dependencies import get_db
+from models.base import async_session_factory
 from models.content_piece import ContentPiece
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -153,9 +159,6 @@ async def notify_tenant_model(req: TenantNotifyRequest, db=Depends(get_db)):
 
     message = req.message or default_msg
 
-    # Telegram-Stub: log + mark in DB
-    import logging
-
     logging.getLogger(__name__).info(f"[TenantNotify] tenant={req.tenant_id} msg={message}")
 
     # Mark notification as pending in tenant settings
@@ -187,7 +190,6 @@ class ForcePublishRequest(BaseModel):
 @router.post("/content/force-publish", dependencies=[Depends(require_admin)])
 async def force_publish_content(req: ForcePublishRequest, db=Depends(get_db)):
     """Admin override: publish post without normal approval flow. Logged as admin_override."""
-    import datetime
     import uuid as _uuid
 
     piece = await db.get(ContentPiece, _uuid.UUID(req.content_piece_id))
@@ -197,7 +199,7 @@ async def force_publish_content(req: ForcePublishRequest, db=Depends(get_db)):
     piece.status = "published"
     piece.approved_by = "admin_override"
     piece.approval_method = "admin_override"
-    piece.approved_at = piece.approved_at or datetime.datetime.utcnow()
+    piece.approved_at = piece.approved_at or datetime.now(UTC)
 
     # Audit log
     await db.execute(
@@ -212,9 +214,7 @@ async def force_publish_content(req: ForcePublishRequest, db=Depends(get_db)):
         },
     )
     await db.commit()
-    import logging as _log
-
-    _log.getLogger(__name__).info(
+    logging.getLogger(__name__).info(
         f"[AdminOverride] force-publish content_piece={req.content_piece_id} reason={req.reason!r}"
     )
     return {
@@ -224,14 +224,76 @@ async def force_publish_content(req: ForcePublishRequest, db=Depends(get_db)):
     }
 
 
+class CreateTenantRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    settings: dict = Field(default_factory=dict)
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("name darf nicht leer sein")
+        return v
+
+
+@router.post("/tenants", dependencies=[Depends(require_admin)], status_code=201)
+async def create_tenant(req: CreateTenantRequest):
+    tenant_id = str(uuid.uuid4())
+    api_key = secrets.token_hex(32)
+    slug_base = re.sub(r"[^a-z0-9-]", "", req.name.lower().replace(" ", "-"))[:56]
+    slug = slug_base or "tenant"
+
+    async with async_session_factory() as db:
+        for attempt in range(3):
+            try:
+                current_slug = slug if attempt == 0 else f"{slug}-{tenant_id[:8]}"
+                await db.execute(
+                    text(
+                        "INSERT INTO tenants (id, name, slug, api_key, enabled, created_at) "
+                        "VALUES (:id, :name, :slug, :api_key, true, :now)"
+                    ),
+                    {
+                        "id": tenant_id,
+                        "name": req.name,
+                        "slug": current_slug,
+                        "api_key": api_key,
+                        "now": datetime.now(UTC),
+                    },
+                )
+                await db.commit()
+                return JSONResponse(
+                    status_code=201,
+                    content={
+                        "id": tenant_id,
+                        "name": req.name,
+                        "slug": current_slug,
+                        "api_key": api_key,
+                    },
+                )
+            except IntegrityError as exc:
+                await db.rollback()
+                constraint = str(exc.orig) if exc.orig else str(exc)
+                if "slug" not in constraint and attempt >= 1:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Tenant konnte nicht angelegt werden (Constraint-Fehler).",
+                    )
+                if attempt == 2:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Slug-Konflikt nach {attempt + 1} Versuchen.",
+                    )
+                # Nächster Attempt mit Suffix
+                continue
+
+
 class TenantDisableRequest(BaseModel):
     reason: str
 
 
 @router.post("/tenants/{tenant_id}/disable", dependencies=[Depends(require_admin)])
 async def disable_tenant(tenant_id: str, req: TenantDisableRequest, db=Depends(get_db)):
-    import datetime
-
     row = await db.execute(
         text("SELECT id FROM tenants WHERE id = :id OR api_key = :id"), {"id": tenant_id}
     )
@@ -240,7 +302,7 @@ async def disable_tenant(tenant_id: str, req: TenantDisableRequest, db=Depends(g
         raise HTTPException(404, "Tenant not found")
 
     actual_id = str(t[0])
-    now = datetime.datetime.utcnow()
+    now = datetime.now(UTC)
     await db.execute(
         text("""UPDATE tenants SET enabled=false, disabled_at=:at,
                 disabled_by='admin', disabled_reason=:reason WHERE id=:id"""),
@@ -384,8 +446,6 @@ async def rotate_admin_token():
             f.write(new_hash)
     except Exception as e:
         raise HTTPException(500, f"Token-Rotation fehlgeschlagen: {e}")
-
-    import logging
 
     logging.getLogger(__name__).info("[Admin] Admin-Token wurde rotiert")
     return {

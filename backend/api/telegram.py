@@ -7,13 +7,14 @@ POST /api/telegram/webhook  — receives Telegram Updates (open, secret-header a
 import hmac
 import logging
 import time
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy import text
 
 from config import settings
+from dependencies import get_db, get_tenant
 from models.base import sync_session_factory
 
 logger = logging.getLogger(__name__)
@@ -109,7 +110,6 @@ def _send_admin_telegram_message(chat_id: int, text_msg: str) -> None:
 
 def _handle_start_command(message: dict, token: str) -> None:
     """Verify one-time token, activate tenant_telegram_link."""
-    from datetime import datetime, timedelta
 
     chat_id: int = message.get("chat", {}).get("id", 0)
     user_id: int = message.get("from", {}).get("id", 0)
@@ -158,9 +158,9 @@ def _handle_start_command(message: dict, token: str) -> None:
         db.execute(
             text(
                 "INSERT INTO tenant_telegram_link "
-                "(tenant_id, telegram_user_id, telegram_chat_id, confirmed_via_token, status, linked_at) "
-                "VALUES (:tid, :uid, :cid, :token, 'active', now()) "
-                "ON CONFLICT (tenant_id, telegram_user_id) DO UPDATE SET "
+                "(tenant_id, telegram_user_id, telegram_chat_id, confirmed_via_token, status, linked_at, channel) "
+                "VALUES (:tid, :uid, :cid, :token, 'active', now(), 'telegram') "
+                "ON CONFLICT (tenant_id, telegram_user_id, channel) DO UPDATE SET "
                 "  telegram_chat_id = EXCLUDED.telegram_chat_id, "
                 "  confirmed_via_token = EXCLUDED.confirmed_via_token, "
                 "  status = 'active', "
@@ -418,6 +418,67 @@ async def telegram_webhook(
         logger.error(f"_store_and_dispatch error: {e}")
 
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Generate Telegram link-token (Issue #61 — Onboarding)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/generate-link")
+async def generate_telegram_link(
+    tenant=Depends(get_tenant),
+    db=Depends(get_db),
+):
+    """Generate a one-time link token for Telegram onboarding.
+
+    Upserts a pending token row for this tenant (ON CONFLICT: overwrite token + reset status).
+    Returns a deeplink using the tenant's own bot username (if configured).
+    """
+    import secrets as _token_gen
+
+    tenant_id = str(tenant.id)
+    token = _token_gen.token_urlsafe(24)
+    expires_at = datetime.now(UTC) + timedelta(minutes=30)
+
+    # Cleanup stale pending tokens for this tenant
+    await db.execute(
+        text("DELETE FROM tenant_telegram_link " "WHERE tenant_id = :tid AND status = 'pending'"),
+        {"tid": tenant_id},
+    )
+
+    # Insert fresh pending row (telegram_user_id=0, telegram_chat_id=0 as placeholder)
+    # ON CONFLICT: overwrite token + reset status if row already exists
+    await db.execute(
+        text(
+            "INSERT INTO tenant_telegram_link "
+            "(tenant_id, telegram_user_id, telegram_chat_id, confirmed_via_token, status, linked_at, channel) "
+            "VALUES (:tid, 0, 0, :token, 'pending', NOW(), 'telegram') "
+            "ON CONFLICT (tenant_id, telegram_user_id, channel) "
+            "DO UPDATE SET confirmed_via_token = EXCLUDED.confirmed_via_token, "
+            "              status = 'pending', "
+            "              linked_at = NOW()"
+        ),
+        {"tid": tenant_id, "token": token},
+    )
+    await db.commit()
+
+    # Load bot_username from tenant_bot_config (best-effort, null if missing)
+    bot_row = await db.execute(
+        text("SELECT telegram_bot_username FROM tenant_bot_config WHERE tenant_id = :tid LIMIT 1"),
+        {"tid": tenant_id},
+    )
+    bot_row_result = bot_row.fetchone()
+    bot_username = bot_row_result[0] if bot_row_result else None
+
+    deeplink = f"https://t.me/{bot_username}?start={token}" if bot_username else None
+
+    return {
+        "token": token,
+        "expires_at": expires_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "start_command": f"/start {token}",
+        "deeplink": deeplink,
+    }
 
 
 # ── Memory-Commands (Phase 5 Welle 7) ────────────────────────────────
