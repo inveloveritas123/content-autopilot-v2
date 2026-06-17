@@ -33,12 +33,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 TIER_MODELS: dict[str, str] = {
-    "S1": "vertex/gemini-2.5-flash@europe-north1",  # EU-Region (Finnland); Flash (ohne Lite) — bessere Qualität, Robert-Entscheid 2026-06-15 (#115)
+    "S1": "vertex/gemini-2.5-flash@europe-central2",  # EU-Region Mailand — europe-north1 gibt 403 auf diesem Key
     "S2": "mistral/mistral-small-latest",
     "S3": "mistral/devstral-small-latest",
     "S4": "mistral/mistral-large-latest",
     "S5": "mistral/devstral-latest",  # CONFIRM-pflichtig
-    "S6": "vertex/gemini-2.5-flash@europe-north1",  # Bedrock-EU gibt 400 (#115) → Gemini-Flash als Übergangslösung; robert-Entscheid 2026-06-15
+    "S6": "vertex/gemini-2.5-flash@europe-central2",  # Gemini-Flash EU-Mailand als S6-Übergangslösung
 }
 
 # Pricing pro Tier ($/1M Tokens) — für Kosten-Schätzung und Actual-Cost.
