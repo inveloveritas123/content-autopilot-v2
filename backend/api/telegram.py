@@ -799,39 +799,457 @@ def _brainstorming_pick_idea(tenant_id: str, chat_id: int, idea_id: str) -> None
         )
 
 
-def _send_onboarding_start(tenant_id: str, chat_id: int) -> None:
-    """Startet Onboarding-Fragebogen via Chat."""
+# ---------------------------------------------------------------------------
+# Onboarding-Wizard — Hilfs-Funktionen (rein, kein DB-Zugriff)
+# ---------------------------------------------------------------------------
+
+
+def _onboarding_get_answers(messages: list) -> dict:
+    """Extrahiert alle bisher gesammelten Antworten aus session.messages."""
+    answers = {}
+    for msg in messages:
+        if msg.get("role") == "meta":
+            answers.update(msg.get("answers", {}))
+        elif msg.get("role") == "answer":
+            answers[msg["key"]] = msg["text"]
+    return answers
+
+
+def _onboarding_get_prefilled(messages: list) -> list:
+    """Gibt die Liste der vorausgefüllten Keys aus dem meta-Eintrag zurück."""
+    for msg in messages:
+        if msg.get("role") == "meta":
+            return msg.get("pre_filled_keys", [])
+    return []
+
+
+def _onboarding_next_question(questions: list, answers: dict) -> dict | None:
+    """Gibt die nächste unbeantwortete Frage zurück (required first, dann optional)."""
+    for q in questions:
+        if q["required"] and q["key"] not in answers:
+            return q
+    for q in questions:
+        if not q["required"] and q["key"] not in answers:
+            return q
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Onboarding-Wizard — DB-Operationen (synchron via asyncio.run)
+# ---------------------------------------------------------------------------
+
+
+def _onboarding_preload_from_memory(tenant_id: str) -> dict:
+    """Liest memory_chunks und versucht Onboarding-Fragen vorauszubefüllen."""
+    import asyncio
+    import json
+    import re
+
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.orm import sessionmaker as _sm
+
+    from config import settings as _s
+    from services.brand_voice import get_onboarding_questions
+    from services.pipeline_llm import call_pipeline_llm
+
+    question_keys = {q["key"]: q["question"] for q in get_onboarding_questions()}
+
+    async def _fetch_chunks():
+        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
+        SM = _sm(engine, class_=AsyncSession, expire_on_commit=False)
+        try:
+            async with SM() as db:
+                result = await db.execute(
+                    text(
+                        "SELECT content_text FROM memory_chunks "
+                        "WHERE tenant_id = :tid ORDER BY created_at DESC LIMIT 30"
+                    ),
+                    {"tid": tenant_id},
+                )
+                return [row[0] for row in result.all()]
+        finally:
+            await engine.dispose()
+
     try:
-        from services.brand_voice import get_onboarding_questions
-
-        questions = get_onboarding_questions()
-        first_q = questions[0]["question"] if questions else None
+        chunks = asyncio.run(_fetch_chunks())
     except Exception:
-        first_q = None
+        return {}
 
-    if not first_q:
+    if not chunks:
+        return {}
+
+    memory_text = "\n---\n".join(chunks[:20])
+    questions_json = json.dumps(question_keys, ensure_ascii=False)
+
+    prompt = f"""Du analysierst Gedaechtnis-Eintraege eines Unternehmers und beantwortest strukturierte Onboarding-Fragen.
+
+Gedaechtnis-Eintraege:
+{memory_text}
+
+Fragen (Key → Frage):
+{questions_json}
+
+Gibt es genug Information um eine oder mehrere Fragen zu beantworten?
+Antworte als JSON-Objekt mit NUR den Keys fuer die du eine klare Antwort ableiten kannst.
+Wenn du dir nicht sicher bist, lass den Key weg. Beispiel: {{"company_description": "IT-Beratung...", "tone_preference": "professionell"}}
+Wenn gar nichts ableitbar: {{}}"""
+
+    try:
+        result = call_pipeline_llm(
+            prompt_key="ONBOARDING_PRELOAD",
+            system_prompt="Antworte NUR als JSON-Objekt, keine Erklaerungen.",
+            user_content=prompt,
+            tenant_id=tenant_id,
+            tier_override="S2",
+        )
+        json_match = re.search(r"\{.*\}", result.text, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group())
+    except Exception as exc:
+        logger.warning("_onboarding_preload_from_memory LLM failed: %s", exc)
+    return {}
+
+
+def _onboarding_get_active_session(tenant_id: str) -> dict | None:
+    """Gibt aktive Onboarding-Session zurück oder None."""
+    import asyncio
+    import json
+
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.orm import sessionmaker as _sm
+
+    from config import settings as _s
+
+    async def _run():
+        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
+        SM = _sm(engine, class_=AsyncSession, expire_on_commit=False)
+        try:
+            async with SM() as db:
+                result = await db.execute(
+                    text(
+                        """SELECT id, messages, current_question_index
+                           FROM bot_session
+                           WHERE tenant_id = :tid AND mode = 'onboarding' AND status = 'active'
+                           ORDER BY created_at DESC LIMIT 1"""
+                    ),
+                    {"tid": tenant_id},
+                )
+                row = result.first()
+                if not row:
+                    return None
+                msgs = row[1] if isinstance(row[1], (dict, list)) else json.loads(row[1] or "[]")
+                return {
+                    "id": str(row[0]),
+                    "messages": msgs,
+                    "current_question_index": row[2],
+                }
+        finally:
+            await engine.dispose()
+
+    try:
+        return asyncio.run(_run())
+    except Exception as exc:
+        logger.warning("_onboarding_get_active_session failed: %s", exc)
+        return None
+
+
+def _onboarding_create_session(tenant_id: str, pre_filled: dict) -> dict:
+    """Legt neue Onboarding-Session an, speichert pre-filled Answers."""
+    import asyncio
+    import json
+    import uuid as _uuid
+
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.orm import sessionmaker as _sm
+
+    from config import settings as _s
+
+    session_id = str(_uuid.uuid4())
+    meta_entry = {
+        "role": "meta",
+        "answers": pre_filled.copy(),
+        "pre_filled_keys": list(pre_filled.keys()),
+    }
+    messages = [meta_entry]
+
+    async def _run():
+        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
+        SM = _sm(engine, class_=AsyncSession, expire_on_commit=False)
+        try:
+            async with SM() as db:
+                await db.execute(
+                    text(
+                        """INSERT INTO bot_session
+                           (id, tenant_id, mode, current_question_index, messages, status)
+                           VALUES (:id, :tid, 'onboarding', 0, CAST(:msgs AS jsonb), 'active')"""
+                    ),
+                    {
+                        "id": session_id,
+                        "tid": tenant_id,
+                        "msgs": json.dumps(messages, ensure_ascii=False),
+                    },
+                )
+                await db.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+    return {"id": session_id, "messages": messages, "current_question_index": 0}
+
+
+def _onboarding_save_answer(
+    session_id: str, tenant_id: str, messages: list, next_index: int
+) -> None:
+    """Persistiert den aktualisierten messages-Array + current_question_index."""
+    import asyncio
+    import json
+
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.orm import sessionmaker as _sm
+
+    from config import settings as _s
+
+    async def _run():
+        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
+        SM = _sm(engine, class_=AsyncSession, expire_on_commit=False)
+        try:
+            async with SM() as db:
+                await db.execute(
+                    text(
+                        """UPDATE bot_session
+                           SET messages = CAST(:msgs AS jsonb),
+                               current_question_index = :idx,
+                               updated_at = now(),
+                               last_message_at = now()
+                           WHERE id = :sid AND tenant_id = :tid"""
+                    ),
+                    {
+                        "msgs": json.dumps(messages, ensure_ascii=False),
+                        "idx": next_index,
+                        "sid": session_id,
+                        "tid": tenant_id,
+                    },
+                )
+                await db.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def _onboarding_close_session(session_id: str, tenant_id: str) -> None:
+    """Setzt Session-Status auf 'closed'."""
+    import asyncio
+
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.orm import sessionmaker as _sm
+
+    from config import settings as _s
+
+    async def _run():
+        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
+        SM = _sm(engine, class_=AsyncSession, expire_on_commit=False)
+        try:
+            async with SM() as db:
+                await db.execute(
+                    text(
+                        "UPDATE bot_session SET status='closed', updated_at=now() "
+                        "WHERE id=:sid AND tenant_id=:tid"
+                    ),
+                    {"sid": session_id, "tid": tenant_id},
+                )
+                await db.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def _onboarding_save_voice_profile(tenant_id: str, answers: dict) -> None:
+    """Ruft build_voice_profile_from_onboarding auf und speichert in tenant_voice_profile."""
+    import asyncio
+    import json
+
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.orm import sessionmaker as _sm
+
+    from config import settings as _s
+    from services.brand_voice import build_voice_profile_from_onboarding
+    from services.pipeline_llm import TIER_MODELS
+
+    # Synchroner Aufruf (build_voice_profile_from_onboarding ist jetzt sync)
+    profile = build_voice_profile_from_onboarding(answers)
+    model_id = TIER_MODELS.get("S4", "mistral/mistral-large-latest")
+
+    async def _run():
+        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
+        SM = _sm(engine, class_=AsyncSession, expire_on_commit=False)
+        try:
+            async with SM() as db:
+                # Deaktiviere alte Profile
+                await db.execute(
+                    text("UPDATE tenant_voice_profile SET is_active=false WHERE tenant_id=:tid"),
+                    {"tid": tenant_id},
+                )
+                # Neues Profil einfügen (Pflichtfelder: version, prompt_version_hash, model_id)
+                await db.execute(
+                    text(
+                        """INSERT INTO tenant_voice_profile
+                           (tenant_id, version, source, payload, prompt_version_hash, model_id, is_active)
+                           VALUES (:tid, 1, 'onboarding', CAST(:payload AS jsonb), 'onboarding-v1', :model_id, true)"""
+                    ),
+                    {
+                        "tid": tenant_id,
+                        "payload": json.dumps(profile, ensure_ascii=False),
+                        "model_id": model_id,
+                    },
+                )
+                await db.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# Onboarding-Wizard — Haupt-Einstiegspunkte
+# ---------------------------------------------------------------------------
+
+
+def _send_onboarding_start(tenant_id: str, chat_id: int) -> None:
+    """Startet oder setzt Onboarding-Wizard fort."""
+    from services.brand_voice import get_onboarding_questions
+
+    questions = get_onboarding_questions()
+
+    # Laufende Session fortsetzen
+    session = _onboarding_get_active_session(tenant_id)
+    if session:
+        answers = _onboarding_get_answers(session["messages"])
+        next_q = _onboarding_next_question(questions, answers)
+        if next_q:
+            prefilled = _onboarding_get_prefilled(session["messages"])
+            pre_note = ""
+            if answers.get(next_q["key"]) and next_q["key"] in prefilled:
+                pre_note = f"_(bereits vorausgefüllt: {answers[next_q['key']][:60]}…)_\n\n"
+            _send_telegram_message(
+                chat_id,
+                f"🚀 Onboarding läuft noch — weiter geht's!\n\n{pre_note}{next_q['question']}",
+                tenant_id=tenant_id,
+            )
+        else:
+            _send_telegram_message(
+                chat_id, "✅ Onboarding bereits abgeschlossen!", tenant_id=tenant_id
+            )
+        return
+
+    # Neue Session: Vorausfüllen aus Memory
+    _send_telegram_message(
+        chat_id,
+        "🔍 Ich schaue kurz nach, was ich schon über dich weiß…",
+        tenant_id=tenant_id,
+    )
+    pre_filled = _onboarding_preload_from_memory(tenant_id)
+
+    session = _onboarding_create_session(tenant_id, pre_filled)
+    answers = pre_filled.copy()
+    next_q = _onboarding_next_question(questions, answers)
+
+    if not next_q:
+        # Alles vorausgefüllt — direkt speichern
+        _onboarding_save_voice_profile(tenant_id, answers)
+        _onboarding_close_session(session["id"], tenant_id)
         _send_telegram_message(
             chat_id,
-            "🚀 Onboarding\n\nDas Onboarding läuft über das Dashboard. "
-            "Gehe zu Einstellungen → Brand Voice → Fragebogen.",
+            "✅ Ich konnte alle Infos aus deinen bisherigen Nachrichten ableiten!\n\n"
+            "Dein Stimmprofil ist fertig. Tippe /help → 'So liest KI mich' um es zu sehen.",
             tenant_id=tenant_id,
         )
         return
 
-    # Starte P08-Session im random_smart-Modus (mode='onboarding' nicht implementiert)
-    try:
-        from services.p08_service import p08_opener
-
-        result = p08_opener(tenant_id=tenant_id, mode="random_smart")
-        question_text = result.question_text
-    except Exception:
-        question_text = first_q
+    pre_note = ""
+    if pre_filled:
+        known_keys = ", ".join(pre_filled.keys())
+        pre_note = f"_Bereits bekannt aus deinen Nachrichten: {known_keys}_\n\n"
 
     _send_telegram_message(
         chat_id,
-        f"🚀 Lass uns starten — ich lerne dich kennen!\n\n{question_text}",
+        f"🚀 Lass uns starten — ich lerne dich kennen!\n\n{pre_note}Frage 1:\n{next_q['question']}",
         tenant_id=tenant_id,
     )
+
+
+def _onboarding_handle_answer(
+    tenant_id: str, chat_id: int, answer_text: str, session: dict
+) -> None:
+    """Verarbeitet eine Antwort im Onboarding-Wizard."""
+    from services.brand_voice import get_onboarding_questions
+
+    questions = get_onboarding_questions()
+    messages = session["messages"]
+    answers = _onboarding_get_answers(messages)
+
+    # Aktuelle Frage ermitteln (was haben wir zuletzt gefragt?)
+    current_key = None
+    for msg in reversed(messages):
+        if msg.get("role") == "question":
+            current_key = msg["key"]
+            break
+
+    if not current_key:
+        # Erste Antwort — nimm die erste unbeantwortete Frage
+        first_q = _onboarding_next_question(questions, answers)
+        current_key = first_q["key"] if first_q else None
+
+    if current_key:
+        messages.append({"role": "answer", "key": current_key, "text": answer_text})
+        answers[current_key] = answer_text
+
+    # Nächste Frage
+    next_q = _onboarding_next_question(questions, answers)
+    q_num = sum(1 for m in messages if m.get("role") == "answer") + 1
+
+    if next_q:
+        messages.append({"role": "question", "key": next_q["key"], "question": next_q["question"]})
+        _onboarding_save_answer(session["id"], tenant_id, messages, q_num)
+        _send_telegram_message(
+            chat_id,
+            f"Frage {q_num}:\n{next_q['question']}",
+            tenant_id=tenant_id,
+        )
+    else:
+        # Alle required beantwortet — Profil speichern
+        _onboarding_save_answer(session["id"], tenant_id, messages, q_num)
+        _onboarding_close_session(session["id"], tenant_id)
+
+        _send_telegram_message(
+            chat_id,
+            "⏳ Einen Moment — ich erstelle dein Stimmprofil…",
+            tenant_id=tenant_id,
+        )
+        try:
+            _onboarding_save_voice_profile(tenant_id, answers)
+            _send_telegram_message(
+                chat_id,
+                "✅ Dein Stimmprofil ist fertig!\n\n"
+                "Tippe /help → 'So liest KI mich' um es zu lesen.\n\n"
+                "Das Profil wird automatisch ergänzt wenn du weitere Sprachnachrichten oder Texte schickst.",
+                tenant_id=tenant_id,
+            )
+        except Exception as exc:
+            logger.error("Onboarding profile save failed: %s", exc)
+            _send_telegram_message(
+                chat_id,
+                "⚠️ Profil konnte nicht gespeichert werden. "
+                "Versuche es in ein paar Minuten erneut mit /help → Onboarding.",
+                tenant_id=tenant_id,
+            )
 
 
 def _memory_search_sync(tenant_id: str, query: str, limit: int = 5) -> list[dict]:
@@ -954,6 +1372,12 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
                 "❓ Unbekanntes Kommando. Tippe /help für alle verfügbaren Befehle.",
                 tenant_id=tenant_id,
             )
+            return
+
+        # Aktive Onboarding-Session → Antwort verarbeiten (vor Short-Text-Filter!)
+        onboarding_session = _onboarding_get_active_session(tenant_id)
+        if onboarding_session:
+            _onboarding_handle_answer(tenant_id, chat_id_for_dispatch, stripped, onboarding_session)
             return
 
         # Zu kurzer Text → Hinweis statt stilles Drop

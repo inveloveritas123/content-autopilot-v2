@@ -119,22 +119,42 @@ def get_onboarding_questions() -> list[dict]:
     return ONBOARDING_QUESTIONS
 
 
-async def build_voice_profile_from_onboarding(answers: dict) -> dict:
-    """Erstelle ein initiales Brand-Voice-Profil aus Onboarding-Antworten."""
-    prompt = f"""Erstelle ein Brand-Voice-Profil aus diesen Onboarding-Antworten:
+def build_voice_profile_from_onboarding(answers: dict) -> dict:
+    """Erstelle ein initiales Brand-Voice-Profil aus Onboarding-Antworten.
+
+    Synchron via call_pipeline_llm (S4 = mistral-large-latest).
+    Kein direkter claude-sonnet-Call (Policy-Verletzung).
+    """
+    import json
+    import re
+
+    from services.pipeline_llm import call_pipeline_llm
+
+    user_content = f"""Erstelle ein Brand-Voice-Profil aus diesen Onboarding-Antworten:
 
 {chr(10).join(f'{k}: {v}' for k, v in answers.items() if v)}
 
-Erstelle ein JSON-Profil mit: tone, vocabulary_level, sentence_style,
-perspective, topics_passion, topics_avoid, formatting_preferences,
-call_to_action_style, authenticity_markers."""
+Erstelle ein JSON-Profil mit diesen Keys:
+- grundton (z.B. "professionell-warm", "direkt-provokant")
+- vokabular (z.B. "Fachbegriffe sparsam", "Alltagssprache")
+- erzaehlmuster (z.B. "Story-first", "Argument-first")
+- persoenlichkeit (2-3 praegnante Adjektive)
+- satzarchitektur (z.B. "kurze Saetze, viel Whitespace")
+- vermeidungsprofil (was der User NICHT will)
+- schriftlich_vs_muendlich (wie nah am gesprochenen Wort)
+- tone, vocabulary_level, sentence_style, perspective, topics_passion, topics_avoid,
+  formatting_preferences, call_to_action_style, authenticity_markers"""
 
     try:
-        profile = await llm_service.complete_json(
-            prompt=prompt,
-            system="Du erstellst Brand-Voice-Profile fuer LinkedIn-Content. Antworte NUR als JSON.",
-            model="claude-sonnet",
+        result = call_pipeline_llm(
+            prompt_key="ONBOARDING_VOICE",
+            system_prompt="Du erstellst Brand-Voice-Profile fuer LinkedIn-Content. Antworte NUR als JSON-Objekt, keine Erklaerungen.",
+            user_content=user_content,
+            tenant_id="onboarding",
+            tier_override="S4",
         )
+        json_match = re.search(r"\{.*\}", result.text, re.DOTALL)
+        profile = json.loads(json_match.group()) if json_match else {}
         profile["source"] = "onboarding"
         profile["onboarding_answers"] = answers
         return profile
