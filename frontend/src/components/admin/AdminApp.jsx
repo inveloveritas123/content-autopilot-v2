@@ -14,6 +14,16 @@ import ReviewQueue from '../ReviewQueue'
 import AdminModels from '../AdminModels'
 import PromptStudio from '../PromptStudio'
 
+// Setzt apiKey für tenant-scopte Komponenten (LLMAnalytics, PromptStudio etc.)
+// Nutzt den ersten Tenant aus VITE_TEST_TENANTS (= Standard/ZKG)
+function setDefaultTenantKey() {
+  if (localStorage.getItem('apiKey')) return // bereits gesetzt
+  try {
+    const tenants = JSON.parse(import.meta.env.VITE_TEST_TENANTS || '[]')
+    if (tenants.length > 0) localStorage.setItem('apiKey', tenants[0].key)
+  } catch {}
+}
+
 export default function AdminApp() {
   // null = noch nicht geprüft, true = eingeloggt, false = ausgeloggt
   const [authenticated, setAuthenticated] = useState(null)
@@ -21,7 +31,7 @@ export default function AdminApp() {
 
   useEffect(() => {
     adminSession()
-      .then((data) => setAuthenticated(!!data.authenticated))
+      .then((data) => { if (data.authenticated) setDefaultTenantKey(); setAuthenticated(!!data.authenticated) })
       .catch(() => setAuthenticated(false))
       .finally(() => setChecking(false))
   }, [])
@@ -37,7 +47,7 @@ export default function AdminApp() {
 
   // Nicht eingeloggt → Login-Maske
   if (!authenticated) {
-    return <AdminLogin onAuthenticated={() => setAuthenticated(true)} />
+    return <AdminLogin onAuthenticated={() => { setDefaultTenantKey(); setAuthenticated(true) }} />
   }
 
   // Eingeloggt → Admin-SPA mit eigenem Layout + Routen
