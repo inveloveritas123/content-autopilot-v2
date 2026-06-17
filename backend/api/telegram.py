@@ -54,7 +54,9 @@ def _record_bad_attempt(ip: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _send_telegram_message(chat_id: int, text_msg: str, *, tenant_id: str) -> bool:
+def _send_telegram_message(
+    chat_id: int, text_msg: str, *, tenant_id: str, reply_markup: dict | None = None
+) -> bool:
     """Fire-and-forget: send a message via the TENANT's own Telegram Bot.
 
     Verwendet ausschliesslich den per-Tenant-Token aus tenant_bot_config.
@@ -62,6 +64,9 @@ def _send_telegram_message(chat_id: int, text_msg: str, *, tenant_id: str) -> bo
     Token wird NIEMALS geloggt (E2/D3).
 
     Nach erfolgreichem Send: telegram_last_active_at aktualisieren (best-effort).
+
+    Args:
+        reply_markup: Optionales Inline-Keyboard-Dict (wird direkt an Telegram übergeben).
 
     Returns:
         True bei erfolgreichem Send, False wenn skip oder Fehler.
@@ -76,7 +81,10 @@ def _send_telegram_message(chat_id: int, text_msg: str, *, tenant_id: str) -> bo
         import httpx
 
         url = f"https://api.telegram.org/bot{token}/sendMessage"
-        httpx.post(url, json={"chat_id": chat_id, "text": text_msg}, timeout=5)
+        payload: dict = {"chat_id": chat_id, "text": text_msg}
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        httpx.post(url, json=payload, timeout=5)
         # best-effort timestamp update — fail-open
         update_last_active(tenant_id)
         return True
@@ -299,6 +307,12 @@ async def telegram_webhook(
     try:
         body: dict[str, Any] = await request.json()
     except Exception:
+        return {"ok": True}
+
+    # Inline Keyboard Callback
+    callback_query = body.get("callback_query")
+    if callback_query:
+        _handle_callback_query(callback_query)
         return {"ok": True}
 
     message: dict = body.get("message", {})
@@ -545,38 +559,273 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
         return True
 
     if cmd in ("/help", "/hilfe"):
+        help_text = (
+            "🤖 Content-Autopilot — dein KI-Ghostwriter für LinkedIn\n\n"
+            "Ich lerne dich kennen und verwandle deine Gedanken in "
+            "authentische LinkedIn-Posts in deiner eigenen Stimme.\n\n"
+            "─────────────────────────\n"
+            "📥 Was du mir schicken kannst\n"
+            "• 🎙 Sprachnachricht — transkribiert & gespeichert\n"
+            "• 💬 Text — direkt ins Gedächtnis\n"
+            "• 📸 Foto — Inhalt erkannt & gespeichert\n\n"
+            "─────────────────────────\n"
+            "💡 Proaktiver Dialog (Mo – Fr, 10 Uhr)\n"
+            "Jeden Werktagmorgen stelle ich dir eine Frage. "
+            "Deine Antwort fließt direkt in deinen Content-Pool.\n\n"
+            "─────────────────────────\n"
+            "🔍 Befehle\n"
+            "• /such <Begriff> — Semantische Suche\n"
+            "• /notiz <Text> — Schnelle Notiz speichern\n"
+            "• /help — Diese Übersicht\n\n"
+            "─────────────────────────\n"
+            "✨ Aus allem entsteht Content — kuratiert im Dashboard.\n"
+            "🔒 EU-Server, DSGVO-konform."
+        )
+        buttons = [
+            [{"text": "🚀 Onboarding starten", "callback_data": "cmd:onboarding"}],
+            [{"text": "🧠 So liest KI mich", "callback_data": "cmd:ki_profil"}],
+            [{"text": "💡 Brainstorming — Ideen wählen", "callback_data": "cmd:brainstorming"}],
+        ]
         _send_telegram_message(
             chat_id,
-            (
-                "🤖 Content-Autopilot — dein KI-Ghostwriter für LinkedIn\n\n"
-                "Ich lerne dich kennen und verwandle deine Gedanken in "
-                "authentische LinkedIn-Posts in deiner eigenen Stimme.\n\n"
-                "─────────────────────────\n"
-                "📥 Was du mir schicken kannst\n"
-                "• 🎙 Sprachnachricht — wird transkribiert & gespeichert\n"
-                "• 💬 Text — direkt ins Gedächtnis\n"
-                "• 📸 Foto — Inhalt wird erkannt & gespeichert\n\n"
-                "─────────────────────────\n"
-                "💡 Proaktiver Dialog (Mo + Do, 9 Uhr)\n"
-                "Ich stelle dir eine Frage zu deinen Werten, Erfahrungen "
-                "oder aktuellen Themen. Deine Antwort (Text oder Voice) "
-                "fließt direkt in deinen Content-Pool.\n\n"
-                "─────────────────────────\n"
-                "🔍 Befehle\n"
-                "• /such <Begriff> — Semantische Suche im Gedächtnis\n"
-                "• /notiz <Text> — Schnelle Notiz manuell speichern\n"
-                "• /help — Diese Übersicht\n\n"
-                "─────────────────────────\n"
-                "✨ Was dabei entsteht\n"
-                "Aus allem, was du teilst, entstehen LinkedIn-Posts — "
-                "kuratiert im Dashboard, nie automatisch veröffentlicht.\n\n"
-                "🔒 Alle Daten laufen über EU-Server (DSGVO-konform)."
-            ),
+            help_text,
             tenant_id=tenant_id,
+            reply_markup={"inline_keyboard": buttons},
         )
         return True
 
     return False  # kein Memory-Command — normal verarbeiten
+
+
+def _handle_callback_query(callback_query: dict) -> None:
+    """Verarbeitet Inline-Keyboard-Button-Klicks."""
+    cq_id = callback_query.get("id", "")
+    data = callback_query.get("data", "")
+    from_user = callback_query.get("from", {})
+    telegram_user_id = from_user.get("id", 0)
+    chat_id = callback_query.get("message", {}).get("chat", {}).get("id", 0)
+
+    # Tenant auflösen
+    try:
+        with sync_session_factory() as db:
+            link_row = db.execute(
+                text(
+                    "SELECT tenant_id FROM tenant_telegram_link "
+                    "WHERE telegram_user_id = :uid AND status = 'active'"
+                ),
+                {"uid": telegram_user_id},
+            ).fetchone()
+    except Exception:
+        link_row = None
+
+    tenant_id = link_row[0] if link_row else None
+
+    # Telegram answerCallbackQuery (verhindert "Ladeanimation" im Client)
+    try:
+        bot_token = None
+        if tenant_id:
+            from services.telegram_token_resolver import get_tenant_bot_token
+
+            bot_token = get_tenant_bot_token(str(tenant_id))
+        if bot_token:
+            import httpx as _httpx
+
+            _httpx.post(
+                f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery",
+                json={"callback_query_id": cq_id},
+                timeout=3,
+            )
+    except Exception:
+        pass
+
+    if not tenant_id or not chat_id:
+        return
+
+    tenant_id_str = str(tenant_id)
+
+    if data == "cmd:ki_profil":
+        _send_ki_profil(tenant_id_str, chat_id)
+    elif data == "cmd:brainstorming":
+        _send_brainstorming_menu(tenant_id_str, chat_id)
+    elif data == "cmd:onboarding":
+        _send_onboarding_start(tenant_id_str, chat_id)
+    elif data.startswith("cmd:bs_pick:"):
+        idea_id = data.split(":", 2)[2]
+        _brainstorming_pick_idea(tenant_id_str, chat_id, idea_id)
+
+
+def _send_ki_profil(tenant_id: str, chat_id: int) -> None:
+    """Sendet das aktuelle Voice-Profil des Tenants als Übersicht."""
+    try:
+        from sqlalchemy import text as _text
+
+        with sync_session_factory() as db:
+            row = db.execute(
+                _text(
+                    "SELECT payload FROM tenant_voice_profile "
+                    "WHERE tenant_id = :tid AND is_active = true LIMIT 1"
+                ),
+                {"tid": tenant_id},
+            ).fetchone()
+        profile = row[0] if row and row[0] else {}
+    except Exception:
+        profile = {}
+
+    if not profile:
+        _send_telegram_message(
+            chat_id,
+            "🧠 KI-Profil noch leer\n\nDu hast noch keine Sprachnachrichten oder Texte geteilt. "
+            "Je mehr du teilst, desto besser lernt mich die KI kennen.",
+            tenant_id=tenant_id,
+        )
+        return
+
+    lines = ["🧠 So liest dich die KI:\n"]
+    field_labels = {
+        "grundton": "Tonalität",
+        "wortschatz": "Wortschatz",
+        "satzarchitektur": "Satzarchitektur",
+        "erzaehlmuster": "Erzählmuster",
+        "emotionaler_ausdruck": "Emotionaler Ausdruck",
+        "persoenlichkeits_stance": "Persönlichkeit",
+        "ueberzeugungsstil": "Überzeugungsstil",
+        "zielgruppen_sprachfilter": "Zielgruppe",
+        # v2-Alt-Felder (Übergang)
+        "tonalitaet": "Tonalität (alt)",
+        "kernthemen": "Kernthemen",
+        "stilprinzipien": "Stilprinzipien",
+    }
+    for key, label in field_labels.items():
+        val = profile.get(key)
+        if val:
+            if isinstance(val, list):
+                val = ", ".join(str(v) for v in val[:5])
+            lines.append(f"• {label}: {str(val)[:200]}")
+
+    if len(lines) == 1:
+        lines.append("Profil-Details werden noch aufgebaut.")
+
+    _send_telegram_message(chat_id, "\n".join(lines)[:4000], tenant_id=tenant_id)
+
+
+def _send_brainstorming_menu(tenant_id: str, chat_id: int) -> None:
+    """Zeigt Top-Ideen als Inline-Keyboard zur Auswahl."""
+    try:
+        from sqlalchemy import text as _text
+
+        with sync_session_factory() as db:
+            rows = db.execute(
+                _text(
+                    "SELECT id, title, hook_suggestion FROM content_ideas "
+                    "WHERE tenant_id = :tid AND status = 'new' "
+                    "ORDER BY created_at DESC LIMIT 8"
+                ),
+                {"tid": tenant_id},
+            ).fetchall()
+    except Exception:
+        rows = []
+
+    if not rows:
+        _send_telegram_message(
+            chat_id,
+            "💡 Noch keine Ideen im Pool\n\nSchick mir eine Sprachnachricht oder einen Text — "
+            "ich generiere dann Ideen daraus.",
+            tenant_id=tenant_id,
+        )
+        return
+
+    lines = ["💡 Brainstorming — wähle eine Idee für einen Post:\n"]
+    buttons = []
+    for i, row in enumerate(rows, 1):
+        idea_id, title, hook_suggestion = str(row[0]), row[1] or "", row[2] or ""
+        preview = (hook_suggestion or title)[:80]
+        lines.append(f"{i}. {preview}")
+        buttons.append(
+            [{"text": f"✍️ Idee {i} ausarbeiten", "callback_data": f"cmd:bs_pick:{idea_id}"}]
+        )
+
+    buttons.append([{"text": "🔄 Neue Ideen generieren", "callback_data": "cmd:bs_generate"}])
+
+    _send_telegram_message(
+        chat_id,
+        "\n".join(lines)[:3500],
+        tenant_id=tenant_id,
+        reply_markup={"inline_keyboard": buttons},
+    )
+
+
+def _brainstorming_pick_idea(tenant_id: str, chat_id: int, idea_id: str) -> None:
+    """Enqueued Ideen-Post-Generierung für ausgewählte Idee."""
+    try:
+        from sqlalchemy import text as _text
+
+        with sync_session_factory() as db:
+            row = db.execute(
+                _text(
+                    "SELECT title, hook_suggestion FROM content_ideas "
+                    "WHERE id = :iid AND tenant_id = :tid"
+                ),
+                {"iid": idea_id, "tid": tenant_id},
+            ).fetchone()
+    except Exception:
+        row = None
+
+    if not row:
+        _send_telegram_message(chat_id, "Idee nicht gefunden.", tenant_id=tenant_id)
+        return
+
+    title = row[0] or row[1] or "Idee"
+    _send_telegram_message(
+        chat_id,
+        f"✍️ Starte Post-Entwurf für: „{title[:80]}“\n\nEinen Moment bitte...",
+        tenant_id=tenant_id,
+    )
+    # Enqueue P09 task — deliver_single_idea_to_chat existiert nicht; deliver_ideas_to_chat
+    # übernimmt die Ideen-Auswahl intern via Top-N-Heuristik.
+    try:
+        from tasks.p09_chat_ideas_task import deliver_ideas_to_chat
+
+        deliver_ideas_to_chat.delay(tenant_id=tenant_id, trigger_text=title[:500])
+    except Exception as e:
+        logger.warning("brainstorming_pick_idea task failed: %s", e)
+        _send_telegram_message(
+            chat_id, "Fehler beim Starten der Post-Generierung.", tenant_id=tenant_id
+        )
+
+
+def _send_onboarding_start(tenant_id: str, chat_id: int) -> None:
+    """Startet Onboarding-Fragebogen via Chat."""
+    try:
+        from services.brand_voice import get_onboarding_questions
+
+        questions = get_onboarding_questions()
+        first_q = questions[0]["question"] if questions else None
+    except Exception:
+        first_q = None
+
+    if not first_q:
+        _send_telegram_message(
+            chat_id,
+            "🚀 Onboarding\n\nDas Onboarding läuft über das Dashboard. "
+            "Gehe zu Einstellungen → Brand Voice → Fragebogen.",
+            tenant_id=tenant_id,
+        )
+        return
+
+    # Starte P08-Session im random_smart-Modus (mode='onboarding' nicht implementiert)
+    try:
+        from services.p08_service import p08_opener
+
+        result = p08_opener(tenant_id=tenant_id, mode="random_smart")
+        question_text = result.question_text
+    except Exception:
+        question_text = first_q
+
+    _send_telegram_message(
+        chat_id,
+        f"🚀 Lass uns starten — ich lerne dich kennen!\n\n{question_text}",
+        tenant_id=tenant_id,
+    )
 
 
 def _memory_search_sync(tenant_id: str, query: str, limit: int = 5) -> list[dict]:
