@@ -7,7 +7,7 @@ import os
 import re
 import secrets
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
@@ -199,7 +199,7 @@ async def force_publish_content(req: ForcePublishRequest, db=Depends(get_db)):
     piece.status = "published"
     piece.approved_by = "admin_override"
     piece.approval_method = "admin_override"
-    piece.approved_at = piece.approved_at or datetime.now(UTC)
+    piece.approved_at = piece.approved_at or datetime.utcnow()
 
     # Audit log
     await db.execute(
@@ -257,7 +257,7 @@ async def create_tenant(req: CreateTenantRequest):
                         "name": req.name,
                         "slug": current_slug,
                         "api_key": api_key,
-                        "now": datetime.now(UTC),
+                        "now": datetime.utcnow(),
                     },
                 )
                 await db.commit()
@@ -299,7 +299,7 @@ async def disable_tenant(tenant_id: str, req: TenantDisableRequest, db=Depends(g
         raise HTTPException(404, "Tenant not found")
 
     actual_id = str(t[0])
-    now = datetime.now(UTC)
+    now = datetime.utcnow()
     await db.execute(
         text("""UPDATE tenants SET enabled=false, disabled_at=:at,
                 disabled_by='admin', disabled_reason=:reason WHERE id=:id"""),
