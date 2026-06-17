@@ -27,6 +27,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { getProjects, createProject, deleteProject, updateProject } from '../api'
+import TenantSwitcher from './TenantSwitcher'
 
 // #90 finale Zuordnung (Robert-Freigabe 2026-06-13); Admin/Tooling-Screens ins Admin-Tool #98 ausgelagert
 // mvp:true  = Kern-Flow (Setup/Speicher/Input/Output), immer sichtbar
@@ -388,6 +389,7 @@ export default function Layout({ children }) {
           </div>
           {/* Project Switcher */}
           <ProjectSwitcher />
+          <TenantSwitcher />
         </div>
 
         {/* Navigation */}

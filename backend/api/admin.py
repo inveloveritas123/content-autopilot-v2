@@ -261,6 +261,37 @@ async def create_tenant(req: CreateTenantRequest):
                     },
                 )
                 await db.commit()
+
+                # Seed Requesty LLM-Provider
+                from config import get_settings
+                from api.llm_settings import _encrypt_key
+                cfg = get_settings()
+                if cfg.requesty_api_key:
+                    await db.execute(
+                        text(
+                            """INSERT INTO llm_providers
+                                (tenant_id, name, provider_type, api_key_encrypted,
+                                 base_url, model_name, task_assignment, is_default, is_active)
+                               VALUES (:tid, 'Requesty.ai', 'requesty', :key,
+                                       'https://router.eu.requesty.ai/v1',
+                                       'vertex/gemini-2.5-flash-lite@europe-central2',
+                                       'all', true, true)"""
+                        ),
+                        {"tid": tenant_id, "key": _encrypt_key(cfg.requesty_api_key)},
+                    )
+                    await db.commit()
+
+                # Seed Standard-Projekt
+                import uuid as _uuid
+                await db.execute(
+                    text(
+                        """INSERT INTO projects (id, tenant_id, name, slug, description)
+                           VALUES (:pid, :tid, 'Standard', 'standard', 'Standard-Projekt')"""
+                    ),
+                    {"pid": str(_uuid.uuid4()), "tid": tenant_id},
+                )
+                await db.commit()
+
                 return JSONResponse(
                     status_code=201,
                     content={

@@ -4,7 +4,7 @@ import json
 import logging
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -560,7 +560,7 @@ async def pause_automation(
 ):
     """Tenant pausiert seine eigene tägliche LLM-Automatik (Kill-Switch)."""
     tenant_id = str(tenant.id)
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     try:
         await db.execute(
             text(
@@ -570,18 +570,6 @@ async def pause_automation(
                    WHERE id=:id"""
             ),
             {"at": now, "id": tenant_id},
-        )
-        await db.execute(
-            text(
-                """INSERT INTO setup_pipeline_run
-                       (id, tenant_id, stage, status, error_meta, created_at)
-                   VALUES (:id, :tid, 'kill_switch', 'disabled', :meta, NOW())"""
-            ),
-            {
-                "id": str(uuid.uuid4()),
-                "tid": tenant_id,
-                "meta": json.dumps({"action": "pause", "by": "self"}),
-            },
         )
         await db.commit()
     except Exception:
@@ -612,18 +600,6 @@ async def resume_automation(
                    WHERE id=:id"""
             ),
             {"id": tenant_id},
-        )
-        await db.execute(
-            text(
-                """INSERT INTO setup_pipeline_run
-                       (id, tenant_id, stage, status, error_meta, created_at)
-                   VALUES (:id, :tid, 'kill_switch', 'enabled', :meta, NOW())"""
-            ),
-            {
-                "id": str(uuid.uuid4()),
-                "tid": tenant_id,
-                "meta": json.dumps({"action": "resume", "by": "self"}),
-            },
         )
         await db.commit()
     except Exception:
