@@ -1128,19 +1128,21 @@ def _send_onboarding_start(tenant_id: str, chat_id: int) -> None:
 
     questions = get_onboarding_questions()
 
+    answered_count = 0
+    total_required = sum(1 for q in questions if q["required"])
+
     # Laufende Session fortsetzen
     session = _onboarding_get_active_session(tenant_id)
     if session:
         answers = _onboarding_get_answers(session["messages"])
         next_q = _onboarding_next_question(questions, answers)
+        answered_count = sum(1 for q in questions if q["key"] in answers)
         if next_q:
-            prefilled = _onboarding_get_prefilled(session["messages"])
-            pre_note = ""
-            if answers.get(next_q["key"]) and next_q["key"] in prefilled:
-                pre_note = f"_(bereits vorausgefüllt: {answers[next_q['key']][:60]}…)_\n\n"
             _send_telegram_message(
                 chat_id,
-                f"🚀 Onboarding läuft noch — weiter geht's!\n\n{pre_note}{next_q['question']}",
+                f"🚀 Onboarding läuft — Frage {answered_count + 1} von {total_required}:\n\n"
+                f"{next_q['question']}\n\n"
+                f"✏️ Schreib deine Antwort einfach hier in den Chat.",
                 tenant_id=tenant_id,
             )
         else:
@@ -1175,12 +1177,15 @@ def _send_onboarding_start(tenant_id: str, chat_id: int) -> None:
 
     pre_note = ""
     if pre_filled:
-        known_keys = ", ".join(pre_filled.keys())
-        pre_note = f"_Bereits bekannt aus deinen Nachrichten: {known_keys}_\n\n"
+        known_count = len(pre_filled)
+        pre_note = f"_(Ich kenne bereits {known_count} Antwort(en) aus deinen Nachrichten.)_\n\n"
 
     _send_telegram_message(
         chat_id,
-        f"🚀 Lass uns starten — ich lerne dich kennen!\n\n{pre_note}Frage 1:\n{next_q['question']}",
+        f"🚀 Lass uns starten — {total_required} kurze Fragen zu dir & deinem Business.\n\n"
+        f"{pre_note}"
+        f"Frage 1 von {total_required}:\n{next_q['question']}\n\n"
+        f"✏️ Schreib deine Antwort einfach hier in den Chat.",
         tenant_id=tenant_id,
     )
 
@@ -1216,11 +1221,12 @@ def _onboarding_handle_answer(
     q_num = sum(1 for m in messages if m.get("role") == "answer") + 1
 
     if next_q:
+        total_required = sum(1 for q in questions if q["required"])
         messages.append({"role": "question", "key": next_q["key"], "question": next_q["question"]})
         _onboarding_save_answer(session["id"], tenant_id, messages, q_num)
         _send_telegram_message(
             chat_id,
-            f"Frage {q_num}:\n{next_q['question']}",
+            f"Frage {q_num} von {total_required}:\n{next_q['question']}",
             tenant_id=tenant_id,
         )
     else:
