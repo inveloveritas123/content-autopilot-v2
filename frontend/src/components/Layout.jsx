@@ -12,21 +12,14 @@ import {
   BarChart3,
   PieChart,
   Settings,
-  ChevronDown,
-  Plus,
-  Trash2,
-  FolderOpen,
-  Check,
   CalendarDays,
   Send,
   MessagesSquare,
   Mic2,
   Brain,
   ShieldAlert,
-  Pencil,
   Sparkles,
 } from 'lucide-react'
-import { getProjects, createProject, deleteProject, updateProject } from '../api'
 import TenantSwitcher from './TenantSwitcher'
 
 // #90 finale Zuordnung (Robert-Freigabe 2026-06-13); Admin/Tooling-Screens ins Admin-Tool #98 ausgelagert
@@ -59,224 +52,6 @@ const brandVoiceNavItems = [
 
 // adminNavItems vollständig entfernt (#90/#98): Modelle + Prompt-Studio → Admin-Tool
 
-function ProjectSwitcher() {
-  const { toast } = useToast()
-  const [projects, setProjects] = useState([])
-  const [open, setOpen] = useState(false)
-  const [activeId, setActiveId] = useState(() => localStorage.getItem('activeProjectId') || null)
-  const [activeName, setActiveName] = useState(
-    () => localStorage.getItem('activeProjectName') || 'Standard'
-  )
-  const [showNewForm, setShowNewForm] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [creating, setCreating] = useState(false)
-  const [renamingId, setRenamingId] = useState(null)
-  const [renameValue, setRenameValue] = useState('')
-  const dropdownRef = useRef(null)
-
-  useEffect(() => {
-    loadProjects()
-  }, [])
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setOpen(false)
-        setShowNewForm(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  async function loadProjects() {
-    try {
-      const data = await getProjects()
-      setProjects(data)
-      // Auto-set active to first project if nothing stored
-      if (!localStorage.getItem('activeProjectId') && data.length > 0) {
-        const first = data[0]
-        setActiveId(first.id)
-        setActiveName(first.name)
-        localStorage.setItem('activeProjectId', first.id)
-        localStorage.setItem('activeProjectName', first.name)
-      }
-    } catch (e) {
-      /* ignore */
-    }
-  }
-
-  const selectProject = (project) => {
-    setActiveId(project.id)
-    setActiveName(project.name)
-    localStorage.setItem('activeProjectId', project.id)
-    localStorage.setItem('activeProjectName', project.name)
-    setOpen(false)
-  }
-
-  const handleCreate = async () => {
-    if (!newName.trim()) return
-    setCreating(true)
-    try {
-      const p = await createProject({ name: newName.trim() })
-      setNewName('')
-      setShowNewForm(false)
-      await loadProjects()
-      selectProject(p)
-    } catch (e) {
-      toast.error('Fehler: ' + e.message)
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  const startRename = (e, p) => {
-    e.stopPropagation()
-    setRenamingId(p.id)
-    setRenameValue(p.name)
-    setShowNewForm(false)
-  }
-
-  const handleRename = async (id) => {
-    if (!renameValue.trim()) {
-      setRenamingId(null)
-      return
-    }
-    try {
-      await updateProject(id, { name: renameValue.trim() })
-      if (activeId === id) {
-        setActiveName(renameValue.trim())
-        localStorage.setItem('activeProjectName', renameValue.trim())
-      }
-      setRenamingId(null)
-      await loadProjects()
-    } catch (e) {
-      toast.error('Umbenennen fehlgeschlagen: ' + e.message)
-    }
-  }
-
-  const handleDelete = async (e, id) => {
-    e.stopPropagation()
-    if (!window.confirm('Projekt wirklich loeschen?')) return
-    try {
-      await deleteProject(id)
-      if (activeId === id) {
-        localStorage.removeItem('activeProjectId')
-        localStorage.removeItem('activeProjectName')
-        setActiveId(null)
-        setActiveName('Standard')
-      }
-      await loadProjects()
-    } catch (e) {
-      toast.error('Fehler: ' + e.message)
-    }
-  }
-
-  return (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => {
-          setOpen(!open)
-          setShowNewForm(false)
-        }}
-        className="w-full flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-lg hover:bg-gray-50 transition-colors group"
-      >
-        <div className="w-6 h-6 rounded-md bg-primary-100 flex items-center justify-center shrink-0">
-          <FolderOpen className="w-3.5 h-3.5 text-primary-700" />
-        </div>
-        <span className="flex-1 text-left text-xs font-medium text-ink truncate">{activeName}</span>
-        <ChevronDown
-          className={`w-3.5 h-3.5 text-ink-muted transition-transform ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
-
-      {open && (
-        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-surface-border rounded-xl shadow-lg z-50 py-1 overflow-hidden">
-          {projects.map((p) => (
-            <div
-              key={p.id}
-              className="flex items-center gap-2 px-3 py-2 min-h-[44px] hover:bg-gray-50 cursor-pointer group"
-              onClick={() => renamingId !== p.id && selectProject(p)}
-            >
-              {activeId === p.id ? (
-                <Check className="w-3.5 h-3.5 text-primary-600 shrink-0" />
-              ) : (
-                <div className="w-3.5 h-3.5 shrink-0" />
-              )}
-              {renamingId === p.id ? (
-                <input
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    e.stopPropagation()
-                    if (e.key === 'Enter') handleRename(p.id)
-                    if (e.key === 'Escape') setRenamingId(null)
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex-1 text-xs border border-primary-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                  autoFocus
-                />
-              ) : (
-                <span
-                  className={`flex-1 text-xs truncate ${activeId === p.id ? 'font-semibold text-primary-700' : 'text-ink'}`}
-                >
-                  {p.name}
-                </span>
-              )}
-              <button
-                onClick={(e) => startRename(e, p)}
-                className="p-0.5 rounded text-gray-300 hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <Pencil className="w-3 h-3" />
-              </button>
-              {projects.length > 1 && (
-                <button
-                  onClick={(e) => handleDelete(e, p.id)}
-                  className="p-0.5 rounded text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-          ))}
-
-          <div className="border-t border-gray-100 mt-1 pt-1">
-            {showNewForm ? (
-              <div className="px-3 py-2 flex items-center gap-2">
-                <input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleCreate()
-                    if (e.key === 'Escape') setShowNewForm(false)
-                  }}
-                  placeholder="Projektname..."
-                  className="flex-1 text-xs border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                  autoFocus
-                />
-                <button
-                  onClick={handleCreate}
-                  disabled={creating || !newName.trim()}
-                  className="text-xs px-2 py-1 bg-primary-700 text-white rounded-md hover:bg-primary-800 disabled:opacity-50"
-                >
-                  {creating ? '...' : 'OK'}
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowNewForm(true)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-ink-muted hover:text-primary-700 hover:bg-gray-50"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Neues Projekt
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 // Rendert eine einzelne Nav-Gruppe gefiltert nach Modus.
 // isMvp=true → nur Einträge mit mvp===true; isMvp=false → alle Einträge.
@@ -387,8 +162,6 @@ export default function Layout({ children }) {
           <div className="mb-2">
             <UiModeSwitch />
           </div>
-          {/* Project Switcher */}
-          <ProjectSwitcher />
           <TenantSwitcher />
         </div>
 

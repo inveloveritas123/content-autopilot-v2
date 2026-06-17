@@ -21,6 +21,9 @@ export default function TenantSwitcher() {
     if (!tenant) return
     setSelected(tenant.name)
     localStorage.setItem('apiKey', tenant.key)
+    // Tenant-spezifische Keys löschen damit neuer Tenant frisch startet
+    localStorage.removeItem('activeProjectId')
+    localStorage.removeItem('activeProjectName')
     window.location.reload()
   }
 
