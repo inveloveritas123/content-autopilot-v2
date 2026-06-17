@@ -117,9 +117,9 @@ celery_app.conf.beat_schedule = {
 # Aktivierung: TELEGRAM_POLLING_ENABLED=true in der Beat-Umgebung setzen.
 # ---------------------------------------------------------------------------
 if os.environ.get("TELEGRAM_POLLING_ENABLED", "false").lower() in ("1", "true", "yes", "on"):
-    celery_app.conf.beat_schedule["telegram-poll-active-bots-every-60s"] = {
+    celery_app.conf.beat_schedule["telegram-poll-active-bots-every-5s"] = {
         "task": "tasks.telegram_poll_task.poll_all_active_bots",
-        "schedule": 60.0,
+        "schedule": 5.0,
     }
 
 

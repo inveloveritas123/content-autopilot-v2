@@ -902,6 +902,12 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
         update:    Roher Telegram-Update-Dict (enthält "message" etc.).
         tenant_id: Bereits aufgelöste, verifizierte Tenant-ID.
     """
+    # Inline-Keyboard-Button-Klick kommt als callback_query, nicht als message
+    callback_query = update.get("callback_query")
+    if callback_query:
+        _handle_callback_query(callback_query)
+        return
+
     message: dict = update.get("message", {})
     if not message:
         return
