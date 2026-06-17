@@ -655,6 +655,8 @@ def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = N
         _send_brainstorming_menu(tenant_id_str, chat_id)
     elif data == "cmd:onboarding":
         _send_onboarding_start(tenant_id_str, chat_id)
+    elif data == "cmd:onboarding_next":
+        _onboarding_send_next_question(tenant_id_str, chat_id)
     elif data.startswith("cmd:bs_pick:"):
         idea_id = data.split(":", 2)[2]
         _brainstorming_pick_idea(tenant_id_str, chat_id, idea_id)
@@ -911,6 +913,41 @@ Wenn gar nichts ableitbar: {{}}"""
     return {}
 
 
+def _onboarding_close_stale_sessions(tenant_id: str) -> None:
+    """Schließt alle aktiven Onboarding-Sessions außer der neuesten."""
+    import asyncio
+
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.orm import sessionmaker as _sm
+
+    from config import settings as _s
+
+    async def _run():
+        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
+        SM = _sm(engine, class_=AsyncSession, expire_on_commit=False)
+        try:
+            async with SM() as db:
+                await db.execute(
+                    text("""UPDATE bot_session SET status='closed', updated_at=now()
+                            WHERE tenant_id=:tid AND mode='onboarding' AND status='active'
+                            AND id NOT IN (
+                                SELECT id FROM bot_session
+                                WHERE tenant_id=:tid AND mode='onboarding' AND status='active'
+                                ORDER BY created_at DESC LIMIT 1
+                            )"""),
+                    {"tid": tenant_id},
+                )
+                await db.commit()
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_run())
+    except Exception as exc:
+        logger.warning("_onboarding_close_stale_sessions failed: %s", exc)
+
+
 def _onboarding_get_active_session(tenant_id: str) -> dict | None:
     """Gibt aktive Onboarding-Session zurück oder None."""
     import asyncio
@@ -1122,28 +1159,80 @@ def _onboarding_save_voice_profile(tenant_id: str, answers: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _onboarding_send_next_question(tenant_id: str, chat_id: int) -> None:
+    """Sendet die nächste offene Onboarding-Frage (aufgerufen durch Button 'Nächste Frage →')."""
+    from services.brand_voice import get_onboarding_questions
+
+    questions = get_onboarding_questions()
+    session = _onboarding_get_active_session(tenant_id)
+    if not session:
+        _send_telegram_message(
+            chat_id,
+            "Kein laufendes Onboarding. Tippe /help → Onboarding starten.",
+            tenant_id=tenant_id,
+        )
+        return
+
+    answers = _onboarding_get_answers(session["messages"])
+    total_required = sum(1 for q in questions if q["required"])
+    answered_required = sum(1 for q in questions if q["required"] and q["key"] in answers)
+
+    # Nur nächste PFLICHT-Frage senden
+    next_q = next((q for q in questions if q["required"] and q["key"] not in answers), None)
+
+    if not next_q:
+        _send_telegram_message(
+            chat_id,
+            "✅ Alle Pflichtfragen sind beantwortet!",
+            tenant_id=tenant_id,
+        )
+        return
+
+    # Frage in messages speichern
+    messages = session["messages"]
+    messages.append({"role": "question", "key": next_q["key"], "question": next_q["question"]})
+    _onboarding_save_answer(session["id"], tenant_id, messages, answered_required)
+
+    _send_telegram_message(
+        chat_id,
+        f"Frage {answered_required + 1} von {total_required}:\n\n{next_q['question']}\n\n"
+        f"✏️ Schreib deine Antwort einfach hier in den Chat.",
+        tenant_id=tenant_id,
+    )
+
+
 def _send_onboarding_start(tenant_id: str, chat_id: int) -> None:
     """Startet oder setzt Onboarding-Wizard fort."""
     from services.brand_voice import get_onboarding_questions
 
     questions = get_onboarding_questions()
 
-    answered_count = 0
     total_required = sum(1 for q in questions if q["required"])
 
-    # Laufende Session fortsetzen
+    # Laufende Session fortsetzen — alle älteren aktiven Sessions vorher schließen
+    _onboarding_close_stale_sessions(tenant_id)
     session = _onboarding_get_active_session(tenant_id)
     if session:
         answers = _onboarding_get_answers(session["messages"])
         next_q = _onboarding_next_question(questions, answers)
         answered_count = sum(1 for q in questions if q["key"] in answers)
         if next_q:
+            # Zeige Status + Button statt sofort Frage (User kann Frage anfordern)
             _send_telegram_message(
                 chat_id,
-                f"🚀 Onboarding läuft — Frage {answered_count + 1} von {total_required}:\n\n"
-                f"{next_q['question']}\n\n"
-                f"✏️ Schreib deine Antwort einfach hier in den Chat.",
+                f"🚀 Onboarding läuft noch! {answered_count} von {total_required} Fragen beantwortet.\n\n"
+                f"Drücke den Button um weiterzumachen:",
                 tenant_id=tenant_id,
+                reply_markup={
+                    "inline_keyboard": [
+                        [
+                            {
+                                "text": f"Frage {answered_count + 1} von {total_required} →",
+                                "callback_data": "cmd:onboarding_next",
+                            }
+                        ]
+                    ]
+                },
             )
         else:
             _send_telegram_message(
@@ -1216,27 +1305,43 @@ def _onboarding_handle_answer(
         messages.append({"role": "answer", "key": current_key, "text": answer_text})
         answers[current_key] = answer_text
 
-    # Nächste Frage
-    next_q = _onboarding_next_question(questions, answers)
-    q_num = sum(1 for m in messages if m.get("role") == "answer") + 1
+    total_required = sum(1 for q in questions if q["required"])
+    answered_required = sum(1 for q in questions if q["required"] and q["key"] in answers)
+    # q_num = wie viele required-Fragen bereits beantwortet (für Fortschrittsanzeige)
+    q_num = min(answered_required, total_required)
 
-    if next_q:
-        total_required = sum(1 for q in questions if q["required"])
-        messages.append({"role": "question", "key": next_q["key"], "question": next_q["question"]})
+    # Nur noch required-Fragen stellen — nach Abschluss aller Pflichtfragen Profil bauen
+    next_required_q = next(
+        (q for q in questions if q["required"] and q["key"] not in answers), None
+    )
+
+    if next_required_q:
+        # Noch nicht alle Pflichtfragen beantwortet — Bestätigung + Button
         _onboarding_save_answer(session["id"], tenant_id, messages, q_num)
         _send_telegram_message(
             chat_id,
-            f"Frage {q_num} von {total_required}:\n{next_q['question']}",
+            f"✅ Gespeichert! ({answered_required} von {total_required} Pflichtfragen beantwortet)\n\n"
+            f"Bereit für die nächste Frage?",
             tenant_id=tenant_id,
+            reply_markup={
+                "inline_keyboard": [
+                    [
+                        {
+                            "text": f"Frage {answered_required + 1} von {total_required} →",
+                            "callback_data": "cmd:onboarding_next",
+                        }
+                    ]
+                ]
+            },
         )
     else:
-        # Alle required beantwortet — Profil speichern
+        # Alle Pflichtfragen beantwortet — Profil speichern
         _onboarding_save_answer(session["id"], tenant_id, messages, q_num)
         _onboarding_close_session(session["id"], tenant_id)
 
         _send_telegram_message(
             chat_id,
-            "⏳ Einen Moment — ich erstelle dein Stimmprofil…",
+            "⏳ Alle Fragen beantwortet — ich erstelle jetzt dein Stimmprofil…",
             tenant_id=tenant_id,
         )
         try:
