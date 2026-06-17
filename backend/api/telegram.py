@@ -597,28 +597,34 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
     return False  # kein Memory-Command — normal verarbeiten
 
 
-def _handle_callback_query(callback_query: dict) -> None:
-    """Verarbeitet Inline-Keyboard-Button-Klicks."""
+def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = None) -> None:
+    """Verarbeitet Inline-Keyboard-Button-Klicks.
+
+    known_tenant_id: vom Polling-Task bereits aufgelöste Tenant-ID (bevorzugt).
+    Fallback: DB-Lookup via telegram_user_id (nur für Webhook-Pfad nötig).
+    """
     cq_id = callback_query.get("id", "")
     data = callback_query.get("data", "")
     from_user = callback_query.get("from", {})
     telegram_user_id = from_user.get("id", 0)
     chat_id = callback_query.get("message", {}).get("chat", {}).get("id", 0)
 
-    # Tenant auflösen
-    try:
-        with sync_session_factory() as db:
-            link_row = db.execute(
-                text(
-                    "SELECT tenant_id FROM tenant_telegram_link "
-                    "WHERE telegram_user_id = :uid AND status = 'active'"
-                ),
-                {"uid": telegram_user_id},
-            ).fetchone()
-    except Exception:
-        link_row = None
-
-    tenant_id = link_row[0] if link_row else None
+    # Tenant auflösen — Polling liefert known_tenant_id direkt, Webhook braucht DB-Lookup
+    if known_tenant_id:
+        tenant_id = known_tenant_id
+    else:
+        try:
+            with sync_session_factory() as db:
+                link_row = db.execute(
+                    text(
+                        "SELECT tenant_id FROM tenant_telegram_link "
+                        "WHERE telegram_user_id = :uid AND status = 'active'"
+                    ),
+                    {"uid": telegram_user_id},
+                ).fetchone()
+        except Exception:
+            link_row = None
+        tenant_id = str(link_row[0]) if link_row else None
 
     # Telegram answerCallbackQuery (verhindert "Ladeanimation" im Client)
     try:
@@ -905,7 +911,7 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
     # Inline-Keyboard-Button-Klick kommt als callback_query, nicht als message
     callback_query = update.get("callback_query")
     if callback_query:
-        _handle_callback_query(callback_query)
+        _handle_callback_query(callback_query, known_tenant_id=tenant_id)
         return
 
     message: dict = update.get("message", {})
