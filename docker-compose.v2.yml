@@ -35,6 +35,9 @@ services:
       NEXTCLOUD_USER: ${NEXTCLOUD_USER:-}
       NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:-}
       DEFAULT_TENANT_KEY: ${DEFAULT_TENANT_KEY}
+      ADMIN_USER: ${ADMIN_USER:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       APP_ENV: ${APP_ENV:-production}
       BRAND_VOICE_NC_BASE_PATH: ${BRAND_VOICE_NC_BASE_PATH:-/content-autopilot/v2/Kunde/}
@@ -99,6 +102,9 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
       APP_ENV: ${APP_ENV:-production}
       DEFAULT_TENANT_KEY: ${DEFAULT_TENANT_KEY}
+      ADMIN_USER: ${ADMIN_USER:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-}
       COST_CAP_USD_PER_DAY: ${COST_CAP_USD_PER_DAY:-5.0}
       COST_CAP_USD_GLOBAL_PER_DAY: ${COST_CAP_USD_GLOBAL_PER_DAY:-10.0}
       TELEGRAM_ADMIN_CHAT_ID: ${TELEGRAM_ADMIN_CHAT_ID:-}  # Setzen für 50%-Cost-Cap-Alert via Telegram
@@ -216,6 +222,7 @@ services:
       - /tmp:mode=1777
     ports:
       - "${APP_PORT:-8601}:8080"
+      - "8611:8082"
     depends_on:
       - backend-v2
     healthcheck:
