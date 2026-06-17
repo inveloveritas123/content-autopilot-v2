@@ -29,7 +29,7 @@ async def get_pipeline_progress(
             func.count(SourceItem.id),
         )
         .where(SourceItem.tenant_id == tenant.id)
-        .where(SourceItem.is_archived is False)
+        .where(SourceItem.is_archived == False)  # noqa: E712
         .group_by(SourceItem.status)
     )
     status_counts = dict(result.all())
@@ -94,7 +94,7 @@ async def get_activity_log(
         select(SourceItem)
         .where(SourceItem.tenant_id == tenant.id)
         .where(SourceItem.status != "new")
-        .where(SourceItem.is_archived is False)
+        .where(SourceItem.is_archived == False)  # noqa: E712
     )
     if status_group and status_group in STATUS_GROUP_MAP:
         query = query.where(SourceItem.status.in_(STATUS_GROUP_MAP[status_group]))
