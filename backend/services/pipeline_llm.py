@@ -69,6 +69,8 @@ MODEL_PER_PROMPT: dict[str, str] = {
     "LAYER1": "S2",  # Strukturierte Intent/Feature-Extraktion — schnelle JSON-Klassifikation, kein Frontier nötig (Issue #15)
     "VOICE_FALLBACK": "S6",  # Voice-Fallback-Generierung aus Kontext+Avatar — analytisch, Frontier-Qualität, EU via Bedrock-Frankfurt (Issue #40)
     "P17": "S2",  # je-Transkript-Beobachter (Voice/Werte/Avatar-Drift-Extraktion) — Testmodus S2/EU; Decisions werden reviewt; via #72 anhebbar (Issue #41)
+    "ONBOARDING_VOICE": "S4",  # Onboarding-Stimmprofil — Mistral-Large; einmalig pro Setup (Issue #15-Ableger)
+    "ONBOARDING_EXTRACT": "S2",  # Antwort-Extraktion aus Dokument/Text — Mistral-Small; schnelle JSON-Klassifikation
 }
 
 # Per-Prompt max_tokens — übernommen aus den bisherigen Task-Konstanten.
@@ -86,6 +88,8 @@ PROMPT_MAX_TOKENS: dict[str, int] = {
     "LAYER1": 512,  # Kompaktes JSON (5 Felder) — gleiche Größenordnung wie P08
     "VOICE_FALLBACK": 8192,  # Fallback-Voice-Profil JSON — P03-strukturiert, gleiche Größe
     "P17": 2000,  # Drift-Proposals (voice/values/avatar) als JSON
+    "ONBOARDING_VOICE": 4096,  # Brand-Voice-Profil JSON aus Onboarding-Antworten
+    "ONBOARDING_EXTRACT": 1024,  # Extrahierte Onboarding-Keys als kompaktes JSON
 }
 
 
