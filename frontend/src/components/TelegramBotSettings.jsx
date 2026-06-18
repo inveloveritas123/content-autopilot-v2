@@ -16,13 +16,22 @@
  */
 
 import { useState } from 'react'
-import { Bot, Circle, Eye, EyeOff } from 'lucide-react'
+import { Bot, Circle, Eye, EyeOff, Users, UserX, UserCheck, UserPlus } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card'
 import { Button } from './ui/Button'
 import { Dialog } from './ui/Dialog'
 import { useToast } from './ui/Toast'
 import { useApi } from '../hooks/useApi'
-import { getTelegramBot, setTelegramBot, revokeTelegramBot } from '../api'
+import {
+  getTelegramBot,
+  setTelegramBot,
+  revokeTelegramBot,
+  getTelegramUsers,
+  blockTelegramUser,
+  unblockTelegramUser,
+  removeTelegramUser,
+  manualLinkTelegramUser,
+} from '../api'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -145,9 +154,7 @@ export default function TelegramBotSettings() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-red-600 dark:text-red-400">
-            Fehler beim Laden: {error}
-          </p>
+          <p className="text-sm text-red-600 dark:text-red-400">Fehler beim Laden: {error}</p>
           <Button size="sm" variant="secondary" className="mt-3" onClick={refetch}>
             Erneut versuchen
           </Button>
@@ -253,11 +260,7 @@ export default function TelegramBotSettings() {
                   </p>
                 )}
 
-                <Button
-                  type="submit"
-                  disabled={connecting || !tokenInput.trim()}
-                  size="sm"
-                >
+                <Button type="submit" disabled={connecting || !tokenInput.trim()} size="sm">
                   {connecting ? 'Verbinde…' : 'Bot verbinden'}
                 </Button>
               </form>
@@ -297,17 +300,15 @@ export default function TelegramBotSettings() {
               {/* Validation timestamp */}
               {data?.validated_at && (
                 <p className="text-xs text-gray-400 dark:text-gray-500">
-                  Token validiert: {relativeTime(data.validated_at) ?? new Date(data.validated_at).toLocaleString('de-DE')}
+                  Token validiert:{' '}
+                  {relativeTime(data.validated_at) ??
+                    new Date(data.validated_at).toLocaleString('de-DE')}
                 </p>
               )}
 
               {/* Revoke button */}
               <div className="pt-1 border-t border-gray-100 dark:border-gray-800">
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => setShowRevokeDialog(true)}
-                >
+                <Button variant="danger" size="sm" onClick={() => setShowRevokeDialog(true)}>
                   Token widerrufen
                 </Button>
               </div>
@@ -334,8 +335,8 @@ export default function TelegramBotSettings() {
             <p>
               Für vollständige Invalidierung den Token zusätzlich in{' '}
               <strong>@BotFather</strong> über{' '}
-              <code className="font-mono">/revoke</code> neu generieren. Nur so wird der alte
-              Token serverseitig bei Telegram ungültig.
+              <code className="font-mono">/revoke</code> neu generieren. Nur so wird der alte Token
+              serverseitig bei Telegram ungültig.
             </p>
           </div>
 
@@ -348,13 +349,315 @@ export default function TelegramBotSettings() {
             >
               Abbrechen
             </Button>
+            <Button variant="danger" size="sm" onClick={handleRevoke} disabled={revoking}>
+              {revoking ? 'Widerrufe…' : 'Ja, widerrufen'}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {configured && <TelegramUsersPanel tenantConfigured={configured} />}
+    </>
+  )
+}
+
+// ─── TelegramUsersPanel ───────────────────────────────────────────────────────
+
+function TelegramUsersPanel({ tenantConfigured }) {
+  const toast = useToast()
+  const { data, loading, error, refetch } = useApi(getTelegramUsers)
+  const [actionLoading, setActionLoading] = useState(null) // user_id being actioned
+  const [removeDialog, setRemoveDialog] = useState(null) // user to remove
+  const [showManualAdd, setShowManualAdd] = useState(false)
+  const [manualUserId, setManualUserId] = useState('')
+  const [manualChatId, setManualChatId] = useState('')
+  const [addingManual, setAddingManual] = useState(false)
+
+  // tenantConfigured prop used to conditionally render from parent
+  void tenantConfigured
+
+  const users = data?.users ?? []
+
+  const handleBlock = async (userId) => {
+    setActionLoading(userId)
+    try {
+      await blockTelegramUser(userId)
+      toast.success('Nutzer blockiert.')
+      refetch()
+    } catch (err) {
+      toast.error(err.message || 'Fehler beim Blockieren')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleUnblock = async (userId) => {
+    setActionLoading(userId)
+    try {
+      await unblockTelegramUser(userId)
+      toast.success('Nutzer freigeschaltet.')
+      refetch()
+    } catch (err) {
+      toast.error(err.message || 'Fehler beim Freischalten')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleRemove = async (userId) => {
+    setActionLoading(userId)
+    try {
+      await removeTelegramUser(userId)
+      toast.success('Nutzer entfernt.')
+      setRemoveDialog(null)
+      refetch()
+    } catch (err) {
+      toast.error(err.message || 'Fehler beim Entfernen')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleManualAdd = async (e) => {
+    e.preventDefault()
+    const uid = parseInt(manualUserId.trim(), 10)
+    if (!uid || uid <= 0) return
+    setAddingManual(true)
+    try {
+      const body = { telegram_user_id: uid }
+      if (manualChatId.trim()) body.telegram_chat_id = parseInt(manualChatId.trim(), 10)
+      await manualLinkTelegramUser(body)
+      toast.success('Nutzer manuell hinzugefügt.')
+      setManualUserId('')
+      setManualChatId('')
+      setShowManualAdd(false)
+      refetch()
+    } catch (err) {
+      toast.error(err.message || 'Fehler beim Hinzufügen')
+    } finally {
+      setAddingManual(false)
+    }
+  }
+
+  const statusBadge = (status) => {
+    const map = {
+      active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+      blocked: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+      pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    }
+    const label = { active: 'Aktiv', blocked: 'Blockiert', pending: 'Ausstehend' }
+    return (
+      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${map[status] ?? map.pending}`}>
+        {label[status] ?? status}
+      </span>
+    )
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-primary-600" aria-hidden="true" />
+              Verbundene Nutzer
+            </CardTitle>
+            <Button size="sm" variant="secondary" onClick={() => setShowManualAdd((s) => !s)}>
+              <UserPlus className="w-3.5 h-3.5 mr-1.5" />
+              Manuell hinzufügen
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Manual add form */}
+          {showManualAdd && (
+            <form
+              onSubmit={handleManualAdd}
+              className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 space-y-3"
+            >
+              <p className="text-xs text-blue-800 dark:text-blue-200 font-medium">
+                Telegram-User-ID hinzufügen (ohne /start-Flow)
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                Die User-ID findest du z.B. über{' '}
+                <code className="font-mono">@userinfobot</code> in Telegram. Chat-ID ist identisch
+                mit User-ID bei Direktnachrichten.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={manualUserId}
+                  onChange={(e) => setManualUserId(e.target.value)}
+                  placeholder="Telegram User-ID"
+                  required
+                  className="flex-1 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-mono"
+                />
+                <input
+                  type="number"
+                  value={manualChatId}
+                  onChange={(e) => setManualChatId(e.target.value)}
+                  placeholder="Chat-ID (optional)"
+                  className="w-36 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-mono"
+                />
+                <Button type="submit" size="sm" disabled={addingManual || !manualUserId.trim()}>
+                  {addingManual ? 'Füge hinzu…' : 'Hinzufügen'}
+                </Button>
+              </div>
+            </form>
+          )}
+
+          {/* Rate limit info */}
+          <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2">
+            Rate-Limit: max. 20 Nachrichten pro 10 Minuten pro Nutzer
+          </div>
+
+          {loading && (
+            <p className="text-sm text-gray-400 animate-pulse">Lade Nutzer…</p>
+          )}
+
+          {error && (
+            <p className="text-sm text-red-600 dark:text-red-400">Fehler: {error}</p>
+          )}
+
+          {!loading && !error && users.length === 0 && (
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Noch keine verbundenen Nutzer. Nutze{' '}
+              <code className="font-mono text-xs">/start</code> im Telegram-Bot oder füge eine
+              User-ID manuell hinzu.
+            </p>
+          )}
+
+          {!loading && users.length > 0 && (
+            <div className="space-y-2">
+              {users.map((user) => {
+                const displayName = user.telegram_first_name
+                  ? `${user.telegram_first_name}${user.telegram_username ? ` (@${user.telegram_username})` : ''}`
+                  : user.telegram_username
+                    ? `@${user.telegram_username}`
+                    : '—'
+                const isActioning = actionLoading === user.telegram_user_id
+                return (
+                  <div
+                    key={user.telegram_user_id}
+                    className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900"
+                  >
+                    {/* Identity */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                          {displayName}
+                        </span>
+                        {statusBadge(user.status)}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 dark:text-gray-500 flex-wrap">
+                        <span className="font-mono">ID: {user.telegram_user_id}</span>
+                        {user.linked_at && (
+                          <span>Verbunden {relativeTime(user.linked_at)}</span>
+                        )}
+                        {user.last_active && (
+                          <span>Aktiv {relativeTime(user.last_active)}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Stats */}
+                    <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 shrink-0">
+                      <div className="text-center">
+                        <div className="font-semibold text-gray-700 dark:text-gray-300">
+                          {user.total_messages}
+                        </div>
+                        <div>Gesamt</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-semibold text-gray-700 dark:text-gray-300">
+                          {user.messages_24h}
+                        </div>
+                        <div>24h</div>
+                      </div>
+                      <div
+                        className={`text-center ${user.messages_10min > 15 ? 'text-amber-600 dark:text-amber-400' : ''}`}
+                      >
+                        <div className="font-semibold">{user.messages_10min}</div>
+                        <div>10min</div>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {user.status === 'blocked' ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleUnblock(user.telegram_user_id)}
+                          disabled={isActioning}
+                          title="Nutzer freischalten"
+                        >
+                          <UserCheck className="w-3.5 h-3.5 mr-1" />
+                          {isActioning ? '…' : 'Freischalten'}
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleBlock(user.telegram_user_id)}
+                          disabled={isActioning}
+                          title="Nutzer blockieren"
+                        >
+                          <UserX className="w-3.5 h-3.5 mr-1" />
+                          {isActioning ? '…' : 'Blockieren'}
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => setRemoveDialog(user)}
+                        disabled={isActioning}
+                        title="Verbindung trennen"
+                      >
+                        Trennen
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Remove confirmation dialog */}
+      <Dialog
+        open={!!removeDialog}
+        onClose={() => actionLoading !== removeDialog?.telegram_user_id && setRemoveDialog(null)}
+        title="Verbindung trennen?"
+        className="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            Der Nutzer{' '}
+            <strong>
+              {removeDialog?.telegram_first_name ??
+                removeDialog?.telegram_username ??
+                `ID ${removeDialog?.telegram_user_id}`}
+            </strong>{' '}
+            wird getrennt und kann keine Nachrichten mehr senden.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setRemoveDialog(null)}
+              disabled={!!actionLoading}
+            >
+              Abbrechen
+            </Button>
             <Button
               variant="danger"
               size="sm"
-              onClick={handleRevoke}
-              disabled={revoking}
+              onClick={() => handleRemove(removeDialog?.telegram_user_id)}
+              disabled={!!actionLoading}
             >
-              {revoking ? 'Widerrufe…' : 'Ja, widerrufen'}
+              {actionLoading ? 'Trenne…' : 'Ja, trennen'}
             </Button>
           </div>
         </div>

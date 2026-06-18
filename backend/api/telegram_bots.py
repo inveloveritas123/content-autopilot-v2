@@ -21,20 +21,17 @@ import logging
 import re
 import uuid
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
-
-# Python 3.9 compat: datetime.UTC was added in 3.11
-UTC = timezone.utc
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant_id
-from services.crypto import decrypt_secret, encrypt_secret, mask_secret
+from services.crypto import decrypt_secret, encrypt_secret
 
 logger = logging.getLogger(__name__)
 
@@ -271,14 +268,12 @@ async def register_telegram_bot(
 
     bot_id: int = bot_info.get("id", 0)
     bot_username: str = bot_info.get("username", "")
-    logger.info(
-        "Telegram bot validated for tenant=%s bot=@%s", tid, bot_username
-    )
+    logger.info("Telegram bot validated for tenant=%s bot=@%s", tid, bot_username)
 
     # 3. Encrypt + upsert
     encrypted = encrypt_secret(raw_token, salt=_TELEGRAM_SALT)
     # Immediately overwrite the local variable so it can't be accidentally used later
-    raw_token = None  # noqa: F841  — intentional
+    raw_token = None
 
     now = datetime.now(UTC)
     try:
@@ -322,9 +317,7 @@ async def register_telegram_bot(
     try:
         row = await _fetch_bot_row(db, tid)
     except Exception as exc:
-        logger.error(
-            "register_telegram_bot re-fetch error tenant=%s: %s", tid, type(exc).__name__
-        )
+        logger.error("register_telegram_bot re-fetch error tenant=%s: %s", tid, type(exc).__name__)
         raise HTTPException(status_code=500, detail="Datenbankfehler beim Lesen des Bots")
 
     return _bot_status_response(row)
@@ -364,7 +357,7 @@ async def delete_telegram_bot(
         if decrypted:
             await _telegram_delete_webhook(decrypted)
             # Overwrite immediately
-            decrypted = None  # noqa: F841
+            decrypted = None
 
     now = datetime.now(UTC)
     try:
@@ -380,9 +373,177 @@ async def delete_telegram_bot(
         )
         await db.commit()
     except Exception as exc:
-        logger.error(
-            "delete_telegram_bot DB error tenant=%s: %s", tid, type(exc).__name__
-        )
+        logger.error("delete_telegram_bot DB error tenant=%s: %s", tid, type(exc).__name__)
         raise HTTPException(status_code=500, detail="Datenbankfehler beim Widerrufen des Bots")
 
     return {"status": "revoked"}
+
+
+# ─── Telegram User Management ──────────────────────────────────────────────
+
+
+@router.get("/tenants/me/telegram-users")
+async def list_telegram_users(
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all linked Telegram users for this tenant with usage stats."""
+    tid = str(tenant_id)
+    rows = await db.execute(
+        text("""
+            SELECT
+                l.telegram_user_id,
+                l.telegram_chat_id,
+                l.status,
+                l.linked_at,
+                l.channel,
+                (SELECT m.original_payload->'from'->>'first_name'
+                 FROM telegram_message_log m
+                 WHERE m.tenant_id = :tid AND m.direction = 'in'
+                   AND (m.original_payload->'from'->>'id')::bigint = l.telegram_user_id
+                 ORDER BY m.created_at DESC LIMIT 1) AS telegram_first_name,
+                (SELECT m.original_payload->'from'->>'username'
+                 FROM telegram_message_log m
+                 WHERE m.tenant_id = :tid AND m.direction = 'in'
+                   AND (m.original_payload->'from'->>'id')::bigint = l.telegram_user_id
+                 ORDER BY m.created_at DESC LIMIT 1) AS telegram_username,
+                (SELECT COUNT(*) FROM telegram_message_log m
+                 WHERE m.tenant_id = :tid AND m.direction = 'in'
+                   AND (m.original_payload->'from'->>'id')::bigint = l.telegram_user_id
+                ) AS total_messages,
+                (SELECT COUNT(*) FROM telegram_message_log m
+                 WHERE m.tenant_id = :tid AND m.direction = 'in'
+                   AND (m.original_payload->'from'->>'id')::bigint = l.telegram_user_id
+                   AND m.created_at > now() - interval '24 hours'
+                ) AS messages_24h,
+                (SELECT COUNT(*) FROM telegram_message_log m
+                 WHERE m.tenant_id = :tid AND m.direction = 'in'
+                   AND (m.original_payload->'from'->>'id')::bigint = l.telegram_user_id
+                   AND m.created_at > now() - interval '10 minutes'
+                ) AS messages_10min,
+                (SELECT MAX(m.created_at) FROM telegram_message_log m
+                 WHERE m.tenant_id = :tid AND m.direction = 'in'
+                   AND (m.original_payload->'from'->>'id')::bigint = l.telegram_user_id
+                ) AS last_active
+            FROM tenant_telegram_link l
+            WHERE l.tenant_id = :tid AND l.channel = 'telegram'
+            ORDER BY l.linked_at DESC
+        """),
+        {"tid": tid},
+    )
+    users = []
+    for r in rows.mappings().all():
+        users.append(
+            {
+                "telegram_user_id": r["telegram_user_id"],
+                "telegram_chat_id": r["telegram_chat_id"],
+                "status": r["status"],
+                "linked_at": r["linked_at"].isoformat() if r["linked_at"] else None,
+                "channel": r["channel"],
+                "telegram_first_name": r["telegram_first_name"],
+                "telegram_username": r["telegram_username"],
+                "total_messages": int(r["total_messages"] or 0),
+                "messages_24h": int(r["messages_24h"] or 0),
+                "messages_10min": int(r["messages_10min"] or 0),
+                "last_active": r["last_active"].isoformat() if r["last_active"] else None,
+            }
+        )
+    return {"users": users}
+
+
+@router.post("/tenants/me/telegram-users/{telegram_user_id}/block")
+async def block_telegram_user(
+    telegram_user_id: int,
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Block a Telegram user — sie erhalten keine Antworten mehr."""
+    tid = str(tenant_id)
+    result = await db.execute(
+        text(
+            "UPDATE tenant_telegram_link SET status = 'blocked' "
+            "WHERE tenant_id = :tid AND telegram_user_id = :uid AND channel = 'telegram'"
+        ),
+        {"tid": tid, "uid": telegram_user_id},
+    )
+    await db.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Nutzer nicht gefunden")
+    return {"status": "blocked"}
+
+
+@router.post("/tenants/me/telegram-users/{telegram_user_id}/unblock")
+async def unblock_telegram_user(
+    telegram_user_id: int,
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Unblock a previously blocked Telegram user."""
+    tid = str(tenant_id)
+    result = await db.execute(
+        text(
+            "UPDATE tenant_telegram_link SET status = 'active' "
+            "WHERE tenant_id = :tid AND telegram_user_id = :uid AND channel = 'telegram'"
+        ),
+        {"tid": tid, "uid": telegram_user_id},
+    )
+    await db.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Nutzer nicht gefunden")
+    return {"status": "active"}
+
+
+@router.delete("/tenants/me/telegram-users/{telegram_user_id}")
+async def remove_telegram_user(
+    telegram_user_id: int,
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove a linked Telegram user from this tenant."""
+    tid = str(tenant_id)
+    result = await db.execute(
+        text(
+            "DELETE FROM tenant_telegram_link "
+            "WHERE tenant_id = :tid AND telegram_user_id = :uid AND channel = 'telegram'"
+        ),
+        {"tid": tid, "uid": telegram_user_id},
+    )
+    await db.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Nutzer nicht gefunden")
+    return {"removed": True}
+
+
+class ManualLinkRequest(BaseModel):
+    telegram_user_id: int
+    telegram_chat_id: int | None = None
+
+    @field_validator("telegram_user_id")
+    @classmethod
+    def validate_user_id(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("telegram_user_id muss positiv sein")
+        return v
+
+
+@router.post("/tenants/me/telegram-users/manual-link", status_code=201)
+async def manual_link_telegram_user(
+    req: ManualLinkRequest,
+    tenant_id: uuid.UUID = Depends(get_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually link a Telegram user by ID — ohne /start-Flow."""
+    tid = str(tenant_id)
+    chat_id = req.telegram_chat_id or req.telegram_user_id  # DM: chat_id == user_id
+    await db.execute(
+        text(
+            "INSERT INTO tenant_telegram_link "
+            "(tenant_id, telegram_user_id, telegram_chat_id, status, linked_at, channel) "
+            "VALUES (:tid, :uid, :cid, 'active', now(), 'telegram') "
+            "ON CONFLICT (tenant_id, telegram_user_id, channel) DO UPDATE SET "
+            "  status = 'active', linked_at = now(), telegram_chat_id = EXCLUDED.telegram_chat_id"
+        ),
+        {"tid": tid, "uid": req.telegram_user_id, "cid": chat_id},
+    )
+    await db.commit()
+    return {"telegram_user_id": req.telegram_user_id, "status": "active"}

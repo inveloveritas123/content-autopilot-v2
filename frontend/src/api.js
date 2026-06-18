@@ -636,6 +636,15 @@ export const setTelegramBot = (token) =>
   request('/tenants/me/telegram-bot', { method: 'POST', body: { token } })
 export const revokeTelegramBot = () =>
   request('/tenants/me/telegram-bot', { method: 'DELETE' })
+export const getTelegramUsers = () => request('/tenants/me/telegram-users')
+export const blockTelegramUser = (userId) =>
+  request(`/tenants/me/telegram-users/${userId}/block`, { method: 'POST' })
+export const unblockTelegramUser = (userId) =>
+  request(`/tenants/me/telegram-users/${userId}/unblock`, { method: 'POST' })
+export const removeTelegramUser = (userId) =>
+  request(`/tenants/me/telegram-users/${userId}`, { method: 'DELETE' })
+export const manualLinkTelegramUser = (data) =>
+  request('/tenants/me/telegram-users/manual-link', { method: 'POST', body: data })
 
 // ── Admin-Session API (#98) ──────────────────────────────────────────────────
 // Diese Endpunkte nutzen HttpOnly-Cookie `admin_session` statt X-API-Key.

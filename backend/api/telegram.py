@@ -49,6 +49,39 @@ def _record_bad_attempt(ip: str) -> None:
     _bad_attempts[ip] = attempts
 
 
+# ── Per-User-Rate-Limiter (Sliding Window, In-Memory) ─────────────────────
+_user_msg_counts: dict[str, list[float]] = {}
+_USER_RATE_WINDOW = 600.0  # 10 Minuten
+_USER_RATE_LIMIT = 20  # max Nachrichten pro Fenster
+
+
+def _check_and_record_user_rate(tenant_id: str, telegram_user_id: int) -> bool:
+    """Returns True wenn Rate-Limit ÜBERSCHRITTEN (zu blockieren). Andernfalls False + zählt auf."""
+    key = f"{tenant_id}:{telegram_user_id}"
+    now = time.monotonic()
+    cutoff = now - _USER_RATE_WINDOW
+    counts = _user_msg_counts.get(key, [])
+    counts = [t for t in counts if t >= cutoff]
+    if len(counts) >= _USER_RATE_LIMIT:
+        _user_msg_counts[key] = counts
+        return True
+    counts.append(now)
+    _user_msg_counts[key] = counts
+    return False
+
+
+def _remaining_rate_wait(tenant_id: str, telegram_user_id: int) -> int:
+    """Gibt die Sekunden zurück bis das älteste Event aus dem Fenster fällt."""
+    key = f"{tenant_id}:{telegram_user_id}"
+    now = time.monotonic()
+    cutoff = now - _USER_RATE_WINDOW
+    counts = [t for t in _user_msg_counts.get(key, []) if t >= cutoff]
+    if not counts:
+        return 0
+    oldest = min(counts)
+    return max(0, int(_USER_RATE_WINDOW - (now - oldest)) + 1)
+
+
 # ---------------------------------------------------------------------------
 # Telegram API helper
 # ---------------------------------------------------------------------------
@@ -233,6 +266,21 @@ def _store_and_dispatch(tenant_id: str, message: dict, message_type: str) -> Non
             # Fail-open: wenn der Dedupe-Check nicht klappt, weiter mit normalem Insert.
             logger.warning("update_id dedup check failed: %s", type(e).__name__)
 
+    # ── Per-User-Rate-Limit-Check ──────────────────────────────────────────
+    telegram_user_id_rl = message.get("from", {}).get("id", 0)
+    if telegram_user_id_rl and tenant_id:
+        if _check_and_record_user_rate(str(tenant_id), telegram_user_id_rl):
+            wait_secs = _remaining_rate_wait(str(tenant_id), telegram_user_id_rl)
+            chat_id_rl = message.get("chat", {}).get("id", 0)
+            if chat_id_rl:
+                _send_telegram_message(
+                    chat_id_rl,
+                    f"⏳ Zu viele Anfragen. Bitte warte {wait_secs // 60 + 1} Minute(n) und versuche es erneut.",
+                    tenant_id=str(tenant_id),
+                )
+            logger.info("Rate limit hit for user %s on tenant %s", telegram_user_id_rl, tenant_id)
+            return
+
     log_id = None
     with sync_session_factory() as db:
         result = db.execute(
@@ -386,22 +434,34 @@ async def telegram_webhook(
             )
             return {"ok": True}
 
-    # Tenant resolution for all other messages
+    # Tenant resolution for all other messages — eine Query liefert tenant_id + status.
+    # Kein separater blocked_check: derselbe Row liefert beide Infos.
+    # ORDER BY linked_at DESC: deterministischer Pick falls ein User bei mehreren Tenants verlinkt ist.
     link_row = None
+    link_status = None
     try:
         with sync_session_factory() as db:
-            link_row = db.execute(
+            row = db.execute(
                 text(
-                    "SELECT tenant_id FROM tenant_telegram_link "
-                    "WHERE telegram_user_id = :uid AND channel = 'telegram' AND status = 'active'"
+                    "SELECT tenant_id, status FROM tenant_telegram_link "
+                    "WHERE telegram_user_id = :uid AND channel = 'telegram' "
+                    "ORDER BY linked_at DESC LIMIT 1"
                 ),
                 {"uid": telegram_user_id},
             ).fetchone()
+            if row is not None:
+                link_row = row
+                link_status = row[1]
     except Exception as e:
         logger.error(f"DB lookup error in telegram_webhook: {e}")
         return {"ok": True}
 
-    if link_row is None:
+    # Stiller Drop für blockierte User (keine Meldung an den User)
+    if link_status == "blocked":
+        return {"ok": True}
+
+    # Kein aktiver Link → Onboarding-Hinweis
+    if link_row is None or link_status != "active":
         chat_id: int = message.get("chat", {}).get("id", 0)
         # tenant_id ist unbekannt — kein Tenant-Token verfügbar.
         # Admin-Token für diese Onboarding-Rückmeldung (kein PII, kein Content).
