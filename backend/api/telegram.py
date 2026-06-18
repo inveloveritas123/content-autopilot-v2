@@ -837,6 +837,386 @@ def _onboarding_next_question(questions: list, answers: dict) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Onboarding-Wizard — Dokument-Upload + langer Text-Paste Hilfsfunktionen
+# ---------------------------------------------------------------------------
+
+
+def _telegram_download_file(tenant_id: str, file_id: str) -> bytes | None:
+    """Lädt eine Telegram-Datei über die Bot-API herunter."""
+    import httpx
+
+    from services.telegram_token_resolver import get_tenant_bot_token
+
+    token = get_tenant_bot_token(tenant_id)
+    if not token:
+        return None
+    try:
+        # getFile → file_path ermitteln
+        resp = httpx.get(
+            f"https://api.telegram.org/bot{token}/getFile",
+            params={"file_id": file_id},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        file_path = resp.json().get("result", {}).get("file_path")
+        if not file_path:
+            return None
+        # Datei herunterladen
+        data = httpx.get(
+            f"https://api.telegram.org/file/bot{token}/{file_path}",
+            timeout=30,
+        )
+        data.raise_for_status()
+        return data.content
+    except Exception as exc:
+        logger.warning("_telegram_download_file failed: %s", exc)
+        return None
+
+
+def _extract_text_from_bytes(file_bytes: bytes, mime_type: str, file_name: str) -> str | None:
+    """Extrahiert Text aus PDF, DOCX oder TXT. Max 50.000 Zeichen."""
+    name_lower = (file_name or "").lower()
+
+    # TXT
+    if "text/plain" in mime_type or name_lower.endswith(".txt"):
+        try:
+            return file_bytes.decode("utf-8", errors="replace")[:50_000]
+        except Exception:
+            return None
+
+    # PDF
+    if "pdf" in mime_type or name_lower.endswith(".pdf"):
+        try:
+            import io
+
+            from pypdf import PdfReader
+
+            reader = PdfReader(io.BytesIO(file_bytes))
+            pages = [page.extract_text() or "" for page in reader.pages]
+            return "\n".join(pages)[:50_000]
+        except Exception as exc:
+            logger.warning("PDF-Extraktion fehlgeschlagen: %s", exc)
+            return None
+
+    # DOCX
+    if "wordprocessingml" in mime_type or name_lower.endswith(".docx"):
+        try:
+            import io
+
+            from docx import Document
+
+            doc = Document(io.BytesIO(file_bytes))
+            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+            return "\n".join(paragraphs)[:50_000]
+        except Exception as exc:
+            logger.warning("DOCX-Extraktion fehlgeschlagen: %s", exc)
+            return None
+
+    return None  # Nicht unterstütztes Format
+
+
+def _extract_onboarding_answers_from_text(
+    tenant_id: str, raw_text: str, open_question_keys: list[str]
+) -> dict:
+    """LLM extrahiert Onboarding-Antworten aus einem freien Text.
+
+    Gibt nur Keys zurück die klar beantwortet werden konnten.
+    """
+    import json
+    import re
+
+    from services.brand_voice import get_onboarding_questions
+    from services.pipeline_llm import call_pipeline_llm
+
+    questions = get_onboarding_questions()
+    open_qs = {q["key"]: q["question"] for q in questions if q["key"] in open_question_keys}
+
+    if not open_qs:
+        return {}
+
+    questions_block = "\n".join(f"- {key}: {question}" for key, question in open_qs.items())
+
+    prompt = f"""Du analysierst einen Text und extrahierst Antworten auf konkrete Onboarding-Fragen.
+
+TEXT:
+{raw_text[:8000]}
+
+OFFENE FRAGEN (Key → Frage):
+{questions_block}
+
+Extrahiere aus dem Text Antworten auf diese Fragen.
+Regeln:
+- Nur Keys aufnehmen die der Text KLAR beantwortet (min. 1 informativer Satz)
+- Keine Antworten erfinden oder extrapolieren
+- Antworten in der Sprache des Textes lassen
+- Wenn nichts ableitbar: leeres Objekt zurückgeben
+
+Antworte NUR als JSON-Objekt, z.B.:
+{{"company_description": "Wir sind...", "tone_preference": "professionell und direkt"}}"""
+
+    try:
+        result = call_pipeline_llm(
+            prompt_key="ONBOARDING_EXTRACT",
+            system_prompt="Du extrahierst strukturierte Daten aus Texten. Antworte NUR als JSON.",
+            user_content=prompt,
+            tenant_id=tenant_id,
+            tier_override="S2",
+        )
+        match = re.search(r"\{.*\}", result.text, re.DOTALL)
+        if match:
+            extracted = json.loads(match.group())
+            # Nur bekannte Keys durchlassen
+            return {k: v for k, v in extracted.items() if k in open_question_keys and v}
+    except Exception as exc:
+        logger.warning("_extract_onboarding_answers_from_text failed: %s", exc)
+    return {}
+
+
+def _onboarding_handle_document(tenant_id: str, chat_id: int, document: dict) -> None:
+    """Verarbeitet ein hochgeladenes Dokument im Onboarding-Kontext."""
+    from services.brand_voice import get_onboarding_questions
+
+    file_id = document.get("file_id", "")
+    mime_type = document.get("mime_type", "")
+    file_name = document.get("file_name", "")
+
+    # Prüfen ob Format unterstützt
+    supported = (
+        "text/plain" in mime_type
+        or "pdf" in mime_type
+        or "wordprocessingml" in mime_type
+        or file_name.lower().endswith((".txt", ".pdf", ".docx"))
+    )
+    if not supported:
+        _send_telegram_message(
+            chat_id,
+            "⚠️ Format nicht unterstützt. Bitte schicke eine TXT-, PDF- oder DOCX-Datei.",
+            tenant_id=tenant_id,
+        )
+        return
+
+    _send_telegram_message(
+        chat_id,
+        "📄 Datei erhalten — ich lese und extrahiere Infos…",
+        tenant_id=tenant_id,
+    )
+
+    # Datei herunterladen + Text extrahieren
+    file_bytes = _telegram_download_file(tenant_id, file_id)
+    if not file_bytes:
+        _send_telegram_message(
+            chat_id,
+            "⚠️ Datei konnte nicht heruntergeladen werden. Versuche es erneut.",
+            tenant_id=tenant_id,
+        )
+        return
+
+    raw_text = _extract_text_from_bytes(file_bytes, mime_type, file_name)
+    if not raw_text or len(raw_text.strip()) < 50:
+        _send_telegram_message(
+            chat_id,
+            "⚠️ Kein verwertbarer Text in der Datei gefunden.",
+            tenant_id=tenant_id,
+        )
+        return
+
+    # Aktive Session ermitteln (oder ohne Session → Memory speichern)
+    questions = get_onboarding_questions()
+    session = _onboarding_get_active_session(tenant_id)
+
+    if session:
+        answers = _onboarding_get_answers(session["messages"])
+    else:
+        answers = {}
+
+    open_required_keys = [q["key"] for q in questions if q["required"] and q["key"] not in answers]
+
+    if not open_required_keys and session:
+        _send_telegram_message(
+            chat_id,
+            "✅ Alle Pflichtfragen sind bereits beantwortet!",
+            tenant_id=tenant_id,
+        )
+        return
+
+    # LLM-Extraktion
+    extracted = _extract_onboarding_answers_from_text(
+        tenant_id, raw_text, open_required_keys or [q["key"] for q in questions if q["required"]]
+    )
+
+    if not extracted:
+        _send_telegram_message(
+            chat_id,
+            "🤔 Ich konnte keine eindeutigen Antworten auf die Onboarding-Fragen aus dem Text ableiten.\n\n"
+            "Tipp: Das Dokument sollte Infos zu deinem Unternehmen, Zielgruppe und Kommunikationsstil enthalten.",
+            tenant_id=tenant_id,
+        )
+        return
+
+    found_count = len(extracted)
+
+    if session:
+        # Antworten in bestehende Session schreiben
+        messages = session["messages"]
+        for key, answer in extracted.items():
+            messages.append({"role": "answer", "key": key, "text": answer, "source": "document"})
+            answers[key] = answer
+
+        answered_required = sum(1 for q in questions if q["required"] and q["key"] in answers)
+        total_required = sum(1 for q in questions if q["required"])
+        _onboarding_save_answer(session["id"], tenant_id, messages, answered_required)
+
+        if answered_required >= total_required:
+            # Alle Pflichtfragen beantwortet → Profil bauen
+            _onboarding_close_session(session["id"], tenant_id)
+            _send_telegram_message(
+                chat_id,
+                f"✅ {found_count} Antworten aus dem Dokument extrahiert!\n\n"
+                f"⏳ Alle Pflichtfragen beantwortet — ich erstelle dein Stimmprofil…",
+                tenant_id=tenant_id,
+            )
+            try:
+                _onboarding_save_voice_profile(tenant_id, answers)
+                _send_telegram_message(
+                    chat_id,
+                    "✅ Dein Stimmprofil ist fertig!\n\n"
+                    "Tippe /help → 'So liest KI mich' um es zu lesen.",
+                    tenant_id=tenant_id,
+                )
+            except Exception as exc:
+                logger.error("Onboarding profile save after doc upload failed: %s", exc)
+        else:
+            remaining = total_required - answered_required
+            _send_telegram_message(
+                chat_id,
+                f"✅ {found_count} Antworten aus dem Dokument extrahiert! ({answered_required} von {total_required} Pflichtfragen)\n\n"
+                f"Noch {remaining} Frage(n) offen:",
+                tenant_id=tenant_id,
+                reply_markup={
+                    "inline_keyboard": [
+                        [
+                            {
+                                "text": f"Frage {answered_required + 1} von {total_required} →",
+                                "callback_data": "cmd:onboarding_next",
+                            }
+                        ]
+                    ]
+                },
+            )
+    else:
+        # Kein aktives Onboarding → neue Session starten und Antworten direkt eintragen
+        session = _onboarding_create_session(tenant_id, extracted)
+        answers = extracted.copy()
+        answered_required = sum(1 for q in questions if q["required"] and q["key"] in answers)
+        total_required = sum(1 for q in questions if q["required"])
+
+        if answered_required >= total_required:
+            _onboarding_close_session(session["id"], tenant_id)
+            _send_telegram_message(
+                chat_id,
+                f"✅ {found_count} Antworten aus dem Dokument extrahiert — alle Pflichtfragen beantwortet!\n\n"
+                f"⏳ Ich erstelle dein Stimmprofil…",
+                tenant_id=tenant_id,
+            )
+            try:
+                _onboarding_save_voice_profile(tenant_id, answers)
+                _send_telegram_message(
+                    chat_id,
+                    "✅ Dein Stimmprofil ist fertig!\n\nTippe /help → 'So liest KI mich'.",
+                    tenant_id=tenant_id,
+                )
+            except Exception as exc:
+                logger.error(
+                    "Onboarding profile save after doc upload (no session) failed: %s", exc
+                )
+        else:
+            remaining = total_required - answered_required
+            _send_telegram_message(
+                chat_id,
+                f"✅ {found_count} Antworten extrahiert ({answered_required} von {total_required} Pflichtfragen).\n\n"
+                f"Noch {remaining} Frage(n) fehlen — drücke den Button um weiterzumachen:",
+                tenant_id=tenant_id,
+                reply_markup={
+                    "inline_keyboard": [
+                        [
+                            {
+                                "text": f"Weiter mit Frage {answered_required + 1} →",
+                                "callback_data": "cmd:onboarding_next",
+                            }
+                        ]
+                    ]
+                },
+            )
+
+
+def _onboarding_handle_bulk_text(tenant_id: str, chat_id: int, text: str, session: dict) -> None:
+    """Verarbeitet langen Text-Paste als Bulk-Antwort (analog zu Dokument-Upload)."""
+    from services.brand_voice import get_onboarding_questions
+
+    questions = get_onboarding_questions()
+    answers = _onboarding_get_answers(session["messages"])
+    open_required_keys = [q["key"] for q in questions if q["required"] and q["key"] not in answers]
+
+    _send_telegram_message(
+        chat_id,
+        "📝 Langer Text erkannt — ich extrahiere Onboarding-Infos…",
+        tenant_id=tenant_id,
+    )
+
+    extracted = _extract_onboarding_answers_from_text(tenant_id, text, open_required_keys)
+
+    if not extracted:
+        # Kein Bulk-Match → als normale Antwort auf aktuelle Frage behandeln
+        _onboarding_handle_answer(tenant_id, chat_id, text, session)
+        return
+
+    # Antworten in Session eintragen (analog zu _onboarding_handle_document)
+    messages = session["messages"]
+    for key, answer in extracted.items():
+        messages.append({"role": "answer", "key": key, "text": answer, "source": "bulk_text"})
+        answers[key] = answer
+
+    answered_required = sum(1 for q in questions if q["required"] and q["key"] in answers)
+    total_required = sum(1 for q in questions if q["required"])
+    _onboarding_save_answer(session["id"], tenant_id, messages, answered_required)
+
+    if answered_required >= total_required:
+        _onboarding_close_session(session["id"], tenant_id)
+        _send_telegram_message(
+            chat_id,
+            f"✅ {len(extracted)} Antworten erkannt — alle Pflichtfragen beantwortet!\n\n⏳ Erstelle Stimmprofil…",
+            tenant_id=tenant_id,
+        )
+        try:
+            _onboarding_save_voice_profile(tenant_id, answers)
+            _send_telegram_message(
+                chat_id,
+                "✅ Dein Stimmprofil ist fertig! Tippe /help → 'So liest KI mich'.",
+                tenant_id=tenant_id,
+            )
+        except Exception as exc:
+            logger.error("Bulk-text profile save failed: %s", exc)
+    else:
+        remaining = total_required - answered_required
+        _send_telegram_message(
+            chat_id,
+            f"✅ {len(extracted)} Antworten erkannt ({answered_required} von {total_required}).\n"
+            f"Noch {remaining} Frage(n) offen:",
+            tenant_id=tenant_id,
+            reply_markup={
+                "inline_keyboard": [
+                    [
+                        {
+                            "text": f"Weiter mit Frage {answered_required + 1} →",
+                            "callback_data": "cmd:onboarding_next",
+                        }
+                    ]
+                ]
+            },
+        )
+
+
+# ---------------------------------------------------------------------------
 # Onboarding-Wizard — DB-Operationen (synchron via asyncio.run)
 # ---------------------------------------------------------------------------
 
@@ -1447,6 +1827,15 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
     if not message:
         return
 
+    text_content: str = message.get("text", "") or ""
+    chat_id_for_dispatch: int = message.get("chat", {}).get("id", 0)
+
+    # Dokument-Upload → Onboarding-Extraktion
+    document = message.get("document")
+    if document:
+        _onboarding_handle_document(tenant_id, chat_id_for_dispatch, document)
+        return
+
     # Determine message type
     if message.get("voice"):
         message_type = "voice"
@@ -1454,9 +1843,6 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
         message_type = "photo"
     else:
         message_type = "text"
-
-    text_content: str = message.get("text", "") or ""
-    chat_id_for_dispatch: int = message.get("chat", {}).get("id", 0)
 
     # Memory-Commands + Silent-Drop-Schutz für Text
     if message_type == "text":
@@ -1485,10 +1871,17 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
             )
             return
 
-        # Aktive Onboarding-Session → Antwort verarbeiten (vor Short-Text-Filter!)
+        # Aktive Onboarding-Session → kurz=Antwort, lang=Bulk-Extraktion
         onboarding_session = _onboarding_get_active_session(tenant_id)
         if onboarding_session:
-            _onboarding_handle_answer(tenant_id, chat_id_for_dispatch, stripped, onboarding_session)
+            if len(stripped) >= 300:
+                _onboarding_handle_bulk_text(
+                    tenant_id, chat_id_for_dispatch, stripped, onboarding_session
+                )
+            else:
+                _onboarding_handle_answer(
+                    tenant_id, chat_id_for_dispatch, stripped, onboarding_session
+                )
             return
 
         # Zu kurzer Text → Hinweis statt stilles Drop
