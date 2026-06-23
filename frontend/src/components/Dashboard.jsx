@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { flushSync } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from './ui/Toast'
 import {
@@ -766,12 +767,13 @@ export default function Dashboard() {
     loadAll()
     loadAutomationStatus()
     // Auto-refresh every 30 seconds to pick up pipeline changes
-    const interval = setInterval(() => loadAll(), 30000)
+    const interval = setInterval(() => loadAll(true), 30000)
     return () => clearInterval(interval)
   }, [])
 
-  async function loadAll() {
-    setLoading(true)
+  async function loadAll(silent = false) {
+    const savedScrollY = silent ? window.scrollY : 0
+    if (!silent) setLoading(true)
     try {
       const [
         dash,
@@ -796,20 +798,27 @@ export default function Dashboard() {
         getIdeasSourceBreakdown().catch(() => null),
         getBrandVoiceStatus('me').catch(() => null),
       ])
-      if (breakdown) setIdeaBreakdown(breakdown)
-      setData(dash)
-      setIdeas(Array.isArray(ideasData) ? ideasData : [])
-      setStats(fbStats)
-      setScheduled(Array.isArray(sched) ? sched : [])
-      setSourceFunnel(Array.isArray(funnel) ? funnel : [])
-      setRecentPosts(Array.isArray(posts) ? posts : posts?.items || [])
-      setTodayBrief(brief || null)
-      setProfileSettings(settingsData?.settings || null)
-      setBrandVoiceData(bvData || null)
+      // flushSync ensures React commits the DOM update synchronously before scroll restore
+      flushSync(() => {
+        if (breakdown) setIdeaBreakdown(breakdown)
+        setData(dash)
+        setIdeas(Array.isArray(ideasData) ? ideasData : [])
+        setStats(fbStats)
+        setScheduled(Array.isArray(sched) ? sched : [])
+        setSourceFunnel(Array.isArray(funnel) ? funnel : [])
+        setRecentPosts(Array.isArray(posts) ? posts : posts?.items || [])
+        setTodayBrief(brief || null)
+        setProfileSettings(settingsData?.settings || null)
+        setBrandVoiceData(bvData || null)
+      })
+      if (silent && savedScrollY > 0) {
+        window.scrollTo({ top: savedScrollY, behavior: 'instant' })
+      }
     } catch (e) {
-      setError(e.message)
+      if (!silent) setError(e.message)
+      else console.error('[silent-refresh] Dashboard', e)
     }
-    setLoading(false)
+    if (!silent) setLoading(false)
   }
 
   async function loadAutomationStatus() {

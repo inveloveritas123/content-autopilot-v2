@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, Component } from 'react'
+import { flushSync } from 'react-dom'
 import { useToast } from './ui/Toast'
 import {
   FileText,
@@ -3484,7 +3485,7 @@ export default function Posts() {
 
   useEffect(() => {
     loadPosts()
-    const interval = setInterval(() => loadPosts(), 30000)
+    const interval = setInterval(() => loadPosts(true), 30000)
     return () => clearInterval(interval)
   }, [filter])
 
@@ -3624,17 +3625,25 @@ export default function Posts() {
     setTriageExecuting(false)
   }
 
-  async function loadPosts() {
-    setLoading(true)
+  async function loadPosts(silent = false) {
+    const savedScrollY = silent ? window.scrollY : 0
+    if (!silent) setLoading(true)
     try {
       const params = {}
       if (filter) params.status = filter
       const data = await getContentList(params)
-      setPosts(Array.isArray(data) ? data : data.items || [])
+      // flushSync ensures React commits the DOM update synchronously before scroll restore
+      flushSync(() => {
+        setPosts(Array.isArray(data) ? data : data.items || [])
+      })
+      if (silent && savedScrollY > 0) {
+        window.scrollTo({ top: savedScrollY, behavior: 'instant' })
+      }
     } catch (e) {
-      setError(e.message)
+      if (!silent) setError(e.message)
+      else console.error('[silent-refresh] Posts', e)
     }
-    setLoading(false)
+    if (!silent) setLoading(false)
   }
 
   const rejectedCount = posts.filter((p) => p.status === 'rejected').length
