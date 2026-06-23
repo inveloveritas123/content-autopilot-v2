@@ -51,7 +51,7 @@ _BRANCHE_KEYWORDS: list[tuple[str, str]] = [
     ("anwalt", "recht"),
     ("kanzlei", "recht"),
     ("notar", "recht"),
-    ("jur", "recht"),          # juridisch, juristisch
+    ("jur", "recht"),  # juridisch, juristisch
     # Finanzen / Steuer / Versicherung / Berater
     ("finanz", "finanzen"),
     ("steuer", "finanzen"),
@@ -381,14 +381,14 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
         from api.telegram import _send_telegram_message
 
         if flagged:
-            _send_telegram_message(
+            sent = _send_telegram_message(
                 chat_id,
                 "Dein Post ist fertig, wartet aber noch auf eine kurze Review.",
                 tenant_id=tenant_id,
             )
             sent_kind = "review_notice"
         else:
-            _send_telegram_message(
+            sent = _send_telegram_message(
                 chat_id, final_post[:_TELEGRAM_MAX_CHARS], tenant_id=tenant_id
             )
             sent_kind = "post"
@@ -398,6 +398,24 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             "status": "ok",
             "sent": False,
             "reason": "send_failed",
+            "flagged_for_review": flagged,
+            "p12_run_id": p12_run_id,
+            "quality_gate": _gate_info,
+        }
+
+    if not sent:
+        logger.warning(
+            "session_post_task: Post/Folgefrage konnte nicht an chat …%s gesendet werden"
+            " (tenant=%s session=%s kind=%s) — _send_telegram_message returned False",
+            str(chat_id)[-4:],
+            tenant_id,
+            session_id,
+            sent_kind,
+        )
+        return {
+            "status": "ok",
+            "sent": False,
+            "reason": "send_returned_false",
             "flagged_for_review": flagged,
             "p12_run_id": p12_run_id,
             "quality_gate": _gate_info,

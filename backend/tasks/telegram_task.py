@@ -370,8 +370,15 @@ def _route_inbound_message(
                         _send_telegram_message,
                     )  # Lazy-Import wie scheduler.py:104
 
-                    _send_telegram_message(chat_id, result.message, tenant_id=tenant_id)
-                    routing_info["p08_message_sent"] = True
+                    sent = _send_telegram_message(chat_id, result.message, tenant_id=tenant_id)
+                    routing_info["p08_message_sent"] = sent
+                    if not sent:
+                        logger.warning(
+                            "telegram_task: p08-Folgefrage konnte nicht an chat …%s gesendet werden"
+                            " (tenant=%s)",
+                            str(chat_id)[-4:],
+                            tenant_id,
+                        )
                 except Exception as exc:
                     logger.warning("p08 message send failed: %s", type(exc).__name__)
                     routing_info["p08_message_sent"] = False

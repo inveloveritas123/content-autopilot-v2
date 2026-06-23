@@ -5,6 +5,7 @@ POST /api/telegram/webhook  — receives Telegram Updates (open, secret-header a
 """
 
 import hmac
+import json
 import logging
 import secrets
 import time
@@ -114,15 +115,76 @@ def _send_telegram_message(
         import httpx
 
         url = f"https://api.telegram.org/bot{token}/sendMessage"
+        # chat_id nur letzte 4 Stellen loggen/persistieren (Datenschutz, kein volles ID-Leak)
+        chat_id_suffix = str(chat_id)[-4:] if chat_id else "????"
         payload: dict = {"chat_id": chat_id, "text": text_msg}
         if reply_markup:
             payload["reply_markup"] = reply_markup
-        httpx.post(url, json=payload, timeout=5)
-        # best-effort timestamp update — fail-open
+        resp = httpx.post(url, json=payload, timeout=5)
+
+        # Telegram antwortet mit HTTP 200 + JSON {"ok": true/false}.
+        # Auch 4xx/5xx sind möglich (ungültiger Token, Bot geblockt, etc.).
+        tg_body: dict = {}
+        try:
+            tg_body = resp.json()
+        except Exception:
+            pass  # JSON-Parse-Fehler → tg_body bleibt leer
+
+        tg_ok: bool = tg_body.get("ok", False)
+        http_ok: bool = resp.status_code == 200
+
+        if not http_ok or not tg_ok:
+            tg_description = tg_body.get("description", "")
+            logger.warning(
+                "_send_telegram_message: Telegram-Send fehlgeschlagen — "
+                "tenant=%s chat=…%s http_status=%s tg_ok=%s tg_description=%r",
+                tenant_id,
+                chat_id_suffix,
+                resp.status_code,
+                tg_ok,
+                tg_description,
+            )
+            # best-effort: Fehlversuch in telegram_message_log persistieren (Tabelle aus Migration 019)
+            try:
+                with sync_session_factory() as db:
+                    db.execute(
+                        text(
+                            "INSERT INTO telegram_message_log "
+                            "(tenant_id, direction, message_type, original_payload) "
+                            "VALUES (:tid, 'out', 'text', :payload::jsonb)"
+                        ),
+                        {
+                            "tid": tenant_id,
+                            "payload": json.dumps(
+                                {
+                                    "chat_id_suffix": chat_id_suffix,
+                                    "http_status": resp.status_code,
+                                    "tg_ok": tg_ok,
+                                    "tg_description": tg_description,
+                                    "send_status": "failed",
+                                }
+                            ),
+                        },
+                    )
+                    db.commit()
+            except Exception as log_exc:
+                # Log-Persistierung ist best-effort — darf Send-Pfad NICHT blockieren
+                logger.debug(
+                    "_send_telegram_message: telegram_message_log INSERT failed: %s",
+                    type(log_exc).__name__,
+                )
+            return False
+
+        # Erfolg: Timestamp aktualisieren (best-effort)
         update_last_active(tenant_id)
         return True
     except Exception as e:
-        logger.warning("Failed to send Telegram message to %s: %s", chat_id, type(e).__name__)
+        logger.warning(
+            "_send_telegram_message: Netzwerkfehler — tenant=%s chat=…%s exc=%s",
+            tenant_id,
+            str(chat_id)[-4:] if chat_id else "????",
+            type(e).__name__,
+        )
         return False
 
 
@@ -982,7 +1044,6 @@ def _extract_onboarding_answers_from_text(
 
     Gibt nur Keys zurück die klar beantwortet werden konnten.
     """
-    import json
     import re
 
     from services.brand_voice import get_onboarding_questions
@@ -1284,7 +1345,6 @@ def _onboarding_handle_bulk_text(tenant_id: str, chat_id: int, text: str, sessio
 def _onboarding_preload_from_memory(tenant_id: str) -> dict:
     """Liest memory_chunks und versucht Onboarding-Fragen vorauszubefüllen."""
     import asyncio
-    import json
     import re
 
     from sqlalchemy import text
@@ -1391,7 +1451,6 @@ def _onboarding_close_stale_sessions(tenant_id: str) -> None:
 def _onboarding_get_active_session(tenant_id: str) -> dict | None:
     """Gibt aktive Onboarding-Session zurück oder None."""
     import asyncio
-    import json
 
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -1435,7 +1494,6 @@ def _onboarding_get_active_session(tenant_id: str) -> dict | None:
 def _onboarding_create_session(tenant_id: str, pre_filled: dict) -> dict:
     """Legt neue Onboarding-Session an, speichert pre-filled Answers."""
     import asyncio
-    import json
     import uuid as _uuid
 
     from sqlalchemy import text
@@ -1482,7 +1540,6 @@ def _onboarding_save_answer(
 ) -> None:
     """Persistiert den aktualisierten messages-Array + current_question_index."""
     import asyncio
-    import json
 
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -1550,7 +1607,6 @@ def _onboarding_close_session(session_id: str, tenant_id: str) -> None:
 def _onboarding_save_voice_profile(tenant_id: str, answers: dict) -> None:
     """Ruft build_voice_profile_from_onboarding auf und speichert in tenant_voice_profile."""
     import asyncio
-    import json
 
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine

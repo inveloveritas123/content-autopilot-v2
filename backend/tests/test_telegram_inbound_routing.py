@@ -288,7 +288,7 @@ class TestFollowupMessageSend:
 
     def test_followup_question_sent(self):
         """Aktive Session + Antwort → Folgefrage wird via _send_telegram_message gesendet."""
-        send_mock = MagicMock()
+        send_mock = MagicMock(return_value=True)
         p08_result = make_p08_result(
             next_action="vertiefen",
             message="Frage 2?",
@@ -303,7 +303,7 @@ class TestFollowupMessageSend:
 
     def test_close_message_sent(self):
         """Session-Abschluss (is_closed=True) → Abschluss-Text wird gesendet."""
-        send_mock = MagicMock()
+        send_mock = MagicMock(return_value=True)
         p08_result = make_p08_result(
             next_action="close",
             message="Danke! Ich habe genug Material gesammelt.",
