@@ -264,6 +264,36 @@ def test_purge_task_hard_delete_includes_llm_call_logs():
     ), "llm_call_logs muss in _HARD_DELETE_TABLES sein (Critical #4)"
 
 
+def test_purge_task_hard_delete_includes_telegram_message_log():
+    """DSGVO Art. 17 / R1: telegram_message_log (Voice-Transkripte + rohe Telegram-Payloads)
+    muss in _HARD_DELETE_TABLES stehen, damit die PII beim Purge-Cron
+    tatsächlich gelöscht wird — nicht nur soft-deleted bleibt.
+    Spalten deletion_request_id + deleted_at existieren seit Migration 047."""
+    import tasks.deletion_purge_task as mod
+
+    assert "telegram_message_log" in mod._HARD_DELETE_TABLES, (
+        "telegram_message_log fehlt in _HARD_DELETE_TABLES — "
+        "DSGVO Art. 17-Bruch: Voice-Transkripte + Telegram-Payloads werden nie hard-deleted (R1)"
+    )
+
+
+def test_purge_task_telegram_message_log_statement_uses_deletion_request_id():
+    """Das Hard-Delete-Statement für telegram_message_log muss per deletion_request_id
+    filtern (FK-basiert, kein BETWEEN-Window) — konsistent mit allen anderen Tabellen."""
+    import tasks.deletion_purge_task as mod
+
+    stmt = mod._HARD_DELETE_TABLES.get("telegram_message_log", "")
+    assert (
+        "deletion_request_id = :req_id" in stmt
+    ), f"telegram_message_log-Statement muss per deletion_request_id = :req_id filtern: {stmt!r}"
+    assert (
+        "BETWEEN" not in stmt
+    ), f"telegram_message_log-Statement darf kein BETWEEN-Window enthalten: {stmt!r}"
+    assert (
+        "tenant_id = :tid" in stmt
+    ), f"telegram_message_log-Statement muss tenant_id = :tid enthalten: {stmt!r}"
+
+
 def test_purge_task_uses_deletion_request_id():
     """_HARD_DELETE_TABLES Statements müssen deletion_request_id = :req_id enthalten."""
     import tasks.deletion_purge_task as mod

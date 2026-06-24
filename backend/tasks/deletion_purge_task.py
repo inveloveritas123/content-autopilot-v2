@@ -37,6 +37,12 @@ _HARD_DELETE_TABLES: dict[str, str] = {
     "llm_call_logs": (
         "DELETE FROM llm_call_logs " "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
     ),
+    # DSGVO Art. 17 / R1: telegram_message_log (Voice-Transkripte + Telegram-Payloads)
+    # muss hard-deleted werden. Spalten deletion_request_id + deleted_at seit Mig. 047.
+    "telegram_message_log": (
+        "DELETE FROM telegram_message_log "
+        "WHERE tenant_id = :tid AND deletion_request_id = :req_id"
+    ),
 }
 
 
