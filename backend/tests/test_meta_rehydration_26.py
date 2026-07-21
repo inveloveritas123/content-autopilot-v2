@@ -6,8 +6,9 @@ Deckt ab:
   (b) prompt_version: aktueller-Prompt-SHA → 'p01-v1.0', unbekannter Hash → 'p01-legacy',
       leer → legacy, bereits-semantisch → durchgereicht
   (c) is_canonical: legacy bleibt False, p0X-v1.0 wird True — kein Flip für Alt-Rows
-  (d) Migration 056: AST-Parse prüft revision='056', down_revision='055', nullable=True,
+  (d) Migration 057: AST-Parse prüft revision='057', down_revision='056', nullable=True,
       server_default='zb', add_column/drop_column auf 'tenants'
+      (rebased 2026-07-21 von 056→057: Nummernkollision mit 056_bot_session_onboarding_mode)
 
 INVARIANTE (getestet in TestPromptVersionResolution.test_invariante_alt_rows):
   Rows mit altem/unbekanntem Hash bleiben 'legacy' — kein is_canonical-Flip.
@@ -26,7 +27,6 @@ import ast
 import hashlib
 import importlib.util
 import os
-import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -190,8 +190,15 @@ class TestPromptVersionResolution(unittest.TestCase):
             pv = _resolve_prompt_version("p01", wrong_sha)
         self.assertEqual(pv, "p01-legacy", "Falscher Hash muss 'legacy' bleiben")
         # is_canonical muss False bleiben
-        payload = {"_meta": {"prompt_version": pv, "agentur_id": "zb",
-                              "kunde_id": "test", "model": "x", "generated_at": "now"}}
+        payload = {
+            "_meta": {
+                "prompt_version": pv,
+                "agentur_id": "zb",
+                "kunde_id": "test",
+                "model": "x",
+                "generated_at": "now",
+            }
+        }
         self.assertFalse(is_canonical(payload), "Alt-Row darf nicht als kanonisch gelten")
 
     def test_sha_cache_wird_genutzt(self):
@@ -285,16 +292,16 @@ class TestIsCanonical(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# (d) Migration 056 — AST-Parse
+# (d) Migration 057 — AST-Parse
+# (rebased 2026-07-21 von 056→057: Kollision mit 056_bot_session_onboarding_mode
+#  aufgelöst, Migration korrekt hinter 056 in die lineare Kette gehängt)
 # ---------------------------------------------------------------------------
 
 
-class TestMigration056(unittest.TestCase):
+class TestMigration057(unittest.TestCase):
     """Prüft die Migration-Datei ohne DB-Zugriff via AST."""
 
-    _MIGRATION_PATH = (
-        _BACKEND_DIR / "alembic" / "versions" / "056_tenant_agentur_id.py"
-    )
+    _MIGRATION_PATH = _BACKEND_DIR / "alembic" / "versions" / "057_tenant_agentur_id.py"
 
     def _parse(self) -> ast.Module:
         if not self._MIGRATION_PATH.exists():
@@ -317,12 +324,12 @@ class TestMigration056(unittest.TestCase):
     def test_revision_korrekt(self):
         tree = self._parse()
         assigns = self._get_assignments(tree)
-        self.assertEqual(assigns.get("revision"), "056")
+        self.assertEqual(assigns.get("revision"), "057")
 
     def test_down_revision_korrekt(self):
         tree = self._parse()
         assigns = self._get_assignments(tree)
-        self.assertEqual(assigns.get("down_revision"), "055")
+        self.assertEqual(assigns.get("down_revision"), "056")
 
     def test_upgrade_enthaelt_add_column(self):
         source = self._MIGRATION_PATH.read_text(encoding="utf-8")

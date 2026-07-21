@@ -1,8 +1,8 @@
 """Neue Spalte tenants.agentur_id für explizite Agentur-Zuordnung.
 
-Revision ID: 056
-Revises: 055
-Create Date: 2026-06-14
+Revision ID: 057
+Revises: 056
+Create Date: 2026-06-14 (rebased 2026-07-21: 056→057, Kollision mit 056_bot_session_onboarding_mode aufgelöst)
 
 Issue #26 — _meta-Rehydration Stufe iv.
 
@@ -14,11 +14,12 @@ der Wert nicht mehr aus dem settings-JSONB-Blob gelesen werden muss.
 - NOT-NULL-Kontrakt + historischer Hash-Backfill = Robert/DEFERIERT (separates ADR).
 """
 
-from alembic import op
 import sqlalchemy as sa
 
-revision = "056"
-down_revision = "055"
+from alembic import op
+
+revision = "057"
+down_revision = "056"
 branch_labels = None
 depends_on = None
 
