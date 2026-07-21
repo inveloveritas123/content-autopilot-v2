@@ -79,6 +79,14 @@ _OTHER_TENANT_ID = uuid.UUID("11111111-2222-3333-4444-555555555555")
 _fake_settings = MagicMock()
 _fake_settings.default_tenant_key = "test-key-32-bytes-padding-xxxxxx"
 _fake_settings.database_url = "postgresql+asyncpg://stub:stub@localhost/stub_db"
+# NOTE: sync_database_url must be a valid string too — this MagicMock leaks into
+# sys.modules["config"] for the rest of the pytest process (no teardown across
+# test files; see tests/conftest.py doc-comment on cross-file pollution). If
+# left unset, any other module that later does `create_engine(settings.sync_
+# database_url)` (e.g. models/base.py) receives an auto-vivified child MagicMock
+# instead of a string, which crashes deep in sqlalchemy's URL/plugin parsing
+# with `ValueError: not enough values to unpack (expected 3, got 0)`.
+_fake_settings.sync_database_url = "postgresql://stub:stub@localhost/stub_db"
 
 # Stub config module
 config_stub = types.SimpleNamespace(settings=_fake_settings)
