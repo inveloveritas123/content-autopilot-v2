@@ -12,7 +12,7 @@ Fortschritt der Enterprise-Grade-Ausbaustufe. Pro Welle ein Eintrag: **was gemac
 |---|---|---|
 | W0 | Fundament: fertige PRs #109 (EU-fail-closed) + #108 (agentur_id) landen | ✅ fertig |
 | W0.5 | Alle vorbestehenden Test-Failures grün (fremde Bugs mitfixen) | ✅ fertig |
-| W1 | Security-Härtung (Admin-Token, offene Tenant-Erstellung, SSRF, Secret-Trennung) | geplant |
+| W1 | Security-Härtung (Admin-Token, offene Tenant-Erstellung, SSRF, Secret-Trennung) | ✅ fertig |
 | W2 | Echte Multi-Tenant-Isolation (Postgres-RLS) | geplant |
 | W3 | Auth: Magic-Link Login + User/Rollen (RBAC) | geplant |
 | W4 | Voice-Engine (Few-Shot-Korpus) + Persona-Lernen | geplant |
@@ -22,6 +22,18 @@ Fortschritt der Enterprise-Grade-Ausbaustufe. Pro Welle ein Eintrag: **was gemac
 ---
 
 ## Einträge
+
+### W1 — Security-Härtung (2026-07-21) ✅
+
+**Was gemacht wurde** (vier Sofort-Löcher aus dem Audit):
+- **Admin-Token fail-closed:** Der bekannte Default-Token `admin_backtest_2026` ist weg — ohne konfigurierten Token ist der Admin-Bereich gesperrt (kein „jeder ist Admin" mehr).
+- **Tenant-Erstellung abgesichert:** `POST /api/tenants` war offen (jeder konnte sich einen Zugang erzeugen) — jetzt nur mit Admin-Rechten.
+- **SSRF-Schutz:** Benutzer-URLs (RSS-Quellen) können nicht mehr auf interne Server-Adressen zeigen (Cloud-Metadata, internes Netz).
+- **Verschlüsselungs-Schlüssel entkoppelt:** Der Admin-Login-Schlüssel hängt nicht mehr am selben Schlüssel wie die Datenverschlüsselung (eine Rotation bricht nicht mehr beides).
+
+**Wie testen:** `cd backend && PYTHONPATH=. .venv/bin/python -m pytest tests/test_admin_auth.py tests/test_admin_create_user.py -q` → grün. Vollständiger Lauf: 1484 passed.
+
+**Für den Betrieb (.env):** In Produktion müssen `ADMIN_TOKEN`, `ADMIN_SESSION_SECRET` und ein dediziertes `DEFAULT_TENANT_KEY` gesetzt sein — der Start warnt sonst laut. `COOKIE_SECURE=true` sobald hinter HTTPS.
 
 ### W0 — Fundament (2026-07-21) ✅
 
