@@ -115,54 +115,71 @@ if "celery" not in sys.modules:
 
 
 # ---------------------------------------------------------------------------
-# Test-Isolation: projekt-interne sys.modules-Stubs nach jedem Test zurücksetzen
+# Test-Isolation: projekt-interne sys.modules-Stubs zwischen Testdatei-Collections
+# zurücksetzen (2026-07-21).
 # ---------------------------------------------------------------------------
+#
+# Problem: ~20 Testdateien injizieren beim Modul-Import (Collection-Phase)
+# UNVOLLSTÄNDIGE Stubs interner App-Module (`sys.modules['dependencies'] = ...`,
+# `sys.modules['services.canonical_profiles'] = ...`, `sys.modules['tasks'] = ...`
+# usw.) OHNE Teardown. Weil pytest alle Testdateien in EINEM Prozess sammelt,
+# leckt so ein Stub in nachfolgend gesammelte Dateien und bricht deren echte
+# Imports → reihenfolgenabhängige ImportErrors und ~150 Folge-Failures.
+#
+# Lösung: Der Zustand ALLER internen App-Module (nach Top-Level-Root) wird beim
+# allerersten collectstart als Baseline eingefroren und danach VOR jeder weiteren
+# Testdatei-Collection wiederhergestellt. Läuft nur in der Collection-Phase
+# (zwischen Dateien) — die Laufzeit-Stubs, die eine Datei WÄHREND ihrer eigenen
+# Testausführung nutzt, bleiben unangetastet (dazwischen feuert kein collectstart).
+# Externe Heavy-Deps (google/anthropic/celery, oben gestubbt) sind KEINE internen
+# Roots und bleiben dauerhaft erhalten.
 
-# Module, deren unvollständige Testdatei-Stubs nachweislich in andere Testdateien
-# lecken und dort Collection-ImportErrors auslösen. BEWUSST eng gehalten: nur die
-# Core-App-Module, die viele andere Dateien beim Import transitiv ziehen. Andere
-# interne Stubs (z.B. services.telegram_token_resolver) werden NICHT angefasst,
-# weil Testdateien sich darauf verlassen, dass ihre eigenen Modul-Level-Stubs bis
-# in die Testausführung bestehen bleiben.
-_POLLUTION_PRONE_MODULES = (
-    "dependencies",
-    "api.telegram",
-    "models.base",
-    "models.tenant",
+# BEWUSST ENG: nur die Module, deren unvollständige Stubs eine transitive
+# Import-Kette in NACHFOLGENDEN Testdateien brechen (echter Collection-Crash,
+# der die ganze Suite mit Exit 2 tötet). NICHT breiter (z.B. alle services.*),
+# weil manche Testdateien ihren Modul-under-Test SELBST per
+# `sys.modules['services.layer1_extraction'] = <stub>` injizieren und ihn bis in
+# ihre Testausführung brauchen — ein breiter Reset würde genau diese wegräumen.
+_POLLUTION_PRONE_MODULES = frozenset(
+    {
+        "dependencies",
+        "api.telegram",
+        "models.base",
+        "models.tenant",
+    }
 )
 
-# Echter (nicht-gestubbter) Zustand dieser Module, eingefroren beim ersten
+
+def _is_internal_module(name: str) -> bool:
+    return name in _POLLUTION_PRONE_MODULES
+
+
+# Echter (nicht-gestubbter) Zustand der internen Module, eingefroren beim ersten
 # collectstart und danach vor jeder weiteren Modul-Collection wiederhergestellt.
 _MODULE_BASELINE: dict = {}
+_BASELINE_KEYS: frozenset = frozenset()
 _BASELINE_FROZEN = False
 
 
 def pytest_collectstart(collector):
-    """Vor dem Sammeln JEDER Testdatei pollution-anfällige Core-Module auf den
-    echten Zustand zurücksetzen.
-
-    Manche Testdateien setzen Modul-Level-Stubs (`sys.modules['dependencies'] =
-    <unvollständiger Stub>`) beim Import in der Collection-Phase. Ohne Reset
-    zwischen den Dateien leckt so ein Stub in die nächste Datei und bricht deren
-    `from dependencies import get_tenant` / `from models.base import
-    async_session_factory`. Nur die eng gefasste Core-Liste wird zurückgesetzt,
-    damit dateieigene Laufzeit-Stubs (z.B. services.*) erhalten bleiben.
-    """
-    global _BASELINE_FROZEN
+    """Vor dem Sammeln JEDER Testdatei alle internen App-Module auf den echten
+    Baseline-Zustand zurücksetzen (siehe Modul-Doku oben)."""
+    global _BASELINE_FROZEN, _BASELINE_KEYS
     if not _BASELINE_FROZEN:
         _MODULE_BASELINE.update(
-            {n: sys.modules[n] for n in _POLLUTION_PRONE_MODULES if n in sys.modules}
+            {n: m for n, m in sys.modules.items() if _is_internal_module(n)}
         )
+        _BASELINE_KEYS = frozenset(_MODULE_BASELINE)
         _BASELINE_FROZEN = True
         return
-    for name in _POLLUTION_PRONE_MODULES:
-        baseline = _MODULE_BASELINE.get(name)
-        if baseline is not None:
-            sys.modules[name] = baseline
-        elif name in sys.modules:
-            # War beim Einfrieren nicht echt geladen → Stub raus, damit der
-            # nächste echte Import sauber durchläuft.
-            del sys.modules[name]
+    # 1. Nach der Baseline hinzugekommene interne Module (Stubs) entfernen.
+    for name in [
+        n for n in sys.modules if _is_internal_module(n) and n not in _BASELINE_KEYS
+    ]:
+        del sys.modules[name]
+    # 2. Ersetzte/entfernte interne Module auf den Baseline-Stand zurückbringen.
+    for name, baseline in _MODULE_BASELINE.items():
+        sys.modules[name] = baseline
 
 
 # Hinweis: Es gibt bewusst KEINE per-Test-autouse-Fixture, die sys.modules
