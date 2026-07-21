@@ -17,11 +17,31 @@ Fortschritt der Enterprise-Grade-Ausbaustufe. Pro Welle ein Eintrag: **was gemac
 | W3 | Auth: Magic-Link Login + User/Rollen (RBAC) | ✅ fertig |
 | W4 | Voice-Engine (Few-Shot-Korpus) + Persona-Lernen | ✅ fertig |
 | W5 | Quality-Gate scharf + Eval-Harness + Observability + Bulkhead | ✅ fertig |
-| W6 | DSGVO-Vervollständigung + Deploy-Härtung + KI-Kennzeichnung | geplant |
+| W6 | DSGVO-Vervollständigung + Deploy-Härtung + KI-Kennzeichnung | ✅ fertig |
 
 ---
 
 ## Einträge
+
+### W6 — Recht, Betrieb & KI-Transparenz (2026-07-21) ✅
+
+**Der letzte Baustein zum Live-Gang** — DSGVO-Vollständigkeit, sicheres Deployment und die gesetzlich vorgeschriebene KI-Kennzeichnung.
+
+- **KI-Kennzeichnung (EU-AI-Act Art. 50):** Jeder Post-Entwurf ist in der Datenbank nachweisbar als KI-erzeugt markiert (`ai_generated`), und die Kunden-Freigabe wird als menschliche Prüfung dokumentiert (`human_reviewed`). Der Entwurf, den der Kunde im Chat bekommt, trägt einen dezenten, **abtrennbaren** Transparenz-Hinweis („KI-gestützt in deiner Stimme erstellt — die Hinweiszeile kannst du entfernen"). Da der Kunde selbst postet, ist er der autorisierende Veröffentlicher; der Nachweis der KI-Herkunft bleibt trotzdem lückenlos.
+- **Recht auf Löschung (DSGVO Art. 17) vervollständigt:** Die Lösch-Kaskade war unvollständig — Kunden-Dateien in der Nextcloud (Transkripte, Analysen, Content) wurden bei einer Löschanfrage NICHT mit entfernt (nur ein Platzhalter). Jetzt werden die konfigurierten NC-Ordner des Mandanten real per WebDAV rekursiv gelöscht, robust gegen Ausfälle (ein NC-Fehler blockiert nie die bereits erfolgte DB-Löschung, wird aber im Audit-Trail vermerkt). Embeddings/Erinnerungen werden mitgelöscht (verifiziert: liegen auf derselben Zeile).
+- **Deploy-Härtung:** Die Deploy-Pipeline führt jetzt DB-Migrationen **vor** dem Umschalten auf die neuen Container aus (kein „neue App gegen alte DB"-Fenster mehr). Alle Dienste bekommen eine Neustart-Richtlinie (`restart: unless-stopped`) — nach Absturz oder Server-Reboot kommen sie von selbst wieder hoch.
+
+**Zusätzlich (NO SHORTCUTS — fremde Bugs mitgefixt):**
+- **Test-Suite läuft endlich KOMPLETT durch:** Der Collection-Crash in `test_telegram_webhook.py` (der die Suite schon in der Sammelphase abbrach und `tests/security` unlauffähig machte) ist behoben — es war ein unvollständiger Test-Stub, kein DB-Bedarf.
+- **Architektur-Wurzelfix `models/base.py`:** Die DB-Engines wurden bisher schon beim bloßen `import` erzeugt — das zwang jeden Importeur (auch reine Unit-Tests) zu einer gültigen DB-URL und war die Ursache dafür, dass ~20 Testdateien die Datenbank mühsam wegstubben mussten. Jetzt werden Engines **lazy beim ersten Aufruf** gebaut; der Import ist DB-frei.
+
+**Wie testen:**
+```bash
+cd backend
+PYTHONPATH=. .venv/bin/python -m alembic heads          # "063 (head)"
+PYTHONPATH=. .venv/bin/python -m pytest tests/test_ai_disclosure.py tests/test_nextcloud_delete.py tests/test_deletion_purge_nc_files.py -q   # grün
+PYTHONPATH=. .venv/bin/python -m pytest tests/ -q       # vollständiger Lauf grün
+```
 
 ### W5 — Qualitätssicherung & stabiler Betrieb (2026-07-21) ✅
 
