@@ -16,12 +16,23 @@ Fortschritt der Enterprise-Grade-Ausbaustufe. Pro Welle ein Eintrag: **was gemac
 | W2 | Echte Multi-Tenant-Isolation (Postgres-RLS) | ✅ fertig |
 | W3 | Auth: Magic-Link Login + User/Rollen (RBAC) | ✅ fertig |
 | W4 | Voice-Engine (Few-Shot-Korpus) + Persona-Lernen | ✅ fertig |
-| W5 | Quality-Gate scharf + Eval-Harness + Observability + Bulkhead | geplant |
+| W5 | Quality-Gate scharf + Eval-Harness + Observability + Bulkhead | ✅ fertig |
 | W6 | DSGVO-Vervollständigung + Deploy-Härtung + KI-Kennzeichnung | geplant |
 
 ---
 
 ## Einträge
+
+### W5 — Qualitätssicherung & stabiler Betrieb (2026-07-21) ✅
+
+**Was gemacht wurde:**
+- **Qualitäts-Prüfung scharf geschaltet:** Jeder Post wird vor dem Versand geprüft (Struktur + Stimme). Bisher lief die Prüfung nur „mit" ohne Konsequenz und nur auf einem der zwei Versandwege — jetzt auf beiden, und im scharfen Modus wandert ein schlechter Post in die Review statt raus.
+- **Qualitäts-Messlatte (Golden-Set):** Ein fester Satz von Beispiel-Posts (gute + schlechte) prüft bei jedem Testlauf, dass die Stimm-Prüfung funktioniert — und wird nie stillschweigend übersprungen (das war vorher ein blinder Fleck).
+- **Kosten- & Nutzungs-Protokoll:** Jeder KI-Aufruf wird mit Modell, Tokens, Kosten und Dauer protokolliert — Grundlage für Kostenkontrolle und Fehlersuche.
+- **Ausfallschutz:** Wenn ein KI-Anbieter zickt, schaltet ein „Sicherungsschalter" kurz ab und versucht es kontrolliert erneut, statt das ganze System zu blockieren.
+- **Fairness zwischen Kunden (Bulkhead):** Ein Kunde mit vielen gleichzeitigen Aufträgen kann nicht mehr die Verarbeitung für alle anderen ausbremsen — jeder Kunde hat ein eigenes Kontingent.
+
+**Wie testen:** `PYTHONPATH=. pytest tests/test_voice_golden.py tests/test_bulkhead.py tests/test_circuit_breaker.py -q` → grün. Vollständiger Lauf: 1566 passed.
 
 ### W4 — Voice-Engine: authentische Stimme (2026-07-21) ✅
 
