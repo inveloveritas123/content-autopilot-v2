@@ -4,7 +4,7 @@ import json
 import logging
 import secrets
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -560,7 +560,7 @@ async def pause_automation(
 ):
     """Tenant pausiert seine eigene tägliche LLM-Automatik (Kill-Switch)."""
     tenant_id = str(tenant.id)
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     try:
         await db.execute(
             text(
@@ -570,6 +570,19 @@ async def pause_automation(
                    WHERE id=:id"""
             ),
             {"at": now, "id": tenant_id},
+        )
+        # Audit-Zeile: wer hat wann den Kill-Switch betätigt (DSGVO/Mandanten-Nachvollziehbarkeit).
+        await db.execute(
+            text(
+                """INSERT INTO setup_pipeline_run
+                       (id, tenant_id, stage, status, error_meta, created_at)
+                   VALUES (:id, :tid, 'kill_switch', 'paused', :meta, NOW())"""
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "tid": tenant_id,
+                "meta": json.dumps({"action": "pause", "by": "self"}),
+            },
         )
         await db.commit()
     except Exception:
@@ -600,6 +613,19 @@ async def resume_automation(
                    WHERE id=:id"""
             ),
             {"id": tenant_id},
+        )
+        # Audit-Zeile: Kill-Switch-Reaktivierung (DSGVO/Mandanten-Nachvollziehbarkeit).
+        await db.execute(
+            text(
+                """INSERT INTO setup_pipeline_run
+                       (id, tenant_id, stage, status, error_meta, created_at)
+                   VALUES (:id, :tid, 'kill_switch', 'active', :meta, NOW())"""
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "tid": tenant_id,
+                "meta": json.dumps({"action": "resume", "by": "self"}),
+            },
         )
         await db.commit()
     except Exception:
@@ -650,15 +676,14 @@ async def set_model_mode(
     E3: Schreibt ausschließlich in den eigenen Tenant (get_tenant-Dependency).
     Sicherheits-Invariante: Default 'testmodus' → bit-identisches aktuelles Routing.
     """
-    from services.model_mode import DEFAULT_MODEL_MODE, VALID_MODEL_MODES
+    from services.model_mode import VALID_MODEL_MODES
 
     mode = (data.model_mode or "").strip().lower()
     if mode not in VALID_MODEL_MODES:
         raise HTTPException(
             status_code=422,
             detail=(
-                f"Ungültiger model_mode '{mode}'. "
-                f"Gültige Werte: {sorted(VALID_MODEL_MODES)}"
+                f"Ungültiger model_mode '{mode}'. " f"Gültige Werte: {sorted(VALID_MODEL_MODES)}"
             ),
         )
     current = tenant.settings or {}
