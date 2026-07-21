@@ -270,9 +270,10 @@ class TestEstimateTierCost:
     """Tests für die Kosten-Schätzfunktion."""
 
     def test_s6_cost_calculation(self):
-        """S6-Kosten: $0.30/1M input + $1.25/1M output (Gemini Flash nach #115)."""
+        """S6-Kosten: $3.00/1M input + $15.00/1M output (Claude Sonnet 4.6 via Bedrock EU,
+        Owner-Entscheid 2026-07-21 „Qualität > Kosten" — S6 trägt Voice/Post-Generierung)."""
         cost = estimate_tier_cost("S6", 1_000_000, 1_000_000)
-        assert abs(cost - (0.30 + 1.25)) < 0.0001
+        assert abs(cost - (3.00 + 15.00)) < 0.0001
 
     def test_s1_cost_calculation(self):
         """S1-Kosten: $0.30/1M input + $1.25/1M output (Gemini Flash)."""
@@ -289,9 +290,9 @@ class TestEstimateTierCost:
         assert cost == pytest.approx(5.0 + 20.0, rel=0.01)
 
     def test_p03_typical_tokens(self):
-        """Typischer P03-Call: 3000 input + 1500 output mit S6 (Gemini Flash nach #115)."""
+        """Typischer P03-Call: 3000 input + 1500 output mit S6 (Claude Sonnet 4.6, Bedrock EU)."""
         cost = estimate_tier_cost("S6", 3000, 1500)
-        expected = (3000 * 0.30 + 1500 * 1.25) / 1_000_000
+        expected = (3000 * 3.00 + 1500 * 15.00) / 1_000_000
         assert abs(cost - expected) < 1e-9
 
 

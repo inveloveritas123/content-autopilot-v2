@@ -45,28 +45,35 @@ def test_transcription_result_fields():
 
 
 def test_gemini_adapter_success():
-    from services.voice_transcription import TranscriptionResult, transcribe_with_gemini
+    """transcribe_with_gemini läuft über den LiteLLM/Requesty-EU-HTTP-Proxy
+    (nicht mehr das google.generativeai-SDK). Test entsprechend auf httpx-Mock
+    umgestellt (2026-07-21)."""
+    from services.voice_transcription import (
+        _EU_VOICE_MODEL,
+        TranscriptionResult,
+        transcribe_with_gemini,
+    )
 
-    mock_response = MagicMock()
-    mock_response.text = "Das ist ein Test."
+    # OpenAI-Shape-Antwort des Routers (choices[0].message.content).
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json.return_value = {"choices": [{"message": {"content": "Das ist ein Test."}}]}
 
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value = mock_response
-
-    mock_genai = MagicMock()
-    mock_genai.GenerativeModel.return_value = mock_model
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value.post.return_value = mock_resp
 
     mock_settings = MagicMock()
-    mock_settings.gemini_api_key = "fake-key"
+    mock_settings.litellm_base_url = "https://eu-router.example/v1"
+    mock_settings.litellm_api_key = "fake-key"
 
-    with patch.dict(sys.modules, {"google.generativeai": mock_genai}):
+    with patch("services.voice_transcription.httpx.Client", return_value=mock_client):
         with patch("config.settings", mock_settings):
             result = transcribe_with_gemini(_FAKE_OGG)
 
     assert isinstance(result, TranscriptionResult)
     assert result.text == "Das ist ein Test."
     assert result.confidence == 0.85
-    assert result.model_id == "gemini-2.0-flash"
+    assert result.model_id == _EU_VOICE_MODEL
 
 
 # ---------------------------------------------------------------------------

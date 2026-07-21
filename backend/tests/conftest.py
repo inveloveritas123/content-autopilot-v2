@@ -143,7 +143,6 @@ if "celery" not in sys.modules:
 _POLLUTION_PRONE_MODULES = frozenset(
     {
         "dependencies",
-        "api.telegram",
         "models.base",
         "models.tenant",
     }
