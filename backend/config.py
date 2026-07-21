@@ -86,6 +86,14 @@ class Settings(BaseSettings):
     admin_user: str | None = None
     admin_password: str | None = None
     admin_session_secret: str | None = None
+
+    # SMTP für Magic-Link-Login (W3). Kein Host → Link wird nur geloggt (dev-Fallback).
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_starttls: bool = True
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str = "noreply@zukunftsbund.de"
     # COOKIE_SECURE: Secure-Flag für Session-/CSRF-Cookies. Default False (HTTP-über-VPN);
     #   auf true setzen, sobald hinter HTTPS deployt wird.
     cookie_secure: bool = False

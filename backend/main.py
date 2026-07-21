@@ -160,6 +160,7 @@ app.add_middleware(LoggingMiddleware)
 
 # Import and include routers
 from api.activity import router as activity_router
+from api.auth import router as auth_router
 from api.campaigns import router as campaigns_router
 from api.content import router as content_router
 from api.dashboard import router as dashboard_router
@@ -170,6 +171,7 @@ from api.llm_settings import router as llm_settings_router
 from api.sources import router as sources_router
 from api.tenants import router as tenants_router
 
+app.include_router(auth_router, prefix="/api", tags=["Auth"])  # W3: Magic-Link-Login
 app.include_router(dashboard_router, prefix="/api", tags=["Dashboard"])
 app.include_router(sources_router, prefix="/api", tags=["Sources"])
 app.include_router(items_router, prefix="/api", tags=["Items"])

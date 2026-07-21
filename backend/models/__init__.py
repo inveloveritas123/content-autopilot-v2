@@ -10,9 +10,14 @@ from .quality_metric import QualityMetric
 from .source import Source
 from .source_item import SourceItem
 from .tenant import Tenant
+from .user import Agency, MagicLinkToken, User, UserTenant
 
 __all__ = [
     "Tenant",
+    "Agency",
+    "User",
+    "UserTenant",
+    "MagicLinkToken",
     "Source",
     "Project",
     "Campaign",
