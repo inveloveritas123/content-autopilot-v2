@@ -1,6 +1,7 @@
 services:
   redis-v2:
     image: redis:7-alpine
+    restart: unless-stopped
     command: redis-server --databases 4
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -12,6 +13,7 @@ services:
   backend-v2:
     image: ${IMAGE_PREFIX:-content-autopilot-v2}/backend:${IMAGE_TAG:-local}
     build: ./backend
+    restart: unless-stopped
     # privileged required on this Proxmox LXC host — LXC user-namespace nesting
     # restricts AF_UNIX socketpair without it. read_only added for FS hardening.
     privileged: true
@@ -70,6 +72,7 @@ services:
   celery-worker-v2:
     image: ${IMAGE_PREFIX:-content-autopilot-v2}/backend:${IMAGE_TAG:-local}
     build: ./backend
+    restart: unless-stopped
     privileged: true
     security_opt:
       - label=disable
@@ -133,6 +136,7 @@ services:
   celery-beat-v2:
     image: ${IMAGE_PREFIX:-content-autopilot-v2}/backend:${IMAGE_TAG:-local}
     build: ./backend
+    restart: unless-stopped
     privileged: true
     security_opt:
       - label=disable
@@ -179,6 +183,7 @@ services:
   mcp-server-v2:
     image: ${IMAGE_PREFIX:-content-autopilot-v2}/mcp-server:${IMAGE_TAG:-local}
     build: ./mcp-server
+    restart: unless-stopped
     privileged: true
     security_opt:
       - label=disable
@@ -212,6 +217,7 @@ services:
     build:
       context: .
       dockerfile: nginx/Dockerfile.v2
+    restart: unless-stopped
     privileged: true
     security_opt:
       - label=disable

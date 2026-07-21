@@ -236,7 +236,10 @@ class TestQualityGateSendWiring:
         assert result["sent_kind"] == "post"
         # _send_telegram_message mit dem eigentlichen Post-Text aufgerufen
         send_mock.assert_called_once()
-        assert send_mock.call_args[0][1] == _GOOD_POST
+        # W6: non-flagged Post trägt abtrennbaren KI-Hinweis (EU-AI-Act Art. 50).
+        _sent = send_mock.call_args[0][1]
+        assert _sent.startswith(_GOOD_POST)
+        assert "KI-gestützt in deiner Stimme erstellt" in _sent
 
         # quality_gate-Info im Return-Dict vorhanden (additiv, kein Key gebrochen)
         qg = result.get("quality_gate")
@@ -306,7 +309,10 @@ class TestQualityGateSendWiring:
         assert result["sent_kind"] == "post"
 
         send_mock.assert_called_once()
-        assert send_mock.call_args[0][1] == _GOOD_POST
+        # W6: non-flagged Post trägt abtrennbaren KI-Hinweis (EU-AI-Act Art. 50).
+        _sent = send_mock.call_args[0][1]
+        assert _sent.startswith(_GOOD_POST)
+        assert "KI-gestützt in deiner Stimme erstellt" in _sent
 
         qg = result.get("quality_gate")
         assert qg is not None
@@ -335,7 +341,10 @@ class TestQualityGateSendWiring:
         assert result["sent_kind"] == "post"
 
         send_mock.assert_called_once()
-        assert send_mock.call_args[0][1] == _GOOD_POST
+        # W6: non-flagged Post trägt abtrennbaren KI-Hinweis (EU-AI-Act Art. 50).
+        _sent = send_mock.call_args[0][1]
+        assert _sent.startswith(_GOOD_POST)
+        assert "KI-gestützt in deiner Stimme erstellt" in _sent
 
         # _gate_info hat None-Werte (Exception vor Zuweisung)
         qg = result.get("quality_gate")

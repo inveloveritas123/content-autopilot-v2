@@ -321,9 +321,11 @@ def regenerate_post_from_feedback(
             )
             sent_kind = "review_notice"
         else:
-            _send_telegram_message(
-                chat_id, final_post[:_TELEGRAM_MAX_CHARS], tenant_id=tenant_id
-            )
+            # W6: KI-Transparenz-Hinweis (EU-AI-Act Art. 50) abtrennbar unter den Post.
+            from services.ai_disclosure import append_ai_notice
+
+            _post_out = append_ai_notice(final_post[:_TELEGRAM_MAX_CHARS])
+            _send_telegram_message(chat_id, _post_out, tenant_id=tenant_id)
             sent_kind = "post"
     except Exception as exc:
         logger.warning("post_feedback_task: telegram send failed: %s", type(exc).__name__)

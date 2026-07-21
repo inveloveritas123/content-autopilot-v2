@@ -323,6 +323,7 @@ async def bulk_approve_content(
         p.approved_at = now
         p.approved_by = "web_ui"
         p.approval_method = "web_ui"
+        p.human_reviewed = True  # W6: menschliche Prüfung dokumentiert (EU-AI-Act Art. 50)
     await db.commit()
     return {"approved": len(pieces), "ids": [str(p.id) for p in pieces]}
 

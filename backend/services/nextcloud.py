@@ -203,6 +203,29 @@ class NextcloudClient:
         except Exception:
             return False
 
+    async def delete_file(self, path: str) -> bool:
+        """Delete a file or folder in Nextcloud via WebDAV DELETE.
+
+        Robust: 404 (already gone) counts as success. Network/other errors
+        are logged and return False — callers must not let this raise, since
+        DSGVO hard-delete of DB rows must not be blocked by NC reachability.
+        """
+        url = f"{self.dav_url}{path}"
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.request("DELETE", url, auth=self._auth())
+                if resp.status_code in (200, 204, 404):
+                    return True
+                logger.error(
+                    "Nextcloud delete_file '%s' returned unexpected status %s",
+                    path,
+                    resp.status_code,
+                )
+                return False
+        except Exception as e:
+            logger.error(f"Nextcloud delete_file '{path}' failed: {e}")
+            return False
+
     async def list_files_recursive(self, path: str, extension: str = ".txt") -> list[dict]:
         """List all files with given extension in folder and subfolders."""
         results = []

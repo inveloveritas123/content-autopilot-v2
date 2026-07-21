@@ -5,10 +5,22 @@ Issue #148, Welle E. Daily 04:00.
 Critical #2: Hard-Delete per deletion_request_id FK (kein BETWEEN-Window mehr).
 Critical #4: Cascade auf llm_call_logs.
 Should-Fix: Per-Iteration-Transaction (async with db.begin() pro Request).
+
+W6-Härtung (Issue #156-followup): _delete_nc_files() ist vollständig
+implementiert (vorher Stub). Löscht die tenant-spezifischen NC-Dateien
+(Transkripte/Analysen/Content) via services.nextcloud.nextcloud_client.
+
+memory_chunks-Embeddings: Die embedding-Spalte (vector(768|1536), Migration
+038/049) lebt AUF der memory_chunks-Zeile selbst — es gibt keine separate
+Embedding-Tabelle. Der Hard-Delete-Statement in _HARD_DELETE_TABLES
+("DELETE FROM memory_chunks WHERE ...") löscht damit die Zeile inkl.
+Embedding in einem Schritt. Keine zusätzliche Kaskade nötig — bereits
+vollständig abgedeckt (verifiziert 2026-07-21).
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from sqlalchemy import text
@@ -46,24 +58,121 @@ _HARD_DELETE_TABLES: dict[str, str] = {
 }
 
 
-# NC-File-Löschung: Stub — wird in Issue #156-followup vollständig implementiert.
-# Die Funktion würde via brand_voice_storage die Tenant-Files nach
-# /zukunftsbund/.../_deleted/<request_id>/ verschieben.
-# Hier NICHT im Soft-Delete, da Recovery noch möglich sein soll — nur im Hard-Purge.
-def _delete_nc_files(tenant_id: str, request_id: str) -> None:  # TODO #156-followup
-    """Stub: Brand-Voice-NC-Files nach /_deleted/<request_id>/ verschieben.
+# NC-Settings-Keys deren Pfade beim Hard-Delete auf Nextcloud bereinigt werden.
+# Quelle: api/tenants.py SettingsUpdate (nc_transcript_path, nc_analysis_path,
+# nc_content_path) — die tenant-spezifischen Ordner unter denen Transkripte,
+# Analysen und generierter Content abgelegt werden.
+_NC_PATH_SETTINGS_KEYS: tuple[str, ...] = (
+    "nc_transcript_path",
+    "nc_analysis_path",
+    "nc_content_path",
+)
 
-    Vollständige Implementierung in Issue #156-followup:
-    - get_default_nc_adapter() → adapter
-    - tenant_voice_path(slug) → src_path
-    - adapter.move(src_path, deleted_path) für alle Files
-    Bewusst kein raise — NC-Fehler darf Hard-Delete-Cron nicht blockieren.
+
+def _tenant_nc_paths(tenant_id: str) -> list[str]:
+    """Liest die tenant-spezifischen NC-Pfade aus tenants.settings.
+
+    Bewusst über eine eigene, kurze DB-Session (statt die Purge-Transaktion
+    zu teilen) — ein Fehler hier darf die Hard-Delete-Transaktion nicht
+    beeinflussen.
     """
-    logger.info(
-        "NC-File-Löschung für tenant=%s request=%s: noch nicht implementiert (#156-followup)",
-        tenant_id,
-        request_id,
-    )
+    paths: list[str] = []
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text("SELECT settings FROM tenants WHERE id = :tid"),
+                {"tid": tenant_id},
+            ).fetchone()
+        if row and row.settings:
+            settings = row.settings
+            for key in _NC_PATH_SETTINGS_KEYS:
+                path = settings.get(key)
+                if path:
+                    paths.append(path)
+    except Exception as exc:
+        logger.error(
+            "Konnte NC-Pfade für tenant=%s nicht laden (Settings-Lookup fehlgeschlagen): %s",
+            tenant_id,
+            exc,
+        )
+    return paths
+
+
+async def _delete_nc_files_async(tenant_id: str, request_id: str) -> list[str]:
+    """Löscht rekursiv alle Dateien unter den tenant-spezifischen NC-Pfaden.
+
+    Gibt eine Liste von Fehlermeldungen zurück (leer = alles ok oder nichts
+    zu tun). Wirft bewusst nichts — NC-Nichterreichbarkeit darf den
+    Hard-Delete-Cron nicht blockieren (DB-Löschung hat bereits stattgefunden).
+    """
+    from services.nextcloud import nextcloud_client
+
+    errors: list[str] = []
+    paths = _tenant_nc_paths(tenant_id)
+
+    if not paths:
+        logger.info(
+            "NC-File-Löschung für tenant=%s request=%s: keine nc_*_path-Settings, nichts zu tun",
+            tenant_id,
+            request_id,
+        )
+        return errors
+
+    for base_path in paths:
+        try:
+            files = await nextcloud_client.list_files_recursive(base_path, extension="")
+        except Exception as exc:
+            msg = f"NC list_folder fehlgeschlagen für path={base_path}: {exc}"
+            logger.error(
+                "NC-File-Löschung tenant=%s request=%s: %s", tenant_id, request_id, msg
+            )
+            errors.append(msg)
+            continue
+
+        # Auch den Basis-Ordner selbst löschen (nicht nur die enthaltenen Dateien) —
+        # WebDAV DELETE auf einen Ordner entfernt ihn samt Inhalt rekursiv, daher
+        # reicht ein einzelner Delete-Call auf base_path. list_files_recursive
+        # oben dient nur der Diagnose/dem Logging (Anzahl betroffener Dateien).
+        ok = await nextcloud_client.delete_file(base_path)
+        if not ok:
+            msg = f"NC delete_file fehlgeschlagen für path={base_path}"
+            logger.error(
+                "NC-File-Löschung tenant=%s request=%s: %s (files_found=%d)",
+                tenant_id,
+                request_id,
+                msg,
+                len(files),
+            )
+            errors.append(msg)
+        else:
+            logger.info(
+                "NC-File-Löschung tenant=%s request=%s: path=%s gelöscht (files_found=%d)",
+                tenant_id,
+                request_id,
+                base_path,
+                len(files),
+            )
+
+    return errors
+
+
+def _delete_nc_files(tenant_id: str, request_id: str) -> list[str]:
+    """Löscht die NC-Dateien (Transkripte/Analysen/Content) eines Tenants beim Hard-Delete.
+
+    Issue #156-followup: vollständige Implementierung (vorher Stub).
+    Robust: NC nicht erreichbar → loggen + weiter, DB-Löschung ist bereits
+    passiert und darf nicht rückgängig gemacht/blockiert werden. Gibt eine
+    Liste von Fehlermeldungen zurück (leer bei Erfolg), damit der Aufrufer
+    sie im deletion_requests.notes-Feld vermerken kann.
+    """
+    try:
+        return asyncio.run(_delete_nc_files_async(tenant_id, request_id))
+    except Exception as exc:
+        msg = f"NC-Löschung unerwartet fehlgeschlagen: {exc}"
+        logger.error(
+            "NC-File-Löschung für tenant=%s request=%s: %s", tenant_id, request_id, msg
+        )
+        return [msg]
 
 
 @celery_app.task(name="tasks.deletion_purge_task.purge_expired")
@@ -113,8 +222,34 @@ def purge_expired() -> dict:
                 )
                 db.commit()
 
-            # NC-Files nach Hard-Delete bereinigen (Stub, non-blocking)
-            _delete_nc_files(str(tenant_id), str(req_id))
+            # NC-Files nach Hard-Delete bereinigen (non-blocking — DB-Löschung ist
+            # bereits committed und darf durch NC-Fehler nicht beeinflusst werden).
+            nc_errors = _delete_nc_files(str(tenant_id), str(req_id))
+            if nc_errors:
+                # Fehler im Deletion-Request-Status vermerken (notes-Feld), damit
+                # er im Audit-Trail sichtbar bleibt, auch wenn die Datenlöschung
+                # selbst erfolgreich war. Eigene, kurze Transaktion — ein Fehler
+                # hier darf den bereits erfolgreichen Hard-Delete nicht zurückrollen.
+                try:
+                    with sync_session_factory() as db:
+                        db.execute(
+                            text(
+                                "UPDATE deletion_requests SET notes = "
+                                "COALESCE(notes || E'\\n', '') || :note WHERE id = :id"
+                            ),
+                            {
+                                "id": req_id,
+                                "note": f"NC-Cleanup-Fehler: {'; '.join(nc_errors)[:900]}",
+                            },
+                        )
+                        db.commit()
+                except Exception as note_exc:
+                    logger.error(
+                        "Konnte NC-Cleanup-Fehler nicht in deletion_requests.notes "
+                        "vermerken für request=%s: %s",
+                        req_id,
+                        note_exc,
+                    )
 
             out["requests_processed"] += 1
 

@@ -228,7 +228,13 @@ class TestGeneratePostFromSession:
         assert len(answers_list) == 3
         assert call[0][3] == {"tone": "warm"}  # voice_payload
         assert call[0][4] == {"persona": "founder"}  # avatar_payload
-        send_mock.assert_called_once_with(4711, "FERTIGER POST", tenant_id="tenant-1")
+        # W6: non-flagged Post wird mit abtrennbarem KI-Hinweis gesendet (EU-AI-Act Art. 50).
+        send_mock.assert_called_once()
+        _args, _kwargs = send_mock.call_args
+        assert _args[0] == 4711
+        assert _args[1].startswith("FERTIGER POST")
+        assert "KI-gestützt in deiner Stimme erstellt" in _args[1]
+        assert _kwargs == {"tenant_id": "tenant-1"}
 
     def test_flagged_post_not_sent_raw(self):
         gate_ctx = _make_ctx(None)

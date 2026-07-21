@@ -89,12 +89,24 @@ jobs:
           npm ci
           npm run build
 
-      - name: Docker-Images bauen und deployen
+      - name: Docker-Images bauen
         run: |
           set -euo pipefail
           cd /opt/content-autopilot-v2
           docker compose -f docker-compose.v2.yml build \
             backend-v2 celery-worker-v2 celery-beat-v2 nginx-v2
+
+      - name: DB-Migrationen anwenden (alembic upgrade head)
+        run: |
+          set -euo pipefail
+          cd /opt/content-autopilot-v2
+          docker compose -f docker-compose.v2.yml run --rm backend-v2 \
+            alembic upgrade head
+
+      - name: Container deployen
+        run: |
+          set -euo pipefail
+          cd /opt/content-autopilot-v2
           docker compose -f docker-compose.v2.yml up -d --force-recreate \
             backend-v2 celery-worker-v2 celery-beat-v2 nginx-v2
           docker compose -f docker-compose.v2.yml restart nginx-v2

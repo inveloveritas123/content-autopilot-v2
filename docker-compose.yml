@@ -1,6 +1,7 @@
 services:
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -8,6 +9,7 @@ services:
 
   backend:
     build: ./backend
+    restart: unless-stopped
     privileged: true
     security_opt:
       - label=disable
@@ -34,6 +36,7 @@ services:
 
   celery-worker:
     build: ./backend
+    restart: unless-stopped
     privileged: true
     security_opt:
       - label=disable
@@ -57,6 +60,7 @@ services:
 
   celery-beat:
     build: ./backend
+    restart: unless-stopped
     privileged: true
     security_opt:
       - label=disable
@@ -73,6 +77,7 @@ services:
 
   mcp-server:
     build: ./mcp-server
+    restart: unless-stopped
     privileged: true
     security_opt:
       - label=disable
@@ -91,6 +96,7 @@ services:
     build:
       context: .
       dockerfile: nginx/Dockerfile
+    restart: unless-stopped
     privileged: true
     security_opt:
       - label=disable

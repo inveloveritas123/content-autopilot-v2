@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,6 +36,16 @@ class ContentPiece(Base):
     category: Mapped[str | None] = mapped_column(
         String(20), nullable=True
     )  # news/persoenlich/trust/praxis
+    # EU-AI-Act Art. 50 (W6): jeder generierte Post ist KI-generiert (default True).
+    # human_reviewed wird bei Freigabe gesetzt — dann ist der Mensch autorisierender
+    # Veröffentlicher (Art. 50 erlaubt manuelle Freigabe ohne Zwangs-Label, aber der
+    # Nachweis „KI-generiert + menschlich geprüft" bleibt in der DB dokumentiert).
+    ai_generated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true"), default=True
+    )
+    human_reviewed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"), default=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     source_item = relationship("SourceItem", back_populates="content_pieces")
