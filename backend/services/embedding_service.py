@@ -416,3 +416,144 @@ async def search_similar(
             }
         )
     return out
+
+
+async def _lexical_search(
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    query_text: str,
+    limit: int,
+    classification: str | None = None,
+    source_types: Sequence[str] | None = None,
+) -> list[dict]:
+    """Lexikalischer Zweig (tsvector/ts_rank_cd) für Hybrid-Retrieval.
+
+    Portiert aus LunaDeva knowledge_service._lexical_candidates. Fängt fehlende
+    ``content_tsv``-Spalte (alte DB ohne Migration 060) defensiv ab und gibt
+    dann leer zurück — der Aufrufer (search_reranked) fällt in diesem Fall auf
+    reines Vektor-Retrieval zurück ("Hybrid schlägt Purismus", aber niemals
+    blockierend).
+    """
+    where_extra = ["content_tsv @@ websearch_to_tsquery('german', :q)", "tenant_id = CAST(:tid AS uuid)"]
+    params: dict = {"tid": tenant_id, "q": query_text, "limit": limit}
+    if classification and classification in ALLOWED_CLASSIFICATIONS:
+        where_extra.append("classification = :class")
+        params["class"] = classification
+    if source_types:
+        params["src_list"] = list(source_types)
+        where_extra.append("source_type = ANY(:src_list)")
+
+    where_sql = " AND ".join(where_extra)
+    sql = text(
+        f"SELECT id, source_type, source_ref, content_text, classification, metadata, "
+        f"       created_at, "
+        f"       ts_rank_cd(content_tsv, websearch_to_tsquery('german', :q)) AS lex_rank "
+        f"FROM memory_chunks "
+        f"WHERE {where_sql} "
+        f"ORDER BY lex_rank DESC "
+        f"LIMIT :limit"
+    )
+    try:
+        rows = (await db.execute(sql, params)).fetchall()
+    except Exception as exc:
+        logger.warning(
+            "search_reranked: lexikalischer Zweig übersprungen (content_tsv evtl. fehlend): %s",
+            exc,
+        )
+        return []
+    out = []
+    for r in rows:
+        out.append(
+            {
+                "id": str(r.id),
+                "source_type": r.source_type,
+                "source_ref": r.source_ref,
+                "content_text": r.content_text,
+                "classification": r.classification,
+                "metadata": dict(r.metadata or {}),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "similarity": 0.0,
+            }
+        )
+    return out
+
+
+async def search_reranked(
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    query_text: str,
+    limit: int = 10,
+    min_similarity: float = 0.0,
+    classification: str | None = None,
+    source_types: Sequence[str] | None = None,
+    over_fetch: int = 20,
+    use_hybrid: bool = True,
+    use_rerank: bool = True,
+) -> list[dict]:
+    """Hybrid-Search (Vektor + Lexical, RRF-fusioniert) + optionales LLM-Reranking.
+
+    Additiv zu ``search_similar`` — bricht dessen Signatur/Verhalten NICHT,
+    ruft es intern für den Vektor-Zweig auf. Für high-stakes RAG-Pfade
+    (Persona-Treue), wo reines Top-K-Cosine nicht reicht (Doktrin:
+    "Reranking bei hohen Stakes", "Hybrid schlägt Purismus").
+
+    Ablauf:
+    1. Vektor-Zweig: search_similar() (bestehende Cosine-Suche, unverändert).
+    2. Lexical-Zweig: content_tsv/ts_rank_cd (falls use_hybrid und Spalte
+       vorhanden — sonst automatischer Fallback auf reinen Vektor-Zweig).
+    3. RRF-Fusion beider Ranglisten (services.rag_rerank.rrf_fuse).
+    4. Optionales Listwise-LLM-Rerank der fusionierten Top-Kandidaten
+       (services.rag_rerank.llm_rerank) — fällt bei jedem Fehler auf die
+       RRF-Reihenfolge zurück.
+
+    Args:
+        over_fetch:  Wie viele Kandidaten pro Zweig geholt werden, bevor
+                     fusioniert/reranked wird (mehr als `limit`, damit RRF/
+                     Rerank echte Auswahl haben).
+        use_hybrid:  False ⇒ überspringt den Lexical-Zweig (reines Vektor-RRF
+                     mit nur einer Liste, äquivalent zu search_similar-Reihenfolge).
+        use_rerank:  False ⇒ überspringt den LLM-Rerank-Schritt (nur RRF-Fusion).
+
+    Returns:
+        Liste von dicts im gleichen Shape wie ``search_similar``-Ergebnisse,
+        Top-``limit``, neu geordnet nach Fusion (+ optional Rerank).
+    """
+    from services.rag_rerank import llm_rerank, rrf_fuse
+
+    vector_hits = await search_similar(
+        db,
+        tenant_id=tenant_id,
+        query_text=query_text,
+        limit=over_fetch,
+        min_similarity=min_similarity,
+        classification=classification,
+        source_types=source_types,
+    )
+    if not vector_hits:
+        return []
+
+    lexical_hits: list[dict] = []
+    if use_hybrid and query_text and query_text.strip():
+        lexical_hits = await _lexical_search(
+            db,
+            tenant_id=tenant_id,
+            query_text=query_text,
+            limit=over_fetch,
+            classification=classification,
+            source_types=source_types,
+        )
+
+    by_id = {h["id"]: h for h in vector_hits}
+    for h in lexical_hits:
+        by_id.setdefault(h["id"], h)
+
+    vector_ids = [h["id"] for h in vector_hits]
+    lexical_ids = [h["id"] for h in lexical_hits]
+    fused_ids = rrf_fuse(vector_ids, lexical_ids) if lexical_ids else vector_ids
+    fused = [by_id[cid] for cid in fused_ids if cid in by_id][:over_fetch]
+
+    if use_rerank and query_text and query_text.strip():
+        return llm_rerank(query_text, fused, tenant_id, top_n=limit)
+    return fused[:limit]
