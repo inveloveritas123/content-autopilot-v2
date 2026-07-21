@@ -742,8 +742,22 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
     routing_info = _route_inbound_message(tenant_id, text_content, log_id=log_id)
     if routing_info:
         result_dict.update(routing_info)
-    elif channel == "telegram":
-        # Kein Routing-Gate hat gegriffen → Memory-Default → Bestätigung senden
+    else:
+        # Kein Routing-Gate hat gegriffen → freier „reinquatschen"-Text (E3/E5, W4c):
+        # der Kunde erzählt etwas, ohne einen Post zu wollen. Das soll in seine
+        # Persona einfließen → P17-Chat-Observer (async, HITL-Vorschläge, blockiert
+        # den Chat-Flow nicht). Nur bei substanziellem Text (Filter im Task).
+        try:
+            from tasks.p17_chat_observer_task import observe_chat_text
+
+            observe_chat_text.apply_async(
+                args=[tenant_id, text_content, f"telegram:{log_id}"], queue="default"
+            )
+        except Exception:
+            pass  # fail-open: Beobachtung ist Kür, kein Blocker
+
+    if not routing_info and channel == "telegram":
+        # Memory-Default → Bestätigung senden
         chat_id = (payload.get("chat") or {}).get("id")
         if chat_id:
             try:
