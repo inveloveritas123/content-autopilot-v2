@@ -286,8 +286,20 @@ class RSSAdapter(AbstractSourceAdapter):
             logger.warning(f"RSS source {source.name} has no URL")
             return []
 
+        # SSRF-Schutz (W1): benutzergesteuerte URL vor dem serverseitigen Fetch
+        # gegen interne/private Ziele absichern (169.254.169.254 Metadata, 10.x, …).
+        from services.url_guard import UnsafeURLError, assert_public_url
+
         try:
-            async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            assert_public_url(feed_url)
+        except UnsafeURLError as e:
+            logger.warning(f"RSS source {source.name}: unsichere URL blockiert — {e}")
+            return []
+
+        try:
+            # follow_redirects=False: ein öffentlicher Redirect darf nicht auf ein
+            # internes Ziel umleiten (SSRF-Redirect-Bypass).
+            async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
                 resp = await client.get(
                     feed_url,
                     headers={

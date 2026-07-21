@@ -1,3 +1,6 @@
+import logging
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -86,6 +89,34 @@ class Settings(BaseSettings):
     # COOKIE_SECURE: Secure-Flag für Session-/CSRF-Cookies. Default False (HTTP-über-VPN);
     #   auf true setzen, sobald hinter HTTPS deployt wird.
     cookie_secure: bool = False
+
+    @model_validator(mode="after")
+    def _warn_on_insecure_production(self):
+        """Sicherheits-Selbstcheck beim Start (W1, 2026-07-21).
+
+        Warnt laut, wenn in Produktion unsichere Defaults aktiv sind — statt sie
+        still zu akzeptieren. Bricht NICHT (dev/VPN-Setups bleiben lauffähig), macht
+        die Lücken aber im Log sichtbar, damit sie vor echtem Kundenbetrieb zu sind.
+        """
+        if self.app_env == "production":
+            log = logging.getLogger(__name__)
+            if not self.cookie_secure:
+                log.warning(
+                    "[Security] COOKIE_SECURE=false in production — Session-/CSRF-Cookies "
+                    "werden ohne Secure-Flag gesetzt. Auf true stellen, sobald hinter HTTPS."
+                )
+            if self.default_tenant_key == "default-key":
+                log.warning(
+                    "[Security] DEFAULT_TENANT_KEY ist der unsichere Standardwert in "
+                    "production — Fernet-Verschlüsselung nutzt einen bekannten Schlüssel. "
+                    "Dediziertes DEFAULT_TENANT_KEY in .env setzen."
+                )
+            if not self.admin_session_secret:
+                log.warning(
+                    "[Security] ADMIN_SESSION_SECRET nicht gesetzt in production — "
+                    "Admin-Login wird fail-closed abgelehnt, bis es konfiguriert ist."
+                )
+        return self
 
     class Config:
         env_file = ".env"

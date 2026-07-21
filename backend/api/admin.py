@@ -1,6 +1,7 @@
 """Admin API — Model management + Backtest"""
 
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -20,16 +21,22 @@ from models.base import async_session_factory
 from models.content_piece import ContentPiece
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+logger = logging.getLogger(__name__)  # W1: war undefiniert, aber in Z.~316 genutzt (F821/NameError)
 
-_ADMIN_TOKEN_ENV = os.environ.get("ADMIN_TOKEN", "admin_backtest_2026")
+# SICHERHEIT (W1, 2026-07-21): KEIN hartcodierter Default-Token mehr.
+# Früher fiel dies auf "admin_backtest_2026" zurück → jeder mit Kenntnis dieses
+# öffentlichen Werts hatte vollen Admin-Zugriff. Jetzt fail-closed: ist weder
+# ADMIN_TOKEN (ENV) noch eine rotierte Hash-Datei gesetzt, wird JEDER Admin-Zugriff
+# verweigert (403), statt einen bekannten Default zu akzeptieren.
+_ADMIN_TOKEN_ENV = os.environ.get("ADMIN_TOKEN") or None
 _ADMIN_TOKEN_FILE = "/app/data/.admin_token_hash"
 
-if _ADMIN_TOKEN_ENV == "admin_backtest_2026":
+if not _ADMIN_TOKEN_ENV:
     import logging as _logging
 
     _logging.getLogger(__name__).warning(
-        "[Admin] ADMIN_TOKEN ist auf Standardwert gesetzt — "
-        "bitte ADMIN_TOKEN in .env setzen oder /api/admin/admin-token/rotate aufrufen!"
+        "[Admin] ADMIN_TOKEN ist NICHT gesetzt — Admin-Endpunkte sind bis zum "
+        "Setzen von ADMIN_TOKEN (.env) oder /api/admin/admin-token/rotate GESPERRT."
     )
 
 
@@ -51,10 +58,10 @@ def require_admin(x_admin_token: str = Header(None)):
         raise HTTPException(status_code=403, detail="Admin access required")
     # Accept file-based rotated token first (takes precedence after rotation)
     file_hash = _get_file_token_hash()
-    if file_hash and _hash_token(x_admin_token) == file_hash:
+    if file_hash and hmac.compare_digest(_hash_token(x_admin_token), file_hash):
         return
-    # Fall back to ENV token (valid until first rotation)
-    if x_admin_token == _ADMIN_TOKEN_ENV:
+    # Fall back to ENV token — NUR wenn tatsächlich gesetzt (kein Default mehr).
+    if _ADMIN_TOKEN_ENV and hmac.compare_digest(x_admin_token, _ADMIN_TOKEN_ENV):
         return
     raise HTTPException(status_code=403, detail="Admin access required")
 
@@ -263,8 +270,9 @@ async def create_tenant(req: CreateTenantRequest):
                 await db.commit()
 
                 # Seed Requesty LLM-Provider
-                from config import get_settings
                 from api.llm_settings import _encrypt_key
+                from config import get_settings
+
                 cfg = get_settings()
                 if cfg.requesty_api_key:
                     await db.execute(
@@ -283,6 +291,7 @@ async def create_tenant(req: CreateTenantRequest):
 
                 # Seed Standard-Projekt
                 import uuid as _uuid
+
                 await db.execute(
                     text(
                         """INSERT INTO projects (id, tenant_id, name, slug, description)

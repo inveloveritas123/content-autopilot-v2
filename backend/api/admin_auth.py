@@ -21,6 +21,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import re
 import secrets
 import time
@@ -54,16 +55,29 @@ _API_KEY_RE = re.compile(r"^[A-Za-z0-9_\-]{1,64}$")
 def _session_secret() -> bytes:
     """Gibt den HMAC-Schlüssel für Session-Token zurück.
 
-    Bevorzugt settings.admin_session_secret (ADMIN_SESSION_SECRET in .env).
-    Fallback: SHA-256(default_tenant_key + "-admin-session").
-    Der Fallback ist sicherer als kein Secret, aber schwächer als ein
-    dedizierten zufälligen Secret in .env.
+    Bevorzugt settings.admin_session_secret (ADMIN_SESSION_SECRET in .env) — ein
+    DEDIZIERTES Secret. Die frühere Ableitung aus default_tenant_key koppelte das
+    Session-Secret an den Fernet-Verschlüsselungs-Root (Doppelrolle): eine Rotation
+    des default_tenant_key hätte still ALLE Admin-Sessions UND alle verschlüsselten
+    Provider-Keys gleichzeitig gebrochen. Deshalb ist ADMIN_SESSION_SECRET jetzt in
+    Produktion PFLICHT; der Fallback greift nur außerhalb production und nie beim
+    unsicheren Default-Key (W1, 2026-07-21).
     """
     if settings.admin_session_secret:
         return settings.admin_session_secret.encode()
-    # Fallback-Ableitung — kein echtes Secret in Code/Git
-    derived = hashlib.sha256((settings.default_tenant_key + "-admin-session").encode()).digest()
-    return derived
+
+    if settings.app_env == "production" or settings.default_tenant_key == "default-key":
+        raise RuntimeError(
+            "ADMIN_SESSION_SECRET ist nicht gesetzt. In Produktion (bzw. bei nicht "
+            "konfiguriertem default_tenant_key) ist ein dediziertes Session-Secret "
+            "Pflicht — kein Fallback auf den Fernet-Root-Key (Doppelrolle vermeiden). "
+            "Setze ADMIN_SESSION_SECRET in .env."
+        )
+    # Nur dev/staging mit echtem default_tenant_key: schwächere, aber funktionierende Ableitung.
+    logging.getLogger(__name__).warning(
+        "[AdminAuth] ADMIN_SESSION_SECRET unset — nutze abgeleitetes Secret (nur dev/staging)."
+    )
+    return hashlib.sha256((settings.default_tenant_key + "-admin-session").encode()).digest()
 
 
 # ---------------------------------------------------------------------------

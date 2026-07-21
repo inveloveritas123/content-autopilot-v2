@@ -7,6 +7,14 @@ Ausführung (lokal):
 Strategie: gleiche Stub-Technik wie test_admin_auth.py — schwere Deps werden via
 sys.modules-Stubs vor dem ersten Import injiziert. Funktioniert auf Py3.9-venv
 ohne installiertes sqlalchemy/celery/google.
+
+Reihenfolge-Härtung (2026-07-21): siehe test_admin_auth.py — tests/conftest.py::
+pytest_collectstart setzt dependencies/models.base/models.tenant vor jeder
+Testdatei-Collection auf ihren echten Baseline-Zustand zurück. Die alten
+`if "X" not in sys.modules`-Guards greifen dadurch nicht mehr zuverlässig.
+Fix: deterministische Helfer `_ensure_package`/`_ensure_attr` (Vorbild:
+test_telegram_outbound_pertenant.py) stellen benötigte Stub-Attribute IMMER
+additiv sicher.
 """
 
 from __future__ import annotations
@@ -14,9 +22,37 @@ from __future__ import annotations
 import sys
 import types
 
-# ---------------------------------------------------------------------------
-# Stubs für fehlende Deps — müssen VOR jedem anderen Import gesetzt werden
-# ---------------------------------------------------------------------------
+
+def _ensure_stub(name: str) -> types.ModuleType:
+    """Legt sys.modules[name] als leeres ModuleType an, falls es fehlt (idempotent)."""
+    if name not in sys.modules:
+        sys.modules[name] = types.ModuleType(name)
+    return sys.modules[name]
+
+
+def _ensure_package(name: str) -> types.ModuleType:
+    """Wie _ensure_stub, garantiert aber zusätzlich ein gültiges __path__.
+
+    Macht aus einem bloßen ModuleType ein echtes Package (importierbare
+    Submodule wie models.base). Robust gegen einen kaputten Nicht-Package-Stub
+    aus einer anderen Testdatei: __path__ wird auch dann nachgerüstet, wenn das
+    Modul bereits in sys.modules steht.
+    """
+    mod = _ensure_stub(name)
+    if not hasattr(mod, "__path__"):
+        mod.__path__ = []
+    return mod
+
+
+def _ensure_attr(module: types.ModuleType, attr: str, factory) -> None:
+    """Setzt `attr` auf `module` nur, wenn es dort noch fehlt (additiv).
+
+    Ein bereits real geladenes Modul wird NICHT überschrieben, nur ein
+    (teilweise) kaputter/zurückgesetzter Stub bekommt das fehlende Attribut
+    deterministisch nachgerüstet.
+    """
+    if not hasattr(module, attr):
+        setattr(module, attr, factory())
 
 
 def _maybe_stub(name: str, factory):
@@ -99,7 +135,12 @@ class _FakeSettings:
     # Admin fields
     admin_user: str | None = None
     admin_password: str | None = None
-    admin_session_secret: str | None = None
+    # W1 (2026-07-21): api/admin_auth.py::_session_secret() verlangt ein
+    # dediziertes ADMIN_SESSION_SECRET, sobald app_env == "production" ODER
+    # default_tenant_key == "default-key" ist (Gate ist gewollt). Diese
+    # Fake-Settings setzen app_env="production" — also MUSS hier ein Secret
+    # gesetzt sein, sonst raised _session_secret() bei jeder Session-Erzeugung.
+    admin_session_secret: str | None = "test-admin-session-secret-32chars-min"
     cookie_secure: bool = False
     # Core
     database_url: str = "postgresql+asyncpg://t:t@localhost/t"
@@ -130,46 +171,9 @@ class _FakeSettings:
     max_calls_global_per_hour: int = 1000
 
 
-# --- config: minimaler Stub mit den benötigten Feldern ---
-if "config" not in sys.modules:
-    _cfg = types.ModuleType("config")
-
-    class _FakeSettings:
-        # Admin fields
-        admin_user: str | None = None
-        admin_password: str | None = None
-        admin_session_secret: str | None = None
-        cookie_secure: bool = False
-        # Core
-        database_url: str = "postgresql+asyncpg://t:t@localhost/t"
-        sync_database_url: str = "postgresql://t:t@localhost/t"
-        redis_url: str = "redis://localhost:6379/0"
-        default_tenant_key: str = "default-key"
-        # LLM
-        gemini_api_key: str = ""
-        anthropic_api_key: str = ""
-        litellm_base_url: str | None = None
-        litellm_api_key: str | None = None
-        requesty_api_key: str | None = None
-        # Nextcloud — needed by services/__init__.py → nextcloud.py at collection time
-        nextcloud_url: str = ""
-        nextcloud_user: str = ""
-        nextcloud_password: str = ""
-        # Misc
-        sentry_dsn: str = ""
-        app_env: str = "production"
-        prompt_storage_backend: str = "localfs"
-        content_truth_base_path: str = "/app/content-truth"
-        content_truth_overlay_path: str = "/app/data/prompts-custom"
-        telegram_bot_token: str | None = None
-        telegram_admin_chat_id: str | None = None
-        telegram_webhook_secret: str | None = None
-        telegram_bot_username: str | None = None
-        max_calls_per_tenant_per_hour: int = 200
-        max_calls_global_per_hour: int = 1000
-
-    _cfg.settings = _FakeSettings()
-    sys.modules["config"] = _cfg
+# --- config-Stub: DETERMINISTISCH sicherstellen, additiv wenn Modul schon existiert ---
+_cfg = _ensure_stub("config")
+_ensure_attr(_cfg, "settings", _FakeSettings)
 
 # --- services.llm — real import preferred so downstream tests keep LLMService ---
 if "services.llm" not in sys.modules:
@@ -186,39 +190,38 @@ if "services.llm" not in sys.modules:
         _svc_llm.BudgetExceededError = type("BudgetExceededError", (Exception,), {})
         sys.modules["services.llm"] = _svc_llm
 
-# --- models stubs ---
-# Give the models stub a real __path__ so Python can find submodules like
-# models.llm_provider when services/provider_resolver.py is imported later.
+# --- models stubs — DETERMINISTISCH statt fragiler "if not in sys.modules"-Guards. ---
+# Hintergrund: tests/conftest.py::pytest_collectstart setzt models.base und
+# models.tenant vor jeder Testdatei-Collection auf den echten Baseline-Zustand
+# zurück. Ein "if not in sys.modules"-Guard sieht das Modul dadurch mal
+# vorhanden, mal nicht — nicht deterministisch. _ensure_package/_ensure_attr
+# sind idempotent additiv.
 import os as _os
 
 _BACKEND_DIR_CU = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
-if "models" not in sys.modules:
-    _models_pkg = types.ModuleType("models")
+
+_models_pkg = _ensure_package("models")
+if not _models_pkg.__path__:
     _models_pkg.__path__ = [_os.path.join(_BACKEND_DIR_CU, "models")]
     _models_pkg.__package__ = "models"
-    sys.modules["models"] = _models_pkg
-elif not hasattr(sys.modules["models"], "__path__"):
-    sys.modules["models"].__path__ = [_os.path.join(_BACKEND_DIR_CU, "models")]
-    sys.modules["models"].__package__ = "models"
 
-if "models.base" not in sys.modules:
-    try:
-        import models.base as _mb
-    except Exception:
-        _mb = types.ModuleType("models.base")
-        _mb.async_session_factory = None
-        _mb.sync_session_factory = None
-        _mb.Base = object
-        sys.modules["models.base"] = _mb
+try:
+    import models.base as _mb
+except Exception:
+    _mb = _ensure_package("models.base")
+_ensure_attr(_mb, "async_session_factory", lambda: None)
+_ensure_attr(_mb, "sync_session_factory", lambda: None)
+_ensure_attr(_mb, "Base", lambda: object)
 
-# Tenant-Stub — leichtes Objekt das die nötigen Felder hat
-# Always patch Tenant even if models.tenant already exists (test_admin_auth.py
-# installs a bare _FakeTenant without __init__ args that crashes create_tenant).
-if "models.tenant" not in sys.modules:
-    _mt = types.ModuleType("models.tenant")
-    sys.modules["models.tenant"] = _mt
-else:
-    _mt = sys.modules["models.tenant"]
+
+# Tenant-Stub — leichtes Objekt das die nötigen Felder hat. Dieser Test braucht
+# IMMER die volle _FakeTenant-Konstruktor-Signatur (create_tenant instanziiert
+# Tenant(name=..., api_key=..., slug=...)) — ein bloßes `Tenant = MagicMock`
+# oder ein bereits vorhandener anders-signaturierter Stub (z.B. aus
+# test_admin_auth.py) reicht hier nicht. Deshalb wird Tenant unbedingt (nicht
+# additiv) auf diese Klasse gesetzt — konsistent mit dem alten Verhalten
+# ("Always patch Tenant even if models.tenant already exists").
+_mt = _ensure_package("models.tenant")
 
 
 class _FakeTenant:
@@ -237,19 +240,20 @@ class _FakeTenant:
 
 _mt.Tenant = _FakeTenant
 
-# --- dependencies stub ---
-if "dependencies" not in sys.modules:
-    _deps = types.ModuleType("dependencies")
+# --- dependencies-Stub — DETERMINISTISCH sicherstellen (additiv). ---
+_deps_mod_cu = _ensure_stub("dependencies")
 
-    async def _get_db():
-        yield None
 
-    async def _get_tenant():
-        return None
+async def _get_db_cu():
+    yield None
 
-    _deps.get_db = _get_db
-    _deps.get_tenant = _get_tenant
-    sys.modules["dependencies"] = _deps
+
+async def _get_tenant_cu():
+    return None
+
+
+_ensure_attr(_deps_mod_cu, "get_db", lambda: _get_db_cu)
+_ensure_attr(_deps_mod_cu, "get_tenant", lambda: _get_tenant_cu)
 
 # ---------------------------------------------------------------------------
 # Echte Imports ab hier
@@ -321,8 +325,13 @@ def _make_app_with_db(db=None) -> FastAPI:
     import sys as _sys
 
     # Re-install _FakeTenant in case another test file (e.g. test_cost_analytics.py)
-    # reloaded models.tenant with the real SQLAlchemy Tenant between collection and run.
-    _sys.modules["models.tenant"].Tenant = _FakeTenant
+    # reloaded models.tenant with the real SQLAlchemy Tenant between collection and run,
+    # OR tests/conftest.py::pytest_collectstart reset models.tenant to its Baseline-
+    # Zustand between this file's collection and its actual test run. Use the
+    # deterministic helper (not a bare sys.modules[...] index) so this never KeyErrors
+    # regardless of whether "models.tenant" currently exists.
+    _mt_runtime = _ensure_package("models.tenant")
+    _mt_runtime.Tenant = _FakeTenant
     if "api.admin_auth" in _sys.modules:
         _sys.modules["api.admin_auth"].Tenant = _FakeTenant
 

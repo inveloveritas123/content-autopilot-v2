@@ -81,11 +81,22 @@ class NCSearchRequest(BaseModel):
     query: str
 
 
-@router.post("/tenants")
+def _require_admin_dep(x_admin_token: str = Header(None)):
+    """Dünner Wrapper um api.admin.require_admin — lazy importiert, damit der
+    Modul-Import von api.tenants nicht transitiv api.admin (→ models.base) zieht
+    (hielt die Test-Import-Ketten leicht, W1 2026-07-21)."""
+    from api.admin import require_admin
+
+    return require_admin(x_admin_token=x_admin_token)
+
+
+@router.post("/tenants", dependencies=[Depends(_require_admin_dep)])
 async def create_tenant(
     data: TenantCreate,
     db: AsyncSession = Depends(get_db),
 ):
+    # SICHERHEIT (W1, 2026-07-21): war offen — jeder konnte sich einen Tenant +
+    # gültigen API-Key erzeugen (Self-Registration-Loch). Jetzt Admin-gated.
     api_key = secrets.token_hex(32)
     tenant = Tenant(
         name=data.name,
