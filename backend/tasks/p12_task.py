@@ -372,6 +372,19 @@ def run_p12(
         context_json_str = json.dumps(context_payload, ensure_ascii=False)
         user_prompt = loaded.user_prompt_template.replace("{context_json}", context_json_str)
 
+        # Voice-Doktrin (W4): verbatim Exzerpte aus dem VOLLEN (ungeprunten) Voice-
+        # Profil als Few-Shot-Historie — sie STEUERN die Stimme (Attribut-Profil im
+        # Kontext orientiert nur). Leere Liste → P12 läuft wie bisher (kein Crash).
+        from services.voice_engine import build_voice_fewshot
+
+        voice_fewshot = build_voice_fewshot(voice_profile)
+        if voice_fewshot:
+            logger.info(
+                "p12 run_id=%s: %d Voice-Few-Shot-Exzerpte als Stimm-Steuerung aktiv",
+                run_id,
+                len(voice_fewshot) // 2,
+            )
+
         # ------------------------------------------------------------------
         # 7. LLM-Call über den Seam (kein direkter SDK-Aufruf)
         # BACKTEST_MODEL_OVERRIDE wird durch MODEL_TIER_P12 Env-Variable ersetzt
@@ -381,6 +394,7 @@ def run_p12(
             system_prompt=loaded.system_prompt,
             user_content=user_prompt,
             tenant_id=tenant_id,
+            few_shot_messages=voice_fewshot,
             max_tokens=3000,
         )
 

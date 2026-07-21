@@ -322,6 +322,7 @@ def call_pipeline_llm(
     max_tokens: int | None = None,
     tier_override: str | None = None,
     max_retries: int = 3,
+    few_shot_messages: list[dict] | None = None,
 ) -> PipelineLLMResult:
     """Synchroner LLM-Call für alle Setup-Pipeline-Tasks über den Router.
 
@@ -369,10 +370,14 @@ def call_pipeline_llm(
     base_url, api_key, auto_cache_enabled = _resolve_provider()
 
     # 4. Request-Body zusammenbauen (OpenAI-Shape)
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_content},
-    ]
+    #    Few-Shot-Messages (Reverse-Prompt/Exzerpt-Paare als synthetische
+    #    User/Assistant-Historie) werden ZWISCHEN System und dem eigentlichen
+    #    Auftrag eingefügt — das ist der Kern der Voice-Doktrin: echte Exzerpte
+    #    STEUERN die Stimme, nicht die Attribut-Beschreibung (W4, 2026-07-21).
+    messages = [{"role": "system", "content": system_prompt}]
+    if few_shot_messages:
+        messages.extend(few_shot_messages)
+    messages.append({"role": "user", "content": user_content})
     is_requesty = "requesty.ai" in base_url
     request_body: dict = {
         "model": model_id,
