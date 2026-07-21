@@ -13,7 +13,7 @@ Fortschritt der Enterprise-Grade-Ausbaustufe. Pro Welle ein Eintrag: **was gemac
 | W0 | Fundament: fertige PRs #109 (EU-fail-closed) + #108 (agentur_id) landen | ✅ fertig |
 | W0.5 | Alle vorbestehenden Test-Failures grün (fremde Bugs mitfixen) | ✅ fertig |
 | W1 | Security-Härtung (Admin-Token, offene Tenant-Erstellung, SSRF, Secret-Trennung) | ✅ fertig |
-| W2 | Echte Multi-Tenant-Isolation (Postgres-RLS) | geplant |
+| W2 | Echte Multi-Tenant-Isolation (Postgres-RLS) | ✅ fertig |
 | W3 | Auth: Magic-Link Login + User/Rollen (RBAC) | geplant |
 | W4 | Voice-Engine (Few-Shot-Korpus) + Persona-Lernen | geplant |
 | W5 | Quality-Gate scharf + Eval-Harness + Observability + Bulkhead | geplant |
@@ -22,6 +22,21 @@ Fortschritt der Enterprise-Grade-Ausbaustufe. Pro Welle ein Eintrag: **was gemac
 ---
 
 ## Einträge
+
+### W2 — Echte Multi-Tenant-Isolation via Postgres-RLS (2026-07-21) ✅
+
+**Der Kern-Meilenstein von Stufe 2.** Bisher war die Mandantentrennung nur „jeder Endpunkt denkt daran, nach `tenant_id` zu filtern" — ein vergessener Filter = Datenleck zwischen Kunden. Jetzt erzwingt die Datenbank selbst die Grenze.
+
+**Was gemacht wurde:**
+- **Alle Mandanten-Tabellen (41) haben Row-Level-Security:** Postgres gibt jede Query nur die Zeilen des aktuellen Kunden zurück — automatisch, auch bei rohem SQL ohne Filter. Ein Programmierfehler kann keine fremden Kundendaten mehr durchlassen.
+- **14 Tabellen bereinigt:** Ihre Kunden-ID war als Text gespeichert (uneinheitlich, ohne Verknüpfung) — jetzt korrekt als UUID mit Fremdschlüssel.
+- **Hintergrund-Jobs abgesichert:** Die Automatik-Tasks (Post-Generierung, Voice-Analyse …) setzen den Kunden-Kontext jetzt korrekt, sonst würden sie nach der Umstellung „nichts sehen".
+- **Wartungs-Jobs, die bewusst über alle Kunden laufen** (z.B. nächtliche Löschung), haben einen expliziten, protokollierbaren Sonderzugang — kein stiller Umweg.
+- **Beweis-Test (Gate):** Ein Sicherheitstest legt zwei Kunden an, schreibt Daten für Kunde A und prüft, dass Kunde B sie nicht sehen kann — selbst bei einer Abfrage ohne Filter.
+
+**Wichtig — greenfield:** Da es noch kein Prod/keine echten Kundendaten gibt, war das ein sauberer Schema-Aufbau ohne riskante Live-Migration.
+
+**Wie testen (CI mit Postgres):** `PYTHONPATH=. pytest tests/security/test_rls_contamination.py` → beweist die Isolation. Voller Lauf: 1484 passed.
 
 ### W1 — Security-Härtung (2026-07-21) ✅
 
