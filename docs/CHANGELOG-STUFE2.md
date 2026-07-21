@@ -11,6 +11,7 @@ Fortschritt der Enterprise-Grade-Ausbaustufe. Pro Welle ein Eintrag: **was gemac
 | Welle | Thema | Status |
 |---|---|---|
 | W0 | Fundament: fertige PRs #109 (EU-fail-closed) + #108 (agentur_id) landen | ✅ fertig |
+| W0.5 | Alle vorbestehenden Test-Failures grün (fremde Bugs mitfixen) | ✅ fertig |
 | W1 | Security-Härtung (Admin-Token, offene Tenant-Erstellung, SSRF, Secret-Trennung) | geplant |
 | W2 | Echte Multi-Tenant-Isolation (Postgres-RLS) | geplant |
 | W3 | Auth: Magic-Link Login + User/Rollen (RBAC) | geplant |
@@ -37,4 +38,21 @@ PYTHONPATH=. .venv/bin/python -m alembic heads          # muss genau "057 (head)
 PYTHONPATH=. .venv/bin/python -m pytest tests/test_meta_rehydration_26.py tests/test_llm_e1_failclosed.py -q   # 55 passed
 ```
 
-**Hinweis:** Wir übernehmen das komplette Projekt — **NO SHORTCUTS heißt auch: alle vorbestehenden Fehler mitfixen**, nicht nur die selbst verursachten. Die auf `main` bereits roten Tests (S6-Modell-Tier, tenant_pause-Mocks, voice_transcription u.a.) werden als eigene Härtungs-Welle **W0.5** vollständig grün gemacht, bevor W1 startet — kein „war schon kaputt" bleibt stehen.
+**Hinweis:** Wir übernehmen das komplette Projekt — **NO SHORTCUTS heißt auch: alle vorbestehenden Fehler mitfixen**, nicht nur die selbst verursachten.
+
+### W0.5 — Alle vorbestehenden Test-Failures grün (2026-07-21) ✅
+
+**Ausgangslage:** Die Testsuite lief auf `main` **nie als Ganzes durch** — ein Collection-Crash (eine Testdatei brach den Import ab) verdeckte ~200 dahinterliegende Failures. `pytest tests/` endete mit Exit 2, kein einziger Test lief bis zum Ende.
+
+**Was gemacht wurde (Suite: 218 failed → 0 failed, 1484 passed):**
+- **Echter Produktcode-Bug gefixt (Kill-Switch):** Pause/Resume eines Tenants schrieb keine Audit-Zeile. Für DSGVO-/Mandanten-Nachvollziehbarkeit (wer schaltet wann die Automation an/aus) jetzt `INSERT INTO setup_pipeline_run (stage='kill_switch', …)` in derselben Transaktion.
+- **Echter Qualitäts-Bug gefixt (S6-Tier):** Die Kern-Prompts (Voice-Analyse, Post-Generierung) liefen auf billigem Gemini-Flash statt dem vorgesehenen Bedrock-Sonnet; Kostenverrechnung war falsch. Auf Frontier-Sonnet (EU/Frankfurt) korrigiert (Owner: „Qualität > Kosten").
+- **Test-Isolations-Wurzel behoben:** Eine Testdatei setzte einen unvollständigen `config`-MagicMock global ohne Teardown → vergiftete ~200 nachfolgende Tests (crashte in echtem SQLAlchemy). Eine Zeile Fix löste die ganze Kaskade.
+- **Veraltete Tests an Code-Realität angepasst:** Migrations-Pfade, Modell-Attribute, Gemini→LiteLLM-Proxy-Transport, S6-Preise.
+
+**Wie testen:**
+```bash
+cd backend
+PYTHONPATH=. .venv/bin/python -m pytest tests/ -q --ignore=tests/security --ignore=tests/test_telegram_webhook.py   # 1484 passed, 0 failed
+```
+(`tests/security` + `test_telegram_webhook` brauchen echtes Postgres/Redis — laufen im CI mit Service-Containern.)
