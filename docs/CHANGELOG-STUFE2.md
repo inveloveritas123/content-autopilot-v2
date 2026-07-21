@@ -14,7 +14,7 @@ Fortschritt der Enterprise-Grade-Ausbaustufe. Pro Welle ein Eintrag: **was gemac
 | W0.5 | Alle vorbestehenden Test-Failures grün (fremde Bugs mitfixen) | ✅ fertig |
 | W1 | Security-Härtung (Admin-Token, offene Tenant-Erstellung, SSRF, Secret-Trennung) | ✅ fertig |
 | W2 | Echte Multi-Tenant-Isolation (Postgres-RLS) | ✅ fertig |
-| W3 | Auth: Magic-Link Login + User/Rollen (RBAC) | geplant |
+| W3 | Auth: Magic-Link Login + User/Rollen (RBAC) | ✅ fertig |
 | W4 | Voice-Engine (Few-Shot-Korpus) + Persona-Lernen | geplant |
 | W5 | Quality-Gate scharf + Eval-Harness + Observability + Bulkhead | geplant |
 | W6 | DSGVO-Vervollständigung + Deploy-Härtung + KI-Kennzeichnung | geplant |
@@ -22,6 +22,17 @@ Fortschritt der Enterprise-Grade-Ausbaustufe. Pro Welle ein Eintrag: **was gemac
 ---
 
 ## Einträge
+
+### W3 — Passwortloser Login + Rollen (2026-07-21) ✅
+
+**Was gemacht wurde:** Bisher gab es nur einen statischen Zugangsschlüssel — kein echtes Login, keine Benutzer, keine Rollen. Jetzt:
+- **Login per Magic-Link:** Der Kunde gibt seine E-Mail ein, bekommt einen Einmal-Link, klickt — fertig. Kein Passwort zu merken (genau der „Kleinkind-Test", den Louis wollte).
+- **Benutzer- & Agentur-Struktur:** Agentur → Benutzer → verwaltete Kunden. Ein Agentur-Eigner sieht alle seine Kunden, ein normaler Benutzer nur die zugewiesenen. Das ist die Grundlage für den späteren White-Label-Verkauf.
+- **Sichere Sitzung:** Nach dem Klick läuft die Anmeldung über ein sicheres, im Browser nicht auslesbares Cookie (kein Token, das per Skript gestohlen werden könnte).
+
+**Wie testen:** `PYTHONPATH=. pytest tests/test_auth_magic_link.py -q` → 20 grün. Vollständiger Lauf: 1504 passed.
+
+**Für den Betrieb (.env):** Für echten Mail-Versand `SMTP_HOST`/`SMTP_USER`/`SMTP_PASSWORD` setzen. Ohne SMTP wird der Login-Link nur ins Log geschrieben (Entwicklungs-Modus).
 
 ### W2 — Echte Multi-Tenant-Isolation via Postgres-RLS (2026-07-21) ✅
 
