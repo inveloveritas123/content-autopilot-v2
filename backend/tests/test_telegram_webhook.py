@@ -12,6 +12,8 @@ import types
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 _BACKEND_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
 
 
@@ -28,7 +30,40 @@ def _ensure_stub(name: str) -> types.ModuleType:
     return sys.modules[name]
 
 
-# sqlalchemy stubs (minimal — only text() and session factory needed by import)
+# Reihenfolge-Isolation: diese Datei ersetzt beim Import global Module in sys.modules
+# (config, sqlalchemy(.ext.*), models(.base/.tenant), services(.llm/.rls/.crypto/
+# .telegram_token_resolver), api.telegram). Ohne Teardown lecken diese Stubs in
+# NACHFOLGEND gesammelte/ausgeführte Testdateien, die das ECHTE Modul brauchen
+# (→ MagicMock statt echter API, ~30 Folge-Failures). Wir snapshotten den
+# Originalzustand JETZT (vor dem Stubben) und restaurieren ihn per modul-scoped
+# autouse-Fixture nach der letzten Testfunktion dieser Datei.
+_POLLUTED_KEYS = (
+    "config",
+    "sqlalchemy",
+    "sqlalchemy.dialects",
+    "sqlalchemy.dialects.postgresql",
+    "sqlalchemy.ext",
+    "sqlalchemy.ext.asyncio",
+    "sqlalchemy.orm",
+    "models",
+    "models.base",
+    "models.tenant",
+    "services",
+    "services.llm",
+    "services.rls",
+    "services.crypto",
+    "services.telegram_token_resolver",
+    "api.telegram",
+    "api",
+)
+_MODULE_SNAPSHOT = {k: sys.modules.get(k) for k in _POLLUTED_KEYS}
+
+
+# sqlalchemy stubs (minimal — only text() and session factory needed by import).
+# WICHTIG: Nur stubben, wenn sqlalchemy noch NICHT (echt) geladen ist. Läuft diese
+# Datei ISOLIERT (kein Vortest hat das echte sqlalchemy importiert), müssen die
+# Stubs die Namen mitliefern, die dependencies.py beim Import zieht — sonst
+# ImportError: cannot import name 'AsyncSession' (bzw. 'async_session_factory').
 if "sqlalchemy" not in sys.modules:
     sa = _ensure_stub("sqlalchemy")
     sa.text = lambda q: q
@@ -39,7 +74,11 @@ if "sqlalchemy" not in sys.modules:
     _ensure_stub("sqlalchemy.dialects")
     _ensure_stub("sqlalchemy.dialects.postgresql")
     _ensure_stub("sqlalchemy.ext")
-    _ensure_stub("sqlalchemy.ext.asyncio")
+    _sa_asyncio = _ensure_stub("sqlalchemy.ext.asyncio")
+    # dependencies.py: `from sqlalchemy.ext.asyncio import AsyncSession`
+    _sa_asyncio.AsyncSession = MagicMock()
+    _sa_asyncio.async_sessionmaker = MagicMock()
+    _sa_asyncio.create_async_engine = MagicMock()
     _ensure_stub("sqlalchemy.orm")
 
 # Patch config before importing the module under test
@@ -48,14 +87,29 @@ _fake_settings.telegram_bot_token = "FAKE_BOT_TOKEN"
 _fake_settings.telegram_webhook_secret = "CORRECT_SECRET"
 _fake_settings.telegram_bot_username = "test_bot"
 
-# Patch models.base to avoid real DB engine creation
+# Patch models.base to avoid real DB engine creation.
+# dependencies.py: `from models.base import async_session_factory` — beide Factories
+# müssen am Stub existieren, sonst ImportError beim isolierten Lauf.
 _fake_base_mod = _ensure_stub("models.base")
 _fake_base_mod.sync_session_factory = MagicMock()
+_fake_base_mod.async_session_factory = MagicMock()
 
 _models_pkg = _ensure_stub("models")
-_ensure_stub("models.tenant")
+# dependencies.py: `from models.tenant import Tenant`
+_fake_tenant_mod = _ensure_stub("models.tenant")
+if not hasattr(_fake_tenant_mod, "Tenant"):
+    _fake_tenant_mod.Tenant = MagicMock()
 # models.base als Attribut registrieren (für patch("models.base.sync_session_factory"))
 _models_pkg.base = _fake_base_mod
+
+# dependencies.py zieht zudem services.llm.set_llm_tenant + services.rls.set_rls_tenant
+_svc_pkg = _ensure_stub("services")
+if "services.llm" not in sys.modules:
+    _svc_llm = _ensure_stub("services.llm")
+    _svc_llm.set_llm_tenant = MagicMock()
+if "services.rls" not in sys.modules:
+    _svc_rls = _ensure_stub("services.rls")
+    _svc_rls.set_rls_tenant = MagicMock()
 
 # datetime.UTC Py3.9-Compat: api.telegram importiert `from datetime import UTC`
 # WICHTIG: sys.modules["datetime"] NICHT ersetzen — das bricht FastAPI's class-Identity
@@ -97,6 +151,19 @@ tg_module = _ilu.module_from_spec(_tg_spec)
 sys.modules["api.telegram"] = tg_module
 _tg_spec.loader.exec_module(tg_module)
 tg_module.settings = _fake_settings
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _restore_polluted_modules():
+    """Stellt nach ALLEN Tests dieser Datei den sys.modules-Zustand für die global
+    gestubbten Module wieder her — verhindert das Lecken der Stubs in nachfolgende
+    Testdateien (Reihenfolge-Isolation). Snapshot siehe _MODULE_SNAPSHOT oben."""
+    yield
+    for key, original in _MODULE_SNAPSHOT.items():
+        if original is None:
+            sys.modules.pop(key, None)  # war vorher nicht geladen → Stub entfernen
+        else:
+            sys.modules[key] = original  # echtes Modul wiederherstellen
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

@@ -207,6 +207,25 @@ from services.telegram_poller import (
 poll_all_active_bots = _poll_task_mod.poll_all_active_bots
 
 
+@pytest.fixture(autouse=True)
+def _pin_api_telegram_stub():
+    """Vor jedem Test sicherstellen, dass sys.modules["api.telegram"] auf UNSEREN
+    Collection-Stub (_api_tg) zeigt. Im vollen Verbund kann eine andere Testdatei
+    api.telegram durch das echte Modul ersetzt haben — dann würde der lazy Import
+    `from api.telegram import dispatch_inbound_update` im Task (telegram_poll_task.py:68)
+    die echte Funktion holen statt unseres gepatchten dispatch_mock, und
+    `assert_any_call` schlägt fehl. Nach dem Test den vorherigen Stand restaurieren."""
+    _prev = sys.modules.get("api.telegram")
+    sys.modules["api.telegram"] = _api_tg
+    try:
+        yield
+    finally:
+        if _prev is not None:
+            sys.modules["api.telegram"] = _prev
+        else:
+            sys.modules.pop("api.telegram", None)
+
+
 # ===========================================================================
 # Hilfs-Konstanten und Fixtures
 # ===========================================================================

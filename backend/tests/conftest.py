@@ -145,6 +145,31 @@ _POLLUTION_PRONE_MODULES = frozenset(
         "dependencies",
         "models.base",
         "models.tenant",
+        # test_telegram_webhook.py ersetzt beim Import global `config` durch einen
+        # MagicMock-basierten Stub. Leckt der in eine nachfolgende Datei, binden
+        # Module wie services.crypto (`_app_settings = config.settings`) beim Import
+        # einen MagicMock statt echter Settings → z.B. `default_tenant_key` ist ein
+        # MagicMock und `sha256(mock + salt)` wirft TypeError. Reset auf den echten
+        # config-Stand + Entfernen der frisch-gebundenen services-Stubs behebt das.
+        "config",
+        "services.crypto",
+        "services.llm",
+        "services.rls",
+        "services.telegram_token_resolver",
+        # LOCKSTEP-Keys: Diese hängen an oben zurückgesetzten Modulen und MÜSSEN
+        # mit-zurückgesetzt werden, sonst binden sie an eine veraltete Identität:
+        #  - `services.pipeline_llm` bindet `BudgetExceededError` aus services.llm auf
+        #    Modul-Ebene; wird services.llm neu re-executed (→ neue Exception-Klasse),
+        #    fängt `pytest.raises(BudgetExceededError)` die alte Klasse nicht mehr.
+        "services.pipeline_llm",
+        # HINWEIS: `models` (Package) und `api.telegram` werden BEWUSST NICHT hier
+        # zurückgesetzt. Testdateien wie test_p02_task/test_telegram_poller setzen
+        # diese Keys als eigene Collection-Stubs und BRAUCHEN sie während ihrer
+        # Laufzeit — collectstart feuert auch modul-intern (pro Klasse), ein Reset
+        # dieser Keys würde die dateieigenen Stubs mitten in der Ausführung räumen.
+        # Der von diesen Stubs ausgehende Leak in tests/security/test_tenant_isolation
+        # wird stattdessen dort an der Quelle geheilt (frischer models-Import in der
+        # client_a-Fixture vor `from main import app`).
     }
 )
 
