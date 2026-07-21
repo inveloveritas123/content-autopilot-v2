@@ -137,6 +137,15 @@ def _make_factory_sequence(*sessions):
 
 
 class TestPushResearchToTelegram:
+    @pytest.fixture(autouse=True)
+    def _mock_rls_sync(self):
+        """W2: _push_research_to_telegram setzt jetzt set_rls_tenant_sync auf der
+        sync-Session (RLS-Kontext). Die Session-Mocks hier erwarten eine feste
+        Query-Reihenfolge — der zusätzliche set_config-Call würde sie verschieben.
+        Als no-op mocken, damit die Tests die Fach-Queries prüfen."""
+        with patch("services.rls.set_rls_tenant_sync", MagicMock(return_value=None)):
+            yield
+
     def test_no_push_when_inserted_zero(self):
         """inserted=0 → sofort return, kein DB-Call, kein Telegram-Call."""
         send_mock = MagicMock()

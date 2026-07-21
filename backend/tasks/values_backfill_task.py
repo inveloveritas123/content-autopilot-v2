@@ -465,13 +465,20 @@ async def _backfill_tenant(tenant_id: str, *, db_execute, llm_complete_json) -> 
 # ---------------------------------------------------------------------------
 
 
-def _make_real_db_execute(engine, SessionMaker):
-    """Erstellt den echten db_execute-Callable für _backfill_tenant."""
+def _make_real_db_execute(engine, SessionMaker, tenant_id: str):
+    """Erstellt den echten db_execute-Callable für _backfill_tenant.
+
+    tenant_id wird gebraucht, um den RLS-Kontext (SET LOCAL app.tenant_id)
+    auf jeder geöffneten Session zu setzen — sonst sieht der Task nach
+    Migration 058 keine Zeilen mehr (fail-closed).
+    """
 
     async def _db_execute(sql: str, params: dict, *, write: bool = False):
         from sqlalchemy import text
 
-        async with SessionMaker() as session:
+        from services.rls import tenant_session
+
+        async with tenant_session(SessionMaker, tenant_id) as session:
             result = await session.execute(text(sql), params)
             if write:
                 await session.commit()
@@ -500,7 +507,7 @@ def run_values_backfill_sync(tenant_id: str) -> dict:
     async def _run():
         engine = create_async_engine(settings.database_url, pool_pre_ping=True)
         SessionMaker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-        db_execute = _make_real_db_execute(engine, SessionMaker)
+        db_execute = _make_real_db_execute(engine, SessionMaker, tenant_id)
 
         async def llm_complete_json(prompt, system, model, purpose):
             return await llm_service.complete_json(

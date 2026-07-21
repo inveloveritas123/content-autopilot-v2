@@ -46,12 +46,13 @@ SYSTEM_PROMPT = (
 
 async def _refresh_industry_context_async(tenant_id: str) -> dict:
     from services.llm import llm_service, set_llm_tenant
+    from services.rls import tenant_session
 
     set_llm_tenant(tenant_id)
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     SessionMaker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     try:
-        async with SessionMaker() as db:
+        async with tenant_session(SessionMaker, tenant_id) as db:
             row = (
                 await db.execute(
                     text("SELECT industry, name FROM tenants WHERE id = CAST(:tid AS uuid)"),

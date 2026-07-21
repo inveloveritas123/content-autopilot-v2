@@ -68,13 +68,17 @@ async def _drift_monitor_async() -> dict:
 
     tenant_results: dict[str, dict] = {}
 
+    from services.rls import bypass_rls_session, tenant_session
+
     try:
-        async with SessionMaker() as db:
+        # Cross-Tenant: DISTINCT tenant_id über alle memory_chunks (Policy-Tabelle) —
+        # braucht expliziten RLS-Bypass, sonst filtert RLS auf 0 Zeilen.
+        async with bypass_rls_session(SessionMaker) as db:
             tenant_ids = await _get_active_tenant_ids(db)
             logger.info("drift_monitor: %d Tenants geprüft", len(tenant_ids))
 
         for tenant_id in tenant_ids:
-            async with SessionMaker() as db:
+            async with tenant_session(SessionMaker, tenant_id) as db:
                 metrics = await _measure_tenant(db, tenant_id)
                 if metrics is None:
                     tenant_results[tenant_id] = {"status": "skipped", "reason": "no_embeddings"}

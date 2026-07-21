@@ -467,6 +467,7 @@ async def _store_chunk_async(
     """
     from services.chunker import chunk_text
     from services.embedding_service import store_chunk, store_chunks_multi
+    from services.rls import tenant_session
 
     chunks = chunk_text(content_text, source_type)
     if not chunks:
@@ -480,7 +481,7 @@ async def _store_chunk_async(
         engine = create_async_engine(settings.database_url, pool_pre_ping=True)
         SessionMaker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         try:
-            async with SessionMaker() as db:
+            async with tenant_session(SessionMaker, tenant_id) as db:
                 return await store_chunk(
                     db=db,
                     tenant_id=tenant_id,
@@ -496,7 +497,7 @@ async def _store_chunk_async(
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     SessionMaker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     try:
-        async with SessionMaker() as db:
+        async with tenant_session(SessionMaker, tenant_id) as db:
             ids = await store_chunks_multi(
                 db,
                 tenant_id=tenant_id,

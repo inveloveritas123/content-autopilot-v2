@@ -31,9 +31,18 @@ async def _generate_variants_async(idea_id: str) -> dict:
 
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     SessionMaker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    from services.rls import set_rls_tenant
+
     try:
         async with SessionMaker() as db:
-            # Lade Idea + Tenant — Schema content_ideas: title, description, angle, hook_suggestion
+            # Henne-Ei: Der Task bekommt nur idea_id, tenant_id ist erst NACH dem
+            # Lesen bekannt. Die Auflösungs-Query läuft daher mit RLS-Bypass; direkt
+            # danach wird der RLS-Kontext auf den aufgelösten Tenant gesetzt, sodass
+            # ALLE weiteren Queries auf dieser Session tenant-isoliert sind (W2).
+            await set_rls_tenant(db, None)  # noop-Kontext; Bypass folgt lokal
+            from services.rls import set_rls_bypass
+
+            await set_rls_bypass(db, True)
             idea_row = (
                 await db.execute(
                     text(
@@ -48,6 +57,9 @@ async def _generate_variants_async(idea_id: str) -> dict:
                 return {"status": "error", "reason": "idea_not_found"}
 
             tenant_id = str(idea_row.tenant_id)
+            # Bypass wieder aus, tenant-scoped für den Rest der Session.
+            await set_rls_bypass(db, False)
+            await set_rls_tenant(db, tenant_id)
             set_llm_tenant(tenant_id)
 
             # Voice-Profile + Customer-Context-Snippet für Kontext

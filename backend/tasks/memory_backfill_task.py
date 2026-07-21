@@ -34,11 +34,15 @@ async def _backfill_async(limit: int) -> dict:
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     SessionMaker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+    from services.rls import bypass_rls_session
+
     embedded_count = 0
     classified_count = 0
     failed_count = 0
     try:
-        async with SessionMaker() as db:
+        # Cross-Tenant-Wartungs-Task: embeddet fehlende Chunks ALLER Tenants —
+        # expliziter RLS-Bypass (auditierbar), kein tenant-scoped Kontext möglich.
+        async with bypass_rls_session(SessionMaker) as db:
             # 1) Chunks ohne embedding
             rows = (
                 await db.execute(

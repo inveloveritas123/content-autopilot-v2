@@ -229,12 +229,13 @@ def run_p02(
         from config import settings as _cfg
         from services.cost_cap import CostCapExceeded, CostCapMiddleware
         from services.llm import BudgetExceededError
+        from services.rls import tenant_session
 
         async def _p02_cap_check() -> None:
             _engine = create_async_engine(_cfg.database_url, pool_pre_ping=True)
             _Session = _sm(_engine, class_=AsyncSession, expire_on_commit=False)
             try:
-                async with _Session() as _sess:
+                async with tenant_session(_Session, tenant_id) as _sess:
                     await CostCapMiddleware(_sess).check_and_record(tenant_id, estimated_cost)
             finally:
                 await _engine.dispose()

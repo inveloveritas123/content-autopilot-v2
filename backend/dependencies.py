@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.base import async_session_factory
 from models.tenant import Tenant
 from services.llm import set_llm_tenant
+from services.rls import set_rls_tenant
 
 
 async def get_db() -> AsyncSession:
@@ -33,6 +34,9 @@ async def get_tenant(x_api_key: str = Header(...), db: AsyncSession = Depends(ge
             },
         )
     set_llm_tenant(str(tenant.id))
+    # W2: RLS-Kontext auf DB-Session setzen — Postgres erzwingt Tenant-Isolation
+    # für alle folgenden Queries (auch Raw-SQL) auf dieser Session.
+    await set_rls_tenant(db, str(tenant.id))
     return tenant
 
 
@@ -57,4 +61,5 @@ async def get_tenant_id(
             },
         )
     set_llm_tenant(str(tenant.id))
+    await set_rls_tenant(db, str(tenant.id))  # W2: RLS-Kontext (siehe get_tenant)
     return tenant.id

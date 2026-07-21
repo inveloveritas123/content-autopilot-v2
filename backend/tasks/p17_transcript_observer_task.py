@@ -53,11 +53,12 @@ async def _run_cost_check(tenant_id: str, estimated_cost: float) -> None:
 
     from config import settings
     from services.cost_cap import CostCapMiddleware
+    from services.rls import tenant_session
 
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     AsyncSessionLocal = async_sm(engine, class_=AsyncSession, expire_on_commit=False)
     try:
-        async with AsyncSessionLocal() as session:
+        async with tenant_session(AsyncSessionLocal, tenant_id) as session:
             mw = CostCapMiddleware(session)
             await mw.check_and_record(tenant_id, estimated_cost)
     finally:

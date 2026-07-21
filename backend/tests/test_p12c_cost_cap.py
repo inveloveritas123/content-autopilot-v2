@@ -33,6 +33,7 @@ class TestP12cCostCapBlocks:
 
         with (
             patch("services.kill_switch.check_kill_switch", return_value=None),
+            patch("services.rls.set_rls_tenant", new=AsyncMock(return_value=None)),
             patch("tasks.p12c_task.CostCapMiddleware") as mock_mw,
         ):
             from services.cost_cap import CostCapExceeded
@@ -58,6 +59,7 @@ class TestP12cCostCapBlocks:
 
         with (
             patch("services.kill_switch.check_kill_switch", return_value=None),
+            patch("services.rls.set_rls_tenant", new=AsyncMock(return_value=None)),
             patch("tasks.p12c_task.CostCapMiddleware") as mock_mw,
             patch("tasks.p12c_task.estimate_tier_cost", return_value=0.05) as mock_est,
         ):
@@ -80,6 +82,7 @@ class TestP12cCostCapBlocks:
 
         with (
             patch("services.kill_switch.check_kill_switch", return_value=None),
+            patch("services.rls.set_rls_tenant", new=AsyncMock(return_value=None)),
             patch("tasks.p12c_task.CostCapMiddleware") as mock_mw,
             patch("tasks.p12c_task._load_prompt", side_effect=RuntimeError("stop here")),
         ):

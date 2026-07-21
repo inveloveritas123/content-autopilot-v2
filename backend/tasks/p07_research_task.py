@@ -168,13 +168,15 @@ async def _process_item_async(
 
 
 async def _run_for_tenant_async(tenant_id: str) -> dict:
+    from services.rls import tenant_session
+
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     SessionMaker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     cutoff = datetime.utcnow() - timedelta(days=LOOKBACK_DAYS)
     inserted = 0
     skipped = 0
     try:
-        async with SessionMaker() as db:
+        async with tenant_session(SessionMaker, tenant_id) as db:
             # Voice-Profile-Snippet (savepoint-isoliert)
             voice_excerpt = ""
             try:
@@ -236,8 +238,11 @@ def _push_research_to_telegram(tenant_id: str, inserted: int) -> None:
     try:
         from api.telegram import _send_telegram_message
         from models.base import sync_session_factory
+        from services.rls import set_rls_tenant_sync
 
         with sync_session_factory() as db:
+            # W2: RLS-Kontext auf sync-Session (tenant_telegram_link ist Policy-Tabelle).
+            set_rls_tenant_sync(db, tenant_id)
             link = db.execute(
                 text(
                     "SELECT telegram_chat_id FROM tenant_telegram_link "

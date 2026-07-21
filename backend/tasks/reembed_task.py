@@ -273,15 +273,18 @@ async def _reembed_async(new_model_id: str, percent: int) -> dict:
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     SessionMaker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+    from services.rls import bypass_rls_session, tenant_session
+
     tenant_results: dict[str, dict] = {}
 
     try:
-        async with SessionMaker() as db:
+        # Cross-Tenant: DISTINCT tenant_id über alle memory_chunks — RLS-Bypass nötig.
+        async with bypass_rls_session(SessionMaker) as db:
             tenant_ids = await _get_all_tenant_ids(db)
             logger.info("reembed: %d Tenants gefunden", len(tenant_ids))
 
         for tenant_id in tenant_ids:
-            async with SessionMaker() as db:
+            async with tenant_session(SessionMaker, tenant_id) as db:
                 logger.info("reembed: tenant=%s — Canary-Phase start", tenant_id)
 
                 # 1) Chunk-IDs für Canary ermitteln

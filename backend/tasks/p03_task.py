@@ -265,12 +265,13 @@ def run_p03(
 
             from config import settings as _s
             from services.cost_cap import CostCapMiddleware
+            from services.rls import tenant_session
 
             async def _p03_cap_check():
                 _engine = create_async_engine(_s.database_url, pool_pre_ping=True)
                 _Session = _sm(_engine, class_=AsyncSession, expire_on_commit=False)
                 try:
-                    async with _Session() as _sess:
+                    async with tenant_session(_Session, tenant_id) as _sess:
                         await CostCapMiddleware(_sess).check_and_record(tenant_id, est)
                 finally:
                     await _engine.dispose()
@@ -338,7 +339,9 @@ def run_p03(
 
             logger.info(
                 "P03 voice_fallback done tenant=%s run_id=%s duration=%dms",
-                tenant_id, run_id, duration_ms,
+                tenant_id,
+                run_id,
+                duration_ms,
             )
             return {
                 "run_id": run_id,
@@ -494,12 +497,13 @@ def run_p03(
 
             from config import settings as _s2
             from services.cost_cap import CostCapMiddleware
+            from services.rls import tenant_session
 
             async def _p03_record_cost():
                 _engine = create_async_engine(_s2.database_url, pool_pre_ping=True)
                 _Session = _sm2(_engine, class_=AsyncSession, expire_on_commit=False)
                 try:
-                    async with _Session() as _sess:
+                    async with tenant_session(_Session, tenant_id) as _sess:
                         await CostCapMiddleware(_sess).check_and_record(
                             tenant_id, 0.0, actual_cost_usd=actual_cost
                         )

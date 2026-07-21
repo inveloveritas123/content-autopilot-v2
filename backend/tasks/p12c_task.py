@@ -194,13 +194,14 @@ def run_p12c(
         from sqlalchemy.orm import sessionmaker as _sm
 
         from config import settings as _s
+        from services.rls import tenant_session
 
         async def _p12c_cap_check():
             _engine = create_async_engine(_s.database_url, pool_pre_ping=True)
             _Session = _sm(_engine, class_=AsyncSession, expire_on_commit=False)
             _cap_exc = None
             try:
-                async with _Session() as _sess:
+                async with tenant_session(_Session, tenant_id) as _sess:
                     await CostCapMiddleware(_sess).check_and_record(tenant_id, est_cost)
             except BaseException as _e:
                 _cap_exc = _e
