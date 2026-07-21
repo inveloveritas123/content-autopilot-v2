@@ -160,9 +160,48 @@ def analyze_item(item_id: str):
     return {"item_id": item_id, "status": actual_status}
 
 
-@celery_app.task(name="tasks.generate_task.generate_content")
-def generate_content(item_id: str):
-    """Generate content for all channels from an analyzed item (Quick-Mode)."""
+@celery_app.task(
+    name="tasks.generate_task.generate_content", bind=True, max_retries=5, default_retry_delay=30
+)
+def generate_content(self, item_id: str):
+    """Generate content for all channels from an analyzed item (Quick-Mode).
+
+    W5-Bulkhead: begrenzt gleichzeitige Generierungen PRO Tenant — ein Kunde mit
+    vielen Jobs blockiert nicht den ganzen Worker-Pool. Ist das Tenant-Kontingent
+    voll, wird der Task zurückgestellt (Celery-Retry mit Backoff), statt einen
+    Worker-Slot zu belegen.
+    """
+    from services.bulkhead import _acquire, _release
+    from services.rls import set_rls_tenant_sync
+
+    # tenant_id + Slot-Acquire in einer kurzen Session.
+    with sync_session_factory() as _bh_session:
+        item = _bh_session.get(SourceItem, item_id)
+        if not item or not item.analysis:
+            logger.error(f"Item {item_id} not found or not analyzed")
+            return
+        _bulk_tenant = str(item.tenant_id)
+        set_rls_tenant_sync(_bh_session, _bulk_tenant)
+        if not _acquire(_bh_session, _bulk_tenant):
+            logger.info(
+                "generate_content: Tenant %s Bulkhead voll — Task zurückgestellt", _bulk_tenant
+            )
+            raise self.retry(countdown=30)
+
+    # Slot belegt → generieren, danach IMMER freigeben.
+    try:
+        _generate_content_inner(item_id)
+    finally:
+        try:
+            with sync_session_factory() as _rel_session:
+                set_rls_tenant_sync(_rel_session, _bulk_tenant)
+                _release(_rel_session, _bulk_tenant)
+        except Exception as _rel_exc:
+            logger.error("generate_content: Bulkhead-Release fehlgeschlagen: %s", _rel_exc)
+
+
+def _generate_content_inner(item_id: str):
+    """Eigentliche Generierung (vom Bulkhead-Wrapper umschlossen)."""
     with sync_session_factory() as session:
         item = session.get(SourceItem, item_id)
         if not item or not item.analysis:

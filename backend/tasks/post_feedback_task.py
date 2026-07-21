@@ -246,6 +246,26 @@ def regenerate_post_from_feedback(
     p12_run_id = pipeline_result.get("p12_run_id")
     flagged = bool(pipeline_result.get("flagged_for_review"))
 
+    # W5: Quality-Gate auch auf dem Regenerierungs-Pfad (war ungeschützt — Audit-Lücke).
+    # Enforce-Mode: schlechter Post (Branche ODER Voice) → Review-Queue statt Roh-Versand.
+    try:
+        from config import settings as _qg_settings
+
+        if getattr(_qg_settings, "quality_gate_enforce", False):
+            from services.content_gate import evaluate_post
+            from tasks.session_post_task import _resolve_branche
+
+            _branche = _resolve_branche(tenant_id)
+            _ev = evaluate_post(final_post, _branche, voice_payload)
+            if not _ev["passed"]:
+                flagged = True
+                logger.info(
+                    "post_feedback_task: quality-gate flagged post (violations=%s)",
+                    _ev["violations"],
+                )
+    except Exception as exc:
+        logger.warning("post_feedback_task: quality-gate fail-open: %s", type(exc).__name__)
+
     # 8. Neues Piece markieren (bot_session_id + Feedback-Metadaten)
     try:
         with sync_session_factory() as db:

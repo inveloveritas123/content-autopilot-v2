@@ -1,0 +1,65 @@
+{
+  "version": "1.0.0",
+  "profile_key": "handwerk_meister",
+  "description": "Synthetisches Voice-Golden-Profil fuer eine fiktive Handwerksmeister-Persona (kein realer Kunde, keine PII). Bodenstaendiger, direkter Ton, kurze Saetze mit gelegentlichem Einschub, Du-Ansprache. Prueft services.voice_gate.check_voice_consistency: good_posts muessen passed=True liefern, bad_posts muessen an Anti-KI-Blocklist und/oder verbotenen Phrasen scheitern.",
+  "profile": {
+    "tonalitaet": {
+      "grundton": "bodenstaendig, direkt, humorvoll-trocken",
+      "ansprache": "du"
+    },
+    "kernthemen": ["Handwerk", "Qualitaet", "Zuverlaessigkeit", "Meisterbetrieb"],
+    "stilprinzipien": {
+      "prinzipien": ["kurze Saetze", "konkrete Beispiele aus dem Alltag", "kein Fachjargon ohne Erklaerung"]
+    },
+    "satzarchitektur": {
+      "laenge": "kurz, praegnant, mit gelegentlichem laengeren Einschub"
+    },
+    "wortschatz": {
+      "signalwoerter": ["Handwerk", "Baustelle", "sauber gemacht", "Meisterarbeit"],
+      "verbotene_woerter": ["Mehrwert", "synergieren", "Skalierung"]
+    },
+    "vermeidungsprofil": {
+      "nie_sagen": [
+        "Klar! Hier ist",
+        "Zusammenfassend lässt sich sagen",
+        {"item": "Als KI", "grund": "verraet KI-Generierung, bricht die Handwerker-Stimme komplett"}
+      ]
+    }
+  },
+  "good_posts": [
+    {
+      "id": "good_baustelle_montag",
+      "text": "Montagmorgen, erste Baustelle, Kaffee noch in der Hand. Der Kunde wollte eine neue Tuerzarge, sauber und ohne Risse. Zwei Stunden spaeter stand sie. Kein Schnickschnack, einfach Meisterarbeit. Genau so mag ich das."
+    },
+    {
+      "id": "good_kundenfrage_boden",
+      "text": "Frage von letzter Woche: Welcher Bodenbelag haelt am laengsten in der Werkstatt? Meine Antwort: kommt drauf an, was drueber rollt. Fuer schwere Maschinen nehme ich Epoxidharz, fuer den Rest reicht ein guter Estrich. Kein Geheimnis, nur Erfahrung."
+    },
+    {
+      "id": "good_lehrling_geschichte",
+      "text": "Mein Lehrling hat heute zum ersten Mal allein eine Wand verputzt. Nicht perfekt, aber ehrlich gearbeitet. Ich hab ihm gesagt: beim naechsten Mal wird's besser, das war schon bei mir so. Baustelle ist eben auch Schule."
+    },
+    {
+      "id": "good_werkzeug_tipp",
+      "text": "Ein guter Handwerker braucht kein Regal voller Werkzeug, sondern das richtige zur richtigen Zeit. Ich arbeite seit Jahren mit denselben drei Saegen. Sauber gemacht schlaegt immer teuer gekauft."
+    }
+  ],
+  "bad_posts": [
+    {
+      "id": "bad_ki_opener_und_floskeln",
+      "text": "Klar! Hier ist mein Tipp fuer die Baustelle. Es ist wichtig zu beachten, dass jeder Handwerker anders arbeitet. Darüber hinaus sollte man immer auf Qualitaet achten. Ich hoffe, das hilft!"
+    },
+    {
+      "id": "bad_verbotenes_wort_mehrwert",
+      "text": "Unser Handwerksbetrieb bietet euch echten Mehrwert bei jeder Baustelle. Wir synergieren Erfahrung und Praezision fuer beste Ergebnisse."
+    },
+    {
+      "id": "bad_generischer_ki_opener",
+      "text": "In der heutigen schnelllebigen Welt müssen auch Handwerksbetriebe umdenken. Als KI-Modell wuerde ich sagen: Skalierung ist der Schluessel zum Erfolg."
+    },
+    {
+      "id": "bad_hedging_und_essay_konnektoren",
+      "text": "Es ist wichtig zu beachten, dass eine Baustelle immer Ueberraschungen bereithaelt. Zusätzlich muss man flexibel bleiben. Zusammenfassend lässt sich sagen, dass Erfahrung der wichtigste Faktor ist."
+    }
+  ]
+}

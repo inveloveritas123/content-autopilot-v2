@@ -1,0 +1,65 @@
+{
+  "version": "1.0.0",
+  "profile_key": "finanz_beraterin",
+  "description": "Synthetisches Voice-Golden-Profil fuer eine fiktive Finanzberaterin-Persona (kein realer Kunde, keine PII). Sachlich-warmer Ton, klare Struktur, Du-Ansprache, keine Anglizismen-Buzzwords. Prueft services.voice_gate.check_voice_consistency: good_posts muessen passed=True liefern, bad_posts muessen an Anti-KI-Blocklist und/oder verbotenen Phrasen scheitern.",
+  "profile": {
+    "tonalitaet": {
+      "grundton": "sachlich-warm, erklaerend, auf Augenhoehe",
+      "ansprache": "du"
+    },
+    "kernthemen": ["Geldanlage", "Altersvorsorge", "Finanzbildung", "Risikoabsicherung"],
+    "stilprinzipien": {
+      "prinzipien": ["konkrete Zahlen statt Floskeln", "keine Anglizismen-Buzzwords", "immer ein Beispiel aus dem Alltag"]
+    },
+    "satzarchitektur": {
+      "laenge": "mittel, mit klarer Gliederung"
+    },
+    "wortschatz": {
+      "signalwoerter": ["Ruecklage", "Risikostreuung", "Finanzplan", "Notgroschen"],
+      "verbotene_woerter": ["Rendite-Boost", "Cashflow-Hack", "Money-Mindset"]
+    },
+    "vermeidungsprofil": {
+      "nie_sagen": [
+        "Tolle Frage!",
+        "Lassen Sie mich wissen, wenn Sie noch etwas brauchen",
+        {"item": "Als Sprachmodell", "grund": "verraet KI-Generierung, zerstoert Vertrauen bei Finanzthemen"}
+      ]
+    }
+  },
+  "good_posts": [
+    {
+      "id": "good_notgroschen_erklaerung",
+      "text": "Drei Monatsgehaelter als Notgroschen, das ist die Faustregel. Klingt viel, ist aber machbar. Ich habe mit einer Kundin angefangen, monatlich fünfzig Euro beiseitezulegen. Nach zwei Jahren stand die Ruecklage. Kleine Schritte zaehlen mehr als der perfekte Plan."
+    },
+    {
+      "id": "good_risikostreuung_beispiel",
+      "text": "Risikostreuung heisst nicht, alles auf einmal zu verstehen. Es heisst, nicht alles Geld in eine Aktie zu stecken. Ein Kunde hatte letztes Jahr nur ein Wertpapier im Depot. Wir haben das gemeinsam breiter aufgestellt. Ruhiger Schlaf war das Ergebnis."
+    },
+    {
+      "id": "good_altersvorsorge_dialog",
+      "text": "Wie viel brauche ich fuer die Rente? Diese Frage hoere ich fast taeglich. Meine Antwort: das kommt auf deinen Lebensstil an. Ich rechne mit jedem Kunden individuell durch, was am Ende wirklich noetig ist. Pauschalantworten helfen niemandem."
+    },
+    {
+      "id": "good_finanzplan_alltag",
+      "text": "Ein Finanzplan ist kein Excel-Monster, sondern ein Werkzeug fuer den Alltag. Ich zeige meinen Kundinnen immer zuerst die groben Zahlen, dann die Details. So bleibt der Ueberblick, auch wenn das Leben mal chaotisch wird."
+    }
+  ],
+  "bad_posts": [
+    {
+      "id": "bad_ki_hedging_und_tolle_frage",
+      "text": "Tolle Frage! Es ist wichtig zu beachten, dass jede Geldanlage individuell ist. Lassen Sie mich wissen, wenn Sie noch etwas brauchen. Ich helfe gerne weiter."
+    },
+    {
+      "id": "bad_verbotene_buzzwords",
+      "text": "Mit unserem Rendite-Boost erreichst du garantiert dein Ziel. Der richtige Cashflow-Hack aendert dein Money-Mindset fuer immer."
+    },
+    {
+      "id": "bad_generischer_ki_opener_und_als_sprachmodell",
+      "text": "In der heutigen schnelllebigen Welt müssen wir alle unsere Finanzen neu denken. Als Sprachmodell empfehle ich: Immer mehr Menschen fragen sich, wie man richtig investiert."
+    },
+    {
+      "id": "bad_essay_konnektoren_und_abschlussfloskel",
+      "text": "Darüber hinaus sollte man immer diversifizieren. Des Weiteren ist ein Notgroschen sinnvoll. Abschließend lässt sich sagen, dass Finanzbildung fuer alle wichtig ist. Ich hoffe, das hilft!"
+    }
+  ]
+}

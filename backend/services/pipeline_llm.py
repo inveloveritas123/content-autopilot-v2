@@ -401,6 +401,7 @@ def call_pipeline_llm(
     )
 
     # 5. HTTP-Call mit Retry-Logik
+    _trace_start = time.monotonic()
     last_error: Exception | None = None
     for attempt in range(max_retries):
         try:
@@ -445,16 +446,61 @@ def call_pipeline_llm(
                 data = resp.json()
 
             # 6. Response parsen
-            return _parse_response(data, model_id, tier)
+            result = _parse_response(data, model_id, tier)
+            _record_trace_best_effort(
+                tenant_id=tenant_id,
+                prompt_key=prompt_key,
+                model=result.model_id,
+                tier=result.tier,
+                tokens_in=result.input_tokens,
+                tokens_out=result.output_tokens,
+                cost_usd=result.cost_usd,
+                latency_ms=int((time.monotonic() - _trace_start) * 1000),
+                status="ok",
+            )
+            return result
 
         except BudgetExceededError:
+            _record_trace_best_effort(
+                tenant_id=tenant_id,
+                prompt_key=prompt_key,
+                model=model_id,
+                tier=tier,
+                tokens_in=0,
+                tokens_out=0,
+                cost_usd=0.0,
+                latency_ms=int((time.monotonic() - _trace_start) * 1000),
+                status="budget_exceeded",
+            )
             raise  # Kein Retry bei Budget-Überschreitung
         except ValueError:
+            _record_trace_best_effort(
+                tenant_id=tenant_id,
+                prompt_key=prompt_key,
+                model=model_id,
+                tier=tier,
+                tokens_in=0,
+                tokens_out=0,
+                cost_usd=0.0,
+                latency_ms=int((time.monotonic() - _trace_start) * 1000),
+                status="error",
+            )
             raise  # BUG-3-Fix: Malformte 200er-Antwort → sofort Fehler, kein Retry
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code if exc.response else 0
             if 400 <= status < 500 and status != 429:
                 # 4xx (ausser 429 Throttle) nicht retrien
+                _record_trace_best_effort(
+                    tenant_id=tenant_id,
+                    prompt_key=prompt_key,
+                    model=model_id,
+                    tier=tier,
+                    tokens_in=0,
+                    tokens_out=0,
+                    cost_usd=0.0,
+                    latency_ms=int((time.monotonic() - _trace_start) * 1000),
+                    status="http_error",
+                )
                 raise
             last_error = exc
             wait = 2**attempt
@@ -482,6 +528,17 @@ def call_pipeline_llm(
                 time.sleep(wait)
 
     assert last_error is not None
+    _record_trace_best_effort(
+        tenant_id=tenant_id,
+        prompt_key=prompt_key,
+        model=model_id,
+        tier=tier,
+        tokens_in=0,
+        tokens_out=0,
+        cost_usd=0.0,
+        latency_ms=int((time.monotonic() - _trace_start) * 1000),
+        status="error" if not isinstance(last_error, httpx.HTTPStatusError) else "http_error",
+    )
     raise last_error
 
 
@@ -592,3 +649,80 @@ def _parse_response(data: dict, model_id: str, tier: str) -> PipelineLLMResult:
         cache_write_tokens=cache_write,
         cost_usd=cost_usd,
     )
+
+
+# ---------------------------------------------------------------------------
+# LLM-Observability: Per-Call-Tracing (portiert aus Leitivo, W-OBSERVABILITY)
+# ---------------------------------------------------------------------------
+#
+# call_pipeline_llm schreibt nach JEDEM Call (Erfolg oder Fehler) eine
+# Metrik-Zeile in llm_trace (models/llm_trace.py, Migration 061). Reine
+# Metriken (Modell/Tier/Tokens/Kosten/Latenz/Outcome) — KEIN Klartext, KEIN
+# Hash von Prompt/Response.
+#
+# ACHTUNG (siehe Aufgabenstellung): pipeline_llm ist synchron und wird sowohl
+# aus Celery-Tasks als auch aus asyncio-Kontexten (Setup-Pipeline-Orchestrator)
+# heraus aufgerufen. Die Trace-Schreibung MUSS daher:
+# 1. synchron sein (sync_session_factory, kein asyncio.run/await hier),
+# 2. best-effort sein — ein Fehler beim Tracing (fehlende DB, kaputte
+#    Migration, gestubbte models.base in Unit-Tests, ...) darf den
+#    eigentlichen LLM-Call NIEMALS brechen. Deshalb: alle Imports UND die
+#    eigentliche DB-Arbeit liegen in einem einzigen try/except, das JEDE
+#    Exception schluckt und nur loggt (kein Re-Raise, kein bare `except:`
+#    — Exception ist bewusst breit, weil hier wirklich alles best-effort
+#    sein muss: ImportError bei gestubbten Modulen, OperationalError ohne
+#    DB, ProgrammingError vor der Migration, etc.).
+def _record_trace_best_effort(
+    *,
+    tenant_id: str | None,
+    prompt_key: str,
+    model: str,
+    tier: str,
+    tokens_in: int,
+    tokens_out: int,
+    cost_usd: float,
+    latency_ms: int,
+    status: str,
+) -> None:
+    """Schreibt best-effort eine llm_trace-Zeile. Wirft NIE.
+
+    Kein Tenant → kein Trace (llm_trace.tenant_id ist NOT NULL + FK, ein
+    fehlender Tenant könnte nur einen Fremd-/Test-Wert sein; das Tracing
+    ist ein Zusatz-Signal, kein Pflichtpfad — also einfach überspringen).
+    """
+    if not tenant_id:
+        return
+    try:
+        # Lazy Imports: in Unit-Tests wird models.base häufig gestubbt
+        # (siehe tests/test_pipeline_llm.py) — ein Modul-Level-Import würde
+        # dort beim Import von pipeline_llm crashen oder mit MagicMock-
+        # Artefakten kollidieren. Der Import lebt deshalb INNERHALB des
+        # try/except und wird pro Call ausgeführt (kein spürbarer Overhead
+        # gegenüber dem eigentlichen Netzwerk-Call).
+        from models.base import sync_session_factory
+        from models.llm_trace import LLMTrace
+        from services.rls import set_rls_tenant_sync
+
+        with sync_session_factory() as session:
+            set_rls_tenant_sync(session.connection(), tenant_id)
+            session.add(
+                LLMTrace(
+                    tenant_id=tenant_id,
+                    prompt_key=prompt_key,
+                    model=model,
+                    tier=tier,
+                    tokens_in=max(0, int(tokens_in)),
+                    tokens_out=max(0, int(tokens_out)),
+                    cost_usd=float(cost_usd),
+                    latency_ms=max(0, int(latency_ms)),
+                    status=status,
+                )
+            )
+            session.commit()
+    except Exception as exc:  # Tracing ist best-effort, darf den LLM-Call nie brechen
+        logger.warning(
+            "call_pipeline_llm: llm_trace-Schreibung fehlgeschlagen (prompt=%s, status=%s): %s",
+            prompt_key,
+            status,
+            exc,
+        )

@@ -347,14 +347,41 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             session_id,
         )
 
+        # W5: Voice-Consistency-Judge (W4d) zusätzlich zum Branchen-Gate — prüft, ob
+        # der Post zur erlernten Kundenstimme passt + keine KI-Floskeln enthält.
+        # fail-open, additiv: verschärft das Gate nur, blockt nie eigenständig.
+        _voice_passed = None
+        _voice_violations: list = []
+        try:
+            from services.voice_gate import check_voice_consistency
+
+            _vres = check_voice_consistency(final_post, voice_payload)
+            _voice_passed = _vres["passed"]
+            _voice_violations = _vres["violations"]
+            if _voice_violations:
+                logger.info(
+                    "session_post_task: voice_gate passed=%s violations=%s (session=%s)",
+                    _voice_passed,
+                    _voice_violations,
+                    session_id,
+                )
+        except Exception as exc:
+            logger.warning(
+                "session_post_task: voice_gate raised — fail-open (session=%s): %s",
+                session_id,
+                type(exc).__name__,
+            )
+
         _gate_info = {
             "score": _gate_result["score"],
             "passed": _gate_result["passed"],
+            "voice_passed": _voice_passed,
+            "voice_violations": _voice_violations,
             "enforced": _gate_enforce,
         }
 
-        # Enforce-Mode: schlechter Post → in Review-Queue-Pfad routen (wie geflaggt)
-        if _gate_enforce and not _gate_result["passed"]:
+        # Enforce-Mode: schlechter Post (Branche ODER Voice) → Review-Queue-Pfad.
+        if _gate_enforce and (not _gate_result["passed"] or _voice_passed is False):
             flagged = True
     except Exception as exc:
         # fail-open: Gate-Fehler darf NIEMALS den Versandpfad blockieren
