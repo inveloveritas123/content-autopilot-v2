@@ -15,13 +15,24 @@ Fortschritt der Enterprise-Grade-Ausbaustufe. Pro Welle ein Eintrag: **was gemac
 | W1 | Security-Härtung (Admin-Token, offene Tenant-Erstellung, SSRF, Secret-Trennung) | ✅ fertig |
 | W2 | Echte Multi-Tenant-Isolation (Postgres-RLS) | ✅ fertig |
 | W3 | Auth: Magic-Link Login + User/Rollen (RBAC) | ✅ fertig |
-| W4 | Voice-Engine (Few-Shot-Korpus) + Persona-Lernen | geplant |
+| W4 | Voice-Engine (Few-Shot-Korpus) + Persona-Lernen | ✅ fertig |
 | W5 | Quality-Gate scharf + Eval-Harness + Observability + Bulkhead | geplant |
 | W6 | DSGVO-Vervollständigung + Deploy-Härtung + KI-Kennzeichnung | geplant |
 
 ---
 
 ## Einträge
+
+### W4 — Voice-Engine: authentische Stimme (2026-07-21) ✅
+
+**Der fachliche Kern des Produkts** — dass die generierten Posts wirklich nach dem Kunden klingen. Umgesetzt nach der belegten Doktrin: **echte Textbeispiele des Kunden steuern die Stimme, nicht eine Eigenschafts-Beschreibung** (in Blindvergleichen 70–85 % überlegen).
+
+- **W4a Few-Shot-Steuerung:** Der Post-Generator bekommt echte, wortwörtliche Sätze des Kunden als Vorbild-Beispiele mit — sie steuern den Ton. Die Eigenschafts-Beschreibung dient nur noch als grobe Orientierung. (Fällt sauber zurück, wenn noch keine Beispiele da sind.)
+- **W4b Bessere Wissenssuche:** Die interne Suche kombiniert jetzt Bedeutungs- und Wort-Treffer (Hybrid) und ordnet die Ergebnisse mit einem zweiten Durchgang nach — relevantere Kontexte für treffendere Posts.
+- **W4c „Reinquatschen ändert die Persona":** Erzählt der Kunde im Chat frei etwas (ohne einen Post zu wollen), fließt das jetzt als Vorschlag in sein Stimmprofil ein — zur Bestätigung, nichts wird heimlich geändert.
+- **W4d Qualitäts-Prüfung der Stimme:** Ein Messverfahren prüft nach der Generierung, ob ein Post zur Stimme des Kunden passt und keine typischen „KI-Floskeln" enthält.
+
+**Wie testen:** `PYTHONPATH=. pytest tests/test_rag_rerank.py tests/test_voice_gate.py -q` → grün. Vollständiger Lauf: 1525 passed.
 
 ### W3 — Passwortloser Login + Rollen (2026-07-21) ✅
 
