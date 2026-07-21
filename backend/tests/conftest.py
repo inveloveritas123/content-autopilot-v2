@@ -3,6 +3,15 @@ Pytest conftest for unit tests.
 Stubs out heavy optional dependencies that are not installed in the test
 environment so that lightweight unit tests (e.g. sensitive_detector) can
 run without a full service stack.
+
+Test-Isolation (2026-07-21): Viele Testdateien injizieren projekt-INTERNE
+Module (dependencies, api.telegram, services.*, tasks.*, models.*) per
+`sys.modules[...] = <Stub>` OHNE Teardown. Ohne Aufräumen leckt so ein
+unvollständiger Stub in nachfolgende Tests (reihenfolgenabhängige Failures,
+z.B. `ImportError: cannot import name 'get_tenant'`). Die autouse-Fixture
+`_isolate_internal_sys_modules` unten stellt den `sys.modules`-Zustand für
+projekt-interne Module nach JEDEM Test wieder her. Externe Heavy-Deps
+(google/anthropic/celery, s.u.) bleiben bewusst dauerhaft gestubbt.
 """
 
 import os
@@ -103,3 +112,62 @@ if "celery" not in sys.modules:
     signals_mod.task_prerun = _FakeSignal()
     signals_mod.task_postrun = _FakeSignal()
     signals_mod.task_failure = _FakeSignal()
+
+
+# ---------------------------------------------------------------------------
+# Test-Isolation: projekt-interne sys.modules-Stubs nach jedem Test zurücksetzen
+# ---------------------------------------------------------------------------
+
+# Module, deren unvollständige Testdatei-Stubs nachweislich in andere Testdateien
+# lecken und dort Collection-ImportErrors auslösen. BEWUSST eng gehalten: nur die
+# Core-App-Module, die viele andere Dateien beim Import transitiv ziehen. Andere
+# interne Stubs (z.B. services.telegram_token_resolver) werden NICHT angefasst,
+# weil Testdateien sich darauf verlassen, dass ihre eigenen Modul-Level-Stubs bis
+# in die Testausführung bestehen bleiben.
+_POLLUTION_PRONE_MODULES = (
+    "dependencies",
+    "api.telegram",
+    "models.base",
+    "models.tenant",
+)
+
+# Echter (nicht-gestubbter) Zustand dieser Module, eingefroren beim ersten
+# collectstart und danach vor jeder weiteren Modul-Collection wiederhergestellt.
+_MODULE_BASELINE: dict = {}
+_BASELINE_FROZEN = False
+
+
+def pytest_collectstart(collector):
+    """Vor dem Sammeln JEDER Testdatei pollution-anfällige Core-Module auf den
+    echten Zustand zurücksetzen.
+
+    Manche Testdateien setzen Modul-Level-Stubs (`sys.modules['dependencies'] =
+    <unvollständiger Stub>`) beim Import in der Collection-Phase. Ohne Reset
+    zwischen den Dateien leckt so ein Stub in die nächste Datei und bricht deren
+    `from dependencies import get_tenant` / `from models.base import
+    async_session_factory`. Nur die eng gefasste Core-Liste wird zurückgesetzt,
+    damit dateieigene Laufzeit-Stubs (z.B. services.*) erhalten bleiben.
+    """
+    global _BASELINE_FROZEN
+    if not _BASELINE_FROZEN:
+        _MODULE_BASELINE.update(
+            {n: sys.modules[n] for n in _POLLUTION_PRONE_MODULES if n in sys.modules}
+        )
+        _BASELINE_FROZEN = True
+        return
+    for name in _POLLUTION_PRONE_MODULES:
+        baseline = _MODULE_BASELINE.get(name)
+        if baseline is not None:
+            sys.modules[name] = baseline
+        elif name in sys.modules:
+            # War beim Einfrieren nicht echt geladen → Stub raus, damit der
+            # nächste echte Import sauber durchläuft.
+            del sys.modules[name]
+
+
+# Hinweis: Es gibt bewusst KEINE per-Test-autouse-Fixture, die sys.modules
+# zurücksetzt. Viele Testdateien setzen ihre Stubs auf Modul-Ebene (Collection)
+# und verlassen sich darauf, dass diese während IHRER Testausführung bestehen
+# bleiben. Die Isolation passiert daher ausschließlich auf Collection-Ebene
+# (pytest_collectstart oben) — das genügt, um Cross-Datei-Pollution zu verhindern,
+# ohne die dateieigenen Laufzeit-Stubs zu zerstören.

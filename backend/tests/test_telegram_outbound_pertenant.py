@@ -49,7 +49,7 @@ except ImportError:
 # Wichtig: NUR stubben wenn cryptography wirklich fehlt — andernfalls test_crypto.py
 # bekommt einen nicht-deterministischen Fake der seine Tests kaputtmacht.
 try:
-    import cryptography.fernet as _cf_real  # type: ignore[import]
+    import cryptography.fernet as _cf_real  # type: ignore[import]  # noqa: F401  (Availability-Check: Import-Erfolg entscheidet, ob gestubbt wird)
     # Echte cryptography verfügbar — kein Stub nötig
 except ImportError:
     _c = _ensure_stub("cryptography")
@@ -95,15 +95,81 @@ if "config" not in sys.modules:
         nextcloud_password="stub",
     )
 
-# models.base-Stub (nur wenn models noch nicht real geladen)
-if "models" not in sys.modules:
-    _ensure_stub("models")
-    if "models.base" not in sys.modules:
-        _mb = _ensure_stub("models.base")
-        _mb.sync_session_factory = MagicMock()
-    # services.provider_resolver imports models.llm_provider — stub it to prevent ImportError
-    if "models.llm_provider" not in sys.modules:
-        _ensure_stub("models.llm_provider").LLMProvider = MagicMock
+# models-Stub — DETERMINISTISCH statt fragiler "if not in sys.modules"-Guards.
+#
+# Hintergrund (2026-07-21, Suite-Kontext-Crash): Andere Testdateien (z.B.
+# test_telegram_bot_api.py) stubben "models" via `types.ModuleType("models")`
+# OHNE __path__ zu setzen und lassen den Stub nach ihrem Lauf in sys.modules
+# zurück. tests/conftest.py::pytest_collectstart setzt zwar `models.base` und
+# `models.tenant` vor jeder neuen Testdatei-Collection zurück, NICHT aber das
+# bloße "models"-Package selbst (bewusst eng gehalten, siehe conftest.py).
+# Ergebnis: `sys.modules["models"]` kann beim Collection-Start dieser Datei
+# ein bereits vorhandener, aber kaputter (kein __path__) Nicht-Package-Stub
+# sein → ein reines "if 'models' not in sys.modules"-Guard greift dann NICHT
+# und `from models.base import ...` crasht mit "'models' is not a package".
+#
+# Fix: __path__ IMMER sicherstellen (idempotent — echte Packages haben schon
+# ein gültiges __path__, das bleibt unangetastet), und die von uns benötigten
+# Attribute auf models.base / models.tenant IMMER vorhanden machen (additiv:
+# ein bereits reales, funktionierendes Modul wird nicht überschrieben, nur um
+# fehlende Attribute ergänzt — andere, evtl. noch laufende Tests, die auf ein
+# echtes models.base angewiesen sind, werden dadurch nicht zerstört).
+
+
+def _ensure_package(name: str) -> types.ModuleType:
+    """Wie _ensure_stub, garantiert aber zusätzlich ein gültiges __path__.
+
+    Robust gegen Pollution aus anderen Testdateien: auch wenn `name` bereits
+    in sys.modules steht (z.B. als kaputter Nicht-Package-Stub einer anderen
+    Datei), wird __path__ nachgerüstet statt das Fehlen stillschweigend zu
+    ignorieren.
+    """
+    mod = _ensure_stub(name)
+    if not hasattr(mod, "__path__"):
+        mod.__path__ = []
+    return mod
+
+
+def _ensure_attr(module: types.ModuleType, attr: str, factory) -> None:
+    """Setzt `attr` auf `module` nur, wenn es dort noch fehlt.
+
+    Additiv statt destruktiv: ein bereits real geladenes Modul (mit echten
+    SQLAlchemy-Factories) wird NICHT überschrieben — es fehlt dort ohnehin
+    nichts. Ein (teilweise) kaputter Stub aus einer anderen Datei bekommt das
+    fehlende Attribut deterministisch nachgerüstet.
+    """
+    if not hasattr(module, attr):
+        setattr(module, attr, factory())
+
+
+_models_pkg = _ensure_package("models")
+_mb = _ensure_package("models.base")
+_ensure_attr(_mb, "sync_session_factory", MagicMock)
+# dependencies.py: `from models.base import async_session_factory`
+_ensure_attr(_mb, "async_session_factory", MagicMock)
+
+_mt = _ensure_package("models.tenant")
+# dependencies.py: `from models.tenant import Tenant`
+_ensure_attr(_mt, "Tenant", lambda: MagicMock)
+
+# services.provider_resolver imports models.llm_provider — stub it to prevent ImportError
+_mlp = _ensure_package("models.llm_provider")
+_ensure_attr(_mlp, "LLMProvider", lambda: MagicMock)
+
+# dependencies-Stub — DETERMINISTISCH, nicht vom evtl. gepollten Real-Modul
+# abhängig. api/telegram.py importiert `from dependencies import get_db,
+# get_tenant` nur als Depends()-Defaults für FastAPI-Routen; diese Tests rufen
+# _send_telegram_message / _send_admin_telegram_message direkt auf, die echten
+# Callables werden nie ausgeführt — simple Platzhalter genügen.
+_deps_mod = _ensure_stub("dependencies")
+if not hasattr(_deps_mod, "get_db"):
+
+    async def _stub_get_db():
+        yield MagicMock()
+
+    _deps_mod.get_db = _stub_get_db
+if not hasattr(_deps_mod, "get_tenant"):
+    _deps_mod.get_tenant = MagicMock()
 
 # datetime.UTC Py3.9-Compat-Stub:
 # api/telegram.py importiert `from datetime import UTC` — erst ab Py3.11.
@@ -315,6 +381,18 @@ class TestSendTelegramMessagePerTenant:
 
     def test_updates_last_active_on_success(self):
         """Erfolgreich gesendet → update_last_active wird aufgerufen."""
+        # Mock-Artefakt-Fix (2026-07-21): ein unkonfigurierter `patch("httpx.post")`
+        # liefert eine bloße MagicMock als Response zurück. api/telegram.py prüft
+        # `resp.status_code == 200 and tg_body.get("ok")` — eine MagicMock ist
+        # NIE `== 200`, also wertet der Code jeden unkonfigurierten Mock als
+        # fehlgeschlagenen Send (→ update_last_active wird korrekterweise NICHT
+        # aufgerufen). Das ist kein Produktcode-Bug, sondern eine fehlende
+        # Mock-Konfiguration — response muss wie in test_sends_when_bot_active
+        # einen echten Erfolg (status_code=200, json().get("ok")=True) simulieren.
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"ok": True}
+
         with (
             patch.object(
                 sys.modules["services.telegram_token_resolver"],
@@ -325,7 +403,7 @@ class TestSendTelegramMessagePerTenant:
                 sys.modules["services.telegram_token_resolver"],
                 "update_last_active",
             ) as mock_update,
-            patch("httpx.post"),
+            patch("httpx.post", return_value=mock_response),
         ):
             tg._send_telegram_message(99, "msg", tenant_id="t-xyz")
 

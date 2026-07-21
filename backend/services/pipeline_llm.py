@@ -38,7 +38,7 @@ TIER_MODELS: dict[str, str] = {
     "S3": "mistral/devstral-small-latest",
     "S4": "mistral/mistral-large-latest",
     "S5": "mistral/devstral-latest",  # CONFIRM-pflichtig
-    "S6": "vertex/gemini-2.5-flash@europe-central2",  # Gemini-Flash EU-Mailand als S6-Übergangslösung
+    "S6": "bedrock/claude-sonnet-4-6@eu-central-1",  # Frontier: Claude Sonnet 4.6 via Bedrock Frankfurt (EU). Qualität > Kosten (Owner 2026-07-21) — trägt Voice-Analyse (P03) + Post-Generierung (P12/P12b).
 }
 
 # Pricing pro Tier ($/1M Tokens) — für Kosten-Schätzung und Actual-Cost.
@@ -49,7 +49,10 @@ TIER_PRICING: dict[str, dict[str, float]] = {
     "S3": {"input": 0.10, "output": 0.30},
     "S4": {"input": 2.00, "output": 6.00},
     "S5": {"input": 0.40, "output": 2.00},
-    "S6": {"input": 0.30, "output": 1.25},  # Gemini Flash als S6-Übergangslösung (#115)
+    "S6": {
+        "input": 3.00,
+        "output": 15.00,
+    },  # Claude Sonnet 4.6 (Bedrock EU) — jetzt konsistent mit TIER_MODELS["S6"] (2026-07-21)
 }
 
 # Per-Prompt-Default-Tier — portiert von ADR-0008 (Qualität > Kosten

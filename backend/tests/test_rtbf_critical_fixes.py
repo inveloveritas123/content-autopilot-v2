@@ -9,9 +9,14 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+# Migrations-Verzeichnis relativ zu dieser Testdatei (backend/tests/ -> backend/alembic/versions/).
+# Vorher hartcodierter Prod-Pfad /opt/content-autopilot-v2/... — schlug lokal/CI fehl (2026-07-21).
+_MIGRATIONS_DIR = Path(__file__).parent.parent / "alembic" / "versions"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -373,11 +378,7 @@ def test_company_profile_review_has_whitelist_check():
 def test_migration_047_revision_metadata():
     """Migration 047 muss revision='047' und down_revision='046' haben.
     Geprüft per Source-Parsing (kein alembic.op Import nötig)."""
-    import pathlib
-
-    path = pathlib.Path(
-        "/opt/content-autopilot-v2/backend/alembic/versions/047_deletion_request_id_fk.py"
-    )
+    path = _MIGRATIONS_DIR / "047_deletion_request_id_fk.py"
     assert path.exists(), "Migration 047 nicht gefunden"
     src = path.read_text()
     assert 'revision = "047"' in src, "revision = '047' nicht in Migration 047"
@@ -386,11 +387,7 @@ def test_migration_047_revision_metadata():
 
 def test_migration_047_covers_all_tables():
     """Migration 047 muss deletion_request_id für alle 5 Pflicht-Tabellen erwähnen."""
-    import pathlib
-
-    path = pathlib.Path(
-        "/opt/content-autopilot-v2/backend/alembic/versions/047_deletion_request_id_fk.py"
-    )
+    path = _MIGRATIONS_DIR / "047_deletion_request_id_fk.py"
     src = path.read_text()
     required = ("memory_chunks", "content_pieces", "content_ideas", "source_items", "llm_call_logs")
     for table in required:
@@ -399,22 +396,14 @@ def test_migration_047_covers_all_tables():
 
 def test_migration_047_has_downgrade():
     """Migration 047 muss eine downgrade()-Funktion haben."""
-    import pathlib
-
-    path = pathlib.Path(
-        "/opt/content-autopilot-v2/backend/alembic/versions/047_deletion_request_id_fk.py"
-    )
+    path = _MIGRATIONS_DIR / "047_deletion_request_id_fk.py"
     src = path.read_text()
     assert "def downgrade" in src, "Migration 047 muss eine downgrade()-Funktion haben"
 
 
 def test_migration_047_covers_telegram_message_log():
     """Migration 047 muss telegram_message_log für M5-Recovery-Symmetrie abdecken."""
-    import pathlib
-
-    path = pathlib.Path(
-        "/opt/content-autopilot-v2/backend/alembic/versions/047_deletion_request_id_fk.py"
-    )
+    path = _MIGRATIONS_DIR / "047_deletion_request_id_fk.py"
     src = path.read_text()
     assert (
         "telegram_message_log" in src
