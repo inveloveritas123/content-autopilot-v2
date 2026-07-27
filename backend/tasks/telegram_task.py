@@ -81,18 +81,23 @@ def _update_log_transcript(log_id: str, transcript: str, model: str, confidence:
 def _load_active_session(tenant_id: str) -> object | None:
     """Lädt die aktive bot_session des Tenants (random_smart oder targeted).
 
-    Gibt ein leichtgewichtiges SimpleNamespace(id, status) zurück (KEIN
-    ORM-Model — route_telegram_intent greift nur per getattr/str darauf zu)
-    oder None, wenn keine aktive Session existiert.
+    Gibt ein leichtgewichtiges SimpleNamespace(id, status, current_question)
+    zurück (KEIN ORM-Model — route_telegram_intent greift nur per
+    getattr/str auf id/status zu) oder None, wenn keine aktive Session
+    existiert.
 
     #57: Filter auf mode IN ('random_smart','targeted') erweitert — ohne dies
     umgehen targeted-Antworten still das p08-Routing (p08_service unterstützt
     targeted bereits).
+
+    #62: current_question (letzte bot-Frage aus messages[-1]["bot"]) wird
+    mitgeladen, damit Layer-1 die Nutzer-Antwort gegen die tatsächlich
+    gestellte Frage klassifizieren kann statt blind zu raten.
     """
     with sync_session_factory() as db:
         row = db.execute(
             text(
-                "SELECT id, status FROM bot_session "
+                "SELECT id, status, messages FROM bot_session "
                 "WHERE tenant_id = :tid AND status = 'active' "
                 "      AND mode IN ('random_smart', 'targeted') "
                 "ORDER BY created_at DESC LIMIT 1"
@@ -101,7 +106,13 @@ def _load_active_session(tenant_id: str) -> object | None:
         ).fetchone()
     if row is None:
         return None
-    return types.SimpleNamespace(id=row.id, status=row.status)
+    current_question = ""
+    messages = row.messages or []
+    if isinstance(messages, list) and messages:
+        last_entry = messages[-1]
+        if isinstance(last_entry, dict):
+            current_question = (last_entry.get("bot") or "").strip()
+    return types.SimpleNamespace(id=row.id, status=row.status, current_question=current_question)
 
 
 def _resolve_chat_id(tenant_id: str) -> int | None:
@@ -335,6 +346,7 @@ def _route_inbound_message(
             transcript=text_content,
             tenant_id=tenant_id,
             session_state="active",
+            current_question=getattr(session, "current_question", ""),
         )
         decision = route_telegram_intent(extraction, tenant_id, current_session=session)
 

@@ -75,18 +75,18 @@ MODEL_PER_PROMPT: dict[str, str] = {
 
 # Per-Prompt max_tokens — übernommen aus den bisherigen Task-Konstanten.
 PROMPT_MAX_TOKENS: dict[str, int] = {
-    "P01": 8192,  # Unternehmerportrait-JSON — P03-Prompt spezifiziert max_tokens=8192
+    "P01": 16384,  # Unternehmerportrait-JSON — 8192 truncatete real (Hotpatch 2026-07-27, #62)
     "P02": 2000,  # Website-Analyse — kompakte JSON-Zusammenfassung (Issue #39)
-    "P03": 8192,  # Voice-Profil-JSON (12 Dimensionen) — P03-Prompt spezifiziert max_tokens=8192
-    "P04": 8192,  # Audience-Avatar-JSON — analog zu P01/P03
+    "P03": 16384,  # Voice-Profil-JSON (12 Dimensionen) — 8192 truncatete real (Hotpatch 2026-07-27, #62)
+    "P04": 16384,  # Audience-Avatar-JSON — analog zu P01/P03
     "P08": 512,  # Conversation turns — kurze JSON-Antworten (next_action/message/quality)
-    "P12": 2000,
-    "P12B": 2000,
+    "P12": 8192,  # Post-Generierung aus Interview — 2000 truncatete real (#62)
+    "P12B": 8192,  # P12b Nachbearbeitung, gleiche Groessenordnung wie P12 (#62)
     "P12C": 1024,
     "SENSITIVE_DETECT": 512,
     "MD_CONVERT_P03": 2000,
     "LAYER1": 512,  # Kompaktes JSON (5 Felder) — gleiche Größenordnung wie P08
-    "VOICE_FALLBACK": 8192,  # Fallback-Voice-Profil JSON — P03-strukturiert, gleiche Größe
+    "VOICE_FALLBACK": 16384,  # Fallback-Voice-Profil JSON — P03-strukturiert, gleiche Größe
     "P17": 2000,  # Drift-Proposals (voice/values/avatar) als JSON
     "ONBOARDING_VOICE": 4096,  # Brand-Voice-Profil JSON aus Onboarding-Antworten
     "ONBOARDING_EXTRACT": 1024,  # Extrahierte Onboarding-Keys als kompaktes JSON
