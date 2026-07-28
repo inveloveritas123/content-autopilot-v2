@@ -38,6 +38,7 @@ from sqlalchemy import text
 from models.base import sync_session_factory
 from services.llm_json import parse_json_from_text as _parse_json_from_text
 from services.pipeline_llm import (
+    PROMPT_MAX_TOKENS,
     call_pipeline_llm,
     estimate_tier_cost,
     resolve_tier,
@@ -272,7 +273,10 @@ def run_p12(
         from services.llm import BudgetExceededError
 
         _tier, _ = resolve_tier("P12")
-        estimated_cost = estimate_tier_cost(_tier, 3000, 1500)
+        # Output-Schätzung an PROMPT_MAX_TOKENS["P12"] gekoppelt (statt eigener
+        # hartcodierter Zahl) — sonst unterschätzt der Cost-Cap-Vorab-Check den
+        # echten Call nach jeder künftigen Anhebung des Limits erneut (Review #128).
+        estimated_cost = estimate_tier_cost(_tier, 3000, PROMPT_MAX_TOKENS["P12"])
         logger.info("p12 run_id=%s: estimated cost=%.6f USD", run_id, estimated_cost)
 
         try:

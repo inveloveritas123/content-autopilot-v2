@@ -18,6 +18,7 @@ Abweichungen vom Spec: keine
 from __future__ import annotations  # Python 3.9-Kompatibilität: str | None Syntax
 
 import logging
+import math
 import os
 import time
 from dataclasses import dataclass, field
@@ -394,11 +395,15 @@ def call_pipeline_llm(
 
     # 5. HTTP-Call mit Retry-Logik
     last_error: Exception | None = None
+    # 300s war für 8192 Output-Tokens kalibriert (P03: 31K input + 8K output).
+    # Seit #62 gehen P01/P03/P04 bis 16384 — ein fixer 300s-Timeout würde eine
+    # lange Antwort mitten in der Generierung abbrechen statt sie (der Zweck
+    # der Token-Anhebung) vollständig durchlaufen zu lassen. Timeout skaliert
+    # daher proportional zum tatsächlich angeforderten max_tokens (Review #128).
+    request_timeout = max(300, math.ceil(max_tokens / 8192 * 300))
     for attempt in range(max_retries):
         try:
-            with httpx.Client(
-                timeout=300
-            ) as client:  # 300s für große Prompts (P03: 31K input + 8K output)
+            with httpx.Client(timeout=request_timeout) as client:
                 resp = client.post(
                     f"{base_url}/chat/completions",
                     json=request_body,

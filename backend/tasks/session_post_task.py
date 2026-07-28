@@ -170,7 +170,10 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             logger.info("session_post_task: session=%s already has a post — skip", session_id)
             return {"status": "already_generated"}
     except Exception as exc:
-        logger.warning("session_post_task: idempotency gate failed: %s", type(exc).__name__)
+        # error statt warning (Review #128): dieser Task war vor PR #128 nie
+        # in conf.include und lief nie in Produktion — ohne ERROR-Level bleibt
+        # ein Ausfall unbemerkt (Sentry greift erst ab ERROR, sentry_config.py).
+        logger.error("session_post_task: idempotency gate failed: %s", type(exc).__name__)
         return {"status": "error", "reason": "idempotency_gate_failed"}
 
     # 2. Session laden (Tenant-Scope im WHERE = E3-Mandantentrennung)
@@ -186,7 +189,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
                 {"id": session_id, "tid": tenant_id},
             ).fetchone()
     except Exception as exc:
-        logger.warning("session_post_task: session load failed: %s", type(exc).__name__)
+        logger.error("session_post_task: session load failed: %s", type(exc).__name__)
         return {"status": "error", "reason": "session_load_failed"}
 
     if row is None:
@@ -270,7 +273,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             tenant_id, effective_idea_id, answers_list, voice_payload, avatar_payload
         )
     except Exception as exc:
-        logger.warning("session_post_task: pipeline raised: %s", type(exc).__name__)
+        logger.error("session_post_task: pipeline raised: %s", type(exc).__name__)
         return {"status": "error", "reason": "pipeline_exception"}
 
     if not isinstance(pipeline_result, dict) or pipeline_result.get("status") != "ok":
@@ -279,11 +282,12 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             if isinstance(pipeline_result, dict)
             else "unknown"
         )
-        logger.info("session_post_task: pipeline not ok (reason=%s)", reason)
+        logger.error("session_post_task: pipeline not ok (reason=%s)", reason)
         return {"status": "error", "reason": reason}
 
     final_post = pipeline_result.get("final_post") or ""
     if not final_post:
+        logger.error("session_post_task: pipeline returned ok but final_post was empty")
         return {"status": "error", "reason": "empty_post"}
 
     p12_run_id = pipeline_result.get("p12_run_id")
@@ -393,7 +397,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             )
             sent_kind = "post"
     except Exception as exc:
-        logger.warning("session_post_task: telegram send failed: %s", type(exc).__name__)
+        logger.error("session_post_task: telegram send failed: %s", type(exc).__name__)
         return {
             "status": "ok",
             "sent": False,
@@ -404,7 +408,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
         }
 
     if not sent:
-        logger.warning(
+        logger.error(
             "session_post_task: Post/Folgefrage konnte nicht an chat …%s gesendet werden"
             " (tenant=%s session=%s kind=%s) — _send_telegram_message returned False",
             str(chat_id)[-4:],
