@@ -80,7 +80,7 @@ export default function MemoryViz() {
     }
   }
   useEffect(() => {
-    load() /* eslint-disable-line */
+    load()
   }, [])
 
   const graphData = useMemo(

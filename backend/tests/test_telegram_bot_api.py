@@ -33,12 +33,20 @@ UTC = UTC
 # Minimal stubs for unavailable heavy dependencies
 # ---------------------------------------------------------------------------
 
+# Names this module injects into sys.modules. Tracked so we can remove them again
+# once the module under test is imported — otherwise these stubs leak into later
+# test modules collected in the same interpreter (see cleanup note below the
+# import). Only names we actually create are recorded; pre-existing real modules
+# are never touched.
+_STUBBED_MODULES: list[str] = []
+
 
 def _stub(name: str) -> types.ModuleType:
     """Return existing module or create a blank stub in sys.modules."""
     if name not in sys.modules:
         m = types.ModuleType(name)
         sys.modules[name] = m
+        _STUBBED_MODULES.append(name)
     return sys.modules[name]
 
 
@@ -84,6 +92,7 @@ _fake_settings.database_url = "postgresql+asyncpg://stub:stub@localhost/stub_db"
 config_stub = types.SimpleNamespace(settings=_fake_settings)
 if "config" not in sys.modules:
     sys.modules["config"] = config_stub  # type: ignore[assignment]
+    _STUBBED_MODULES.append("config")
 
 # Stub services.crypto — we want deterministic behaviour without real Fernet
 _crypto_mod = _stub("services.crypto")
@@ -131,6 +140,16 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import api.telegram_bots as bot_module
+
+# Restore sys.modules isolation: the stubs above only needed to be in place while
+# importing the module under test. `bot_module` already holds its bound references
+# (router, get_db, get_tenant_id used in the dependency overrides below), so the
+# stubs can be removed now. Leaving them installed leaks into later-collected test
+# modules in the same interpreter — e.g. test_telegram_outbound_pertenant.py, whose
+# api/telegram.py imports `get_tenant`, a name our `dependencies` stub omits. Mirrors
+# the cleanup pattern documented in test_prompt_studio_api.py.
+for _name in _STUBBED_MODULES:
+    sys.modules.pop(_name, None)
 
 # Build minimal test app
 _app = FastAPI()

@@ -10,7 +10,13 @@ import {
   LogIn,
   UserPlus,
 } from 'lucide-react'
-import { adminListUsers, adminRegenerateApiKey, adminSetApiKey, adminCreateUser, setApiKey } from '../../api'
+import {
+  adminListUsers,
+  adminRegenerateApiKey,
+  adminSetApiKey,
+  adminCreateUser,
+  setApiKey,
+} from '../../api'
 
 // localStorage-Key für den aktiven X-API-Key (gleicher Key wie main.jsx/tenant-init nutzt)
 const API_KEY_STORAGE = 'apiKey'
@@ -87,7 +93,9 @@ function NewKeyDialog({ userId, userName, onClose }) {
         <div className="px-5 py-4 bg-amber-50 border-b border-amber-200 flex items-center gap-3">
           <Key className="w-5 h-5 text-amber-600 shrink-0" />
           <div>
-            <h2 className="text-sm font-semibold text-amber-900">Neuer API-Key — einmalig sichtbar</h2>
+            <h2 className="text-sm font-semibold text-amber-900">
+              Neuer API-Key — einmalig sichtbar
+            </h2>
             <p className="text-xs text-amber-700 mt-0.5">Nutzer: {userName}</p>
           </div>
         </div>
@@ -111,13 +119,15 @@ function NewKeyDialog({ userId, userName, onClose }) {
             <>
               {/* Warnung */}
               <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
-                <strong>Jetzt kopieren!</strong> Dieser Key wird nicht erneut angezeigt und ist ab sofort
-                aktiv.
+                <strong>Jetzt kopieren!</strong> Dieser Key wird nicht erneut angezeigt und ist ab
+                sofort aktiv.
               </div>
 
               {/* Key-Anzeige + Copy */}
               <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                <code className="flex-1 text-xs font-mono text-ink break-all select-all">{key}</code>
+                <code className="flex-1 text-xs font-mono text-ink break-all select-all">
+                  {key}
+                </code>
                 <CopyButton text={key} />
               </div>
 
@@ -186,7 +196,9 @@ function SetKeyDialog({ userId, userName, onClose }) {
                   autoComplete="off"
                   value={keyInput}
                   onChange={(e) => setKeyInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleSet() }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSet()
+                  }}
                   placeholder="cap_live_…"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
@@ -204,7 +216,11 @@ function SetKeyDialog({ userId, userName, onClose }) {
                 disabled={loading || !keyInput.trim()}
                 className="w-full flex items-center justify-center gap-2 py-2 px-4 text-sm font-medium rounded-lg bg-primary-700 text-white hover:bg-primary-800 disabled:opacity-50 transition-colors"
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Key className="w-4 h-4" />
+                )}
                 Key setzen
               </button>
             </>
@@ -258,7 +274,7 @@ function CreateUserDialog({ onClose }) {
 
   function handleDone() {
     setNewKey(null) // Key aus dem State entfernen
-    onClose(true)   // Liste neu laden
+    onClose(true) // Liste neu laden
   }
 
   return (
@@ -284,7 +300,9 @@ function CreateUserDialog({ onClose }) {
                   autoComplete="off"
                   value={nameInput}
                   onChange={(e) => setNameInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCreate()
+                  }}
                   placeholder="z.B. Acme GmbH"
                   maxLength={255}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -306,7 +324,11 @@ function CreateUserDialog({ onClose }) {
                 disabled={loading || !nameInput.trim()}
                 className="w-full flex items-center justify-center gap-2 py-2 px-4 text-sm font-medium rounded-lg bg-primary-700 text-white hover:bg-primary-800 disabled:opacity-50 transition-colors"
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <UserPlus className="w-4 h-4" />
+                )}
                 Benutzer anlegen
               </button>
             </>
@@ -317,17 +339,21 @@ function CreateUserDialog({ onClose }) {
             <>
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-800">
                 <Check className="inline w-4 h-4 mr-1" />
-                <strong>{newUser.name}</strong> wurde angelegt (Slug: <code className="font-mono">{newUser.slug}</code>).
+                <strong>{newUser.name}</strong> wurde angelegt (Slug:{' '}
+                <code className="font-mono">{newUser.slug}</code>).
               </div>
 
               {/* Warnung */}
               <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
-                <strong>Jetzt kopieren!</strong> Dieser API-Key wird nicht erneut angezeigt und ist ab sofort aktiv.
+                <strong>Jetzt kopieren!</strong> Dieser API-Key wird nicht erneut angezeigt und ist
+                ab sofort aktiv.
               </div>
 
               {/* Key-Anzeige + Copy */}
               <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                <code className="flex-1 text-xs font-mono text-ink break-all select-all">{newKey}</code>
+                <code className="flex-1 text-xs font-mono text-ink break-all select-all">
+                  {newKey}
+                </code>
                 <CopyButton text={newKey} />
               </div>
 
@@ -410,9 +436,7 @@ export default function UserManagement() {
   return (
     <div>
       {/* Create-User-Dialog */}
-      {createUserOpen && (
-        <CreateUserDialog onClose={handleCreateUserClose} />
-      )}
+      {createUserOpen && <CreateUserDialog onClose={handleCreateUserClose} />}
 
       {/* Regenerate-Dialog */}
       {regenerateTarget && (
@@ -549,8 +573,8 @@ export default function UserManagement() {
       )}
 
       <p className="mt-4 text-xs text-slate-500">
-        Tipp: Nach "Key neu generieren" kannst du den Klartext-Key direkt als aktiven Kontext
-        setzen — dann zeigen LLM Analytics und Drift-Review die Daten dieses Tenants.
+        Tipp: Nach "Key neu generieren" kannst du den Klartext-Key direkt als aktiven Kontext setzen
+        — dann zeigen LLM Analytics und Drift-Review die Daten dieses Tenants.
       </p>
     </div>
   )

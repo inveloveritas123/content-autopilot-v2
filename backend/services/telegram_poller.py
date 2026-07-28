@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +39,11 @@ def _bot_hint(token: str) -> str:
 
 def poll_once(
     token: str,
-    offset: Optional[int],
+    offset: int | None,
     *,
     timeout: int = 0,
     http=None,
-) -> tuple[list[dict], Optional[int]]:
+) -> tuple[list[dict], int | None]:
     """Ruft getUpdates für einen einzelnen Bot-Token ab.
 
     Args:
@@ -77,14 +76,11 @@ def poll_once(
         if resp.status_code == 401:
             raise _TelegramUnauthorized(f"HTTP 401 bot={_bot_hint(token)}")
         if resp.status_code != 200:
-            raise _TelegramHTTPError(
-                f"HTTP {resp.status_code} bot={_bot_hint(token)}"
-            )
+            raise _TelegramHTTPError(f"HTTP {resp.status_code} bot={_bot_hint(token)}")
         data = resp.json()
         if not data.get("ok"):
             raise _TelegramAPIError(
-                f"ok=false bot={_bot_hint(token)} "
-                f"desc={str(data.get('description',''))[:80]}"
+                f"ok=false bot={_bot_hint(token)} " f"desc={str(data.get('description',''))[:80]}"
             )
         return data.get("result") or []
 
@@ -115,11 +111,9 @@ def run_forever(interval_seconds: float = 2.0) -> None:
         interval_seconds: Wartezeit zwischen zwei poll_all-Aufrufen (Default 2s).
     """
     # Lazy-Import damit dieses Modul dep-leicht bleibt
-    from tasks.telegram_poll_task import poll_all_active_bots  # noqa: PLC0415
+    from tasks.telegram_poll_task import poll_all_active_bots
 
-    logger.info(
-        "telegram_poller.run_forever started (interval=%.1fs)", interval_seconds
-    )
+    logger.info("telegram_poller.run_forever started (interval=%.1fs)", interval_seconds)
     try:
         while True:
             try:

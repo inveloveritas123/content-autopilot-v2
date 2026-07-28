@@ -31,7 +31,10 @@ export default function AdminApp() {
 
   useEffect(() => {
     adminSession()
-      .then((data) => { if (data.authenticated) setDefaultTenantKey(); setAuthenticated(!!data.authenticated) })
+      .then((data) => {
+        if (data.authenticated) setDefaultTenantKey()
+        setAuthenticated(!!data.authenticated)
+      })
       .catch(() => setAuthenticated(false))
       .finally(() => setChecking(false))
   }, [])
@@ -47,7 +50,14 @@ export default function AdminApp() {
 
   // Nicht eingeloggt → Login-Maske
   if (!authenticated) {
-    return <AdminLogin onAuthenticated={() => { setDefaultTenantKey(); setAuthenticated(true) }} />
+    return (
+      <AdminLogin
+        onAuthenticated={() => {
+          setDefaultTenantKey()
+          setAuthenticated(true)
+        }}
+      />
+    )
   }
 
   // Eingeloggt → Admin-SPA mit eigenem Layout + Routen

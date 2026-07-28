@@ -669,8 +669,11 @@ class TestGetTenantModelMode:
                     class _MockSession:
                         def execute(self__, _sql, _params):
                             class _Row:
+                                # _MockCM is instantiated and consumed within the
+                                # same loop iteration (below), so expected_mode is
+                                # the current value at call time — B023 false positive.
                                 def fetchone(self___):
-                                    return ({"model_mode": expected_mode},)
+                                    return ({"model_mode": expected_mode},)  # noqa: B023
 
                             return _Row()
 

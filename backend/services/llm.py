@@ -164,10 +164,8 @@ class LLMService:
                 # Nur wenn resolved == "claude-sonnet" (der Gemini-Remap-Key)
                 try:
                     from services.model_mode import (
-                        CREATIVE_MODEL_KEYS,
                         CREATIVE_MODEL_BY_MODE,
-                        DEFAULT_MODEL_MODE,
-                        VALID_MODEL_MODES,
+                        CREATIVE_MODEL_KEYS,
                         get_tenant_model_mode,
                     )
 

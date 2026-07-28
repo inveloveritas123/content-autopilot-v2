@@ -69,9 +69,9 @@ AVATAR_KEYS_FOR_P12B = ["sprache_der_zielgruppe", "content_trigger"]
 # dürfen. quellen/status werden je Werte-Eintrag vom prune_values()-Schritt
 # gestrippt (Token-Hygiene); _meta wird durch prune() generell entfernt.
 VALUES_KEYS_FOR_P12 = [
-    "werte",          # Pflichtfeld: Liste mit wert/beschreibung/belege/gewicht
+    "werte",  # Pflichtfeld: Liste mit wert/beschreibung/belege/gewicht
     "ueberzeugungen",  # Optional: tiefere Überzeugungsebene
-    "tabus",           # Optional: Absolut-Verbote / rote Linien
+    "tabus",  # Optional: Absolut-Verbote / rote Linien
 ]
 
 
@@ -106,9 +106,7 @@ def prune_values(payload: dict) -> dict:
                 continue
             # Nur LLM-relevante Felder behalten
             stripped = {
-                k: entry[k]
-                for k in ("wert", "beschreibung", "belege", "gewicht")
-                if k in entry
+                k: entry[k] for k in ("wert", "beschreibung", "belege", "gewicht") if k in entry
             }
             active_werte.append(stripped)
         pruned["werte"] = active_werte

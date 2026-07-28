@@ -41,9 +41,9 @@ DEFAULT_MODEL_MODE: str = "testmodus"
 # 'produktiv'         → "claude-sonnet-eu"  — neuer Key → Bedrock-Frankfurt (S6, EU)
 # 'benutzerdefiniert' → None               — kein Override → aktuelles Verhalten
 CREATIVE_MODEL_BY_MODE: dict[str, str | None] = {
-    "testmodus": "claude-sonnet",     # KEY — löst via REQUESTY_MODELS zu Gemini auf
+    "testmodus": "claude-sonnet",  # KEY — löst via REQUESTY_MODELS zu Gemini auf
     "produktiv": "claude-sonnet-eu",  # KEY — löst via REQUESTY_MODELS zu Bedrock-Frankfurt auf
-    "benutzerdefiniert": None,         # kein Override → heutiges Verhalten
+    "benutzerdefiniert": None,  # kein Override → heutiges Verhalten
 }
 
 # ── Kreative Model-Keys (werden in _resolve_model abgefangen) ────────────────
@@ -93,5 +93,3 @@ def get_tenant_model_mode(tenant_id: str | None) -> str:
     except Exception as exc:
         logger.debug("get_tenant_model_mode fehlgeschlagen (fail-open → testmodus): %s", exc)
         return DEFAULT_MODEL_MODE
-
-

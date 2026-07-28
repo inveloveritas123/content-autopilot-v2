@@ -263,8 +263,9 @@ async def create_tenant(req: CreateTenantRequest):
                 await db.commit()
 
                 # Seed Requesty LLM-Provider
-                from config import get_settings
                 from api.llm_settings import _encrypt_key
+                from config import get_settings
+
                 cfg = get_settings()
                 if cfg.requesty_api_key:
                     await db.execute(
@@ -283,6 +284,7 @@ async def create_tenant(req: CreateTenantRequest):
 
                 # Seed Standard-Projekt
                 import uuid as _uuid
+
                 await db.execute(
                     text(
                         """INSERT INTO projects (id, tenant_id, name, slug, description)
@@ -305,7 +307,9 @@ async def create_tenant(req: CreateTenantRequest):
                 await db.rollback()
                 constraint = str(exc.orig) if exc.orig else str(exc)
                 if "uq_tenants_slug" not in constraint:
-                    logger.error("IntegrityError beim Tenant-Anlegen (non-slug): %s", constraint)
+                    logging.getLogger(__name__).error(
+                        "IntegrityError beim Tenant-Anlegen (non-slug): %s", constraint
+                    )
                     raise HTTPException(
                         status_code=409, detail="Tenant konnte nicht angelegt werden."
                     )

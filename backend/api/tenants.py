@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
 import logging
 import secrets
-import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
@@ -650,15 +648,14 @@ async def set_model_mode(
     E3: Schreibt ausschließlich in den eigenen Tenant (get_tenant-Dependency).
     Sicherheits-Invariante: Default 'testmodus' → bit-identisches aktuelles Routing.
     """
-    from services.model_mode import DEFAULT_MODEL_MODE, VALID_MODEL_MODES
+    from services.model_mode import VALID_MODEL_MODES
 
     mode = (data.model_mode or "").strip().lower()
     if mode not in VALID_MODEL_MODES:
         raise HTTPException(
             status_code=422,
             detail=(
-                f"Ungültiger model_mode '{mode}'. "
-                f"Gültige Werte: {sorted(VALID_MODEL_MODES)}"
+                f"Ungültiger model_mode '{mode}'. " f"Gültige Werte: {sorted(VALID_MODEL_MODES)}"
             ),
         )
     current = tenant.settings or {}

@@ -318,8 +318,9 @@ export default function Settings() {
         <CardContent className="space-y-3">
           <p className="text-sm text-gray-600">
             <strong>MVP</strong> zeigt nur die Kern-Flows (Dashboard, Pipeline, Quellen, Ideen,
-            Posts, Posten, Brand Voice, Gedächtnis, Einstellungen). <strong>Features</strong> schaltet
-            den vollen Funktionsumfang frei (Dialogue, Kalender, Analytics, Admin-Tools usw.).
+            Posts, Posten, Brand Voice, Gedächtnis, Einstellungen). <strong>Features</strong>{' '}
+            schaltet den vollen Funktionsumfang frei (Dialogue, Kalender, Analytics, Admin-Tools
+            usw.).
           </p>
           {/* Segmented Control: MVP | Features */}
           <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
@@ -344,7 +345,8 @@ export default function Settings() {
             ))}
           </div>
           <p className="text-xs text-gray-400">
-            Modus wird pro Tenant gespeichert. Die Navigation passt sich sofort an — kein Reload nötig.
+            Modus wird pro Tenant gespeichert. Die Navigation passt sich sofort an — kein Reload
+            nötig.
           </p>
         </CardContent>
       </Card>
@@ -868,7 +870,9 @@ export default function Settings() {
                   )}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{opt.desc}</p>
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${opt.badgeClass}`}>
+                <span
+                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${opt.badgeClass}`}
+                >
                   {opt.badge}
                 </span>
               </button>

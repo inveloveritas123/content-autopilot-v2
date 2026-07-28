@@ -10,7 +10,6 @@ all tests cleanly when either `cryptography` or `config` cannot be imported.
 from __future__ import annotations
 
 import importlib.util
-import os
 import sys
 from pathlib import Path
 
@@ -43,6 +42,7 @@ SALT_OTHER = "-other-service-encrypt"
 # ---------------------------------------------------------------------------
 # Roundtrip
 # ---------------------------------------------------------------------------
+
 
 class TestEncryptDecryptRoundtrip:
     def test_roundtrip_short(self):
@@ -85,6 +85,7 @@ class TestEncryptDecryptRoundtrip:
 # Different salts produce different tokens and cross-salt decrypt fails
 # ---------------------------------------------------------------------------
 
+
 class TestSaltIsolation:
     def test_different_salts_produce_different_tokens(self):
         m = _import_crypto()
@@ -105,6 +106,7 @@ class TestSaltIsolation:
 # Fault tolerance of decrypt_secret
 # ---------------------------------------------------------------------------
 
+
 class TestDecryptFaultTolerance:
     def test_garbage_input_returns_empty(self):
         m = _import_crypto()
@@ -117,6 +119,7 @@ class TestDecryptFaultTolerance:
     def test_random_bytes_returns_empty(self):
         m = _import_crypto()
         import base64
+
         garbage = base64.urlsafe_b64encode(b"\x00" * 64).decode()
         assert m.decrypt_secret(garbage, salt=SALT) == ""
 
@@ -130,6 +133,7 @@ class TestDecryptFaultTolerance:
 # ---------------------------------------------------------------------------
 # mask_secret
 # ---------------------------------------------------------------------------
+
 
 class TestMaskSecret:
     def test_none_returns_none(self):

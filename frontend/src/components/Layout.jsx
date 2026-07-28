@@ -52,7 +52,6 @@ const brandVoiceNavItems = [
 
 // adminNavItems vollständig entfernt (#90/#98): Modelle + Prompt-Studio → Admin-Tool
 
-
 // Rendert eine einzelne Nav-Gruppe gefiltert nach Modus.
 // isMvp=true → nur Einträge mit mvp===true; isMvp=false → alle Einträge.
 function NavGroup({ items, isMvp }) {

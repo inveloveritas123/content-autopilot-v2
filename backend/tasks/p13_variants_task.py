@@ -152,8 +152,7 @@ def _create_manual_idea(
             # find-or-create Source type='manual' (E3: tenant-scoped)
             source_row = db.execute(
                 text(
-                    "SELECT id FROM sources "
-                    "WHERE tenant_id = :tid AND type = 'manual' LIMIT 1"
+                    "SELECT id FROM sources " "WHERE tenant_id = :tid AND type = 'manual' LIMIT 1"
                 ),
                 {"tid": tenant_id},
             ).fetchone()
@@ -405,6 +404,7 @@ def _try_p13_variant_choice(tenant_id: str, text: str) -> bool | dict:
 def _parse_choice_token(text: str) -> int | None:
     """Parst 1/2/3/eins/zwei/drei/hook/story/these → 1/2/3 (1-basiert) oder None."""
     import re
+
     t = text.lower().strip()
     # Numerisch
     if re.match(r"^1$", t):
@@ -500,10 +500,7 @@ def _persist_choice(tenant_id: str, idea_id: str, variant: dict) -> bool:
             )
             # is_chosen Set für die gewählte Variante
             db.execute(
-                text(
-                    "UPDATE idea_variants SET is_chosen = true "
-                    "WHERE id = CAST(:vid AS uuid)"
-                ),
+                text("UPDATE idea_variants SET is_chosen = true " "WHERE id = CAST(:vid AS uuid)"),
                 {"vid": variant["id"]},
             )
             # Hook + Outline in content_ideas spiegeln + Marker löschen
