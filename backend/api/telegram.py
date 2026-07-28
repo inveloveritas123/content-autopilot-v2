@@ -252,7 +252,9 @@ def _handle_start_command(
                 expected_tenant_id,
                 tenant_id,
             )
-            _send_admin_telegram_message(chat_id, "Ungültiger Token.")
+            # E3-Scope: die Nachricht kam über expected_tenant_id's eigenen Bot rein —
+            # die Ablehnung muss über denselben Bot raus, sonst verhallt sie (Review #128).
+            _send_telegram_message(chat_id, "Ungültiger Token.", tenant_id=str(expected_tenant_id))
             return
 
         # Ensure linked_at is timezone-aware for comparison
