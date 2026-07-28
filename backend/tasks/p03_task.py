@@ -338,7 +338,9 @@ def run_p03(
 
             logger.info(
                 "P03 voice_fallback done tenant=%s run_id=%s duration=%dms",
-                tenant_id, run_id, duration_ms,
+                tenant_id,
+                run_id,
+                duration_ms,
             )
             return {
                 "run_id": run_id,

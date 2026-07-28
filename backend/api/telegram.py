@@ -212,9 +212,7 @@ def _send_admin_telegram_message(chat_id: int, text_msg: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _handle_start_command(
-    message: dict, token: str, expected_tenant_id: str | None = None
-) -> None:
+def _handle_start_command(message: dict, token: str, expected_tenant_id: str | None = None) -> None:
     """Verify one-time token, activate tenant_telegram_link.
 
     Args:
@@ -1495,7 +1493,7 @@ def _onboarding_get_active_session(tenant_id: str) -> dict | None:
                 row = result.first()
                 if not row:
                     return None
-                msgs = row[1] if isinstance(row[1], (dict, list)) else json.loads(row[1] or "[]")
+                msgs = row[1] if isinstance(row[1], dict | list) else json.loads(row[1] or "[]")
                 return {
                     "id": str(row[0]),
                     "messages": msgs,

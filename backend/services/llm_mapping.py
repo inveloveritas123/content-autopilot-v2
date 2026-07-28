@@ -12,9 +12,9 @@ from __future__ import annotations
 # ── Requesty.ai model strings (direct, EU-region) ─────────────────────────────
 # Cost targets: gemini-2.5-flash-lite $0.075/1M (all tasks — mistral-medium DISABLED, caused $20 runaway)
 REQUESTY_MODELS: dict[str, str] = {
-    "gemini-flash": "vertex/gemini-2.5-flash-lite@europe-central2",   # Analysis: cheap, EU-hosted
-    "claude-sonnet": "vertex/gemini-2.5-flash-lite@europe-central2",   # Creative: remapped to Gemini (mistral-medium disabled 2026-05-03 — caused $20 budget overrun in one day)
-    "claude-sonnet-eu": "bedrock/claude-sonnet-4-6@eu-central-1",      # Creative/produktiv: Bedrock Frankfurt (S6, EU-souverän, Anthropic-Quality) — Issue #72
+    "gemini-flash": "vertex/gemini-2.5-flash-lite@europe-central2",  # Analysis: cheap, EU-hosted
+    "claude-sonnet": "vertex/gemini-2.5-flash-lite@europe-central2",  # Creative: remapped to Gemini (mistral-medium disabled 2026-05-03 — caused $20 budget overrun in one day)
+    "claude-sonnet-eu": "bedrock/claude-sonnet-4-6@eu-central-1",  # Creative/produktiv: Bedrock Frankfurt (S6, EU-souverän, Anthropic-Quality) — Issue #72
     "gpt-4o-mini": "openai/gpt-4.1-mini",
 }
 

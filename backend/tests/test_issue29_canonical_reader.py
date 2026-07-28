@@ -23,6 +23,7 @@ _BACKEND_ROOT = Path(__file__).parent.parent
 # Helfer: EDITABLE_ROOT_KEYS aus Quelltext extrahieren (Py3.9-kompatibel)
 # ---------------------------------------------------------------------------
 
+
 def _load_editable_root_keys() -> dict:
     """Parst EDITABLE_ROOT_KEYS aus api/brand_voice.py via ast.literal_eval.
 
@@ -47,6 +48,7 @@ def _load_editable_root_keys() -> dict:
 # ---------------------------------------------------------------------------
 # Pure helpers: extrahiert aus dialogue.py / pipeline.py für dep-freie Tests
 # ---------------------------------------------------------------------------
+
 
 def _extract_tone(voice_profile: dict, default: str = "") -> str:
     """
@@ -88,7 +90,7 @@ def _extract_avoid(voice_profile: dict):
     # Alt-Row-Fallback  (str | list not valid in isinstance on Py3.9 → tuple)
     return voice_profile.get("topics_avoid") or (
         voice_profile.get("vermeidungsregeln")
-        if isinstance(voice_profile.get("vermeidungsregeln"), (str, list))
+        if isinstance(voice_profile.get("vermeidungsregeln"), str | list)
         else None
     )
 
@@ -185,6 +187,7 @@ class TestEditableRootKeys:
 # 2. Tone-Extraktion — dialogue.py (kanonisch + Alt-Row-Fallback)
 # ============================================================================
 
+
 class TestExtractTone:
     """Tone wird kanonisch aus grundton.charakterisierung gelesen."""
 
@@ -245,6 +248,7 @@ class TestExtractTone:
 # ============================================================================
 # 3. Avoid-Extraktion — pipeline.py (kanonisch + Alt-Row-Fallback)
 # ============================================================================
+
 
 class TestExtractAvoid:
     """Vermeidungsprofil wird kanonisch aus vermeidungsprofil.nie_sagen gelesen."""

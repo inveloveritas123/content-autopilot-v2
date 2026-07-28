@@ -63,7 +63,9 @@ export default function AdminOverview() {
               to={t.to}
               className={`group flex flex-col gap-3 p-5 rounded-xl border bg-slate-800/50 hover:bg-slate-800 transition-colors border-slate-700 hover:border-slate-600`}
             >
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${t.accent}`}>
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center border ${t.accent}`}
+              >
                 <Icon className={`w-5 h-5 ${t.accent.split(' ')[0]}`} strokeWidth={1.75} />
               </div>
               <div>

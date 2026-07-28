@@ -23,22 +23,21 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from config import settings as _app_settings
 
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _fernet_for(salt: str) -> Fernet:
     """Return a Fernet instance whose key is derived from DEFAULT_TENANT_KEY + salt."""
-    key_material = hashlib.sha256(
-        (_app_settings.default_tenant_key + salt).encode()
-    ).digest()
+    key_material = hashlib.sha256((_app_settings.default_tenant_key + salt).encode()).digest()
     return Fernet(base64.urlsafe_b64encode(key_material))
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def encrypt_secret(plaintext: str, *, salt: str) -> str:
     """Encrypt *plaintext* with a salt-specific Fernet key.

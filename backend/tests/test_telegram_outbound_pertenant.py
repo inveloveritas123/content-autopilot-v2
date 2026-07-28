@@ -49,7 +49,7 @@ except ImportError:
 # Wichtig: NUR stubben wenn cryptography wirklich fehlt — andernfalls test_crypto.py
 # bekommt einen nicht-deterministischen Fake der seine Tests kaputtmacht.
 try:
-    import cryptography.fernet as _cf_real  # type: ignore[import]
+    import cryptography.fernet as _cf_real  # type: ignore[import]  # noqa: F401
     # Echte cryptography verfügbar — kein Stub nötig
 except ImportError:
     _c = _ensure_stub("cryptography")
@@ -79,7 +79,9 @@ except ImportError:
     _cf.InvalidToken = _InvalidToken
 
 # config-Stub
+_created_config_stub = False
 if "config" not in sys.modules:
+    _created_config_stub = True
     _cfg = _ensure_stub("config")
     _cfg.settings = types.SimpleNamespace(
         telegram_bot_token="GLOBAL_ADMIN_TOKEN",
@@ -173,6 +175,16 @@ _at_spec.loader.exec_module(_at_mod)
 # Referenzen für Tests
 resolver = _ttr_mod
 tg = _at_mod
+
+# Restore config isolation: the SimpleNamespace stub above only needed to satisfy
+# `from config import settings` while exec'ing api/telegram.py and the service
+# modules loaded above (they've bound their references now). Leaving it in
+# sys.modules leaks a settings object missing most fields into later-collected
+# modules — e.g. test_telegram_bot_api is fixed to clean up too, and
+# test_throttle_adversarial patches config.settings.max_calls_per_tenant_per_hour,
+# which this stub lacks. Drop it so downstream re-imports the real config.
+if _created_config_stub:
+    sys.modules.pop("config", None)
 
 
 # ---------------------------------------------------------------------------

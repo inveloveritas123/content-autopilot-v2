@@ -216,8 +216,7 @@ export default function TelegramBotSettings() {
                     Neuer Bot: <code className="font-mono">/newbot</code> — folge den Anweisungen
                   </li>
                   <li>
-                    Vorhandener Bot:{' '}
-                    <code className="font-mono">/mybots</code> → Bot wählen →{' '}
+                    Vorhandener Bot: <code className="font-mono">/mybots</code> → Bot wählen →{' '}
                     <em>API Token</em>
                   </li>
                   <li>Token hier einfügen und speichern</li>
@@ -333,10 +332,9 @@ export default function TelegramBotSettings() {
           <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-800 dark:text-amber-200">
             <p className="font-medium mb-1">Sicherheitshinweis</p>
             <p>
-              Für vollständige Invalidierung den Token zusätzlich in{' '}
-              <strong>@BotFather</strong> über{' '}
-              <code className="font-mono">/revoke</code> neu generieren. Nur so wird der alte Token
-              serverseitig bei Telegram ungültig.
+              Für vollständige Invalidierung den Token zusätzlich in <strong>@BotFather</strong>{' '}
+              über <code className="font-mono">/revoke</code> neu generieren. Nur so wird der alte
+              Token serverseitig bei Telegram ungültig.
             </p>
           </div>
 
@@ -447,7 +445,9 @@ function TelegramUsersPanel({ tenantConfigured }) {
     }
     const label = { active: 'Aktiv', blocked: 'Blockiert', pending: 'Ausstehend' }
     return (
-      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${map[status] ?? map.pending}`}>
+      <span
+        className={`text-xs font-medium px-2 py-0.5 rounded-full ${map[status] ?? map.pending}`}
+      >
         {label[status] ?? status}
       </span>
     )
@@ -479,9 +479,8 @@ function TelegramUsersPanel({ tenantConfigured }) {
                 Telegram-User-ID hinzufügen (ohne /start-Flow)
               </p>
               <p className="text-xs text-blue-700 dark:text-blue-300">
-                Die User-ID findest du z.B. über{' '}
-                <code className="font-mono">@userinfobot</code> in Telegram. Chat-ID ist identisch
-                mit User-ID bei Direktnachrichten.
+                Die User-ID findest du z.B. über <code className="font-mono">@userinfobot</code> in
+                Telegram. Chat-ID ist identisch mit User-ID bei Direktnachrichten.
               </p>
               <div className="flex gap-2">
                 <input
@@ -511,19 +510,14 @@ function TelegramUsersPanel({ tenantConfigured }) {
             Rate-Limit: max. 20 Nachrichten pro 10 Minuten pro Nutzer
           </div>
 
-          {loading && (
-            <p className="text-sm text-gray-400 animate-pulse">Lade Nutzer…</p>
-          )}
+          {loading && <p className="text-sm text-gray-400 animate-pulse">Lade Nutzer…</p>}
 
-          {error && (
-            <p className="text-sm text-red-600 dark:text-red-400">Fehler: {error}</p>
-          )}
+          {error && <p className="text-sm text-red-600 dark:text-red-400">Fehler: {error}</p>}
 
           {!loading && !error && users.length === 0 && (
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Noch keine verbundenen Nutzer. Nutze{' '}
-              <code className="font-mono text-xs">/start</code> im Telegram-Bot oder füge eine
-              User-ID manuell hinzu.
+              Noch keine verbundenen Nutzer. Nutze <code className="font-mono text-xs">/start</code>{' '}
+              im Telegram-Bot oder füge eine User-ID manuell hinzu.
             </p>
           )}
 
@@ -551,12 +545,8 @@ function TelegramUsersPanel({ tenantConfigured }) {
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 dark:text-gray-500 flex-wrap">
                         <span className="font-mono">ID: {user.telegram_user_id}</span>
-                        {user.linked_at && (
-                          <span>Verbunden {relativeTime(user.linked_at)}</span>
-                        )}
-                        {user.last_active && (
-                          <span>Aktiv {relativeTime(user.last_active)}</span>
-                        )}
+                        {user.linked_at && <span>Verbunden {relativeTime(user.linked_at)}</span>}
+                        {user.last_active && <span>Aktiv {relativeTime(user.last_active)}</span>}
                       </div>
                     </div>
 
