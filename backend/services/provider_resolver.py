@@ -39,7 +39,7 @@ def get_active_provider(tenant_id=None, task: str = "all") -> dict | None:
     with sync_session_factory() as session:
         # Try task-specific provider first
         query = select(LLMProvider).where(
-            LLMProvider.is_active is True,
+            LLMProvider.is_active.is_(True),
         )
         if tenant_id:
             query = query.where(LLMProvider.tenant_id == tenant_id)

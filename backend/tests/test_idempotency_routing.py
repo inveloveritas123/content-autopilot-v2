@@ -369,7 +369,7 @@ class TestTargetedModeFilter:
 
     def test_targeted_session_found(self):
         """_load_active_session gibt targeted-Session zurück."""
-        fake_row = types.SimpleNamespace(id="targeted-sess-1", status="active")
+        fake_row = types.SimpleNamespace(id="targeted-sess-1", status="active", messages=[])
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
@@ -380,6 +380,39 @@ class TestTargetedModeFilter:
 
         assert result is not None
         assert str(result.id) == "targeted-sess-1"
+
+    def test_current_question_extracted_from_last_message(self):
+        """#62: current_question kommt aus messages[-1]['bot'] (letzte Bot-Frage)."""
+        fake_row = types.SimpleNamespace(
+            id="targeted-sess-2",
+            status="active",
+            messages=[
+                {"bot": "Erste Frage?", "question_index": 1},
+                {"bot": "Zweite Frage?", "question_index": 2},
+            ],
+        )
+        mock_db = MagicMock()
+        mock_db.__enter__ = MagicMock(return_value=mock_db)
+        mock_db.__exit__ = MagicMock(return_value=False)
+        mock_db.execute.return_value.fetchone.return_value = fake_row
+
+        with patch.object(tt, "sync_session_factory", return_value=mock_db):
+            result = tt._load_active_session("tenant-targeted")
+
+        assert result.current_question == "Zweite Frage?"
+
+    def test_current_question_empty_when_no_messages(self):
+        """#62: leere messages-Liste → current_question ist leerer String, kein Crash."""
+        fake_row = types.SimpleNamespace(id="targeted-sess-3", status="active", messages=[])
+        mock_db = MagicMock()
+        mock_db.__enter__ = MagicMock(return_value=mock_db)
+        mock_db.__exit__ = MagicMock(return_value=False)
+        mock_db.execute.return_value.fetchone.return_value = fake_row
+
+        with patch.object(tt, "sync_session_factory", return_value=mock_db):
+            result = tt._load_active_session("tenant-targeted")
+
+        assert result.current_question == ""
 
     def test_sql_includes_targeted_mode(self):
         """Verifiziert, dass die SQL-Query 'targeted' im Filter enthält."""
@@ -407,7 +440,7 @@ class TestTargetedModeFilter:
 
     def test_only_random_smart_session_is_still_found(self):
         """random_smart-Session wird weiterhin gefunden (Regression für #57)."""
-        fake_row = types.SimpleNamespace(id="random-sess-1", status="active")
+        fake_row = types.SimpleNamespace(id="random-sess-1", status="active", messages=[])
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)

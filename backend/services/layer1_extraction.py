@@ -63,7 +63,14 @@ _FALLBACK_USER_TEMPLATE = """Eingabe des Nutzers:
 <user_input>{transcript}</user_input>
 
 Session-Kontext: {session_state}
-Letzter Post: {last_post_summary}"""
+Aktuell gestellte Bot-Frage (falls Session aktiv, sonst leer): {current_question}
+Letzter Post: {last_post_summary}
+
+Hinweis: Wenn eine Bot-Frage gestellt wurde UND die Eingabe des Nutzers
+inhaltlich darauf eingeht (auch als Präzisierung, Widerspruch oder
+Rückfrage zur Frage selbst) → intent = "answer_to_question". Nur wenn die
+Eingabe erkennbar NICHTS mit der gestellten Frage zu tun hat, andere
+Intents in Betracht ziehen."""
 
 # Load JSON schema at import time
 _SCHEMA_PATH = os.path.normpath(
@@ -209,6 +216,7 @@ def extract_intent_features(
     tenant_id: str,
     session_state: str = "no_session",
     last_post_summary: str = "",
+    current_question: str = "",
 ) -> ExtractionResult:
     """Extrahiert Intent und Features aus einem Telegram-Transkript.
 
@@ -219,6 +227,14 @@ def extract_intent_features(
     Schritt 5: Anthropic-Call
     Schritt 6: Parse + Schema-Validierung (max. 1 Retry)
     Schritt 7: Flags zusammenfuehren
+
+    Args:
+        current_question: Die zuletzt vom Bot gestellte Frage (aus
+            bot_session.messages[-1]["bot"]), falls session_state=="active".
+            Ohne dies kann der Klassifikator "answer_to_question" nicht
+            zuverlaessig von "spontaneous_idea" unterscheiden — eine
+            freiformulierte Antwort sieht ohne die Frage selbst identisch
+            zu einem unaufgeforderten Gedanken aus (#62).
     """
     # --- 1. Input guard ---
     if not transcript or not transcript.strip():
@@ -281,6 +297,7 @@ def extract_intent_features(
     user_content = prompt.user_prompt_template.format(
         transcript=transcript,
         session_state=session_state,
+        current_question=current_question or "(keine)",
         last_post_summary=last_post_summary or "kein vorheriger Post",
     )
 

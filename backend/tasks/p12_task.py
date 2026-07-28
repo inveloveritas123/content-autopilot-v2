@@ -379,7 +379,6 @@ def run_p12(
             system_prompt=loaded.system_prompt,
             user_content=user_prompt,
             tenant_id=tenant_id,
-            max_tokens=3000,
         )
 
         raw_text = res.text

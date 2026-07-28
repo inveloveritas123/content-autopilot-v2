@@ -23,4 +23,11 @@ Eingabe des Nutzers:
 <user_input>{transcript}</user_input>
 
 Session-Kontext: {session_state}
+Aktuell gestellte Bot-Frage (falls Session aktiv, sonst leer): {current_question}
 Letzter Post: {last_post_summary}
+
+Hinweis: Wenn eine Bot-Frage gestellt wurde UND die Eingabe des Nutzers
+inhaltlich darauf eingeht (auch als Präzisierung, Widerspruch oder
+Rückfrage zur Frage selbst) → intent = "answer_to_question". Nur wenn die
+Eingabe erkennbar NICHTS mit der gestellten Frage zu tun hat, andere
+Intents in Betracht ziehen.

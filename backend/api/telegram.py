@@ -212,8 +212,17 @@ def _send_admin_telegram_message(chat_id: int, text_msg: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _handle_start_command(message: dict, token: str) -> None:
-    """Verify one-time token, activate tenant_telegram_link."""
+def _handle_start_command(
+    message: dict, token: str, expected_tenant_id: str | None = None
+) -> None:
+    """Verify one-time token, activate tenant_telegram_link.
+
+    Args:
+        expected_tenant_id: Wenn gesetzt (Aufruf aus dem Per-Tenant-Poller,
+            #62), muss der ueber den Token aufgeloeste Tenant damit
+            uebereinstimmen — verhindert dass ein fuer Tenant A generierter
+            Link ueber Tenant B's Bot aktiviert wird (E3-Scope).
+    """
 
     chat_id: int = message.get("chat", {}).get("id", 0)
     user_id: int = message.get("from", {}).get("id", 0)
@@ -236,6 +245,17 @@ def _handle_start_command(message: dict, token: str) -> None:
             return
 
         tenant_id, linked_at = row[0], row[1]
+
+        if expected_tenant_id is not None and str(tenant_id) != str(expected_tenant_id):
+            logger.warning(
+                "_handle_start_command: token tenant mismatch (poller=%s, token=%s)",
+                expected_tenant_id,
+                tenant_id,
+            )
+            # E3-Scope: die Nachricht kam über expected_tenant_id's eigenen Bot rein —
+            # die Ablehnung muss über denselben Bot raus, sonst verhallt sie (Review #128).
+            _send_telegram_message(chat_id, "Ungültiger Token.", tenant_id=str(expected_tenant_id))
+            return
 
         # Ensure linked_at is timezone-aware for comparison
         now = datetime.now(UTC)
@@ -1969,13 +1989,20 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
         stripped = text_content.strip()
         cmd_only = stripped.lower().split()[0].split("@")[0] if stripped.startswith("/") else ""
 
-        # /start für bereits verbundenen User → Bestätigung statt silent drop
+        # /start <token> → Deeplink-Bestätigung verarbeiten (#62 — vorher wurde
+        # jedes /start im Polling-Pfad pauschal als "bereits verbunden"
+        # beantwortet, ohne den Token je zu prüfen; tenant_telegram_link blieb
+        # dauerhaft 'pending'). /start ohne Token → Bestätigung wie bisher.
         if cmd_only == "/start":
-            _send_telegram_message(
-                chat_id_for_dispatch,
-                "✅ Du bist bereits verbunden!\n\nSchick mir Gedanken, Sprachnachrichten oder Fotos — ich behalte alles im Gedächtnis.\n\n/help zeigt alle Kommandos.",
-                tenant_id=tenant_id,
-            )
+            token_arg = stripped[len("/start") :].strip()
+            if token_arg:
+                _handle_start_command(message, token_arg, expected_tenant_id=tenant_id)
+            else:
+                _send_telegram_message(
+                    chat_id_for_dispatch,
+                    "✅ Du bist bereits verbunden!\n\nSchick mir Gedanken, Sprachnachrichten oder Fotos — ich behalte alles im Gedächtnis.\n\n/help zeigt alle Kommandos.",
+                    tenant_id=tenant_id,
+                )
             return
 
         # Unbekanntes Kommando → Hinweis
