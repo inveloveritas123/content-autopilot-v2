@@ -295,16 +295,20 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
 
     # 6. Content-Piece markieren (bot_session_id) + P12b-Text übernehmen.
     #    Piece über p12_run_id finden (P12 hat es bereits angelegt). Fail-open.
+    #    RETURNING id fängt die content_pieces.id für das Action-Keyboard (Schritt 7) —
+    #    p12_run_id is None / kein Treffer → content_id bleibt None → Send ohne Keyboard.
+    content_id: str | None = None
     try:
         with sync_session_factory() as db:
             if p12_run_id:
-                db.execute(
+                _row = db.execute(
                     text(
                         "UPDATE content_pieces SET "
                         "content_text = :txt, "
                         "content_metadata = content_metadata || CAST(:meta AS jsonb) "
                         "WHERE tenant_id = :tid "
-                        "      AND content_metadata->>'p12_run_id' = :rid"
+                        "      AND content_metadata->>'p12_run_id' = :rid "
+                        "RETURNING id"
                     ),
                     {
                         "txt": final_post,
@@ -314,8 +318,9 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
                         "tid": tenant_id,
                         "rid": p12_run_id,
                     },
-                )
+                ).fetchone()
                 db.commit()
+                content_id = str(_row[0]) if _row else None
     except Exception as exc:
         logger.warning("session_post_task: piece marker update failed: %s", type(exc).__name__)
 
@@ -392,8 +397,14 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             )
             sent_kind = "review_notice"
         else:
+            from api.telegram import _draft_action_keyboard
+
+            _markup = _draft_action_keyboard(content_id) if content_id else None
             sent = _send_telegram_message(
-                chat_id, final_post[:_TELEGRAM_MAX_CHARS], tenant_id=tenant_id
+                chat_id,
+                final_post[:_TELEGRAM_MAX_CHARS],
+                tenant_id=tenant_id,
+                reply_markup=_markup,
             )
             sent_kind = "post"
     except Exception as exc:
