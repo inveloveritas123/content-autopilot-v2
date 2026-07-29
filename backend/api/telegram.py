@@ -240,6 +240,39 @@ def _draft_action_keyboard(content_id: str) -> dict:
     }
 
 
+def _approve_content_sync(content_id: str, tenant_id: str) -> str:
+    """Gibt ein content_piece frei (Telegram-Button). Tenant-scoped + idempotent.
+
+    Returns: 'approved' (neu freigegeben) | 'already' (war schon approved/published)
+             | 'not_found' (existiert nicht ODER gehört anderem Tenant).
+    Fail-open: bei DB-Fehler 'not_found' (kein Raise im Send-/Callback-Pfad).
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text("SELECT status FROM content_pieces WHERE id = :cid AND tenant_id = :tid"),
+                {"cid": content_id, "tid": tenant_id},
+            ).fetchone()
+            if row is None:
+                return "not_found"
+            if row[0] in ("approved", "published"):
+                return "already"
+            db.execute(
+                text(
+                    "UPDATE content_pieces SET status = 'approved', "
+                    "approval_method = 'telegram_button', approved_by = 'telegram', "
+                    "approved_at = now() "
+                    "WHERE id = :cid AND tenant_id = :tid"
+                ),
+                {"cid": content_id, "tid": tenant_id},
+            )
+            db.commit()
+            return "approved"
+    except Exception as exc:
+        logger.warning("_approve_content_sync failed: %s", type(exc).__name__)
+        return "not_found"
+
+
 def _send_admin_telegram_message(chat_id: int, text_msg: str) -> None:
     """Fire-and-forget: Admin-Alert via GLOBALEM Bot-Token (settings.telegram_bot_token).
 

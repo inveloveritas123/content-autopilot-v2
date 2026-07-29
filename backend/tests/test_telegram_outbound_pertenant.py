@@ -510,3 +510,37 @@ class TestDraftActionKeyboard:
         assert "cmd:reject:abc-123" in callbacks
         # Jeder Button trägt exakt die content_id → keine Verwechslung zwischen Drafts
         assert all(cb.endswith(":abc-123") for cb in callbacks)
+
+
+# ===========================================================================
+# Tests: _approve_content_sync (Stufe 1: tenant-scoped + idempotent)
+# ===========================================================================
+
+
+class TestApproveContentSync:
+    def test_approves_draft_scoped_to_tenant(self):
+        db = _make_db_mock(row=("draft",))  # SELECT status → 'draft'
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            result = tg._approve_content_sync("cid-1", "tenant-a")
+        assert result == "approved"
+        # Genau ein UPDATE mit tenant-scope + telegram_button
+        upd = [c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])]
+        assert len(upd) == 1
+        assert "tenant_id = :tid" in str(upd[0].args[0])
+        assert upd[0].args[1]["tid"] == "tenant-a"
+        assert upd[0].args[1]["cid"] == "cid-1"
+
+    def test_idempotent_when_already_approved(self):
+        db = _make_db_mock(row=("approved",))
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            result = tg._approve_content_sync("cid-1", "tenant-a")
+        assert result == "already"
+        assert not [
+            c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])
+        ]
+
+    def test_not_found_or_cross_tenant(self):
+        db = _make_db_mock(row=None)  # kein Row für (cid, tenant)
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            result = tg._approve_content_sync("cid-x", "tenant-b")
+        assert result == "not_found"
