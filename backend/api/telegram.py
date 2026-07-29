@@ -273,6 +273,37 @@ def _approve_content_sync(content_id: str, tenant_id: str) -> str:
         return "not_found"
 
 
+def _reject_content_sync(content_id: str, tenant_id: str) -> str:
+    """Verwirft ein content_piece (Telegram-Button). Tenant-scoped + idempotent.
+
+    Returns: 'rejected' (neu verworfen) | 'already' (war schon rejected)
+             | 'not_found' (existiert nicht ODER gehört anderem Tenant).
+    Fail-open: bei DB-Fehler 'not_found' (kein Raise im Send-/Callback-Pfad).
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text("SELECT status FROM content_pieces WHERE id = :cid AND tenant_id = :tid"),
+                {"cid": content_id, "tid": tenant_id},
+            ).fetchone()
+            if row is None:
+                return "not_found"
+            if row[0] == "rejected":
+                return "already"
+            db.execute(
+                text(
+                    "UPDATE content_pieces SET status = 'rejected' "
+                    "WHERE id = :cid AND tenant_id = :tid"
+                ),
+                {"cid": content_id, "tid": tenant_id},
+            )
+            db.commit()
+            return "rejected"
+    except Exception as exc:
+        logger.warning("_reject_content_sync failed: %s", type(exc).__name__)
+        return "not_found"
+
+
 def _send_admin_telegram_message(chat_id: int, text_msg: str) -> None:
     """Fire-and-forget: Admin-Alert via GLOBALEM Bot-Token (settings.telegram_bot_token).
 

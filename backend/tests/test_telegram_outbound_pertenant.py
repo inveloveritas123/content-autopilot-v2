@@ -572,3 +572,54 @@ class TestApproveContentSync:
         log_text = "\n".join(r.getMessage() for r in caplog.records)
         assert "boom" not in log_text, f"Exception-Message im Log gefunden: {log_text}"
         assert "Exception" in log_text, f"Exception-Klassenname fehlt im Log: {log_text}"
+
+
+# ===========================================================================
+# Tests: _reject_content_sync (Stufe 1: tenant-scoped + idempotent)
+# ===========================================================================
+
+
+class TestRejectContentSync:
+    def test_rejects_draft_scoped_to_tenant(self):
+        db = _make_db_mock(row=("draft",))
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            assert tg._reject_content_sync("cid-1", "tenant-a") == "rejected"
+        upd = [c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])]
+        assert len(upd) == 1 and "status = 'rejected'" in str(upd[0].args[0])
+        assert "tenant_id = :tid" in str(upd[0].args[0])
+        assert upd[0].args[1]["tid"] == "tenant-a"
+        assert upd[0].args[1]["cid"] == "cid-1"
+
+    def test_idempotent_when_already_rejected(self):
+        db = _make_db_mock(row=("rejected",))
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            assert tg._reject_content_sync("cid-1", "tenant-a") == "already"
+        assert not [
+            c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])
+        ]
+
+    def test_not_found(self):
+        db = _make_db_mock(row=None)
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            assert tg._reject_content_sync("cid-x", "tenant-a") == "not_found"
+        assert not [
+            c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])
+        ]
+        sel = [c for c in db.execute.call_args_list if "SELECT status" in str(c.args[0])]
+        assert sel[0].args[1]["tid"] == "tenant-a"
+
+    def test_fail_open_on_db_error(self, caplog):
+        db = _make_db_mock(row=("draft",))
+        db.execute.side_effect = Exception("boom")
+        with (
+            patch.object(tg, "sync_session_factory", return_value=db),
+            caplog.at_level(logging.WARNING),
+        ):
+            result = tg._reject_content_sync("cid-1", "tenant-a")
+        assert result == "not_found"
+        assert not [
+            c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])
+        ]
+        log_text = "\n".join(r.getMessage() for r in caplog.records)
+        assert "boom" not in log_text, f"Exception-Message im Log gefunden: {log_text}"
+        assert "Exception" in log_text, f"Exception-Klassenname fehlt im Log: {log_text}"
