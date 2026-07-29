@@ -403,6 +403,46 @@ class TestSendTelegramMessagePerTenant:
 
         assert result is False
 
+    def test_logs_outbound_row_on_success(self):
+        """Erfolgreicher Send → telegram_message_log-Zeile (direction='out', send_status='sent').
+
+        Instrumentierungs-Lücke aus #119: erfolgreiche Sends waren unsichtbar, weil
+        NUR der Fehlerzweig eine 'out'-Zeile schrieb. Der DoD-Marker
+        „erster echter direction='out'" braucht die Erfolgs-Zeile.
+        """
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"ok": True}
+
+        db_mock = _make_db_mock()
+
+        with (
+            patch.object(
+                sys.modules["services.telegram_token_resolver"],
+                "get_tenant_bot_token",
+                return_value="987654:TENANT_TOKEN",
+            ),
+            patch.object(
+                sys.modules["services.telegram_token_resolver"],
+                "update_last_active",
+            ),
+            patch.object(tg, "sync_session_factory", return_value=db_mock),
+            patch("httpx.post", return_value=mock_response),
+        ):
+            result = tg._send_telegram_message(12345, "Test msg", tenant_id="tenant-abc")
+
+        assert result is True
+        insert_calls = [
+            c
+            for c in db_mock.execute.call_args_list
+            if "INSERT INTO telegram_message_log" in str(c.args[0])
+        ]
+        assert len(insert_calls) == 1, "erwartet: genau ein Outbound-Log-INSERT bei Erfolg"
+        sql = str(insert_calls[0].args[0])
+        assert "'out'" in sql
+        payload = insert_calls[0].args[1]["payload"]
+        assert '"send_status": "sent"' in payload
+
 
 # ===========================================================================
 # Tests: _send_admin_telegram_message

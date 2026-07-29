@@ -177,6 +177,37 @@ def _send_telegram_message(
 
         # Erfolg: Timestamp aktualisieren (best-effort)
         update_last_active(tenant_id)
+        # Erfolgreichen Send in telegram_message_log persistieren (best-effort).
+        # Ohne diese Zeile sind erfolgreiche Sends unsichtbar — bisher wurde NUR
+        # der Fehlerzweig geloggt (Instrumentierungs-Lücke #119). Der DoD-Marker
+        # „erster echter direction='out'" braucht diese Erfolgs-Zeile.
+        # Nur Metadaten (kein Nachrichtentext) — Datenschutz-Invariante wie im Fehlerzweig.
+        try:
+            with sync_session_factory() as db:
+                db.execute(
+                    text(
+                        "INSERT INTO telegram_message_log "
+                        "(tenant_id, direction, message_type, original_payload) "
+                        "VALUES (:tid, 'out', 'text', :payload::jsonb)"
+                    ),
+                    {
+                        "tid": tenant_id,
+                        "payload": json.dumps(
+                            {
+                                "chat_id_suffix": chat_id_suffix,
+                                "send_status": "sent",
+                            }
+                        ),
+                    },
+                )
+                db.commit()
+        except Exception as log_exc:
+            # Log-Persistierung ist best-effort — darf den (bereits erfolgreichen)
+            # Send-Pfad NICHT blockieren.
+            logger.debug(
+                "_send_telegram_message: telegram_message_log INSERT (sent) failed: %s",
+                type(log_exc).__name__,
+            )
         return True
     except Exception as e:
         logger.warning(
