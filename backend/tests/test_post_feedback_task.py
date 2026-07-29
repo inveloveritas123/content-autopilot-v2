@@ -112,9 +112,9 @@ if _existing_pft is None or not hasattr(_existing_pft, "regenerate_post_from_fee
     pass  # wird nach der Datei-Existenzprüfung geladen
 
 _task_file = os.path.join(_BACKEND_DIR, "tasks", "post_feedback_task.py")
-assert os.path.exists(_task_file), (
-    "tasks/post_feedback_task.py noch nicht erstellt — RED-Phase bestätigt."
-)
+assert os.path.exists(
+    _task_file
+), "tasks/post_feedback_task.py noch nicht erstellt — RED-Phase bestätigt."
 
 _spec_pft = _ilu.spec_from_file_location(
     "tasks.post_feedback_task",
@@ -320,12 +320,12 @@ class TestRegeneratePostFromFeedback:
 
         # Steering-Keys für Feedback + Vorgänger-Post injiziert
         q_texts = [p["question_text"] for p in answers_list]
-        assert any("kundenfeedback" in q.lower() or "feedback" in q.lower() for q in q_texts), (
-            f"Feedback-Key fehlt in {q_texts}"
-        )
-        assert any("vorheriger" in q.lower() or "post" in q.lower() for q in q_texts), (
-            f"Vorgänger-Post-Key fehlt in {q_texts}"
-        )
+        assert any(
+            "kundenfeedback" in q.lower() or "feedback" in q.lower() for q in q_texts
+        ), f"Feedback-Key fehlt in {q_texts}"
+        assert any(
+            "vorheriger" in q.lower() or "post" in q.lower() for q in q_texts
+        ), f"Vorgänger-Post-Key fehlt in {q_texts}"
 
         # Feedback-Text im answers_list vorhanden
         ans_vals = [p["answer_text"] for p in answers_list]

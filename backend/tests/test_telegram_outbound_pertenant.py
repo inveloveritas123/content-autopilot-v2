@@ -264,9 +264,9 @@ class TestGetTenantBotToken:
             resolver.get_tenant_bot_token("tenant-123")
 
         for record in caplog.records:
-            assert raw_token not in record.getMessage(), (
-                f"Token im Log gefunden: {record.getMessage()}"
-            )
+            assert (
+                raw_token not in record.getMessage()
+            ), f"Token im Log gefunden: {record.getMessage()}"
 
 
 # ===========================================================================
