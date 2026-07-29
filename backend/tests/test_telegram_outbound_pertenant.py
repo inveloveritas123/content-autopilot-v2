@@ -529,6 +529,11 @@ class TestApproveContentSync:
         assert "tenant_id = :tid" in str(upd[0].args[0])
         assert upd[0].args[1]["tid"] == "tenant-a"
         assert upd[0].args[1]["cid"] == "cid-1"
+        # Exakte mandatierte Feldwerte — Regression auf einen davon muss rot schlagen
+        assert "status = 'approved'" in str(upd[0].args[0])
+        assert "approval_method = 'telegram_button'" in str(upd[0].args[0])
+        assert "approved_by = 'telegram'" in str(upd[0].args[0])
+        assert "approved_at = now()" in str(upd[0].args[0])
 
     def test_idempotent_when_already_approved(self):
         db = _make_db_mock(row=("approved",))
@@ -544,3 +549,26 @@ class TestApproveContentSync:
         with patch.object(tg, "sync_session_factory", return_value=db):
             result = tg._approve_content_sync("cid-x", "tenant-b")
         assert result == "not_found"
+        # Kein UPDATE — weder für ein nicht-existentes noch für ein fremdes Piece
+        assert not [
+            c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])
+        ]
+        # SELECT war tenant-scoped auf genau den übergebenen Tenant
+        sel = [c for c in db.execute.call_args_list if "SELECT status" in str(c.args[0])]
+        assert sel[0].args[1]["tid"] == "tenant-b"
+
+    def test_fail_open_on_db_error(self, caplog):
+        db = _make_db_mock(row=("draft",))
+        db.execute.side_effect = Exception("boom")
+        with (
+            patch.object(tg, "sync_session_factory", return_value=db),
+            caplog.at_level(logging.WARNING),
+        ):
+            result = tg._approve_content_sync("cid-1", "tenant-a")
+        assert result == "not_found"
+        assert not [
+            c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])
+        ]
+        log_text = "\n".join(r.getMessage() for r in caplog.records)
+        assert "boom" not in log_text, f"Exception-Message im Log gefunden: {log_text}"
+        assert "Exception" in log_text, f"Exception-Klassenname fehlt im Log: {log_text}"
