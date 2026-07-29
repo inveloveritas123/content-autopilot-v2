@@ -55,6 +55,23 @@ if not hasattr(sys.modules["api.ideas"], "_run_p12_p12b_pipeline"):
     sys.modules["api.ideas"]._run_p12_p12b_pipeline = MagicMock()
 _api_pkg.ideas = sys.modules["api.ideas"]
 
+# api.telegram._draft_action_keyboard — _telegram_task_env stubbt api.telegram nur mit
+# den älteren Sends/Dispatch-Mocks (Issue #17); _draft_action_keyboard (Task 1-4,
+# Stufe-1-Buttons) fehlt dort. post_feedback_task braucht die ECHTE Funktion (reines
+# Dict-Building, keine Abhängigkeiten) für den Keyboard-Callback-Data-Test — daher
+# gezielt aus der echten Datei unter einem privaten Modulnamen nachladen und NUR das
+# fehlende Attribut ergänzen (bestehende Stub-Attribute für andere Telegram-Tests
+# bleiben unangetastet). Muster: test_session_post_task.py (Task 5).
+_at_stub = sys.modules.get("api.telegram")
+if _at_stub is not None and not hasattr(_at_stub, "_draft_action_keyboard"):
+    _at_spec = _ilu.spec_from_file_location(
+        "api._telegram_real_for_keyboard_stub",
+        os.path.join(_BACKEND_DIR, "api", "telegram.py"),
+    )
+    _at_real = _ilu.module_from_spec(_at_spec)
+    _at_spec.loader.exec_module(_at_real)
+    _at_stub._draft_action_keyboard = _at_real._draft_action_keyboard
+
 # services.canonical_profiles — Lazy-Import-Ziel (load_active_profiles).
 import services as _services_pkg
 
@@ -313,6 +330,33 @@ class TestRegeneratePostFromFeedback:
         # Feedback-Text im answers_list vorhanden
         ans_vals = [p["answer_text"] for p in answers_list]
         assert "Mach den Post kürzer!" in ans_vals
+
+    # ----- Action-Keyboard am regenerierten Post (Task 6) -----
+
+    def test_regenerated_post_sent_with_action_keyboard(self):
+        """Step-8-UPDATE liefert per RETURNING id die NEUE content_id → Send bekommt
+        das Approve/Regenerate/Reject-Keyboard aus api.telegram._draft_action_keyboard.
+        Muster: test_session_post_task.py::test_post_sent_with_action_keyboard (Task 5)."""
+        gate_ctx = _make_ctx(None)
+        piece_ctx = _make_piece_ctx()
+        count_ctx = _make_scalar_ctx(1)  # 1 Piece = erste Runde, unter Limit
+        session_ctx = _make_ctx((_SESSION_MESSAGES, "closed", "random_smart"))
+        marker_ctx = _make_ctx(("cid-new",))  # UPDATE ... RETURNING id -> NEUE content_id
+
+        result, _pipeline_mock, send_mock = self._run(
+            [gate_ctx, piece_ctx, count_ctx, session_ctx, marker_ctx],
+            pipeline_return={
+                "status": "ok",
+                "final_post": "NEUER POST",
+                "p12_run_id": "run-42",
+            },
+        )
+
+        assert result["status"] == "ok"
+        assert result["sent"] is True
+        reply_markup = send_mock.call_args.kwargs["reply_markup"]
+        cbs = [b["callback_data"] for row in reply_markup["inline_keyboard"] for b in row]
+        assert "cmd:approve:cid-new" in cbs
 
     # ----- paused_for_cost -----
 

@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/telegram", tags=["Telegram"])
 
+DEFAULT_REGEN_FEEDBACK = (
+    "Formuliere den Post deutlich anders: anderer Hook, andere Struktur, gleicher Kerninhalt."
+)
+
 # ---------------------------------------------------------------------------
 # In-memory rate-limiter for bad webhook secret attempts (per IP)
 # ---------------------------------------------------------------------------
@@ -217,6 +221,87 @@ def _send_telegram_message(
             type(e).__name__,
         )
         return False
+
+
+def _draft_action_keyboard(content_id: str) -> dict:
+    """Inline-Keyboard für einen fertigen Entwurf (Stufe 1).
+
+    Jeder callback_data trägt die content_piece.id, damit der Callback-Handler
+    tenant-scoped genau dieses Piece freigeben/verwerfen/neu-schreiben kann.
+    """
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Freigeben", "callback_data": f"cmd:approve:{content_id}"},
+                {"text": "✏️ Nochmal anders", "callback_data": f"cmd:regenerate:{content_id}"},
+            ],
+            [{"text": "❌ Verwerfen", "callback_data": f"cmd:reject:{content_id}"}],
+        ]
+    }
+
+
+def _approve_content_sync(content_id: str, tenant_id: str) -> str:
+    """Gibt ein content_piece frei (Telegram-Button). Tenant-scoped + idempotent.
+
+    Returns: 'approved' (neu freigegeben) | 'already' (war schon approved/published)
+             | 'not_found' (existiert nicht ODER gehört anderem Tenant).
+    Fail-open: bei DB-Fehler 'not_found' (kein Raise im Send-/Callback-Pfad).
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text("SELECT status FROM content_pieces WHERE id = :cid AND tenant_id = :tid"),
+                {"cid": content_id, "tid": tenant_id},
+            ).fetchone()
+            if row is None:
+                return "not_found"
+            if row[0] in ("approved", "published"):
+                return "already"
+            db.execute(
+                text(
+                    "UPDATE content_pieces SET status = 'approved', "
+                    "approval_method = 'telegram_button', approved_by = 'telegram', "
+                    "approved_at = now() "
+                    "WHERE id = :cid AND tenant_id = :tid"
+                ),
+                {"cid": content_id, "tid": tenant_id},
+            )
+            db.commit()
+            return "approved"
+    except Exception as exc:
+        logger.warning("_approve_content_sync failed: %s", type(exc).__name__)
+        return "not_found"
+
+
+def _reject_content_sync(content_id: str, tenant_id: str) -> str:
+    """Verwirft ein content_piece (Telegram-Button). Tenant-scoped + idempotent.
+
+    Returns: 'rejected' (neu verworfen) | 'already' (war schon rejected)
+             | 'not_found' (existiert nicht ODER gehört anderem Tenant).
+    Fail-open: bei DB-Fehler 'not_found' (kein Raise im Send-/Callback-Pfad).
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text("SELECT status FROM content_pieces WHERE id = :cid AND tenant_id = :tid"),
+                {"cid": content_id, "tid": tenant_id},
+            ).fetchone()
+            if row is None:
+                return "not_found"
+            if row[0] == "rejected":
+                return "already"
+            db.execute(
+                text(
+                    "UPDATE content_pieces SET status = 'rejected' "
+                    "WHERE id = :cid AND tenant_id = :tid"
+                ),
+                {"cid": content_id, "tid": tenant_id},
+            )
+            db.commit()
+            return "rejected"
+    except Exception as exc:
+        logger.warning("_reject_content_sync failed: %s", type(exc).__name__)
+        return "not_found"
 
 
 def _send_admin_telegram_message(chat_id: int, text_msg: str) -> None:
@@ -701,7 +786,7 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
             sim = r.get("similarity") or 0
             preview = (r.get("content_text") or "")[:200]
             tag = r.get("classification") or "—"
-            lines.append(f"\n• {sim*100:.0f}% [{tag}] {preview}")
+            lines.append(f"\n• {sim * 100:.0f}% [{tag}] {preview}")
         _send_telegram_message(chat_id, "\n".join(lines)[:4000], tenant_id=tenant_id)
         return True
 
@@ -831,6 +916,44 @@ def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = N
     elif data.startswith("cmd:bs_pick:"):
         idea_id = data.split(":", 2)[2]
         _brainstorming_pick_idea(tenant_id_str, chat_id, idea_id)
+    elif data.startswith("cmd:approve:"):
+        content_id = data.split(":", 2)[2]
+        outcome = _approve_content_sync(content_id, tenant_id_str)
+        msg = {
+            "approved": "✅ Freigegeben. Kopier dir den Text oben und ab damit auf LinkedIn.",
+            "already": "✅ Der Post ist bereits freigegeben.",
+            "not_found": "Hm — diesen Entwurf finde ich nicht mehr.",
+        }[outcome]
+        _send_telegram_message(chat_id, msg, tenant_id=tenant_id_str)
+    elif data.startswith("cmd:reject:"):
+        content_id = data.split(":", 2)[2]
+        outcome = _reject_content_sync(content_id, tenant_id_str)
+        msg = {
+            "rejected": "❌ Verworfen.",
+            "already": "❌ War schon verworfen.",
+            "not_found": "Hm — diesen Entwurf finde ich nicht mehr.",
+        }[outcome]
+        _send_telegram_message(chat_id, msg, tenant_id=tenant_id_str)
+    elif data.startswith("cmd:regenerate:"):
+        content_id = data.split(":", 2)[2]
+        try:
+            from tasks.post_feedback_task import regenerate_post_from_feedback
+
+            regenerate_post_from_feedback.apply_async(
+                args=[content_id, tenant_id_str, DEFAULT_REGEN_FEEDBACK, None]
+            )
+            _send_telegram_message(
+                chat_id,
+                "✏️ Alles klar, ich schreibe ihn neu — kommt gleich.",
+                tenant_id=tenant_id_str,
+            )
+        except Exception as exc:
+            logger.warning("regenerate enqueue failed: %s", type(exc).__name__)
+            _send_telegram_message(
+                chat_id,
+                "Das hat gerade nicht geklappt — versuch es gleich nochmal.",
+                tenant_id=tenant_id_str,
+            )
 
 
 def _send_ki_profil(tenant_id: str, chat_id: int) -> None:

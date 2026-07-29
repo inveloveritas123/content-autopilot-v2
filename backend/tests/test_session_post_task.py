@@ -45,6 +45,23 @@ if "api.ideas" not in sys.modules:
     _ai._run_p12_p12b_pipeline = MagicMock()
 _api_pkg.ideas = sys.modules["api.ideas"]
 
+# api.telegram._draft_action_keyboard — _telegram_task_env stubbt api.telegram nur mit
+# den älteren Sends/Dispatch-Mocks (Issue #17); _draft_action_keyboard (Task 1-4,
+# Stufe-1-Buttons) fehlt dort. session_post_task braucht die ECHTE Funktion (reines
+# Dict-Building, keine Abhängigkeiten) für den Keyboard-Callback-Data-Test — daher
+# gezielt aus der echten Datei unter einem privaten Modulnamen nachladen und NUR das
+# fehlende Attribut ergänzen (bestehende Stub-Attribute für andere Telegram-Tests
+# bleiben unangetastet).
+_at_stub = sys.modules.get("api.telegram")
+if _at_stub is not None and not hasattr(_at_stub, "_draft_action_keyboard"):
+    _at_spec = _ilu.spec_from_file_location(
+        "api._telegram_real_for_keyboard_stub",
+        os.path.join(_BACKEND_DIR, "api", "telegram.py"),
+    )
+    _at_real = _ilu.module_from_spec(_at_spec)
+    _at_spec.loader.exec_module(_at_real)
+    _at_stub._draft_action_keyboard = _at_real._draft_action_keyboard
+
 # services.canonical_profiles — Lazy-Import-Ziel (load_active_profiles).
 import services as _services_pkg
 
@@ -228,7 +245,25 @@ class TestGeneratePostFromSession:
         assert len(answers_list) == 3
         assert call[0][3] == {"tone": "warm"}  # voice_payload
         assert call[0][4] == {"persona": "founder"}  # avatar_payload
-        send_mock.assert_called_once_with(4711, "FERTIGER POST", tenant_id="tenant-1")
+        send_mock.assert_called_once_with(
+            4711, "FERTIGER POST", tenant_id="tenant-1", reply_markup=None
+        )
+
+    def test_post_sent_with_action_keyboard(self):
+        """Step-6-UPDATE liefert per RETURNING id ein content_id → Send bekommt
+        das Approve/Regenerate/Reject-Keyboard aus api.telegram._draft_action_keyboard."""
+        gate_ctx = _make_ctx(None)
+        session_ctx = _make_ctx(_closed_session_row(_SESSION_MESSAGES))
+        marker_ctx = _make_ctx(("cid-42",))  # UPDATE ... RETURNING id
+        result, _pipeline_mock, send_mock = self._run(
+            [gate_ctx, session_ctx, marker_ctx],
+            pipeline_return={"status": "ok", "final_post": "FERTIGER POST", "p12_run_id": "run-9"},
+        )
+        assert result["status"] == "ok"
+        assert result["sent"] is True
+        reply_markup = send_mock.call_args.kwargs["reply_markup"]
+        cbs = [b["callback_data"] for row in reply_markup["inline_keyboard"] for b in row]
+        assert "cmd:approve:cid-42" in cbs
 
     def test_flagged_post_not_sent_raw(self):
         gate_ctx = _make_ctx(None)
