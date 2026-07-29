@@ -623,3 +623,52 @@ class TestRejectContentSync:
         log_text = "\n".join(r.getMessage() for r in caplog.records)
         assert "boom" not in log_text, f"Exception-Message im Log gefunden: {log_text}"
         assert "Exception" in log_text, f"Exception-Klassenname fehlt im Log: {log_text}"
+
+
+# ===========================================================================
+# Tests: _handle_callback_query — approve/reject/regenerate Dispatch (Stufe 1)
+# ===========================================================================
+
+
+class TestApproveRejectRegenerateCallbacks:
+    def _cq(self, data):
+        return {"id": "cq1", "data": data, "from": {"id": 5}, "message": {"chat": {"id": 99}}}
+
+    def test_approve_callback_calls_sync_and_confirms(self):
+        with (
+            patch.object(tg, "_approve_content_sync", return_value="approved") as appr,
+            patch.object(tg, "_send_telegram_message") as send,
+            patch("httpx.post"),
+        ):
+            tg._handle_callback_query(self._cq("cmd:approve:cid-1"), known_tenant_id="tenant-a")
+        appr.assert_called_once_with("cid-1", "tenant-a")  # tenant-scoped
+        assert send.called and "✅" in send.call_args.args[1]
+
+    def test_reject_callback_calls_sync(self):
+        with (
+            patch.object(tg, "_reject_content_sync", return_value="rejected") as rej,
+            patch.object(tg, "_send_telegram_message"),
+            patch("httpx.post"),
+        ):
+            tg._handle_callback_query(self._cq("cmd:reject:cid-1"), known_tenant_id="tenant-a")
+        rej.assert_called_once_with("cid-1", "tenant-a")
+
+    def test_regenerate_callback_enqueues_feedback_task(self):
+        fake_task = MagicMock()
+        with (
+            patch.dict(
+                sys.modules,
+                {"tasks.post_feedback_task": MagicMock(regenerate_post_from_feedback=fake_task)},
+            ),
+            patch.object(tg, "_send_telegram_message"),
+            patch("httpx.post"),
+        ):
+            tg._handle_callback_query(self._cq("cmd:regenerate:cid-1"), known_tenant_id="tenant-a")
+        assert fake_task.apply_async.called
+        args = (
+            fake_task.apply_async.call_args.kwargs.get("args")
+            or fake_task.apply_async.call_args.args[0]
+        )
+        assert (
+            args[0] == "cid-1" and args[1] == "tenant-a"
+        )  # (post_id, tenant_id, feedback, log_id)

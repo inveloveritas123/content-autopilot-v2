@@ -916,6 +916,44 @@ def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = N
     elif data.startswith("cmd:bs_pick:"):
         idea_id = data.split(":", 2)[2]
         _brainstorming_pick_idea(tenant_id_str, chat_id, idea_id)
+    elif data.startswith("cmd:approve:"):
+        content_id = data.split(":", 2)[2]
+        outcome = _approve_content_sync(content_id, tenant_id_str)
+        msg = {
+            "approved": "✅ Freigegeben. Kopier dir den Text oben und ab damit auf LinkedIn.",
+            "already": "✅ Der Post ist bereits freigegeben.",
+            "not_found": "Hm — diesen Entwurf finde ich nicht mehr.",
+        }[outcome]
+        _send_telegram_message(chat_id, msg, tenant_id=tenant_id_str)
+    elif data.startswith("cmd:reject:"):
+        content_id = data.split(":", 2)[2]
+        outcome = _reject_content_sync(content_id, tenant_id_str)
+        msg = {
+            "rejected": "❌ Verworfen.",
+            "already": "❌ War schon verworfen.",
+            "not_found": "Hm — diesen Entwurf finde ich nicht mehr.",
+        }[outcome]
+        _send_telegram_message(chat_id, msg, tenant_id=tenant_id_str)
+    elif data.startswith("cmd:regenerate:"):
+        content_id = data.split(":", 2)[2]
+        try:
+            from tasks.post_feedback_task import regenerate_post_from_feedback
+
+            regenerate_post_from_feedback.apply_async(
+                args=[content_id, tenant_id_str, DEFAULT_REGEN_FEEDBACK, None]
+            )
+            _send_telegram_message(
+                chat_id,
+                "✏️ Alles klar, ich schreibe ihn neu — kommt gleich.",
+                tenant_id=tenant_id_str,
+            )
+        except Exception as exc:
+            logger.warning("regenerate enqueue failed: %s", type(exc).__name__)
+            _send_telegram_message(
+                chat_id,
+                "Das hat gerade nicht geklappt — versuch es gleich nochmal.",
+                tenant_id=tenant_id_str,
+            )
 
 
 def _send_ki_profil(tenant_id: str, chat_id: int) -> None:
