@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/telegram", tags=["Telegram"])
 
+DEFAULT_REGEN_FEEDBACK = (
+    "Formuliere den Post deutlich anders: anderer Hook, andere Struktur, gleicher Kerninhalt."
+)
+
 # ---------------------------------------------------------------------------
 # In-memory rate-limiter for bad webhook secret attempts (per IP)
 # ---------------------------------------------------------------------------
@@ -217,6 +221,23 @@ def _send_telegram_message(
             type(e).__name__,
         )
         return False
+
+
+def _draft_action_keyboard(content_id: str) -> dict:
+    """Inline-Keyboard für einen fertigen Entwurf (Stufe 1).
+
+    Jeder callback_data trägt die content_piece.id, damit der Callback-Handler
+    tenant-scoped genau dieses Piece freigeben/verwerfen/neu-schreiben kann.
+    """
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Freigeben", "callback_data": f"cmd:approve:{content_id}"},
+                {"text": "✏️ Nochmal anders", "callback_data": f"cmd:regenerate:{content_id}"},
+            ],
+            [{"text": "❌ Verwerfen", "callback_data": f"cmd:reject:{content_id}"}],
+        ]
+    }
 
 
 def _send_admin_telegram_message(chat_id: int, text_msg: str) -> None:
@@ -701,7 +722,7 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
             sim = r.get("similarity") or 0
             preview = (r.get("content_text") or "")[:200]
             tag = r.get("classification") or "—"
-            lines.append(f"\n• {sim*100:.0f}% [{tag}] {preview}")
+            lines.append(f"\n• {sim * 100:.0f}% [{tag}] {preview}")
         _send_telegram_message(chat_id, "\n".join(lines)[:4000], tenant_id=tenant_id)
         return True
 

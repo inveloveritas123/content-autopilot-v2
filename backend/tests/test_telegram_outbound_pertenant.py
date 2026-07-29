@@ -264,9 +264,9 @@ class TestGetTenantBotToken:
             resolver.get_tenant_bot_token("tenant-123")
 
         for record in caplog.records:
-            assert (
-                raw_token not in record.getMessage()
-            ), f"Token im Log gefunden: {record.getMessage()}"
+            assert raw_token not in record.getMessage(), (
+                f"Token im Log gefunden: {record.getMessage()}"
+            )
 
 
 # ===========================================================================
@@ -493,3 +493,20 @@ class TestSendAdminTelegramMessage:
             tg._send_admin_telegram_message(88888, "msg")
 
         mock_resolver.assert_not_called()
+
+
+# ===========================================================================
+# Tests: _draft_action_keyboard (Stufe 1: Approve/Regenerate/Reject-Buttons)
+# ===========================================================================
+
+
+class TestDraftActionKeyboard:
+    def test_keyboard_has_three_actions_scoped_to_content_id(self):
+        kb = tg._draft_action_keyboard("abc-123")
+        rows = kb["inline_keyboard"]
+        callbacks = [btn["callback_data"] for row in rows for btn in row]
+        assert "cmd:approve:abc-123" in callbacks
+        assert "cmd:regenerate:abc-123" in callbacks
+        assert "cmd:reject:abc-123" in callbacks
+        # Jeder Button trägt exakt die content_id → keine Verwechslung zwischen Drafts
+        assert all(cb.endswith(":abc-123") for cb in callbacks)
