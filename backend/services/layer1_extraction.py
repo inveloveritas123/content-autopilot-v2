@@ -312,35 +312,14 @@ def extract_intent_features(
 
     # --- 7. Parse + validate (max 1 retry) ---
     data: dict = {}
+    # ⚠️ Das Parsen steht bewusst in einem EIGENEN try. Beide Retry-Calls unten können
+    # ihrerseits ValueError werfen (`pipeline_llm` meldet malformte 200er-Antworten so
+    # und unterdrückt dafür absichtlich seinen eigenen Retry). Lägen sie im selben try
+    # wie das Parsen, landete ein Router-Fehler im Parse-Fehler-Handler — mit einem
+    # dritten bezahlten Call und dem falschen Triage-Label in der Reviewer-Queue.
     for attempt in range(2):
         try:
             data = _parse_llm_output(raw_output)
-            errors = _validate_schema(data)
-            if not errors:
-                break
-            if attempt == 0:
-                logger.warning("[Layer1] Schema-Verletzung (Versuch 1): %s — retry", errors)
-                retry_content = (
-                    user_content + f"\n\nFehler im ersten Versuch: {errors}. "
-                    "Bitte antworte exakt gemäß dem JSON-Schema."
-                )
-                res2 = call_pipeline_llm(
-                    prompt_key="LAYER1",
-                    system_prompt=prompt.system_prompt,
-                    user_content=retry_content,
-                    tenant_id=tenant_id,
-                )
-                raw_output = res2.text.strip()
-            else:
-                logger.error("[Layer1] Schema-Verletzung nach Retry: %s", errors)
-                return ExtractionResult(
-                    intent="unclassified",
-                    session_context="no_session",
-                    extracted_features={},
-                    flagged_for_review=True,
-                    flag_reasons=[*flag_reasons, "schema_violation"],
-                    routed_to="reviewer_queue",
-                )
         except ValueError as ve:
             logger.error("[Layer1] JSON-Parse fehlgeschlagen (Versuch %d): %s", attempt, ve)
             if attempt == 1:
@@ -352,7 +331,82 @@ def extract_intent_features(
                     flag_reasons=[*flag_reasons, "json_parse_error"],
                     routed_to="reviewer_queue",
                 )
-            # On first parse error, retry without schema reminder (raw_output unchanged — loop continues)
+            # Ein Parse-Fehler bedeutet hier meist: die Antwort wurde abgeschnitten, weil
+            # das Thinking-Modell das max_tokens-Budget beim Nachdenken verbraucht hat.
+            # Denselben Rohtext ein zweites Mal zu parsen kann per Konstruktion nicht
+            # gelingen — vorher taten beide "Versuche" genau das und scheiterten in
+            # derselben Millisekunde. Also das Modell wirklich erneut fragen.
+            retry_content = (
+                user_content + "\n\nDeine vorherige Antwort war unvollständig bzw. kein "
+                "gültiges JSON. Antworte NUR mit dem vollständigen JSON-Objekt."
+            )
+            try:
+                res_retry = call_pipeline_llm(
+                    prompt_key="LAYER1",
+                    system_prompt=prompt.system_prompt,
+                    user_content=retry_content,
+                    tenant_id=tenant_id,
+                )
+            except Exception as retry_exc:
+                # Der zusätzliche Call darf keinen NEUEN Fehlerpfad nach außen öffnen:
+                # vorher konnte hier nichts werfen, weil es keinen Call gab. Eigener
+                # Grund statt "json_parse_error" — sonst steht in der Reviewer-Queue
+                # "JSON kaputt", obwohl z.B. das Router-Budget leer war.
+                logger.error("[Layer1] Retry-Call fehlgeschlagen: %s", type(retry_exc).__name__)
+                return ExtractionResult(
+                    intent="unclassified",
+                    session_context="no_session",
+                    extracted_features={},
+                    flagged_for_review=True,
+                    flag_reasons=[*flag_reasons, "llm_retry_failed"],
+                    routed_to="reviewer_queue",
+                )
+            raw_output = res_retry.text.strip()
+            continue
+
+        errors = _validate_schema(data)
+        if not errors:
+            break
+        if attempt == 0:
+            logger.warning("[Layer1] Schema-Verletzung (Versuch 1): %s — retry", errors)
+            retry_content = (
+                user_content + f"\n\nFehler im ersten Versuch: {errors}. "
+                "Bitte antworte exakt gemäß dem JSON-Schema."
+            )
+            try:
+                res2 = call_pipeline_llm(
+                    prompt_key="LAYER1",
+                    system_prompt=prompt.system_prompt,
+                    user_content=retry_content,
+                    tenant_id=tenant_id,
+                )
+            except Exception as schema_retry_exc:
+                # Vor der Trennung der try-Blöcke fing der Parse-Handler diesen Fehler
+                # mit ab und der Lauf endete als "schema_violation". Dieses Ergebnis
+                # bleibt erhalten — nur ohne den Umweg über den falschen Handler.
+                logger.error(
+                    "[Layer1] Schema-Retry-Call fehlgeschlagen: %s",
+                    type(schema_retry_exc).__name__,
+                )
+                return ExtractionResult(
+                    intent="unclassified",
+                    session_context="no_session",
+                    extracted_features={},
+                    flagged_for_review=True,
+                    flag_reasons=[*flag_reasons, "schema_violation"],
+                    routed_to="reviewer_queue",
+                )
+            raw_output = res2.text.strip()
+        else:
+            logger.error("[Layer1] Schema-Verletzung nach Retry: %s", errors)
+            return ExtractionResult(
+                intent="unclassified",
+                session_context="no_session",
+                extracted_features={},
+                flagged_for_review=True,
+                flag_reasons=[*flag_reasons, "schema_violation"],
+                routed_to="reviewer_queue",
+            )
 
     # --- 8. Merge flags from pattern check + LLM output ---
     llm_flagged = data.get("flagged_for_review", False)
