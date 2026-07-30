@@ -299,6 +299,14 @@ if "api.telegram" not in sys.modules:
     _at._send_telegram_message = MagicMock(return_value=True)
     _at._send_admin_telegram_message = MagicMock()
     _at.dispatch_inbound_update = MagicMock()
+    # C5: _route_inbound_message und _start_targeted_session importieren das
+    # Abbrechen-Keyboard aus demselben Lazy-Import. Fehlt es am Stub, wirft der
+    # Import — und weil der Send in einem try/except sitzt, sähe man nur einen
+    # stummen Nicht-Send statt der Ursache. Der Inhalt wird gegen das ECHTE Modul
+    # in test_tier1_session_escape.py geprüft, hier zählt nur die Existenz.
+    _at._interview_cancel_keyboard = MagicMock(
+        return_value={"inline_keyboard": [[{"callback_data": "cmd:session_cancel"}]]}
+    )
 # Als Paket-Attribut registrieren (für @patch-Auflösung via getattr)
 sys.modules["api"].telegram = sys.modules["api.telegram"]
 

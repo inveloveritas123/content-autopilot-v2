@@ -879,3 +879,84 @@ class TestP08DbFailure:
         assert result.session_id == "sess-db-fail"
         mock_call_llm.assert_called_once()
         assert mock_call_llm.call_args.kwargs["prompt_key"] == "P08"
+
+
+class TestP08ResponseRespectsMidflightCancel:
+    """C5-Absicherung gegen das Rennen zwischen Abbruch und laufender Verarbeitung.
+
+    Der Statuscheck liegt am Anfang von `p08_response`, der Write am Ende —
+    dazwischen läuft ein LLM-Call (`pipeline_llm` erlaubt bis zu 3 Versuche à
+    ≥300s). Bricht der Nutzer in diesem Fenster ab (`status='expired'`), darf der
+    abschließende Write die Session NICHT zurück auf 'active' setzen (Abbruch
+    verpufft) und erst recht nicht auf 'closed': `tasks/session_post_task.py`
+    generiert bei 'closed' einen Post — aus den halben Antworten eines Gesprächs,
+    das der Nutzer abgebrochen hat.
+    """
+
+    def _ctx(self, fetchone_val=None, rowcount=1):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        ctx.execute.return_value.fetchone.return_value = fetchone_val
+        ctx.execute.return_value.rowcount = rowcount
+        return ctx
+
+    def _run(self, mock_load_prompt, mock_call_llm, mock_db_factory, rowcount):
+        prompt = MagicMock()
+        prompt.system_prompt = "system"
+        prompt.user_prompt_template = (
+            "mode={mode} topic={topic} voice_profile={voice_profile} "
+            "recent_messages={recent_messages} features_json={features_json} "
+            "question_index={question_index} max_questions={max_questions}"
+        )
+        mock_load_prompt.return_value = prompt
+        mock_call_llm.return_value = _make_llm_result("Und was kam dann?")
+        session_row = _make_db_session_row(messages=[])
+        contexts = [
+            self._ctx(session_row),
+            self._ctx(None, rowcount=rowcount),
+            self._ctx(None, rowcount=rowcount),
+            self._ctx(None, rowcount=rowcount),
+        ]
+        mock_db_factory.side_effect = list(contexts)
+        return contexts
+
+    @patch("services.p08_service.sync_session_factory")
+    @patch("services.p08_service.call_pipeline_llm")
+    @patch("services.p08_service._load_p08_prompt")
+    def test_final_update_only_touches_still_active_sessions(
+        self, mock_load_prompt, mock_call_llm, mock_db_factory
+    ):
+        contexts = self._run(mock_load_prompt, mock_call_llm, mock_db_factory, rowcount=1)
+        p08_response(session_id="sess-1", features={"key_insight": "x"})
+
+        update_sql = " ".join(
+            str(c.args[0])
+            for ctx in contexts
+            for c in ctx.execute.call_args_list
+            if "UPDATE bot_session" in str(c.args[0])
+        )
+        assert "status = 'active'" in update_sql, (
+            "Der abschließende Write hat keinen Status-Guard — ein Abbruch während "
+            "des LLM-Calls wird überschrieben"
+        )
+
+    @patch("services.p08_service.sync_session_factory")
+    @patch("services.p08_service.call_pipeline_llm")
+    @patch("services.p08_service._load_p08_prompt")
+    def test_cancelled_midflight_does_not_trigger_post_generation(
+        self, mock_load_prompt, mock_call_llm, mock_db_factory
+    ):
+        """0 betroffene Zeilen = die Session ist weg. Der Caller triggert die
+        Post-Generierung nur bei `is_closed and not was_already_closed`
+        (`tasks/telegram_task.py`) — also muss `was_already_closed` True sein."""
+        self._run(mock_load_prompt, mock_call_llm, mock_db_factory, rowcount=0)
+        result = p08_response(session_id="sess-1", features={"key_insight": "x"})
+
+        assert (
+            result.was_already_closed is True
+        ), "Abbruch während der Verarbeitung führt trotzdem zur Post-Generierung"
+        assert not result.message, (
+            "Nach dem Abbruch geht noch eine Folgefrage raus — der Nutzer hat gerade "
+            "'Gespräch abgebrochen' gelesen"
+        )

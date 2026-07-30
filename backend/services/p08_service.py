@@ -203,7 +203,13 @@ def _close_session_db(session_id: str, tenant_id: str) -> None:
     """
     with sync_session_factory() as s:
         s.execute(
-            text("UPDATE bot_session SET status = 'closed', updated_at = NOW() WHERE id = :id"),
+            # `AND status = 'active'` : eine zwischenzeitlich abgebrochene ('expired')
+            # Session darf nicht nachträglich auf 'closed' gehoben werden — 'closed'
+            # ist die Bedingung, unter der session_post_task einen Post generiert.
+            text(
+                "UPDATE bot_session SET status = 'closed', updated_at = NOW() "
+                "WHERE id = :id AND status = 'active'"
+            ),
             {"id": session_id},
         )
         s.commit()
@@ -466,11 +472,18 @@ def p08_response(
         }
     )
     new_status = "closed" if is_closed else "active"
+    # ⚠️ `AND status = 'active'` ist der Guard gegen ein Rennen: der Statuscheck oben
+    # liegt VOR dem LLM-Call (bis zu 3 Versuche à ≥300s), dieser Write danach. Bricht
+    # der Nutzer in diesem Fenster ab (`status='expired'`, api/telegram.py
+    # `_cancel_active_session`), würde ein ungefilterter Write die Session wieder auf
+    # 'active' setzen (Abbruch verpufft) oder auf 'closed' — und 'closed' lässt
+    # `tasks/session_post_task.py` einen Post aus den halben Antworten bauen.
     with sync_session_factory() as s:
-        s.execute(
+        res = s.execute(
             text(
                 "UPDATE bot_session SET messages = CAST(:msgs AS jsonb), current_question_index = :idx, "
-                "status = :status, updated_at = NOW(), last_message_at = NOW() WHERE id = :id"
+                "status = :status, updated_at = NOW(), last_message_at = NOW() "
+                "WHERE id = :id AND status = 'active'"
             ),
             {
                 "msgs": json.dumps(messages_list),
@@ -480,6 +493,21 @@ def p08_response(
             },
         )
         s.commit()
+        session_still_live = getattr(res, "rowcount", 1) != 0
+
+    if not session_still_live:
+        # Session wurde während der Verarbeitung beendet. was_already_closed=True
+        # hält den Post-Trigger im Caller zurück; leere message unterdrückt die
+        # Folgefrage, die sonst NACH dem „Gespräch abgebrochen" beim Nutzer landet.
+        logger.info("[P08] Session %s wurde während der Verarbeitung beendet", session_id)
+        return ResponseResult(
+            next_action="close",
+            message="",
+            quality=quality,
+            session_id=session_id,
+            is_closed=True,
+            was_already_closed=True,
+        )
 
     # #19: Der frühere `ready_for_p10`-Insert in content_ideas (toter Pfad,
     # kein Consumer) ist entfernt. Die Post-Generierung läuft jetzt über den

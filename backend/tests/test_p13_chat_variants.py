@@ -736,3 +736,48 @@ class TestBugCSessionPostSteering:
         call_args = pipeline_mock.call_args
         idea_id_arg = call_args[0][1] if call_args[0] else call_args[1].get("idea_id")
         assert idea_id_arg is None
+
+
+# ---------------------------------------------------------------------------
+# 7. C5 — der targeted-Opener eröffnet eine Session ohne TTL und braucht deshalb
+#    einen sichtbaren Ausgang an der Frage selbst.
+# ---------------------------------------------------------------------------
+
+
+class TestTargetedOpenerOffersAnExit:
+    def _start(self, send_mock):
+        opener = types.SimpleNamespace(session_id="sess-9", question_text="Was war der Auslöser?")
+        p08_mod = types.ModuleType("services.p08_service")
+        p08_mod.p08_opener = MagicMock(return_value=opener)
+        with (
+            patch.dict(sys.modules, {"services.p08_service": p08_mod}),
+            patch.object(p13, "_resolve_chat_id", return_value=4711),
+            patch.object(sys.modules["api.telegram"], "_send_telegram_message", send_mock),
+        ):
+            return p13._start_targeted_session("tenant-1", "idea-1")
+
+    def test_opener_question_carries_an_exit(self):
+        send_mock = MagicMock(return_value=True)
+        self._start(send_mock)
+        assert send_mock.call_args.args == (4711, "Was war der Auslöser?")
+        assert send_mock.call_args.kwargs.get(
+            "reply_markup"
+        ), "targeted-Opener bietet keinen Ausstieg an — Session schluckt danach alles"
+
+    def test_opener_still_returns_the_session(self):
+        assert self._start(MagicMock(return_value=True)) == {
+            "session_id": "sess-9",
+            "question_text": "Was war der Auslöser?",
+        }
+
+    def test_undelivered_opener_rolls_the_session_back(self):
+        """`_send_telegram_message` WIRFT nicht, es gibt False zurück.
+
+        Ohne Auswertung bliebe eine aktive Session zurück, deren Frage der Nutzer
+        nie gesehen hat — ab dann schluckt sie jede seiner Nachrichten als Antwort
+        auf eine unsichtbare Frage (`_load_active_session`, kein TTL).
+        """
+        with patch.object(p13, "_expire_session") as expire:
+            result = self._start(MagicMock(return_value=False))
+        assert result is None, "nicht zugestellter Opener gilt trotzdem als Erfolg"
+        assert expire.called, "aktive Session bleibt als Falle zurück"
