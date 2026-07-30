@@ -1776,8 +1776,42 @@ def _onboarding_close_session(session_id: str, tenant_id: str) -> None:
     asyncio.run(_run())
 
 
+def _has_active_transcript_profile(tenant_id: str) -> bool:
+    """True if an active source='transcript' voice profile exists for the tenant.
+
+    Fail-safe: returns True on any DB error — when in doubt, protect the profile
+    from being overwritten (C4). tenant_id is a text column; no cast needed here.
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text(
+                    "SELECT 1 FROM tenant_voice_profile "
+                    "WHERE tenant_id = :tid AND is_active = true AND source = 'transcript' "
+                    "LIMIT 1"
+                ),
+                {"tid": tenant_id},
+            ).fetchone()
+        return row is not None
+    except Exception as exc:  # fail-safe
+        logger.warning(
+            "transcript-profile check failed; assuming present (fail-safe): %s",
+            type(exc).__name__,
+        )
+        return True
+
+
 def _onboarding_save_voice_profile(tenant_id: str, answers: dict) -> None:
     """Ruft build_voice_profile_from_onboarding auf und speichert in tenant_voice_profile."""
+    # C4 Overwrite-Guard: a transcript profile (from the 60-min setup call) must
+    # never be deactivated by chat-onboarding. Defense-in-depth behind the C3 gate.
+    if _has_active_transcript_profile(tenant_id):
+        logger.warning(
+            "onboarding save aborted: active transcript profile present (tenant=%s)",
+            tenant_id,
+        )
+        return
+
     import asyncio
 
     from sqlalchemy import text
