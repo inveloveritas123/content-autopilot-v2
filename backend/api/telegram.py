@@ -1273,10 +1273,10 @@ def _onboarding_handle_document(tenant_id: str, chat_id: int, document: dict) ->
     # profile must be protected at this entry point too, not just the chat one.
     profile_state = _active_profile_state(tenant_id)
     if profile_state == "present":
-        _send_telegram_message(chat_id, _PROFILE_GATE_PRESENT_TEXT, tenant_id=tenant_id)
+        _send_telegram_message(chat_id, _PROFILE_GATE_DOCUMENT_PRESENT_TEXT, tenant_id=tenant_id)
         return
     if profile_state == "unknown":
-        _send_telegram_message(chat_id, _PROFILE_GATE_UNKNOWN_TEXT, tenant_id=tenant_id)
+        _send_telegram_message(chat_id, _PROFILE_GATE_DOCUMENT_UNKNOWN_TEXT, tenant_id=tenant_id)
         return
 
     from services.brand_voice import get_onboarding_questions
@@ -1811,9 +1811,10 @@ def _active_profile_state(
 ) -> Literal["present", "absent", "unknown"]:
     """Tri-state active-profile lookup: present / absent / unknown (check failed).
 
-    source=None checks any source (C3 "any profile" semantics); source=
-    "transcript" additionally requires an exact match (C4 semantics) — bound
-    as a query parameter, never interpolated into the SQL string.
+    source=None checks any source — the semantics both the C3 gates and the
+    C4 save-guard use, and the only variant with a caller today. A non-None
+    source additionally requires an exact match; it is bound as a query
+    parameter, never interpolated into the SQL string.
 
     "unknown" is deliberately not collapsed into a boolean guess: it's what
     lets callers tell a genuine profile apart from an unreachable check, so
@@ -1843,10 +1844,10 @@ def _active_profile_state(
 def _has_active_profile(tenant_id: str, source: str | None = None) -> bool:
     """True if an active voice profile exists for the tenant.
 
-    source=None → any source (C3 gate semantics); source="transcript" →
-    exact match (C4 save-guard semantics). Fail-safe: True on any DB error —
-    when in doubt, protect an existing profile rather than risk overwriting
-    or losing it.
+    source=None → any source, which is what every gate in this file wants; a
+    non-None source narrows to that exact source. Fail-safe: True on any DB
+    error — when in doubt, protect an existing profile rather than risk
+    overwriting or losing it.
 
     Thin boolean facade over `_active_profile_state`, kept as the tested,
     documented contract for a future caller that only needs a yes/no gate.
@@ -1858,22 +1859,47 @@ def _has_active_profile(tenant_id: str, source: str | None = None) -> bool:
     return _active_profile_state(tenant_id, source=source) != "absent"
 
 
-# Shared copy for every place the C3/C4 fail-safe can fire, so "a profile
-# genuinely exists" vs. "the check itself failed" always reads the same
-# regardless of which entry point (chat-onboarding start, document upload,
-# or the save guard) hit it.
-_PROFILE_GATE_PRESENT_TEXT = (
-    "🧠 Du hast schon ein fertiges Stimmprofil (aus deinem Setup-Gespräch). "
-    "Ich starte das Chat-Onboarding nicht, um es nicht zu überschreiben.\n\n"
-    "Tippe /help → „So liest KI mich“, um dein Profil zu sehen — oder schick "
+# Shared STATE sentence for every place the C3/C4 fail-safe can fire, so
+# "a profile genuinely exists" vs. "the check itself failed" always reads the
+# same regardless of which entry point hit it.
+_PROFILE_STATE_PRESENT = "🧠 Du hast schon ein fertiges Stimmprofil (aus deinem Setup-Gespräch)."
+_PROFILE_STATE_UNKNOWN = (
+    "⚠️ Ich konnte gerade nicht sicher prüfen, ob schon ein Stimmprofil existiert."
+)
+# Closing hint — only offered where a profile provably exists (there is
+# something to look at); pointless when the check itself was unreachable.
+_PROFILE_GATE_HINT = (
+    "\n\nTippe /help → „So liest KI mich“, um dein Profil zu sehen — oder schick "
     "mir einfach eine Sprachnachricht für einen Post."
 )
-_PROFILE_GATE_UNKNOWN_TEXT = (
-    "⚠️ Ich konnte gerade nicht sicher prüfen, ob schon ein Stimmprofil existiert. "
-    "Um keins zu riskieren, starte ich das Chat-Onboarding sicherheitshalber nicht. "
-    "Versuch es in ein paar Minuten erneut."
+
+# The ACTION sentence is per entry point and deliberately NOT shared: someone
+# who uploaded a file must be told what happened to that file, not that a chat
+# onboarding they never started was declined.
+_PROFILE_GATE_START_PRESENT_TEXT = (
+    f"{_PROFILE_STATE_PRESENT} Ich starte das Chat-Onboarding nicht, "
+    f"um es nicht zu überschreiben.{_PROFILE_GATE_HINT}"
 )
-_PROFILE_SAVE_ABORT_TEXT: dict[str, str] = {
+_PROFILE_GATE_START_UNKNOWN_TEXT = (
+    f"{_PROFILE_STATE_UNKNOWN} Um keins zu riskieren, starte ich das "
+    "Chat-Onboarding sicherheitshalber nicht. Versuch es in ein paar Minuten erneut."
+)
+_PROFILE_GATE_DOCUMENT_PRESENT_TEXT = (
+    f"{_PROFILE_STATE_PRESENT} Deine Datei habe ich deshalb nicht ausgewertet — "
+    f"sie hätte das bestehende Profil überschrieben.{_PROFILE_GATE_HINT}"
+)
+_PROFILE_GATE_DOCUMENT_UNKNOWN_TEXT = (
+    f"{_PROFILE_STATE_UNKNOWN} Deine Datei habe ich deshalb nicht ausgewertet, "
+    "um kein bestehendes Profil zu riskieren. Schick sie in ein paar Minuten einfach nochmal."
+)
+
+# The three outcomes _onboarding_save_voice_profile can report. Named once so
+# the states can't drift between the function signature, the abort-copy map and
+# the five call sites — and so a mistyped key below is a static error, not a
+# KeyError in front of a tester.
+ProfileSaveResult = Literal["saved", "aborted_profile_exists", "aborted_unknown"]
+
+_PROFILE_SAVE_ABORT_TEXT: dict[ProfileSaveResult, str] = {
     "aborted_profile_exists": (
         "🧠 Du hast schon ein aktives Stimmprofil — ich habe deine Antworten nicht "
         "gespeichert, um es nicht zu überschreiben. Tippe /help → 'So liest KI mich' "
@@ -1886,32 +1912,45 @@ _PROFILE_SAVE_ABORT_TEXT: dict[str, str] = {
 }
 
 
-def _onboarding_save_voice_profile(
-    tenant_id: str, answers: dict
-) -> Literal["saved", "aborted_profile_exists", "aborted_unknown"]:
+def _onboarding_save_voice_profile(tenant_id: str, answers: dict) -> ProfileSaveResult:
     """Ruft build_voice_profile_from_onboarding auf und speichert in tenant_voice_profile.
 
     Returns which of three outcomes occurred so callers can tell the tenant
     the truth instead of unconditionally claiming success:
     - "saved": the profile was built and written.
-    - "aborted_profile_exists": a real active transcript profile protects
-      itself (C4) — nothing was written; callers must say so honestly.
-    - "aborted_unknown": the guard check itself couldn't be verified (DB
-      unreachable) — nothing was written; callers must neither claim
-      success nor claim a profile exists, and must read as retryable.
+    - "aborted_profile_exists": an active profile protects itself (C4) —
+      nothing was written; callers must say so honestly.
+    - "aborted_unknown": the outcome could not be confirmed; callers must
+      neither claim success nor claim a profile exists, and must read as
+      retryable. Returned by this function only *before* anything is written
+      (the guard check was unreachable), but callers additionally map any
+      exception escaping this call to the same value — and such an exception
+      can be raised after `await db.commit()` already succeeded (e.g. from
+      `engine.dispose()`). So "aborted_unknown" means "not confirmed", not
+      "provably nothing was written".
     """
-    # C4 Overwrite-Guard: a transcript profile (from the 60-min setup call) must
-    # never be deactivated by chat-onboarding. Defense-in-depth behind the C3 gate.
-    profile_state = _active_profile_state(tenant_id, source="transcript")
+    # C4 Overwrite-Guard: no chat-onboarding run may deactivate an existing
+    # active profile. Checked for ANY source, matching the C3 gates — scoping
+    # this to source='transcript' would wave the destructive UPDATE through for
+    # exactly the tenant whose transcript row a previous run already flipped to
+    # is_active=false (and for source='voice_fallback' profiles). Kept as
+    # defense-in-depth behind C3 because routes into the wizard that only need
+    # an already-open bot_session (bulk text, typed answer) never re-pass C3.
+    #
+    # TOCTOU, deliberately not fixed here: this check reads through the *sync*
+    # engine while the UPDATE/INSERT below run in a separate transaction on the
+    # *async* engine — the guard is not atomic with the write. It narrows the
+    # window to milliseconds; it does not close it. Do not read this as a lock.
+    profile_state = _active_profile_state(tenant_id)
     if profile_state == "present":
         logger.warning(
-            "onboarding save aborted: active transcript profile present (tenant=%s)",
+            "onboarding save aborted: active voice profile present (tenant=%s)",
             tenant_id,
         )
         return "aborted_profile_exists"
     if profile_state == "unknown":
         logger.warning(
-            "onboarding save aborted: transcript-profile check unreachable (tenant=%s)",
+            "onboarding save aborted: voice-profile check unreachable (tenant=%s)",
             tenant_id,
         )
         return "aborted_unknown"
@@ -2017,10 +2056,10 @@ def _send_onboarding_start(tenant_id: str, chat_id: int) -> None:
     # own honest, retryable copy instead.
     profile_state = _active_profile_state(tenant_id)
     if profile_state == "present":
-        _send_telegram_message(chat_id, _PROFILE_GATE_PRESENT_TEXT, tenant_id=tenant_id)
+        _send_telegram_message(chat_id, _PROFILE_GATE_START_PRESENT_TEXT, tenant_id=tenant_id)
         return
     if profile_state == "unknown":
-        _send_telegram_message(chat_id, _PROFILE_GATE_UNKNOWN_TEXT, tenant_id=tenant_id)
+        _send_telegram_message(chat_id, _PROFILE_GATE_START_UNKNOWN_TEXT, tenant_id=tenant_id)
         return
 
     from services.brand_voice import get_onboarding_questions
@@ -2077,7 +2116,7 @@ def _send_onboarding_start(tenant_id: str, chat_id: int) -> None:
         try:
             save_result = _onboarding_save_voice_profile(tenant_id, answers)
         except Exception as exc:
-            logger.error("Onboarding profile save (preloaded) failed: %s", exc)
+            logger.error("Onboarding profile save (preloaded) failed: %s", type(exc).__name__)
             save_result = "aborted_unknown"
         _onboarding_close_session(session["id"], tenant_id)
         if save_result == "saved":
