@@ -1140,7 +1140,18 @@ def _brainstorming_generate_ideas(tenant_id: str, chat_id: int) -> None:
 
 
 def _brainstorming_pick_idea(tenant_id: str, chat_id: int, idea_id: str) -> None:
-    """Enqueued Ideen-Post-Generierung für ausgewählte Idee."""
+    """Startet aus der gewählten Idee das echte Post-Interview (C7).
+
+    Vorher lief die Wahl in `deliver_ideas_to_chat` — den Task, der Ideen *auflistet*.
+    Der Tester wählte also eine Idee und bekam die Ideenliste erneut; der Button
+    versprach einen Entwurf und lieferte keinen.
+
+    Der Weg zum Post ist strukturell an eine `bot_session` gebunden: erst deren
+    Schließen fährt P12→P12b und liefert den Entwurf mit Freigabe-Buttons. Die
+    Auswahl ruft deshalb denselben Kernpfad wie die Wahl eines P13-Hooks
+    (`_start_targeted_session`); eine Abkürzung „Post direkt generieren" würde ihn
+    umgehen.
+    """
     try:
         from sqlalchemy import text as _text
 
@@ -1160,21 +1171,32 @@ def _brainstorming_pick_idea(tenant_id: str, chat_id: int, idea_id: str) -> None
         return
 
     title = row[0] or row[1] or "Idee"
+    # Ehrliche Ankündigung: es folgt ein Interview, kein sofortiger Entwurf.
     _send_telegram_message(
         chat_id,
-        f"✍️ Starte Post-Entwurf für: „{title[:80]}“\n\nEinen Moment bitte...",
+        f"✍️ Los geht's mit: „{title[:80]}“\n\n"
+        "Ich stelle dir dazu gleich ein paar kurze Fragen — antworte einfach per "
+        "Sprachnachricht. Aus deinen Antworten baue ich dann den Post.",
         tenant_id=tenant_id,
     )
-    # Enqueue P09 task — deliver_single_idea_to_chat existiert nicht; deliver_ideas_to_chat
-    # übernimmt die Ideen-Auswahl intern via Top-N-Heuristik.
+    # ⚠️ _start_targeted_session fängt intern ALLES ab und gibt bei Fehlschlag None
+    # zurück, statt zu werfen. Ein reines try/except sähe den Fehler nie — der
+    # Rückgabewert ist das Signal. Das try deckt nur den Import ab.
     try:
-        from tasks.p09_chat_ideas_task import deliver_ideas_to_chat
+        from tasks.p13_variants_task import _start_targeted_session
 
-        deliver_ideas_to_chat.delay(tenant_id=tenant_id, trigger_text=title[:500])
+        started = _start_targeted_session(tenant_id, idea_id)
     except Exception as e:
-        logger.warning("brainstorming_pick_idea task failed: %s", e)
+        logger.warning(
+            "brainstorming_pick_idea: start_targeted_session failed: %s", type(e).__name__
+        )
+        started = None
+
+    if not started:
         _send_telegram_message(
-            chat_id, "Fehler beim Starten der Post-Generierung.", tenant_id=tenant_id
+            chat_id,
+            "Das hat gerade nicht geklappt — versuch es gleich nochmal.",
+            tenant_id=tenant_id,
         )
 
 
