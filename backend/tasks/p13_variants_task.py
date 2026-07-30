@@ -576,6 +576,14 @@ def _detach_source_log(tenant_id: str, idea_id: str) -> None:
 
     Die Idee selbst bleibt bestehen; sie taucht weiter im Ideen-Menü auf. Gelöscht
     wird nichts — nur der Idempotenz-Schlüssel freigegeben.
+
+    ⚠️ `source_log_id` trägt zwei Bedeutungen. Für den Button-Weg heißt er „zu dieser
+    Nachricht läuft ein Interview"; für `generate_variants_for_chat` heißt derselbe
+    Schlüssel „zu dieser Nachricht wurden schon Varianten erzeugt" (Idempotenz-Gate,
+    oben in dieser Datei). Wer hier freigibt, gibt beides frei. Praktisch folgenlos,
+    solange `generate_variants_for_chat` keinen erreichbaren Aufrufer hat (nur der
+    abgeschaltete LLM-Zweig rief ihn) — aber die Kopplung ist real und gehört
+    mitbedacht, falls der Varianten-Weg je wiederbelebt wird.
     """
     try:
         with sync_session_factory() as db:

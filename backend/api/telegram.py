@@ -990,12 +990,23 @@ def _load_message_text(tenant_id: str, log_id: str) -> str:
     return ""
 
 
+_DOUBLE_PRESS_WINDOW_MIN = 15
+
+
 def _idea_exists_for_log(tenant_id: str, log_id: str) -> bool | None:
     """Doppeldruck-Schutz. None = Prüfung fehlgeschlagen, Aussage unmöglich.
 
     Telegram behält alte Inline-Keyboards dauerhaft tippbar — ohne diesen Check
     startet jeder weitere Druck ein weiteres Interview. Nutzt denselben Schlüssel,
     den `generate_variants_for_chat` bereits als Idempotenz-Marker führt.
+
+    ⚠️ Das Zeitfenster ist nicht kosmetisch. Der Schutz soll ein hektisches
+    Doppeltippen abfangen — das geschieht in Sekunden. Ohne Fenster sperrt jede
+    angelegte Idee ihre Nachricht für immer, auch wenn danach nichts läuft: wird
+    der Task nie ausgeführt (Worker tot, Broker geleert), greifen weder
+    `_detach_source_log` im Task noch der Enqueue-Fehlerpfad, und der Knopf bliebe
+    dauerhaft tot. Ein laufendes Interview fängt ohnehin der Session-Check ab, der
+    vor dieser Prüfung steht — das Fenster kann also kurz sein.
 
     Weder fail-open noch fail-closed: beides wäre eine Behauptung über einen
     Zustand, den wir nicht kennen. Der Aufrufer sagt dem Nutzer dann ehrlich,
@@ -1006,9 +1017,10 @@ def _idea_exists_for_log(tenant_id: str, log_id: str) -> bool | None:
             row = db.execute(
                 text(
                     "SELECT 1 FROM content_ideas WHERE tenant_id = :tid "
-                    "  AND source_context->>'source_log_id' = :lid LIMIT 1"
+                    "  AND source_context->>'source_log_id' = :lid "
+                    "  AND created_at > now() - make_interval(mins => :window) LIMIT 1"
                 ),
-                {"tid": tenant_id, "lid": str(log_id)},
+                {"tid": tenant_id, "lid": str(log_id), "window": _DOUBLE_PRESS_WINDOW_MIN},
             ).fetchone()
         return row is not None
     except Exception as exc:
@@ -1421,6 +1433,7 @@ def _cancel_active_session(tenant_id: str, chat_id: int) -> bool:
     # Query) die ältere und schluckt weiter Nachrichten, obwohl der Bot gerade
     # „ich frage nicht weiter" gesagt hat. Ein Statement, kein SELECT davor.
     cancelled = 0
+    cancelled_idea_ids: list[str] = []
     try:
         with sync_session_factory() as db:
             rows = db.execute(
@@ -1428,12 +1441,13 @@ def _cancel_active_session(tenant_id: str, chat_id: int) -> bool:
                     "UPDATE bot_session SET status = 'expired', updated_at = NOW() "
                     "WHERE tenant_id = :tid AND status = 'active' "
                     "      AND mode IN ('random_smart', 'targeted') "
-                    "RETURNING id"
+                    "RETURNING id, topic_idea_id"
                 ),
                 {"tid": tenant_id},
             ).fetchall()
             db.commit()
             cancelled = len(rows or [])
+            cancelled_idea_ids = [str(r[1]) for r in (rows or []) if r[1]]
     except Exception as exc:
         logger.warning("_cancel_active_session failed: %s", type(exc).__name__)
         # Nicht stumm scheitern: sonst drückt der Tester „Abbrechen", bekommt nichts
@@ -1444,6 +1458,21 @@ def _cancel_active_session(tenant_id: str, chat_id: int) -> bool:
             tenant_id=tenant_id,
         )
         return False
+
+    # Abgebrochene Interviews geben ihre Ursprungsnachricht wieder frei. Ohne das
+    # bliebe die Idee an ihre log_id gebunden, und der nächste Druck auf
+    # [✍️ Daraus einen Post machen] am selben Nachrichten-Bubble bekäme
+    # „Daran arbeite ich schon" — obwohl die Session gerade auf 'expired' steht und
+    # nichts läuft. Der Nutzer hat den Abbruch selbst ausgelöst und darf es
+    # danach erneut versuchen; genau dazu lädt der Abbruch-Text ihn auch ein.
+    # Eigenes try: ein Fehler hier darf die bereits erfolgte Absage nicht kippen.
+    for idea_id in cancelled_idea_ids:
+        try:
+            from tasks.p13_variants_task import _detach_source_log
+
+            _detach_source_log(tenant_id, idea_id)
+        except Exception as exc:
+            logger.warning("detach after cancel failed: %s", type(exc).__name__)
 
     # Senden erst NACH dem Schließen der DB-Session — _send_telegram_message
     # macht einen HTTP-Call mit 5s Timeout, dafür bleibt keine Verbindung offen.

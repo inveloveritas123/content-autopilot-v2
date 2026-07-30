@@ -283,9 +283,80 @@ class TestIdeaExistsForLog:
         with patch.object(tg, "sync_session_factory", return_value=_db(None)):
             assert tg._idea_exists_for_log(TENANT, LOG) is False
 
+    def test_zeitfenster_begrenzt_die_sperre(self):
+        """Ohne Fenster spernte eine angelegte Idee ihre Nachricht fuer immer.
+
+        Wird der Task nie ausgefuehrt (Worker tot, Broker geleert), greift weder
+        `_detach_source_log` im Task noch der Enqueue-Fehlerpfad. Der Schutz soll
+        hektisches Doppeltippen abfangen — das geschieht in Sekunden.
+        """
+        db = _db(None)
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            tg._idea_exists_for_log(TENANT, LOG)
+
+        sql = str(db.execute.call_args.args[0])
+        params = db.execute.call_args.args[1]
+        assert "make_interval(mins => :window)" in sql
+        assert params["window"] == tg._DOUBLE_PRESS_WINDOW_MIN
+
     def test_db_fehler_ist_None_nicht_geraten(self):
         """Weder fail-open noch fail-closed — beides wäre eine Behauptung."""
         broken = MagicMock()
         broken.__enter__ = MagicMock(side_effect=RuntimeError("db down"))
         with patch.object(tg, "sync_session_factory", return_value=broken):
             assert tg._idea_exists_for_log(TENANT, LOG) is None
+
+
+# ---------------------------------------------------------------------------
+# 4. Abbruch gibt die Ursprungsnachricht wieder frei (Review Runde 2, B2)
+# ---------------------------------------------------------------------------
+
+
+class TestCancelReleasesMessage:
+    """Wer [❌ Abbrechen] drückt, muss es aus derselben Nachricht erneut versuchen können.
+
+    Ohne Freigabe bliebe die Idee an ihre log_id gebunden: die Session steht auf
+    'expired', es läuft nichts — und der nächste Druck auf [✍️ Daraus einen Post
+    machen] am selben Bubble bekäme trotzdem „Daran arbeite ich schon". Der Knopf
+    wäre für diese Nachricht endgültig tot, ausgelöst durch reguläre Bedienung.
+    """
+
+    def _cancel(self, rows):
+        db = MagicMock()
+        db.__enter__ = MagicMock(return_value=db)
+        db.__exit__ = MagicMock(return_value=False)
+        db.execute.return_value.fetchall.return_value = rows
+        p13 = types.ModuleType("tasks.p13_variants_task")
+        p13._detach_source_log = MagicMock()
+        with (
+            patch.object(tg, "sync_session_factory", return_value=db),
+            patch.object(tg, "_send_telegram_message", MagicMock(return_value=True)),
+            patch.dict(sys.modules, {"tasks.p13_variants_task": p13}),
+        ):
+            result = tg._cancel_active_session(TENANT, CHAT)
+        return p13, result, db
+
+    def test_abbruch_loest_die_idee_von_der_nachricht(self):
+        p13, result, db = self._cancel([("sess-1", "idea-7")])
+
+        assert result is True
+        p13._detach_source_log.assert_called_once_with(TENANT, "idea-7")
+        assert "topic_idea_id" in str(db.execute.call_args.args[0])
+
+    def test_mehrere_sessions_werden_alle_freigegeben(self):
+        p13, _result, _db = self._cancel([("s1", "idea-1"), ("s2", "idea-2")])
+
+        assert [c.args[1] for c in p13._detach_source_log.call_args_list] == ["idea-1", "idea-2"]
+
+    def test_session_ohne_idee_bleibt_folgenlos(self):
+        """random_smart-Sessions haben kein topic_idea_id — kein Aufruf, kein Absturz."""
+        p13, result, _db = self._cancel([("sess-1", None)])
+
+        assert result is True
+        p13._detach_source_log.assert_not_called()
+
+    def test_nichts_abzubrechen_gibt_nichts_frei(self):
+        p13, result, _db = self._cancel([])
+
+        assert result is False
+        p13._detach_source_log.assert_not_called()
