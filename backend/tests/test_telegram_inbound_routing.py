@@ -94,7 +94,9 @@ class TestProcessTextRouting:
 
         assert result["status"] == "ok"
         assert result["memory_chunk_id"] == "chunk-xyz"
-        assert "routed_to" not in result
+        # Seit PR 2 endet der Fall „keine Session" nicht mehr stumm, sondern in
+        # einer Frage an den Nutzer. Der Kern bleibt: kein Layer1, kein p08.
+        assert result["routed_to"] == "awaiting_user_choice"
         mock_extract.assert_not_called()
         mock_p08.assert_not_called()
 

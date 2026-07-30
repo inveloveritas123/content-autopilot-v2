@@ -141,11 +141,18 @@ def _create_manual_idea(
     tenant_id: str,
     idea_text: str,
     log_id: str | None,
+    pending_choice: bool = True,
 ) -> str | None:
     """Legt eine manuelle Idee an (Spiegel von api/ideas.py:1294-1335).
 
     find-or-create Source type='manual' → Stub-SourceItem → content_ideas-INSERT.
     Gibt idea_id (str) oder None bei Fehler zurück.
+
+    pending_choice steuert den `chat_variant_choice_pending`-Marker. True für den
+    Varianten-Weg, wo der Nutzer noch 1/2/3 wählen muss. False für den direkten
+    Interview-Weg: dort gibt es keine Wahl, und ein stehengebliebener Marker
+    würde `_load_pending_idea` 24 h lang fündig werden lassen — die nächste kurze
+    Nachricht („ok", „ja") landete dann als Varianten-Wahl in Gate 2.
     """
     try:
         with sync_session_factory() as db:
@@ -186,10 +193,9 @@ def _create_manual_idea(
 
             # content_ideas-INSERT mit State-Marker
             idea_id = str(uuid.uuid4())
-            source_context: dict = {
-                "source": "telegram_chat",
-                "chat_variant_choice_pending": True,
-            }
+            source_context: dict = {"source": "telegram_chat"}
+            if pending_choice:
+                source_context["chat_variant_choice_pending"] = True
             if log_id is not None:
                 source_context["source_log_id"] = str(log_id)
 
@@ -550,9 +556,48 @@ def start_targeted_session_task(self, tenant_id: str, idea_id: str) -> dict:
     """
     result = _start_targeted_session(tenant_id, idea_id)
     if result is None:
+        # Erst die Idee von ihrer Ursprungsnachricht lösen, dann zum Wiederholen
+        # einladen — sonst ist die Einladung eine Falle (siehe _detach_source_log).
+        _detach_source_log(tenant_id, idea_id)
         _send_start_failed_notice(tenant_id)
         return {"status": "failed", "reason": "start_targeted_session_returned_none"}
     return {"status": "ok", "session_id": result.get("session_id")}
+
+
+def _detach_source_log(tenant_id: str, idea_id: str) -> None:
+    """Löst eine Idee von ihrer Ursprungsnachricht (tenant-gescopet).
+
+    Scheitert der Interview-Start, lädt der Bot wörtlich zum erneuten Versuch ein
+    („versuch es gleich nochmal"). Bliebe `source_log_id` im source_context stehen,
+    fände `_idea_exists_for_log` beim zweiten Knopfdruck genau diese Idee und der
+    Bot antwortete „Daran arbeite ich schon" — auf eine Wiederholung, zu der er
+    selbst aufgefordert hat, während nichts läuft: keine Session, kein Task.
+    Der Knopf wäre für diese Nachricht dauerhaft tot.
+
+    Die Idee selbst bleibt bestehen; sie taucht weiter im Ideen-Menü auf. Gelöscht
+    wird nichts — nur der Idempotenz-Schlüssel freigegeben.
+
+    ⚠️ `source_log_id` trägt zwei Bedeutungen. Für den Button-Weg heißt er „zu dieser
+    Nachricht läuft ein Interview"; für `generate_variants_for_chat` heißt derselbe
+    Schlüssel „zu dieser Nachricht wurden schon Varianten erzeugt" (Idempotenz-Gate,
+    oben in dieser Datei). Wer hier freigibt, gibt beides frei. Praktisch folgenlos,
+    solange `generate_variants_for_chat` keinen erreichbaren Aufrufer hat (nur der
+    abgeschaltete LLM-Zweig rief ihn) — aber die Kopplung ist real und gehört
+    mitbedacht, falls der Varianten-Weg je wiederbelebt wird.
+    """
+    try:
+        with sync_session_factory() as db:
+            db.execute(
+                text(
+                    "UPDATE content_ideas "
+                    "SET source_context = source_context - 'source_log_id' "
+                    "WHERE id = :iid AND tenant_id = :tid"
+                ),
+                {"iid": idea_id, "tid": tenant_id},
+            )
+            db.commit()
+    except Exception as exc:
+        logger.warning("p13_task: detach source_log failed: %s", type(exc).__name__)
 
 
 def _send_start_failed_notice(tenant_id: str) -> None:

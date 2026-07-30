@@ -417,11 +417,16 @@ if not hasattr(_p09t_mod, "deliver_ideas_to_chat"):
     _p09t_mod.deliver_ideas_to_chat = MagicMock()
 
 # tasks.p13_variants_task — Lazy-Import im P13-Gate von _route_inbound_message
-# (#36 S3). Stub mit generate_variants_for_chat + _try_p13_variant_choice als MagicMock.
+# (#36 S3) und in _is_pending_variant_choice (PR 2). Stub mit den vier lazy
+# importierten Namen als MagicMock.
+# Defaults: keine offene Varianten-Wahl (None/False) — das ist der Normalzustand,
+# und Tests, die eine Wahl brauchen, patchen ihn explizit.
 if "tasks.p13_variants_task" not in sys.modules:
     _p13t = _stub("tasks.p13_variants_task")
     _p13t.generate_variants_for_chat = MagicMock()
     _p13t._try_p13_variant_choice = MagicMock(return_value=False)
+    _p13t._load_pending_idea = MagicMock(return_value=None)
+    _p13t._parse_choice_token = MagicMock(return_value=None)
 # Als Paket-Attribut registrieren
 sys.modules["tasks"].p13_variants_task = sys.modules["tasks.p13_variants_task"]
 _p13t_mod = sys.modules["tasks.p13_variants_task"]
@@ -429,6 +434,10 @@ if not hasattr(_p13t_mod, "generate_variants_for_chat"):
     _p13t_mod.generate_variants_for_chat = MagicMock()
 if not hasattr(_p13t_mod, "_try_p13_variant_choice"):
     _p13t_mod._try_p13_variant_choice = MagicMock(return_value=False)
+if not hasattr(_p13t_mod, "_load_pending_idea"):
+    _p13t_mod._load_pending_idea = MagicMock(return_value=None)
+if not hasattr(_p13t_mod, "_parse_choice_token"):
+    _p13t_mod._parse_choice_token = MagicMock(return_value=None)
 
 # ---------------------------------------------------------------------------
 # tasks.telegram_task — genau EINMAL laden; bei Wiederholungsimport wiederverwenden

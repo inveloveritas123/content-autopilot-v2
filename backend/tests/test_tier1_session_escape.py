@@ -64,7 +64,7 @@ TENANT = "6cff9601-ce95-43c6-b928-5b13b90d4df3"
 CHAT = 4711
 
 
-def _session_db(rows=(("sess-1",),)):
+def _session_db(rows=(("sess-1", None),)):
     db = MagicMock()
     db.__enter__ = MagicMock(return_value=db)
     db.__exit__ = MagicMock(return_value=False)
@@ -72,8 +72,12 @@ def _session_db(rows=(("sess-1",),)):
     return db
 
 
-def _cancel(rows=(("sess-1",),), db=None):
-    """Ruft _cancel_active_session. Gibt (Rückgabewert, db-Mock, send-Mock) zurück."""
+def _cancel(rows=(("sess-1", None),), db=None):
+    """Ruft _cancel_active_session. Gibt (Rückgabewert, db-Mock, send-Mock) zurück.
+
+    Zeilenform (id, topic_idea_id): das UPDATE gibt seit PR 2 beide Spalten zurück —
+    abgebrochene targeted-Interviews geben ihre Ursprungsnachricht wieder frei.
+    """
     db = db if db is not None else _session_db(rows)
     with (
         patch.object(tg, "sync_session_factory", return_value=db),
@@ -153,7 +157,7 @@ class TestCancelActiveSession:
         (p08_opener prüft nicht auf laufende). Beendet man nur die neueste, findet
         _load_active_session die ältere und schluckt die nächste Nachricht weiter —
         während der Bot „ich frage nicht weiter" behauptet hat."""
-        _, db, _ = _cancel(rows=(("sess-1",), ("sess-2",)))
+        _, db, _ = _cancel(rows=(("sess-1", None), ("sess-2", None)))
         update_sql = " ".join(
             str(c.args[0]) for c in db.execute.call_args_list if "UPDATE" in str(c.args[0])
         )

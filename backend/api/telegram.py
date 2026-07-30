@@ -253,6 +253,23 @@ def _interview_cancel_keyboard() -> dict:
     return {"inline_keyboard": [[{"text": "❌ Abbrechen", "callback_data": "cmd:session_cancel"}]]}
 
 
+def _choice_keyboard(log_id: str) -> dict:
+    """Zwei Wege für eine frisch eingegangene Nachricht (PR 2).
+
+    Die log_id trägt beide callback_data: über sie liest der Handler den Text
+    tenant-gescopet nach, und sie ist zugleich der Idempotenz-Schlüssel gegen
+    Doppeldruck — Telegram behält alte Inline-Keyboards dauerhaft tippbar.
+
+    Frisches Dict je Aufruf — ein geteiltes Modul-Dict könnte ein Caller mutieren.
+    """
+    return {
+        "inline_keyboard": [
+            [{"text": "✍️ Daraus einen Post machen", "callback_data": f"cmd:msg_post:{log_id}"}],
+            [{"text": "🗄 Nur merken", "callback_data": f"cmd:msg_keep:{log_id}"}],
+        ]
+    }
+
+
 def _approve_content_sync(content_id: str, tenant_id: str) -> str:
     """Gibt ein content_piece frei (Telegram-Button). Tenant-scoped + idempotent.
 
@@ -931,6 +948,171 @@ _DOCUMENT_UNSUPPORTED_TEXT = (
 )
 
 
+_CHOICE_RETRY_TEXT = "Das hat gerade nicht geklappt — versuch es gleich nochmal."
+
+
+def _load_message_text(tenant_id: str, log_id: str) -> str:
+    """Text einer eingegangenen Nachricht — tenant-gescopet (E3).
+
+    Die log_id stammt aus callback_data und ist damit vom Nutzer wählbar; der
+    tenant_id-Filter ist die Zugriffskontrolle. Eine ungültige UUID lässt das
+    SELECT scheitern — gefangen, Rückgabe "" und damit dieselbe ehrliche Absage
+    wie bei einer unbekannten Nachricht.
+
+    `transcript_text` füllt ausschließlich `_process_voice`
+    (`_update_log_transcript`); bei Textnachrichten bleibt die Spalte NULL. Daher
+    der Rückgriff auf original_payload, das beide Formate kennt: `text` als String
+    (Telegram) oder als {"body": …} (WhatsApp-Adapter, vgl. telegram_task.py).
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text(
+                    "SELECT transcript_text, original_payload FROM telegram_message_log "
+                    "WHERE id = :lid AND tenant_id = :tid AND direction = 'in'"
+                ),
+                {"lid": log_id, "tid": tenant_id},
+            ).fetchone()
+    except Exception as exc:
+        logger.warning("load message text failed: %s", type(exc).__name__)
+        return ""
+    if row is None:
+        return ""
+    transcript = (row[0] or "").strip()
+    if transcript:
+        return transcript
+    payload = row[1] if isinstance(row[1], dict) else {}
+    raw = payload.get("text")
+    if isinstance(raw, dict):
+        return (raw.get("body") or "").strip()
+    if isinstance(raw, str):
+        return raw.strip()
+    return ""
+
+
+# ⚠️ Dieser Wert hat eine UNTERE Schranke, keine obere. Er muss länger sein als der
+# Worst Case von `p08_opener`: `pipeline_llm.py` rechnet `request_timeout =
+# max(300, …)` bei `max_retries=3`, also ≥ 900 s = 15 Minuten für einen einzigen
+# Opener — plus Wartezeit in der Queue. Wird das Fenster darunter gedrückt, ist es
+# genau dann blind, wenn es gebraucht wird: Der Nutzer sieht „Moment", der Opener
+# hängt in Retries, er drückt erneut — und bekommt eine zweite Idee, einen zweiten
+# Task und zwei aktive Sessions, von denen die ältere ohne TTL zurückbleibt.
+# Die Kosten sind asymmetrisch: ein zu langes Fenster kostet „Nachricht neu
+# schicken", ein zu kurzes eine Geister-Session. Im Zweifel also nach oben irren.
+_DOUBLE_PRESS_WINDOW_MIN = 30
+
+
+def _idea_exists_for_log(tenant_id: str, log_id: str) -> bool | None:
+    """Doppeldruck-Schutz. None = Prüfung fehlgeschlagen, Aussage unmöglich.
+
+    Telegram behält alte Inline-Keyboards dauerhaft tippbar — ohne diesen Check
+    startet jeder weitere Druck ein weiteres Interview. Nutzt denselben Schlüssel,
+    den `generate_variants_for_chat` bereits als Idempotenz-Marker führt.
+
+    ⚠️ Das Zeitfenster ist nicht kosmetisch. Der Schutz soll ein hektisches
+    Doppeltippen abfangen — das geschieht in Sekunden. Ohne Fenster sperrt jede
+    angelegte Idee ihre Nachricht für immer, auch wenn danach nichts läuft: wird
+    der Task nie ausgeführt (Worker tot, Broker geleert), greifen weder
+    `_detach_source_log` im Task noch der Enqueue-Fehlerpfad, und der Knopf bliebe
+    dauerhaft tot. Ein laufendes Interview fängt ohnehin der Session-Check ab, der
+    vor dieser Prüfung steht — das Fenster kann also kurz sein.
+
+    Weder fail-open noch fail-closed: beides wäre eine Behauptung über einen
+    Zustand, den wir nicht kennen. Der Aufrufer sagt dem Nutzer dann ehrlich,
+    dass es nicht geklappt hat.
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text(
+                    "SELECT 1 FROM content_ideas WHERE tenant_id = :tid "
+                    "  AND source_context->>'source_log_id' = :lid "
+                    "  AND created_at > now() - make_interval(mins => :window) LIMIT 1"
+                ),
+                {"tid": tenant_id, "lid": str(log_id), "window": _DOUBLE_PRESS_WINDOW_MIN},
+            ).fetchone()
+        return row is not None
+    except Exception as exc:
+        logger.warning("idea existence check failed: %s", type(exc).__name__)
+        return None
+
+
+def _start_post_from_message(tenant_id: str, chat_id: int, log_id: str) -> None:
+    """[✍️ Daraus einen Post machen] — gezieltes Interview zu einer Nachricht.
+
+    Derselbe Weg wie die Hook-Wahl (C7): manuelle Idee anlegen, dann das Interview
+    ASYNCHRON eröffnen. `_start_targeted_session` → `p08_opener` ist ein LLM-Call
+    mit bis zu 3×300 s Timeout; inline aufgerufen blockiert er die Zustellung für
+    ALLE Tenants (der Poller iteriert Bots und Updates sequenziell).
+    """
+    text_content = _load_message_text(tenant_id, log_id)
+    if not text_content:
+        _send_telegram_message(
+            chat_id, "Hm — diese Nachricht finde ich nicht mehr.", tenant_id=tenant_id
+        )
+        return
+
+    try:
+        from tasks.telegram_task import _load_active_session
+
+        session_active = _load_active_session(tenant_id) is not None
+    except Exception as exc:
+        logger.warning("active session check failed: %s", type(exc).__name__)
+        session_active = False
+    if session_active:
+        _send_telegram_message(
+            chat_id,
+            "Wir sind gerade mitten in einem Gespräch — antworte einfach auf die Frage "
+            "oben, oder brich mit ❌ Abbrechen ab.",
+            tenant_id=tenant_id,
+        )
+        return
+
+    already = _idea_exists_for_log(tenant_id, log_id)
+    if already is None:
+        _send_telegram_message(chat_id, _CHOICE_RETRY_TEXT, tenant_id=tenant_id)
+        return
+    if already:
+        _send_telegram_message(chat_id, "✍️ Daran arbeite ich schon.", tenant_id=tenant_id)
+        return
+
+    try:
+        from tasks.p13_variants_task import _create_manual_idea
+
+        idea_id = _create_manual_idea(tenant_id, text_content[:1000], log_id, pending_choice=False)
+    except Exception as exc:
+        logger.warning("manual idea creation failed: %s", type(exc).__name__)
+        idea_id = None
+    if idea_id is None:
+        _send_telegram_message(chat_id, _CHOICE_RETRY_TEXT, tenant_id=tenant_id)
+        return
+
+    # ⚠️ NUR enqueuen, nie hier ausführen — sonst hängt der LLM-Call im Poll-Loop.
+    try:
+        from tasks.p13_variants_task import start_targeted_session_task
+
+        start_targeted_session_task.delay(tenant_id=tenant_id, idea_id=idea_id)
+    except Exception as exc:
+        logger.warning("targeted session enqueue failed: %s", type(exc).__name__)
+        # Die Idee ist bereits committet. Ohne dieses Lösen wäre der gleich folgende
+        # Rat „versuch es gleich nochmal" eine Falle: der Doppeldruck-Schutz fände
+        # sie und antwortete „Daran arbeite ich schon", obwohl nichts läuft.
+        try:
+            from tasks.p13_variants_task import _detach_source_log
+
+            _detach_source_log(tenant_id, idea_id)
+        except Exception as detach_exc:
+            logger.warning("detach after enqueue failure: %s", type(detach_exc).__name__)
+        _send_telegram_message(chat_id, _CHOICE_RETRY_TEXT, tenant_id=tenant_id)
+        return
+
+    _send_telegram_message(
+        chat_id,
+        "✍️ Alles klar — ich hab zwei, drei kurze Rückfragen. Moment.",
+        tenant_id=tenant_id,
+    )
+
+
 def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = None) -> None:
     """Verarbeitet Inline-Keyboard-Button-Klicks.
 
@@ -1032,11 +1214,13 @@ def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = N
             )
         except Exception as exc:
             logger.warning("regenerate enqueue failed: %s", type(exc).__name__)
-            _send_telegram_message(
-                chat_id,
-                "Das hat gerade nicht geklappt — versuch es gleich nochmal.",
-                tenant_id=tenant_id_str,
-            )
+            _send_telegram_message(chat_id, _CHOICE_RETRY_TEXT, tenant_id=tenant_id_str)
+    elif data.startswith("cmd:msg_post:"):
+        _start_post_from_message(tenant_id_str, chat_id, data.split(":", 2)[2])
+    elif data.startswith("cmd:msg_keep:"):
+        # Der Memory-Chunk liegt bereits — er wurde vor dem Senden der Buttons
+        # angelegt. Hier noch etwas zu schreiben wäre gespielte Arbeit.
+        _send_telegram_message(chat_id, "🗄 Gut — bleibt im Gedächtnis.", tenant_id=tenant_id_str)
 
 
 def _send_ki_profil(tenant_id: str, chat_id: int) -> None:
@@ -1258,6 +1442,7 @@ def _cancel_active_session(tenant_id: str, chat_id: int) -> bool:
     # Query) die ältere und schluckt weiter Nachrichten, obwohl der Bot gerade
     # „ich frage nicht weiter" gesagt hat. Ein Statement, kein SELECT davor.
     cancelled = 0
+    cancelled_idea_ids: list[str] = []
     try:
         with sync_session_factory() as db:
             rows = db.execute(
@@ -1265,12 +1450,13 @@ def _cancel_active_session(tenant_id: str, chat_id: int) -> bool:
                     "UPDATE bot_session SET status = 'expired', updated_at = NOW() "
                     "WHERE tenant_id = :tid AND status = 'active' "
                     "      AND mode IN ('random_smart', 'targeted') "
-                    "RETURNING id"
+                    "RETURNING id, topic_idea_id"
                 ),
                 {"tid": tenant_id},
             ).fetchall()
             db.commit()
             cancelled = len(rows or [])
+            cancelled_idea_ids = [str(r[1]) for r in (rows or []) if r[1]]
     except Exception as exc:
         logger.warning("_cancel_active_session failed: %s", type(exc).__name__)
         # Nicht stumm scheitern: sonst drückt der Tester „Abbrechen", bekommt nichts
@@ -1281,6 +1467,21 @@ def _cancel_active_session(tenant_id: str, chat_id: int) -> bool:
             tenant_id=tenant_id,
         )
         return False
+
+    # Abgebrochene Interviews geben ihre Ursprungsnachricht wieder frei. Ohne das
+    # bliebe die Idee an ihre log_id gebunden, und der nächste Druck auf
+    # [✍️ Daraus einen Post machen] am selben Nachrichten-Bubble bekäme
+    # „Daran arbeite ich schon" — obwohl die Session gerade auf 'expired' steht und
+    # nichts läuft. Der Nutzer hat den Abbruch selbst ausgelöst und darf es
+    # danach erneut versuchen; genau dazu lädt der Abbruch-Text ihn auch ein.
+    # Eigenes try: ein Fehler hier darf die bereits erfolgte Absage nicht kippen.
+    for idea_id in cancelled_idea_ids:
+        try:
+            from tasks.p13_variants_task import _detach_source_log
+
+            _detach_source_log(tenant_id, idea_id)
+        except Exception as exc:
+            logger.warning("detach after cancel failed: %s", type(exc).__name__)
 
     # Senden erst NACH dem Schließen der DB-Session — _send_telegram_message
     # macht einen HTTP-Call mit 5s Timeout, dafür bleibt keine Verbindung offen.
