@@ -108,9 +108,10 @@ class TestProcessTextSendsChoice:
     ):
         mock_run.return_value = "chunk-1"
         sender = MagicMock(return_value=True)
-        with patch.object(
-            tt, "sync_session_factory", return_value=make_guard_db_mock(None)
-        ), patch("api.telegram._send_telegram_message", sender):
+        with (
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+            patch("api.telegram._send_telegram_message", sender),
+        ):
             result = tt._process_text(
                 "log-77",
                 "tenant-1",
@@ -131,9 +132,10 @@ class TestProcessTextSendsChoice:
     def test_mit_gespraech_bleibt_beim_alten_pfad(self, mock_run, _store, _gate, mock_route):
         mock_run.return_value = "chunk-2"
         sender = MagicMock(return_value=True)
-        with patch.object(
-            tt, "sync_session_factory", return_value=make_guard_db_mock(None)
-        ), patch("api.telegram._send_telegram_message", sender):
+        with (
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+            patch("api.telegram._send_telegram_message", sender),
+        ):
             result = tt._process_text(
                 "log-78", "tenant-1", {"text": "Ja, so war das ungefähr.", "chat": {"id": 42}}
             )

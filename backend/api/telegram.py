@@ -948,6 +948,141 @@ _DOCUMENT_UNSUPPORTED_TEXT = (
 )
 
 
+_CHOICE_RETRY_TEXT = "Das hat gerade nicht geklappt — versuch es gleich nochmal."
+
+
+def _load_message_text(tenant_id: str, log_id: str) -> str:
+    """Text einer eingegangenen Nachricht — tenant-gescopet (E3).
+
+    Die log_id stammt aus callback_data und ist damit vom Nutzer wählbar; der
+    tenant_id-Filter ist die Zugriffskontrolle. Eine ungültige UUID lässt das
+    SELECT scheitern — gefangen, Rückgabe "" und damit dieselbe ehrliche Absage
+    wie bei einer unbekannten Nachricht.
+
+    `transcript_text` füllt ausschließlich `_process_voice`
+    (`_update_log_transcript`); bei Textnachrichten bleibt die Spalte NULL. Daher
+    der Rückgriff auf original_payload, das beide Formate kennt: `text` als String
+    (Telegram) oder als {"body": …} (WhatsApp-Adapter, vgl. telegram_task.py).
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text(
+                    "SELECT transcript_text, original_payload FROM telegram_message_log "
+                    "WHERE id = :lid AND tenant_id = :tid"
+                ),
+                {"lid": log_id, "tid": tenant_id},
+            ).fetchone()
+    except Exception as exc:
+        logger.warning("load message text failed: %s", type(exc).__name__)
+        return ""
+    if row is None:
+        return ""
+    transcript = (row[0] or "").strip()
+    if transcript:
+        return transcript
+    payload = row[1] if isinstance(row[1], dict) else {}
+    raw = payload.get("text")
+    if isinstance(raw, dict):
+        return (raw.get("body") or "").strip()
+    if isinstance(raw, str):
+        return raw.strip()
+    return ""
+
+
+def _idea_exists_for_log(tenant_id: str, log_id: str) -> bool | None:
+    """Doppeldruck-Schutz. None = Prüfung fehlgeschlagen, Aussage unmöglich.
+
+    Telegram behält alte Inline-Keyboards dauerhaft tippbar — ohne diesen Check
+    startet jeder weitere Druck ein weiteres Interview. Nutzt denselben Schlüssel,
+    den `generate_variants_for_chat` bereits als Idempotenz-Marker führt.
+
+    Weder fail-open noch fail-closed: beides wäre eine Behauptung über einen
+    Zustand, den wir nicht kennen. Der Aufrufer sagt dem Nutzer dann ehrlich,
+    dass es nicht geklappt hat.
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text(
+                    "SELECT 1 FROM content_ideas WHERE tenant_id = :tid "
+                    "  AND source_context->>'source_log_id' = :lid LIMIT 1"
+                ),
+                {"tid": tenant_id, "lid": str(log_id)},
+            ).fetchone()
+        return row is not None
+    except Exception as exc:
+        logger.warning("idea existence check failed: %s", type(exc).__name__)
+        return None
+
+
+def _start_post_from_message(tenant_id: str, chat_id: int, log_id: str) -> None:
+    """[✍️ Daraus einen Post machen] — gezieltes Interview zu einer Nachricht.
+
+    Derselbe Weg wie die Hook-Wahl (C7): manuelle Idee anlegen, dann das Interview
+    ASYNCHRON eröffnen. `_start_targeted_session` → `p08_opener` ist ein LLM-Call
+    mit bis zu 3×300 s Timeout; inline aufgerufen blockiert er die Zustellung für
+    ALLE Tenants (der Poller iteriert Bots und Updates sequenziell).
+    """
+    text_content = _load_message_text(tenant_id, log_id)
+    if not text_content:
+        _send_telegram_message(
+            chat_id, "Hm — diese Nachricht finde ich nicht mehr.", tenant_id=tenant_id
+        )
+        return
+
+    try:
+        from tasks.telegram_task import _load_active_session
+
+        session_active = _load_active_session(tenant_id) is not None
+    except Exception as exc:
+        logger.warning("active session check failed: %s", type(exc).__name__)
+        session_active = False
+    if session_active:
+        _send_telegram_message(
+            chat_id,
+            "Wir sind gerade mitten in einem Gespräch — antworte einfach auf die Frage "
+            "oben, oder brich mit ❌ Abbrechen ab.",
+            tenant_id=tenant_id,
+        )
+        return
+
+    already = _idea_exists_for_log(tenant_id, log_id)
+    if already is None:
+        _send_telegram_message(chat_id, _CHOICE_RETRY_TEXT, tenant_id=tenant_id)
+        return
+    if already:
+        _send_telegram_message(chat_id, "✍️ Daran arbeite ich schon.", tenant_id=tenant_id)
+        return
+
+    try:
+        from tasks.p13_variants_task import _create_manual_idea
+
+        idea_id = _create_manual_idea(tenant_id, text_content[:1000], log_id, pending_choice=False)
+    except Exception as exc:
+        logger.warning("manual idea creation failed: %s", type(exc).__name__)
+        idea_id = None
+    if idea_id is None:
+        _send_telegram_message(chat_id, _CHOICE_RETRY_TEXT, tenant_id=tenant_id)
+        return
+
+    # ⚠️ NUR enqueuen, nie hier ausführen — sonst hängt der LLM-Call im Poll-Loop.
+    try:
+        from tasks.p13_variants_task import start_targeted_session_task
+
+        start_targeted_session_task.delay(tenant_id=tenant_id, idea_id=idea_id)
+    except Exception as exc:
+        logger.warning("targeted session enqueue failed: %s", type(exc).__name__)
+        _send_telegram_message(chat_id, _CHOICE_RETRY_TEXT, tenant_id=tenant_id)
+        return
+
+    _send_telegram_message(
+        chat_id,
+        "✍️ Alles klar — ich hab zwei, drei kurze Rückfragen. Moment.",
+        tenant_id=tenant_id,
+    )
+
+
 def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = None) -> None:
     """Verarbeitet Inline-Keyboard-Button-Klicks.
 
@@ -1049,11 +1184,13 @@ def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = N
             )
         except Exception as exc:
             logger.warning("regenerate enqueue failed: %s", type(exc).__name__)
-            _send_telegram_message(
-                chat_id,
-                "Das hat gerade nicht geklappt — versuch es gleich nochmal.",
-                tenant_id=tenant_id_str,
-            )
+            _send_telegram_message(chat_id, _CHOICE_RETRY_TEXT, tenant_id=tenant_id_str)
+    elif data.startswith("cmd:msg_post:"):
+        _start_post_from_message(tenant_id_str, chat_id, data.split(":", 2)[2])
+    elif data.startswith("cmd:msg_keep:"):
+        # Der Memory-Chunk liegt bereits — er wurde vor dem Senden der Buttons
+        # angelegt. Hier noch etwas zu schreiben wäre gespielte Arbeit.
+        _send_telegram_message(chat_id, "🗄 Gut — bleibt im Gedächtnis.", tenant_id=tenant_id_str)
 
 
 def _send_ki_profil(tenant_id: str, chat_id: int) -> None:
