@@ -299,7 +299,13 @@ class TestFollowupMessageSend:
 
         assert result is not None
         assert result["p08_message_sent"] is True
-        send_mock.assert_called_once_with(4711, "Frage 2?", tenant_id="tenant-1")
+        assert send_mock.call_args.args == (4711, "Frage 2?")
+        assert send_mock.call_args.kwargs["tenant_id"] == "tenant-1"
+        # C5: an einer laufenden Frage hängt der Ausgang — sonst schluckt die
+        # Session (kein TTL) alles Folgende als Antwort.
+        assert send_mock.call_args.kwargs.get(
+            "reply_markup"
+        ), "Folgefrage bietet keinen Ausstieg an"
 
     def test_close_message_sent(self):
         """Session-Abschluss (is_closed=True) → Abschluss-Text wird gesendet."""
@@ -314,6 +320,8 @@ class TestFollowupMessageSend:
 
         assert result is not None
         assert result["p08_message_sent"] is True
+        # Kein Abbrechen-Button: die Session ist mit dieser Nachricht schon zu,
+        # ein Ausgang daran wäre ein toter Button (C5).
         send_mock.assert_called_once_with(
             9999, "Danke! Ich habe genug Material gesammelt.", tenant_id="tenant-1"
         )

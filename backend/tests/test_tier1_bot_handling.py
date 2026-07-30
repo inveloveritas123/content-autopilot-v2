@@ -32,15 +32,20 @@ from unittest.mock import MagicMock, patch
 _BACKEND = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
 if _BACKEND not in sys.path:
     sys.path.insert(0, _BACKEND)
-# Force-Load MUSS idempotent sein: mehrere Testdateien laden api.telegram per Pfad,
-# und pytest importiert beim Collect alle. Ein unbedingtes Überschreiben von
-# sys.modules["api.telegram"] tauscht das Modulobjekt unter Dateien weg, die schon
-# eines geholt haben — test_telegram_poller.py patcht dann sein altes Objekt, während
-# der Produktionscode `from api.telegram import ...` zur Laufzeit das neue auflöst.
-# Ergebnis: dessen Dispatch-Tests fallen aus, obwohl sie isoliert grün sind. Deshalb
-# hier dasselbe Muster wie dort — vorhandenes Modul wiederverwenden.
-if "api.telegram" in sys.modules:
-    tg = sys.modules["api.telegram"]
+# api.telegram beschaffen — zwei Fallen auf einmal:
+#   1. Ein bereits geladenes ECHTES Modul darf NICHT ersetzt werden. pytest
+#      importiert beim Collect alle Testdateien; tauscht eine davon das Modulobjekt
+#      weg, patcht eine Geschwisterdatei ihr altes Objekt, während der
+#      Produktionscode `from api.telegram import ...` zur Laufzeit das neue auflöst
+#      (kostete 2 Phantom-Failures in test_telegram_poller.py).
+#   2. `_telegram_task_env.py` legt unter demselben Namen ein STUB-Modul ab. Wer das
+#      blind wiederverwendet, testet gegen ein Modul ohne die zu prüfenden
+#      Funktionen — das ging bisher nur gut, weil zufällig eine alphabetisch frühere
+#      Datei das echte Modul lud.
+# Also: echtes Modul wiederverwenden, Stub durch das echte ersetzen.
+_existing = sys.modules.get("api.telegram")
+if _existing is not None and hasattr(_existing, "_handle_callback_query"):
+    tg = _existing
 else:
     _at_spec = _ilu.spec_from_file_location(
         "api.telegram", os.path.join(_BACKEND, "api", "telegram.py")

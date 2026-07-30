@@ -240,6 +240,19 @@ def _draft_action_keyboard(content_id: str) -> dict:
     }
 
 
+def _interview_cancel_keyboard() -> dict:
+    """Ausstieg aus einem laufenden Interview (C5).
+
+    Hängt an den Fragen der random_smart-/targeted-Gespräche. Ohne ihn gibt es
+    keinen sichtbaren Ausgang: solange eine bot_session aktiv ist, wird jede
+    eingehende Nachricht als Antwort auf die Frage geroutet, und Sessions haben
+    kein TTL.
+
+    Frisches Dict je Aufruf — ein geteiltes Modul-Dict könnte ein Caller mutieren.
+    """
+    return {"inline_keyboard": [[{"text": "❌ Abbrechen", "callback_data": "cmd:session_cancel"}]]}
+
+
 def _approve_content_sync(content_id: str, tenant_id: str) -> str:
     """Gibt ein content_piece frei (Telegram-Button). Tenant-scoped + idempotent.
 
@@ -847,6 +860,14 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
             )
         return True
 
+    # C5 — Ausstieg. Hier und nicht in dispatch_inbound_update: _try_memory_command
+    # läuft im Webhook-Pfad (:675) UND im Poller-Pfad (:1255), der Dispatch nur im
+    # Poller. Zusätzlich fängt dieser Zweig das Kommando ab, BEVOR es als Content
+    # ins Gedächtnis oder als „unbekanntes Kommando" abgewiesen wird.
+    if cmd in ("/abbrechen", "/cancel", "/stop"):
+        _cancel_active_session(tenant_id, chat_id)
+        return True
+
     if cmd in ("/help", "/hilfe"):
         help_text = (
             "🤖 Content-Autopilot — dein KI-Ghostwriter für LinkedIn\n\n"
@@ -869,6 +890,7 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
             "🔍 Befehle\n"
             "• /such <Begriff> — Semantische Suche\n"
             "• /notiz <Text> — Schnelle Notiz speichern\n"
+            "• /abbrechen — Laufendes Gespräch beenden\n"
             "• /help — Diese Übersicht\n\n"
             "─────────────────────────\n"
             "✨ Aus allem entsteht Content — kuratiert im Dashboard.\n"
@@ -969,6 +991,8 @@ def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = N
         # bleiben tippbar, obwohl der Wizard entfernt ist. Ein stiller No-Op wäre
         # für den Tester ein kaputter Button.
         _send_telegram_message(chat_id, _VOICE_PROFILE_ORIGIN_TEXT, tenant_id=tenant_id_str)
+    elif data == "cmd:session_cancel":
+        _cancel_active_session(tenant_id_str, chat_id)
     elif data == "cmd:bs_generate":
         _brainstorming_generate_ideas(tenant_id_str, chat_id)
     elif data.startswith("cmd:bs_pick:"):
@@ -1198,6 +1222,71 @@ def _brainstorming_pick_idea(tenant_id: str, chat_id: int, idea_id: str) -> None
             "Das hat gerade nicht geklappt — versuch es gleich nochmal.",
             tenant_id=tenant_id,
         )
+
+
+def _cancel_active_session(tenant_id: str, chat_id: int) -> bool:
+    """Beendet ein laufendes Interview auf Wunsch des Nutzers (C5).
+
+    Solange eine bot_session aktiv ist, routet `tasks/telegram_task.py`
+    (`_load_active_session`) JEDE eingehende Nachricht als Antwort auf die
+    gestellte Frage — und Sessions haben kein TTL. Ohne Ausstieg verschwindet
+    also alles im Interview, was der Nutzer danach schickt.
+
+    ⚠️ Status 'expired', NICHT 'closed':
+      1. `tasks/session_post_task.py:200` überspringt alles mit status != 'closed'.
+         'closed' würde die Post-Generierung scharf stellen — der Nutzer bricht ab
+         und bekommt trotzdem einen Post aus halben Antworten.
+      2. Die CHECK-Constraint erlaubt nur ('active','closed','expired')
+         (`alembic/versions/019_telegram_tables.py:99`), und `deploy.yml` fährt
+         KEIN `alembic upgrade head` — ein neuer Wert wäre auf dem Server eine
+         tote Migration.
+
+    Fail-open (E2: nur type(exc).__name__ loggen), tenant-gescopet (E3).
+
+    Returns:
+        True, wenn eine Session beendet wurde; sonst False.
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text(
+                    "SELECT id FROM bot_session "
+                    "WHERE tenant_id = :tid AND status = 'active' "
+                    "      AND mode IN ('random_smart', 'targeted') "
+                    "ORDER BY created_at DESC LIMIT 1"
+                ),
+                {"tid": tenant_id},
+            ).fetchone()
+
+            if row is None:
+                _send_telegram_message(
+                    chat_id,
+                    "Es läuft gerade kein Gespräch. Schick mir einfach eine "
+                    "Sprachnachricht oder tippe /help.",
+                    tenant_id=tenant_id,
+                )
+                return False
+
+            db.execute(
+                text(
+                    "UPDATE bot_session SET status = 'expired', updated_at = NOW() "
+                    "WHERE id = :sid AND tenant_id = :tid"
+                ),
+                {"sid": row[0], "tid": tenant_id},
+            )
+            db.commit()
+    except Exception as exc:
+        logger.warning("_cancel_active_session failed: %s", type(exc).__name__)
+        return False
+
+    _send_telegram_message(
+        chat_id,
+        "❌ Gespräch abgebrochen. Deine bisherigen Antworten bleiben im Gedächtnis, "
+        "aber ich frage nicht weiter.\n\n"
+        "Schick mir jederzeit eine Sprachnachricht oder tippe /help.",
+        tenant_id=tenant_id,
+    )
+    return True
 
 
 def _memory_search_sync(tenant_id: str, query: str, limit: int = 5) -> list[dict]:

@@ -546,9 +546,16 @@ def _start_targeted_session(tenant_id: str, idea_id: str) -> dict | None:
         chat_id = _resolve_chat_id(tenant_id)
         if chat_id is not None:
             try:
-                from api.telegram import _send_telegram_message
+                from api.telegram import _interview_cancel_keyboard, _send_telegram_message
 
-                _send_telegram_message(chat_id, opener.question_text, tenant_id=tenant_id)
+                # C5: eröffnet eine Session, die danach jede Nachricht als Antwort
+                # schluckt (kein TTL) — sichtbarer Ausgang gehört an die Frage.
+                _send_telegram_message(
+                    chat_id,
+                    opener.question_text,
+                    tenant_id=tenant_id,
+                    reply_markup=_interview_cancel_keyboard(),
+                )
             except Exception as exc:
                 logger.warning(
                     "p13_task: opener send failed (session created): %s",

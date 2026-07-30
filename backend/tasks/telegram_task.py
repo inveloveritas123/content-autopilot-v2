@@ -378,11 +378,23 @@ def _route_inbound_message(
             chat_id = _resolve_chat_id(tenant_id)
             if chat_id is not None and result.message:
                 try:
-                    from api.telegram import (
+                    from api.telegram import (  # Lazy-Import wie scheduler.py:104
+                        _interview_cancel_keyboard,
                         _send_telegram_message,
-                    )  # Lazy-Import wie scheduler.py:104
+                    )
 
-                    sent = _send_telegram_message(chat_id, result.message, tenant_id=tenant_id)
+                    # C5: Solange das Gespräch weiterläuft, hängt an der Frage ein
+                    # sichtbarer Ausgang. An der Abschluss-Nachricht nicht — dann
+                    # ist die Session ohnehin zu.
+                    if result.is_closed:
+                        sent = _send_telegram_message(chat_id, result.message, tenant_id=tenant_id)
+                    else:
+                        sent = _send_telegram_message(
+                            chat_id,
+                            result.message,
+                            tenant_id=tenant_id,
+                            reply_markup=_interview_cancel_keyboard(),
+                        )
                     routing_info["p08_message_sent"] = sent
                     if not sent:
                         logger.warning(

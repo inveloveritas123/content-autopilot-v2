@@ -307,9 +307,13 @@ class TestSendOpeningQuestion:
 
             _send_opening_question("tenant-x", "Was war dein erster Schritt?")
 
-        mock_send.assert_called_once_with(
-            99001, "Was war dein erster Schritt?", tenant_id="tenant-x"
-        )
+        assert mock_send.call_args.args == (99001, "Was war dein erster Schritt?")
+        assert mock_send.call_args.kwargs["tenant_id"] == "tenant-x"
+        # C5: Die proaktive Frage kommt unangekündigt und eröffnet eine Session, die
+        # danach jede Nachricht als Antwort schluckt (kein TTL) → Ausgang gehört dran.
+        assert mock_send.call_args.kwargs.get(
+            "reply_markup"
+        ), "Proaktive Frage bietet keinen Ausstieg an"
 
     @patch("tasks.random_smart_scheduler.sync_session_factory")
     def test_no_send_when_no_active_link(self, mock_factory):
