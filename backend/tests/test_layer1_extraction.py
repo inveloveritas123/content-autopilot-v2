@@ -718,8 +718,12 @@ class TestLayer1TruncationRobustness:
     Hintergrund: LAYER1 laeuft in Produktion auf einem Thinking-Modell
     (PIPELINE_TIER_DEFAULT=S1 -> vertex/gemini-2.5-flash). Unsichtbare
     Reasoning-Token teilen sich das max_tokens-Budget mit der Antwort, also
-    bricht die Antwort gelegentlich mitten im JSON ab (live gemessen: 1 von 10
-    Laeufen bei max_tokens=512).
+    bricht die Antwort gelegentlich mitten im JSON ab. Beobachtet auf Server B
+    am 2026-07-30: 508 Completion-Token bei 47 Zeichen sichtbarem Text.
+
+    Diese Tests pinnen die ROBUSTHEIT (echter Retry, ehrliche Degradation) —
+    nicht die Wahrscheinlichkeit, dass es passiert. Letztere haengt am
+    Token-Budget und ist nicht durch Unit-Tests belegbar.
     """
 
     def test_parse_error_triggers_new_llm_call(self):
@@ -770,9 +774,15 @@ class TestThinkingModelTokenBudget:
 
     Die sichtbare LAYER1-Antwort ist ~300 Zeichen (~90 Token) und passt
     theoretisch in 512. Auf einem Thinking-Modell zaehlt aber das Nachdenken
-    gegen dasselbe Budget. Live gemessen auf Server B (2026-07-30):
-    max_tokens=512 -> 1 von 10 Laeufen abgeschnitten;
-    max_tokens=2000 -> 0 von 15 Laeufen abgeschnitten.
+    gegen dasselbe Budget.
+
+    ⚠️ Das ist ein LOCK-Test, kein Wirksamkeitsbeleg. Der Stichprobenvergleich
+    auf Server B (512: 1 Ausfall/10 Laeufe, 2000: 0/15) ist statistisch nicht
+    signifikant (Fisher p≈0,4). Gemini 2.5 Flash waehlt sein Thinking-Budget
+    ausserdem dynamisch, ein hoeherer Deckel ist also kein Deckel. Der Test
+    verhindert nur, dass jemand die Werte unbemerkt wieder senkt; die
+    deterministische Loesung waere ein explizites thinking_budget bzw. eine
+    finish_reason=="length"-Auswertung.
     """
 
     THINKING_HEADROOM = 2000
@@ -783,3 +793,83 @@ class TestThinkingModelTokenBudget:
     def test_p08_budget_has_thinking_headroom(self):
         """P08 ist die Interview-Maschine — gleiche Groesse, gleiches Modell, gleiches Risiko."""
         assert PROMPT_MAX_TOKENS["P08"] >= self.THINKING_HEADROOM
+
+
+class TestLayer1RetryCallFailures:
+    """Die zusaetzlichen Retry-Calls duerfen keinen neuen Fehlerpfad nach aussen oeffnen.
+
+    Vor dem Robustheits-Fix konnte an der Parse-Fehler-Stelle nichts werfen, weil
+    dort gar kein Call stattfand. Wer einen Call ergaenzt, ergaenzt auch dessen
+    Fehlermoeglichkeiten — und `call_pipeline_llm` wirft nachweislich (malformte
+    200er-Antworten, leeres Router-Budget).
+    """
+
+    def test_retry_call_failure_degrades_instead_of_raising(self):
+        """Scheitert der Retry-Call selbst, wird ehrlich degradiert statt geworfen."""
+        truncated = _make_raw_llm_result(_TRUNCATED_JSON)
+
+        with patch(
+            "services.layer1_extraction.call_pipeline_llm",
+            side_effect=[truncated, RuntimeError("router down")],
+        ) as mock_call:
+            result = extract_intent_features(
+                transcript="Irgendein Gedanke.",
+                tenant_id="tenant_test",
+            )
+
+        assert mock_call.call_count == 2
+        assert result.routed_to == "reviewer_queue"
+        # Eigener Grund: in der Reviewer-Queue soll nicht "JSON kaputt" stehen,
+        # wenn in Wahrheit der Router nicht erreichbar war.
+        assert "llm_retry_failed" in result.flag_reasons
+        assert "json_parse_error" not in result.flag_reasons
+
+    def test_retry_sends_different_user_content(self):
+        """Ein Retry, der dieselbe Eingabe schickt, ist kein Retry."""
+        truncated = _make_raw_llm_result(_TRUNCATED_JSON)
+        valid = _make_llm_result(_valid_response(intent="smalltalk"))
+
+        with patch(
+            "services.layer1_extraction.call_pipeline_llm",
+            side_effect=[truncated, valid],
+        ) as mock_call:
+            extract_intent_features(transcript="Hallo!", tenant_id="tenant_test")
+
+        first, second = mock_call.call_args_list
+        assert second.kwargs["prompt_key"] == "LAYER1"
+        assert second.kwargs["user_content"] != first.kwargs["user_content"]
+        assert second.kwargs["user_content"].startswith(first.kwargs["user_content"])
+
+    def test_schema_retry_call_failure_stays_schema_violation(self):
+        """Regressionssperre: ein Fehler im SCHEMA-Retry darf nicht im Parse-Handler landen.
+
+        `call_pipeline_llm` wirft bei malformten 200er-Antworten ValueError. Lag der
+        Schema-Retry-Call im selben try wie das Parsen, fing ihn der
+        `except ValueError`-Handler ab und feuerte einen DRITTEN bezahlten Call —
+        und die Reviewer-Queue bekam faelschlich "json_parse_error" statt
+        "schema_violation".
+        """
+        schema_invalid = _make_llm_result(
+            {
+                "intent": "KEIN_GUELTIGER_ENUM_WERT",
+                "session_context": "no_session",
+                "extracted_features": {
+                    "topic_keywords": [],
+                    "sentiment": "neutral",
+                    "has_question": False,
+                },
+                "flagged_for_review": False,
+                "flag_reasons": [],
+            }
+        )
+
+        with patch(
+            "services.layer1_extraction.call_pipeline_llm",
+            side_effect=[schema_invalid, ValueError("Malformte LLM-Antwort: content fehlt")],
+        ) as mock_call:
+            result = extract_intent_features(transcript="Hallo!", tenant_id="tenant_test")
+
+        assert mock_call.call_count == 2, "Kein dritter Call — der Schema-Retry hat sein Budget"
+        assert result.routed_to == "reviewer_queue"
+        assert "schema_violation" in result.flag_reasons
+        assert "json_parse_error" not in result.flag_reasons
