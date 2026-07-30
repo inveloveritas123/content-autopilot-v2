@@ -75,3 +75,52 @@ class TestOnboardingSaveGuard:
         ):
             tg._onboarding_save_voice_profile("tenant-a", {"grundton": "x"})
         run.assert_called_once()
+
+
+class TestHasActiveVoiceProfile:
+    def test_true_when_any_active_profile(self):
+        db = _make_db_mock(row=(1,))
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            assert tg._has_active_voice_profile("tenant-a") is True
+
+    def test_false_when_none(self):
+        db = _make_db_mock(row=None)
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            assert tg._has_active_voice_profile("tenant-a") is False
+
+    def test_fail_safe_true_on_error(self):
+        db = _make_db_mock()
+        db.execute.side_effect = Exception("x")
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            assert tg._has_active_voice_profile("tenant-a") is True
+
+
+class TestOnboardingStartGate:
+    def test_start_declines_when_profile_exists(self):
+        with (
+            patch.object(tg, "_has_active_voice_profile", return_value=True),
+            patch.object(tg, "_send_telegram_message") as send,
+            patch.object(tg, "_onboarding_close_stale_sessions") as stale,
+            patch.object(tg, "_onboarding_get_active_session") as active,
+        ):
+            tg._send_onboarding_start("tenant-a", 99)
+        # declines politely, does NOT enter the wizard machinery
+        assert send.called
+        stale.assert_not_called()
+        active.assert_not_called()
+
+    def test_start_proceeds_when_no_profile(self):
+        with (
+            patch.object(tg, "_has_active_voice_profile", return_value=False),
+            patch.object(tg, "_send_telegram_message"),
+            patch.object(tg, "_onboarding_close_stale_sessions") as stale,
+            patch.object(tg, "_onboarding_get_active_session", return_value=None),
+            patch.object(tg, "_onboarding_preload_from_memory", return_value={}),
+            patch.object(tg, "_onboarding_create_session", return_value={"id": "s1"}),
+            patch(
+                "services.brand_voice.get_onboarding_questions",
+                return_value=[{"key": "k", "question": "q?", "required": True}],
+            ),
+        ):
+            tg._send_onboarding_start("tenant-a", 99)
+        stale.assert_called_once()  # reached the normal path

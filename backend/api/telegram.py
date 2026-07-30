@@ -1801,6 +1801,30 @@ def _has_active_transcript_profile(tenant_id: str) -> bool:
         return True
 
 
+def _has_active_voice_profile(tenant_id: str) -> bool:
+    """True if any active voice profile exists for the tenant (any source).
+
+    Fail-safe: returns True on any DB error — when in doubt, don't offer the
+    chat-onboarding wizard and risk overwriting an existing profile (C3).
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text(
+                    "SELECT 1 FROM tenant_voice_profile WHERE tenant_id = :tid "
+                    "AND is_active = true LIMIT 1"
+                ),
+                {"tid": tenant_id},
+            ).fetchone()
+        return row is not None
+    except Exception as exc:  # fail-safe
+        logger.warning(
+            "voice-profile check failed; assuming present (fail-safe): %s",
+            type(exc).__name__,
+        )
+        return True
+
+
 def _onboarding_save_voice_profile(tenant_id: str, answers: dict) -> None:
     """Ruft build_voice_profile_from_onboarding auf und speichert in tenant_voice_profile."""
     # C4 Overwrite-Guard: a transcript profile (from the 60-min setup call) must
@@ -1905,6 +1929,19 @@ def _onboarding_send_next_question(tenant_id: str, chat_id: int) -> None:
 
 def _send_onboarding_start(tenant_id: str, chat_id: int) -> None:
     """Startet oder setzt Onboarding-Wizard fort."""
+    # C3 Profil-Gate: never start chat-onboarding when an active voice profile
+    # already exists (the testers all have a transcript profile → declined here).
+    if _has_active_voice_profile(tenant_id):
+        _send_telegram_message(
+            chat_id,
+            "🧠 Du hast schon ein fertiges Stimmprofil (aus deinem Setup-Gespräch). "
+            "Ich starte das Chat-Onboarding nicht, um es nicht zu überschreiben.\n\n"
+            "Tippe /help → „So liest KI mich“, um dein Profil zu sehen — oder schick "
+            "mir einfach eine Sprachnachricht für einen Post.",
+            tenant_id=tenant_id,
+        )
+        return
+
     from services.brand_voice import get_onboarding_questions
 
     questions = get_onboarding_questions()
