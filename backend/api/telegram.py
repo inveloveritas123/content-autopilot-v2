@@ -253,6 +253,23 @@ def _interview_cancel_keyboard() -> dict:
     return {"inline_keyboard": [[{"text": "❌ Abbrechen", "callback_data": "cmd:session_cancel"}]]}
 
 
+def _choice_keyboard(log_id: str) -> dict:
+    """Zwei Wege für eine frisch eingegangene Nachricht (PR 2).
+
+    Die log_id trägt beide callback_data: über sie liest der Handler den Text
+    tenant-gescopet nach, und sie ist zugleich der Idempotenz-Schlüssel gegen
+    Doppeldruck — Telegram behält alte Inline-Keyboards dauerhaft tippbar.
+
+    Frisches Dict je Aufruf — ein geteiltes Modul-Dict könnte ein Caller mutieren.
+    """
+    return {
+        "inline_keyboard": [
+            [{"text": "✍️ Daraus einen Post machen", "callback_data": f"cmd:msg_post:{log_id}"}],
+            [{"text": "🗄 Nur merken", "callback_data": f"cmd:msg_keep:{log_id}"}],
+        ]
+    }
+
+
 def _approve_content_sync(content_id: str, tenant_id: str) -> str:
     """Gibt ein content_piece frei (Telegram-Button). Tenant-scoped + idempotent.
 

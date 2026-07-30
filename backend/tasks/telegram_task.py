@@ -115,6 +115,85 @@ def _load_active_session(tenant_id: str) -> object | None:
     return types.SimpleNamespace(id=row.id, status=row.status, current_question=current_question)
 
 
+def _is_pending_variant_choice(tenant_id: str, text_content: str) -> bool:
+    """True nur bei OFFENEM Varianten-Marker UND parsebarem Wahl-Token.
+
+    Beide Bedingungen zusammen. Ein reiner Marker-Check wäre falsch: der Marker
+    lebt 24 Stunden (`_P13_CHOICE_WINDOW_HOURS`), ein veralteter würde die Weiche
+    kippen und damit ausgerechnet den LLM-Pfad wieder öffnen, den
+    `_awaits_user_choice` schließt.
+
+    Token zuerst — reines Regex, spart den DB-Treffer im Normalfall.
+    """
+    try:
+        from tasks.p13_variants_task import _load_pending_idea, _parse_choice_token
+
+        if _parse_choice_token(text_content) is None:
+            return False
+        return _load_pending_idea(tenant_id) is not None
+    except Exception as exc:
+        logger.warning("pending variant check failed: %s", type(exc).__name__)
+        return False
+
+
+def _awaits_user_choice(tenant_id: str, text_content: str) -> bool:
+    """True = der Nutzer muss entscheiden, was mit der Nachricht passieren soll.
+
+    Ersetzt den LLM-Rateschritt: statt zu klassifizieren, was jemand wollte, fragt
+    der Bot nach. Nur wenn ein bestehender Pfad die Nachricht nachweislich
+    erwartet, bleibt es beim alten Verhalten.
+
+    Fail-open zu False — im Zweifel heutiges Verhalten, nie ein Absturz des
+    Chunk-Returns.
+    """
+    try:
+        if _load_active_session(tenant_id) is not None:
+            return False
+
+        from services.chat_intent_heuristics import is_idea_request
+
+        if is_idea_request(text_content):
+            return False
+
+        return not _is_pending_variant_choice(tenant_id, text_content)
+    except Exception as exc:
+        logger.warning("choice gate failed: %s", type(exc).__name__)
+        return False
+
+
+def _send_choice_prompt(
+    tenant_id: str, chat_id: int, log_id: str, text_content: str, icon: str
+) -> bool:
+    """Bestätigung plus die zwei Wege. True, wenn zugestellt.
+
+    Kein Rollback nötig, wenn der Versand scheitert: es wurde keine Session
+    eröffnet, die als Falle zurückbliebe, und der Memory-Chunk liegt bereits.
+    Aber protokollieren statt schlucken — dieser Prompt ist der einzige sichtbare
+    Ausgang der Nachricht.
+    """
+    preview = text_content[:80].rstrip()
+    suffix = "…" if len(text_content) > 80 else ""
+    try:
+        from api.telegram import _choice_keyboard, _send_telegram_message
+
+        sent = _send_telegram_message(
+            chat_id,
+            f"{icon} Notiert: „{preview}{suffix}“\n\nWas soll ich damit machen?",
+            tenant_id=tenant_id,
+            reply_markup=_choice_keyboard(log_id),
+        )
+    except Exception as exc:
+        logger.warning("choice prompt send failed: %s", type(exc).__name__)
+        return False
+    if not sent:
+        logger.warning(
+            "telegram_task: Wahl-Prompt nicht zugestellt (tenant=%s, log_id=%s)",
+            tenant_id,
+            log_id,
+        )
+    return sent
+
+
 def _resolve_chat_id(tenant_id: str) -> int | None:
     """Lookup active Telegram chat_id for a tenant (Issue #17).
 
@@ -614,8 +693,25 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         logger.warning("store_voice_chunk failed: %s", exc)
         return {"status": "transcribed_no_chunk", "reason": str(exc)[:120]}
 
-    # Bestätigung an den Nutzer senden
     chat_id_voice = (payload.get("chat") or {}).get("id")
+    result_dict = {
+        "status": "ok",
+        "transcript_chars": len(transcript),
+        "memory_chunk_id": chunk_id,
+        "source_type": source_type,
+        "channel": channel,
+    }
+
+    # PR 2 — Weiche VOR dem Routing: greift sie, entscheidet der Nutzer per Button
+    # und es läuft kein LLM-Rateschritt. Nur für Telegram: die Buttons sind ein
+    # Inline-Keyboard, das der WhatsApp-Adapter nicht kennt.
+    if channel == "telegram" and _awaits_user_choice(tenant_id, transcript):
+        if chat_id_voice:
+            _send_choice_prompt(tenant_id, chat_id_voice, log_id, transcript, "🎤")
+        result_dict["routed_to"] = "awaiting_user_choice"
+        return result_dict
+
+    # Bestätigung an den Nutzer senden
     if chat_id_voice and channel == "telegram":
         preview = transcript[:80].rstrip()
         suffix = "…" if len(transcript) > 80 else ""
@@ -627,16 +723,9 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
                 f"🎤 Gespeichert: „{preview}{suffix}“",
                 tenant_id=tenant_id,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("voice confirmation send failed: %s", type(exc).__name__)
 
-    result_dict = {
-        "status": "ok",
-        "transcript_chars": len(transcript),
-        "memory_chunk_id": chunk_id,
-        "source_type": source_type,
-        "channel": channel,
-    }
     routing_info = _route_inbound_message(tenant_id, transcript, log_id=log_id)
     if routing_info:
         result_dict.update(routing_info)
@@ -762,21 +851,28 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
         "source_type": "manual_note",
         "channel": channel,
     }
+    chat_id = (payload.get("chat") or {}).get("id")
+
+    # PR 2 — dieselbe Weiche wie im Voice-Pfad (Louis, 30.07.: Text-Parität).
+    if channel == "telegram" and _awaits_user_choice(tenant_id, text_content):
+        if chat_id:
+            _send_choice_prompt(tenant_id, chat_id, log_id, text_content, "📝")
+        result_dict["routed_to"] = "awaiting_user_choice"
+        return result_dict
+
     routing_info = _route_inbound_message(tenant_id, text_content, log_id=log_id)
     if routing_info:
         result_dict.update(routing_info)
-    elif channel == "telegram":
+    elif channel == "telegram" and chat_id:
         # Kein Routing-Gate hat gegriffen → Memory-Default → Bestätigung senden
-        chat_id = (payload.get("chat") or {}).get("id")
-        if chat_id:
-            try:
-                from api.telegram import _send_telegram_message
+        try:
+            from api.telegram import _send_telegram_message
 
-                _send_telegram_message(
-                    chat_id,
-                    "✅ Gespeichert im Gedächtnis.",
-                    tenant_id=tenant_id,
-                )
-            except Exception:
-                pass
+            _send_telegram_message(
+                chat_id,
+                "✅ Gespeichert im Gedächtnis.",
+                tenant_id=tenant_id,
+            )
+        except Exception as exc:
+            logger.warning("text confirmation send failed: %s", type(exc).__name__)
     return result_dict

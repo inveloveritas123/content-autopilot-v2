@@ -109,7 +109,17 @@ def _make_db(fetchone_val=None, fetchall_val=None):
 
 
 class TestP13Gate6OwnIdea:
-    """Gate 6: is_own_idea-Treffer ohne Session + ohne letzten Post → P13."""
+    """Gate 6 WAR: is_own_idea-Treffer ohne Session + ohne letzten Post → P13.
+
+    Seit PR 2 („explizite Wahl statt geratenem Intent") ist dieser Zweig nicht mehr
+    erreichbar. `_awaits_user_choice` greift VOR `_route_inbound_message`: ohne
+    laufendes Gespräch entscheidet der Nutzer per Button, statt dass ein LLM seinen
+    Intent errät. Louis' Entscheid vom 30.07. — der Rateschritt endete an vier
+    belegten Stellen in Stille.
+
+    Die Tests bleiben stehen und prüfen jetzt die Stilllegung: Gate 6 darf nicht
+    versehentlich wieder anspringen, und es darf kein Layer1-Call mehr laufen.
+    """
 
     @patch("tasks.p13_variants_task.generate_variants_for_chat")
     @patch("services.layer2_routing.route_telegram_intent")
@@ -121,7 +131,7 @@ class TestP13Gate6OwnIdea:
     @patch("tasks.telegram_task._load_active_session", return_value=None)
     @patch("tasks.telegram_task._store_chunk_async", new_callable=MagicMock)
     @patch("tasks.telegram_task.asyncio.run")
-    def test_own_idea_no_session_no_post_enqueues_p13(
+    def test_own_idea_startet_kein_p13_mehr_sondern_fragt(
         self,
         mock_run,
         mock_store,
@@ -134,6 +144,7 @@ class TestP13Gate6OwnIdea:
         mock_route,
         mock_task,
     ):
+        """„ich hab eine Idee" löst kein automatisches P13 mehr aus (PR 2)."""
         mock_run.return_value = "chunk-1"
         mock_extract.return_value = make_extraction("spontaneous_idea")
         mock_route.return_value = make_decision("p13_variants", {})
@@ -145,14 +156,9 @@ class TestP13Gate6OwnIdea:
                 {"text": "ich hab eine Idee für einen Post zu nachhaltigen Lieferketten"},
             )
 
-        assert result.get("routed_to") == "p13_variants"
-        assert result.get("p13_enqueued") is True
-        mock_task.apply_async.assert_called_once()
-        args = (
-            mock_task.apply_async.call_args.kwargs.get("args")
-            or mock_task.apply_async.call_args.args[0]
-        )
-        assert args[0] == "tenant-1"
+        assert result.get("routed_to") == "awaiting_user_choice"
+        mock_task.apply_async.assert_not_called()
+        assert not mock_extract.called, "Layer1 darf gar nicht erst laufen"
 
     @patch("tasks.p13_variants_task._try_p13_variant_choice", return_value=False)
     @patch("tasks.telegram_task._resolve_last_post", return_value=None)
@@ -180,11 +186,9 @@ class TestP13Gate6OwnIdea:
                     "tenant-1",
                     {"text": "Das war ein langer Tag im Büro, wirklich erschöpft."},
                 )
-        # Kein Routing-Key → Memory-Default
-        assert result.get("routed_to") is None
-        # Layer1 nicht aufgerufen (Kostenprofile unverändert)
-        # (patch kommt NACH dem Gate-Check im Code → mock_l1 nicht direkt prüfbar,
-        # aber routed_to=None beweist: kein Layer1-Ergebnis verarbeitet)
+        # Seit PR 2: nicht mehr stiller Memory-Default, sondern eine Frage an den
+        # Nutzer. Der Kern des Tests bleibt — kein Layer1, kein Kostenprofil-Anstieg.
+        assert result.get("routed_to") == "awaiting_user_choice"
 
     @patch("tasks.p13_variants_task.generate_variants_for_chat")
     @patch("services.layer2_routing.route_telegram_intent")
@@ -209,7 +213,13 @@ class TestP13Gate6OwnIdea:
         mock_route,
         mock_task,
     ):
-        """flagged_for_review → reviewer_queue, kein P13-Task."""
+        """Auch der flagged-Zweig ist stillgelegt — er war eine der Stille-Quellen.
+
+        `flagged_for_review` schlug jeden korrekten Intent (layer2_routing.py:64-65),
+        und `INJECTION_PATTERNS` trifft Alltagsdeutsch („ignoriere", „du bist ein").
+        Das Ergebnis `reviewer_queue` erzeugt keine Chat-Nachricht — der Tester sah
+        nichts. Ohne Layer1-Call kann dieser Ausgang gar nicht mehr entstehen.
+        """
         mock_run.return_value = "chunk-3"
         extraction = make_extraction("spontaneous_idea")
         extraction.flagged_for_review = True
@@ -223,8 +233,9 @@ class TestP13Gate6OwnIdea:
                 {"text": "ich hab eine Idee …"},
             )
 
-        assert result.get("routed_to") == "reviewer_queue"
+        assert result.get("routed_to") == "awaiting_user_choice"
         mock_task.apply_async.assert_not_called()
+        assert not mock_route.called
 
 
 # ---------------------------------------------------------------------------
