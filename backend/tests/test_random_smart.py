@@ -307,6 +307,7 @@ class TestSendOpeningQuestion:
 
             _send_opening_question("tenant-x", "Was war dein erster Schritt?")
 
+        assert mock_send.call_count == 1, "Frage darf genau einmal rausgehen"
         assert mock_send.call_args.args == (99001, "Was war dein erster Schritt?")
         assert mock_send.call_args.kwargs["tenant_id"] == "tenant-x"
         # C5: Die proaktive Frage kommt unangekündigt und eröffnet eine Session, die

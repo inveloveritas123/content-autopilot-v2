@@ -64,23 +64,30 @@ TENANT = "6cff9601-ce95-43c6-b928-5b13b90d4df3"
 CHAT = 4711
 
 
-def _session_db(row=("sess-1",)):
+def _session_db(rows=(("sess-1",),)):
     db = MagicMock()
     db.__enter__ = MagicMock(return_value=db)
     db.__exit__ = MagicMock(return_value=False)
-    db.execute.return_value.fetchone.return_value = row
+    db.execute.return_value.fetchall.return_value = list(rows)
     return db
 
 
-def _cancel(row=("sess-1",), db=None):
+def _cancel(rows=(("sess-1",),), db=None):
     """Ruft _cancel_active_session. Gibt (Rückgabewert, db-Mock, send-Mock) zurück."""
-    db = db if db is not None else _session_db(row)
+    db = db if db is not None else _session_db(rows)
     with (
         patch.object(tg, "sync_session_factory", return_value=db),
         patch.object(tg, "_send_telegram_message") as send,
     ):
         result = tg._cancel_active_session(TENANT, CHAT)
     return result, db, send
+
+
+def _broken_db():
+    db = MagicMock()
+    db.__enter__ = MagicMock(side_effect=RuntimeError("db down"))
+    db.__exit__ = MagicMock(return_value=False)
+    return db
 
 
 def _executed_sql(db) -> str:
@@ -127,20 +134,37 @@ class TestCancelActiveSession:
         assert "Sprachnachricht" in send.call_args.args[1] or "/help" in send.call_args.args[1]
 
     def test_no_session_is_answered_honestly(self):
-        result, _, send = _cancel(row=None)
+        result, _, send = _cancel(rows=())
         assert result is False
         assert send.called, "Abbruch ohne laufendes Gespräch bleibt stumm"
 
     def test_db_error_fails_open(self):
-        broken = MagicMock()
-        broken.__enter__ = MagicMock(side_effect=RuntimeError("db down"))
-        broken.__exit__ = MagicMock(return_value=False)
-        result, _, _ = _cancel(db=broken)
+        result, _, _ = _cancel(db=_broken_db())
         assert result is False, "DB-Fehler darf nicht durchschlagen"
+
+    def test_db_error_still_answers_the_user(self):
+        """Sonst drückt der Tester „Abbrechen", bekommt NICHTS, und sitzt weiter fest —
+        genau der Zustand, den C5 auflösen soll."""
+        _, _, send = _cancel(db=_broken_db())
+        assert send.called, "Abbruch scheitert stumm — keine Rückmeldung an den Tester"
+
+    def test_every_active_interview_is_ended_not_just_the_newest(self):
+        """Zwei Taps auf der noch sichtbaren Ideenliste erzeugen ZWEI aktive Sessions
+        (p08_opener prüft nicht auf laufende). Beendet man nur die neueste, findet
+        _load_active_session die ältere und schluckt die nächste Nachricht weiter —
+        während der Bot „ich frage nicht weiter" behauptet hat."""
+        _, db, _ = _cancel(rows=(("sess-1",), ("sess-2",)))
+        update_sql = " ".join(
+            str(c.args[0]) for c in db.execute.call_args_list if "UPDATE" in str(c.args[0])
+        )
+        assert (
+            "LIMIT" not in update_sql.upper()
+        ), "Abbruch beendet nur EINE Session — ältere bleiben aktiv und fangen weiter ab"
 
 
 class TestCancelCommandReachesEveryEntryPath:
-    """`_try_memory_command` läuft im Webhook (:675) UND im Poller (:1255)."""
+    """`_try_memory_command` wird von telegram_webhook UND dispatch_inbound_update
+    aufgerufen — deshalb sitzt der Ausstieg dort und nicht im Dispatch."""
 
     def _run(self, command):
         with (

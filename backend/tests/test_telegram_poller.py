@@ -184,7 +184,8 @@ _api_tg = _ensure_stub("api.telegram")
 # ohne Teardown). Jede alphabetisch später gesammelte Testdatei bekäme dann einen
 # No-Op-Mock statt dispatch_inbound_update und sähe stumme Nicht-Aufrufe.
 # Die Tests, die den Dispatch beobachten, patchen ihn ohnehin lokal per
-# patch.object() (:405/:446/:559) — hier muss das Attribut nur EXISTIEREN.
+# patch.object(_api_tg, "dispatch_inbound_update", …) — hier muss das Attribut
+# nur EXISTIEREN, damit patch.object es findet.
 if not hasattr(_api_tg, "dispatch_inbound_update"):
     _api_tg.dispatch_inbound_update = MagicMock()
 

@@ -299,6 +299,7 @@ class TestFollowupMessageSend:
 
         assert result is not None
         assert result["p08_message_sent"] is True
+        assert send_mock.call_count == 1, "Folgefrage darf genau einmal rausgehen"
         assert send_mock.call_args.args == (4711, "Frage 2?")
         assert send_mock.call_args.kwargs["tenant_id"] == "tenant-1"
         # C5: an einer laufenden Frage hängt der Ausgang — sonst schluckt die

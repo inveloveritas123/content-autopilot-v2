@@ -359,7 +359,7 @@ def _welcome_text(headline: str) -> str:
         "• 🎙 Schick mir eine Sprachnachricht mit einem Gedanken oder Erlebnis — "
         "daraus wird ein LinkedIn-Post in deiner Stimme.\n"
         "• 💡 Oder lass dir Ideen vorschlagen und wähl eine aus.\n"
-        "• Jeden Entwurf bekommst du mit [✅ Freigeben] [✏️ Nochmal anders] [❌ Verwerfen].\n\n"
+        "• Fertige Entwürfe kommen mit [✅ Freigeben] [✏️ Nochmal anders] [❌ Verwerfen].\n\n"
         "Tippe /help für die Übersicht."
     )
 
@@ -861,9 +861,10 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
         return True
 
     # C5 — Ausstieg. Hier und nicht in dispatch_inbound_update: _try_memory_command
-    # läuft im Webhook-Pfad (:675) UND im Poller-Pfad (:1255), der Dispatch nur im
-    # Poller. Zusätzlich fängt dieser Zweig das Kommando ab, BEVOR es als Content
-    # ins Gedächtnis oder als „unbekanntes Kommando" abgewiesen wird.
+    # wird von BEIDEN Eingängen aufgerufen (telegram_webhook und
+    # dispatch_inbound_update), der Dispatch läuft nur im Poller. Zusätzlich fängt
+    # dieser Zweig das Kommando ab, BEVOR es als Content ins Gedächtnis oder als
+    # „unbekanntes Kommando" abgewiesen wird.
     if cmd in ("/abbrechen", "/cancel", "/stop"):
         _cancel_active_session(tenant_id, chat_id)
         return True
@@ -1148,9 +1149,14 @@ def _brainstorming_generate_ideas(tenant_id: str, chat_id: int) -> None:
     try:
         from tasks.p09_chat_ideas_task import deliver_ideas_to_chat
 
-        deliver_ideas_to_chat.delay(tenant_id=tenant_id)
+        # trigger_text ist Pflichtargument ohne Default (p09_chat_ideas_task.py:53).
+        # celery prüft die Signatur bereits im Client (strict_typing) — ohne diesen
+        # Wert wirft .delay() sofort TypeError, und der Tester bekam bei JEDEM Druck
+        # nur die Fehlermeldung unten. Leerer String = „ohne Vorgabe", die Task
+        # normalisiert selbst (`trigger_text = (trigger_text or "")[:500]`).
+        deliver_ideas_to_chat.delay(tenant_id=tenant_id, trigger_text="")
     except Exception as e:
-        logger.warning("brainstorming_generate_ideas task failed: %s", e)
+        logger.warning("brainstorming_generate_ideas task failed: %s", type(e).__name__)
         _send_telegram_message(
             chat_id, "Fehler beim Starten der Ideen-Generierung.", tenant_id=tenant_id
         )
@@ -1203,20 +1209,19 @@ def _brainstorming_pick_idea(tenant_id: str, chat_id: int, idea_id: str) -> None
         "Sprachnachricht. Aus deinen Antworten baue ich dann den Post.",
         tenant_id=tenant_id,
     )
-    # ⚠️ _start_targeted_session fängt intern ALLES ab und gibt bei Fehlschlag None
-    # zurück, statt zu werfen. Ein reines try/except sähe den Fehler nie — der
-    # Rückgabewert ist das Signal. Das try deckt nur den Import ab.
+    # ⚠️ NUR enqueuen, nie hier ausführen: _start_targeted_session → p08_opener →
+    # call_pipeline_llm ist ein LLM-Call (bis 3×300s). Dieser Callback läuft im
+    # Poller, der Bots und Updates SEQUENZIELL abarbeitet — synchron würde ein Klick
+    # die Zustellung für ALLE Tenants blockieren. Die Absage bei Fehlschlag schickt
+    # der Task selbst (er kennt das Ergebnis, wir hier nicht).
     try:
-        from tasks.p13_variants_task import _start_targeted_session
+        from tasks.p13_variants_task import start_targeted_session_task
 
-        started = _start_targeted_session(tenant_id, idea_id)
+        start_targeted_session_task.delay(tenant_id=tenant_id, idea_id=idea_id)
     except Exception as e:
         logger.warning(
-            "brainstorming_pick_idea: start_targeted_session failed: %s", type(e).__name__
+            "brainstorming_pick_idea: enqueue start_targeted_session failed: %s", type(e).__name__
         )
-        started = None
-
-    if not started:
         _send_telegram_message(
             chat_id,
             "Das hat gerade nicht geklappt — versuch es gleich nochmal.",
@@ -1246,35 +1251,40 @@ def _cancel_active_session(tenant_id: str, chat_id: int) -> bool:
     Returns:
         True, wenn eine Session beendet wurde; sonst False.
     """
-    row = None
+    # ALLE aktiven Interview-Sessions beenden, nicht nur die neueste: `p08_opener`
+    # prüft beim Anlegen NICHT auf laufende Sessions, und die Ideenliste bleibt in
+    # Telegram tippbar — zwei Taps erzeugen also zwei aktive Sessions. Beendet man
+    # nur die neueste, findet `_load_active_session` (telegram_task.py, gleiche
+    # Query) die ältere und schluckt weiter Nachrichten, obwohl der Bot gerade
+    # „ich frage nicht weiter" gesagt hat. Ein Statement, kein SELECT davor.
+    cancelled = 0
     try:
         with sync_session_factory() as db:
-            row = db.execute(
+            rows = db.execute(
                 text(
-                    "SELECT id FROM bot_session "
+                    "UPDATE bot_session SET status = 'expired', updated_at = NOW() "
                     "WHERE tenant_id = :tid AND status = 'active' "
                     "      AND mode IN ('random_smart', 'targeted') "
-                    "ORDER BY created_at DESC LIMIT 1"
+                    "RETURNING id"
                 ),
                 {"tid": tenant_id},
-            ).fetchone()
-
-            if row is not None:
-                db.execute(
-                    text(
-                        "UPDATE bot_session SET status = 'expired', updated_at = NOW() "
-                        "WHERE id = :sid AND tenant_id = :tid"
-                    ),
-                    {"sid": row[0], "tid": tenant_id},
-                )
-                db.commit()
+            ).fetchall()
+            db.commit()
+            cancelled = len(rows or [])
     except Exception as exc:
         logger.warning("_cancel_active_session failed: %s", type(exc).__name__)
+        # Nicht stumm scheitern: sonst drückt der Tester „Abbrechen", bekommt nichts
+        # und sitzt weiter in der Session fest, ohne es zu wissen.
+        _send_telegram_message(
+            chat_id,
+            "Das konnte ich gerade nicht abbrechen — versuch es gleich nochmal.",
+            tenant_id=tenant_id,
+        )
         return False
 
     # Senden erst NACH dem Schließen der DB-Session — _send_telegram_message
     # macht einen HTTP-Call mit 5s Timeout, dafür bleibt keine Verbindung offen.
-    if row is None:
+    if cancelled == 0:
         _send_telegram_message(
             chat_id,
             "Es läuft gerade kein Gespräch. Schick mir einfach eine "

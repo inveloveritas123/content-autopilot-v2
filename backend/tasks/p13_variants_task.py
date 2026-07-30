@@ -532,6 +532,66 @@ def _persist_choice(tenant_id: str, idea_id: str, variant: dict) -> bool:
         return False
 
 
+@celery_app.task(
+    name="tasks.p13_variants_task.start_targeted_session_task",
+    bind=True,
+    max_retries=1,
+)
+def start_targeted_session_task(self, tenant_id: str, idea_id: str) -> dict:
+    """Startet das targeted-Interview asynchron (Button „✍️ Idee ausarbeiten").
+
+    Warum als Task und nicht direkt: `_start_targeted_session` → `p08_opener` →
+    `call_pipeline_llm` ist ein LLM-Call (bis 3×300s). Der Button-Callback läuft im
+    Poller, der Bots und Updates SEQUENZIELL abarbeitet — ein synchroner Aufruf dort
+    blockiert die Zustellung für alle Tenants, nicht nur für den Klickenden.
+
+    Fail-open: kein Raise. Bei Fehlschlag bekommt der Nutzer eine ehrliche Absage,
+    sonst wartet er auf eine Frage, die nie kommt.
+    """
+    result = _start_targeted_session(tenant_id, idea_id)
+    if result is None:
+        _send_start_failed_notice(tenant_id)
+        return {"status": "failed", "reason": "start_targeted_session_returned_none"}
+    return {"status": "ok", "session_id": result.get("session_id")}
+
+
+def _send_start_failed_notice(tenant_id: str) -> None:
+    """Ehrliche Absage, wenn das Interview nicht starten konnte."""
+    try:
+        chat_id = _resolve_chat_id(tenant_id)
+        if chat_id is None:
+            return
+        from api.telegram import _send_telegram_message
+
+        _send_telegram_message(
+            chat_id,
+            "Das hat gerade nicht geklappt — versuch es gleich nochmal.",
+            tenant_id=tenant_id,
+        )
+    except Exception as exc:
+        logger.warning("p13_task: start-failed notice send failed: %s", type(exc).__name__)
+
+
+def _expire_session(session_id: str, tenant_id: str) -> None:
+    """Setzt eine gerade erst geöffnete Session auf 'expired' (tenant-gescopet).
+
+    'expired' und nicht 'closed': `tasks/session_post_task.py:200` überspringt alles
+    != 'closed', ein Post aus einer nie beantworteten Session entsteht so nicht.
+    """
+    try:
+        with sync_session_factory() as db:
+            db.execute(
+                text(
+                    "UPDATE bot_session SET status = 'expired', updated_at = NOW() "
+                    "WHERE id = CAST(:sid AS uuid) AND tenant_id = :tid AND status = 'active'"
+                ),
+                {"sid": str(session_id), "tid": tenant_id},
+            )
+            db.commit()
+    except Exception as exc:
+        logger.warning("p13_task: expire_session failed: %s", type(exc).__name__)
+
+
 def _start_targeted_session(tenant_id: str, idea_id: str) -> dict | None:
     """Startet p08_opener(mode='targeted', topic_idea_id=idea_id) + sendet die Frage.
 
@@ -544,13 +604,14 @@ def _start_targeted_session(tenant_id: str, idea_id: str) -> dict | None:
         opener = p08_opener(tenant_id, mode="targeted", topic_idea_id=idea_id)
         # Opener-Frage in den Chat senden (Muster random_smart_scheduler.py:104)
         chat_id = _resolve_chat_id(tenant_id)
+        sent = False
         if chat_id is not None:
             try:
                 from api.telegram import _interview_cancel_keyboard, _send_telegram_message
 
                 # C5: eröffnet eine Session, die danach jede Nachricht als Antwort
                 # schluckt (kein TTL) — sichtbarer Ausgang gehört an die Frage.
-                _send_telegram_message(
+                sent = _send_telegram_message(
                     chat_id,
                     opener.question_text,
                     tenant_id=tenant_id,
@@ -561,6 +622,16 @@ def _start_targeted_session(tenant_id: str, idea_id: str) -> dict | None:
                     "p13_task: opener send failed (session created): %s",
                     type(exc).__name__,
                 )
+
+        if not sent:
+            # ⚠️ _send_telegram_message WIRFT NICHT, es gibt False zurück. Ohne diese
+            # Prüfung bliebe eine aktive Session zurück, deren Frage der Nutzer nie
+            # gesehen hat — ab dann schluckt sie jede seiner Nachrichten als Antwort
+            # auf eine unsichtbare Frage. Lieber zurückrollen und ehrlich scheitern.
+            logger.warning("p13_task: opener not delivered — rolling session back")
+            _expire_session(opener.session_id, tenant_id)
+            return None
+
         return {"session_id": opener.session_id, "question_text": opener.question_text}
     except Exception as exc:
         logger.warning("p13_task: start_targeted_session failed: %s", type(exc).__name__)

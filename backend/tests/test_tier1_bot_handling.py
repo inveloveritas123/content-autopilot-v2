@@ -25,6 +25,7 @@ os.environ.setdefault("DEFAULT_TENANT_KEY", "test-key-32-chars-padded-xxxxxxx")
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "x")
 
 import importlib.util as _ilu
+import inspect
 import sys
 import types
 from unittest.mock import MagicMock, patch
@@ -115,3 +116,26 @@ class TestGenerateIdeasButtonWorks:
     def test_button_confirms_to_the_user(self):
         _, send = self._press()
         assert send.called, "Button antwortet dem Tester nicht — wirkt kaputt"
+
+    def test_call_matches_the_real_task_signature(self):
+        """Ein MagicMock akzeptiert JEDE Signatur — der echte Celery-Task nicht.
+
+        celery prüft die Argumente bereits im Client (`strict_typing` ist Default),
+        ein falscher Aufruf wirft also sofort TypeError, statt erst im Worker
+        aufzuschlagen. Hier landete er im `except` des Handlers und der Tester bekam
+        bei JEDEM Druck „Fehler beim Starten der Ideen-Generierung." — der Button war
+        nicht mehr tot, aber er funktionierte auch nie. Die Mock-Tests oben können das
+        strukturell nicht sehen, deshalb dieser Bind gegen die echte Signatur.
+        """
+        fake_task, _ = self._press()
+        from tasks.p09_chat_ideas_task import deliver_ideas_to_chat
+
+        # `conftest.py` stubbt celery, wenn es fehlt — dann ist der Task die nackte
+        # Funktion und `self` steht noch in der Signatur. Genau deshalb greift die
+        # echte celery-Prüfung hier nie und der Defekt überlebte. Also `self`
+        # abziehen und binden wie `.delay()` es täte.
+        sig = inspect.signature(deliver_ideas_to_chat)
+        params = list(sig.parameters.values())
+        if params and params[0].name == "self":
+            sig = sig.replace(parameters=params[1:])
+        sig.bind(**fake_task.delay.call_args.kwargs)

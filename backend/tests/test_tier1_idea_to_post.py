@@ -10,9 +10,12 @@ ausarbeiten" muss deshalb genau das tun, was die Wahl eines P13-Hooks tut —
 `_start_targeted_session` aufrufen und das Interview eröffnen. Eine Abkürzung
 „Post direkt generieren" gibt es nicht, sie würde den Pfad umgehen.
 
-⚠️ `_start_targeted_session` fängt intern ALLES ab und gibt bei Fehlern `None`
-zurück statt zu werfen. Ein reines try/except sähe den Fehlschlag nie — der
-Rückgabewert ist das Signal.
+⚠️ Der Start muss ASYNCHRON laufen. `_start_targeted_session` → `p08_opener` →
+`call_pipeline_llm` ist ein LLM-Call mit bis zu 3×300s Timeout. Der Callback läuft
+im Poller (`telegram_poll_task` iteriert Bots und Updates sequenziell) bzw. inline
+in der FastAPI-Event-Loop — ein synchroner Aufruf hier blockiert die Zustellung
+für ALLE Tenants. Vorher war dieser Zweig ein reines `.delay()`; das muss er
+bleiben.
 
 NIE `from api import telegram` benutzen — Geschwister-Stub vergiftet sys.modules.
 """
@@ -69,17 +72,18 @@ def _idea_db(row):
     return db
 
 
-_STARTED = {"session_id": "s1", "question_text": "Was war der Auslöser?"}
-
-
-def _pick(row=("Wie wir Kunden onboarden", "Der erste Tag entscheidet"), started=_STARTED):
+def _pick(row=("Wie wir Kunden onboarden", "Der erste Tag entscheidet"), enqueue_raises=False):
     """Klickt „Idee ausarbeiten" mit gestubbten Nachbarmodulen.
 
-    Gibt (p13-Stub, p09-Stub, send-Mock) zurück. `started=None` simuliert den
-    Fehlschlag von _start_targeted_session (es wirft nie, es gibt None zurück).
+    Gibt (p13-Stub, p09-Stub, send-Mock) zurück.
     """
     p13 = types.ModuleType("tasks.p13_variants_task")
-    p13._start_targeted_session = MagicMock(return_value=started)
+    p13.start_targeted_session_task = MagicMock()
+    if enqueue_raises:
+        p13.start_targeted_session_task.delay.side_effect = RuntimeError("broker down")
+    # Wenn der Produktionscode das hier je aufruft, läuft ein LLM-Call synchron
+    # im Poller — der Mock macht das sichtbar statt es zu verstecken.
+    p13._start_targeted_session = MagicMock()
     p09 = types.ModuleType("tasks.p09_chat_ideas_task")
     p09.deliver_ideas_to_chat = MagicMock()
 
@@ -98,7 +102,18 @@ def _pick(row=("Wie wir Kunden onboarden", "Der erste Tag entscheidet"), started
 class TestPickIdeaStartsTheRealInterview:
     def test_chosen_idea_reaches_the_interview_starter(self):
         p13, _, _ = _pick()
-        p13._start_targeted_session.assert_called_once_with(TENANT, IDEA)
+        p13.start_targeted_session_task.delay.assert_called_once_with(
+            tenant_id=TENANT, idea_id=IDEA
+        )
+
+    def test_start_is_enqueued_not_run_inline(self):
+        """Synchron wäre ein LLM-Call (bis 3×300s) im sequenziellen Poll-Loop —
+        er blockiert die Zustellung für ALLE Tenants, nicht nur für den Klicker."""
+        p13, _, _ = _pick()
+        assert not p13._start_targeted_session.called, (
+            "targeted-Session wird synchron im Callback-Pfad gestartet — "
+            "das hängt einen LLM-Call in den Poller"
+        )
 
     def test_pick_does_not_relist_ideas(self):
         _, p09, _ = _pick()
@@ -128,9 +143,9 @@ class TestPickIdeaFailurePaths:
         p13, _, _ = _pick(row=None)
         assert not p13._start_targeted_session.called
 
-    def test_failed_start_is_not_silent(self):
-        """_start_targeted_session schluckt Fehler und gibt None zurück."""
-        _, _, send = _pick(started=None)
+    def test_failed_enqueue_is_not_silent(self):
+        """Broker weg → der Tester darf nicht auf eine Frage warten, die nie kommt."""
+        _, _, send = _pick(enqueue_raises=True)
         text = " ".join(c.args[1] for c in send.call_args_list).lower()
         assert (
             "nicht geklappt" in text or "nochmal" in text

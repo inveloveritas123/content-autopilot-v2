@@ -13,9 +13,13 @@ Diese Tests pinnen die Entfernung als *Verhalten*, nicht als Zeilenzahl:
 - Dokumente bekommen eine ehrliche Antwort statt in den Wizard zu laufen,
 - und `api/telegram.py` schreibt überhaupt kein Stimmprofil mehr.
 
-Der letzte Punkt ist der eigentliche Doktrin-Wächter: er schlägt an, sobald
-irgendwer dem Bot wieder einen Profil-Schreibpfad gibt, egal über welchen
-Eingang.
+Der letzte Punkt ist der Doktrin-Wächter. Sein Umfang ist bewusst begrenzt und
+soll nicht überschätzt werden: er greptet `api/telegram.py` nach literalen
+INSERT/UPDATE auf `tenant_voice_profile`. Ein Schreibpfad, der über ein
+Service-Modul oder das ORM liefe, fällt durch — dagegen hilft nur, dass es
+solche Bausteine gar nicht mehr gibt (die verwaisten
+`get_onboarding_questions` / `build_voice_profile_from_onboarding` in
+`services/brand_voice.py` sind deshalb mitentfernt worden).
 
 NIE `from api import telegram` benutzen — ein Geschwister-Stub aus
 `_telegram_task_env.py` vergiftet `sys.modules` in der Vollsuite. Immer
