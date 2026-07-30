@@ -179,3 +179,11 @@ class TestEnqueuedTaskIsRegisteredInTheWorker:
             "deliver_ideas_to_chat wird enqueued, das Modul steht aber nicht "
             "in celery_app.conf.include → NotRegistered im Worker möglich"
         )
+
+    def test_post_feedback_module_is_included(self):
+        """„✏️ Nochmal anders" (cmd:regenerate) wird aus demselben Callback-Pfad
+        enqueued — derselbe Defekt, nur ein anderes Modul."""
+        assert '"tasks.post_feedback_task"' in self._include_block(), (
+            "regenerate_post_from_feedback wird enqueued, das Modul steht aber nicht "
+            "in celery_app.conf.include → NotRegistered im Worker möglich"
+        )
