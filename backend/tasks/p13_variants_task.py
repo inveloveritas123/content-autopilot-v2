@@ -141,11 +141,18 @@ def _create_manual_idea(
     tenant_id: str,
     idea_text: str,
     log_id: str | None,
+    pending_choice: bool = True,
 ) -> str | None:
     """Legt eine manuelle Idee an (Spiegel von api/ideas.py:1294-1335).
 
     find-or-create Source type='manual' → Stub-SourceItem → content_ideas-INSERT.
     Gibt idea_id (str) oder None bei Fehler zurück.
+
+    pending_choice steuert den `chat_variant_choice_pending`-Marker. True für den
+    Varianten-Weg, wo der Nutzer noch 1/2/3 wählen muss. False für den direkten
+    Interview-Weg: dort gibt es keine Wahl, und ein stehengebliebener Marker
+    würde `_load_pending_idea` 24 h lang fündig werden lassen — die nächste kurze
+    Nachricht („ok", „ja") landete dann als Varianten-Wahl in Gate 2.
     """
     try:
         with sync_session_factory() as db:
@@ -186,10 +193,9 @@ def _create_manual_idea(
 
             # content_ideas-INSERT mit State-Marker
             idea_id = str(uuid.uuid4())
-            source_context: dict = {
-                "source": "telegram_chat",
-                "chat_variant_choice_pending": True,
-            }
+            source_context: dict = {"source": "telegram_chat"}
+            if pending_choice:
+                source_context["chat_variant_choice_pending"] = True
             if log_id is not None:
                 source_context["source_log_id"] = str(log_id)
 

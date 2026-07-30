@@ -781,3 +781,45 @@ class TestTargetedOpenerOffersAnExit:
             result = self._start(MagicMock(return_value=False))
         assert result is None, "nicht zugestellter Opener gilt trotzdem als Erfolg"
         assert expire.called, "aktive Session bleibt als Falle zurück"
+
+
+# ---------------------------------------------------------------------------
+# 6. _create_manual_idea — Varianten-Marker abschaltbar (PR 2)
+# ---------------------------------------------------------------------------
+
+
+def _captured_idea_ctx(db) -> dict:
+    """Liest das source_context-JSON aus dem content_ideas-INSERT."""
+    for call in db.execute.call_args_list:
+        params = call.args[1] if len(call.args) > 1 else call.kwargs.get("params")
+        if isinstance(params, dict) and "ctx" in params:
+            return json.loads(params["ctx"])
+    raise AssertionError("content_ideas-INSERT wurde nicht ausgeführt")
+
+
+class TestManualIdeaPendingChoice:
+    """Der direkte Interview-Weg darf keine Varianten-Wahl offen zurücklassen.
+
+    `_load_pending_idea` findet den Marker 24 h lang. Bliebe er nach dem Knopf
+    „Daraus einen Post machen" stehen, würde `_try_p13_variant_choice` die nächste
+    kurze Nachricht („ok", „ja") als Wahl einer Variante verschlucken, die es nie gab.
+    """
+
+    def test_pending_choice_false_setzt_keinen_marker(self):
+        db = _make_db(fetchone_val=None)
+        with patch.object(p13, "sync_session_factory", return_value=db):
+            idea_id = p13._create_manual_idea(
+                "tenant-1", "Ein Gedanke zum Vertrieb", "log-1", pending_choice=False
+            )
+        assert idea_id is not None
+        ctx = _captured_idea_ctx(db)
+        assert "chat_variant_choice_pending" not in ctx
+        assert ctx["source_log_id"] == "log-1"
+        assert ctx["source"] == "telegram_chat"
+
+    def test_default_setzt_marker_weiter(self):
+        """generate_variants_for_chat braucht ihn — Default-Verhalten bleibt."""
+        db = _make_db(fetchone_val=None)
+        with patch.object(p13, "sync_session_factory", return_value=db):
+            p13._create_manual_idea("tenant-1", "Ein Gedanke", "log-2")
+        assert _captured_idea_ctx(db).get("chat_variant_choice_pending") is True
