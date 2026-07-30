@@ -686,3 +686,100 @@ class TestLayer1Extraction:
         assert kw["tenant_id"] == "tenant_xyz"
         assert "system_prompt" in kw
         assert "user_content" in kw
+
+
+def _make_raw_llm_result(raw_text: str) -> PipelineLLMResult:
+    """Baut ein PipelineLLMResult mit beliebigem Rohtext (statt validem JSON).
+
+    Fuer Trunkierungs-Szenarien: das Modell liefert abgeschnittenes JSON, das
+    json.loads nicht parsen kann.
+    """
+    return PipelineLLMResult(
+        text=raw_text,
+        model_id="vertex/gemini-2.5-flash@europe-central2",
+        tier="S1",
+        input_tokens=380,
+        output_tokens=508,
+        cache_read_tokens=0,
+        cache_write_tokens=0,
+        cost_usd=0.000749,
+    )
+
+
+# Real abgeschnittene Antwort aus dem Live-System (Server B, 2026-07-30):
+# das Thinking-Modell verbrauchte das max_tokens-Budget beim Nachdenken, die
+# sichtbare Antwort brach mitten im zweiten Feld ab.
+_TRUNCATED_JSON = '{\n  "intent": "answer_to_question",\n  "session_'
+
+
+class TestLayer1TruncationRobustness:
+    """Ein abgeschnittener LLM-Output darf nicht zum Totalausfall fuehren.
+
+    Hintergrund: LAYER1 laeuft in Produktion auf einem Thinking-Modell
+    (PIPELINE_TIER_DEFAULT=S1 -> vertex/gemini-2.5-flash). Unsichtbare
+    Reasoning-Token teilen sich das max_tokens-Budget mit der Antwort, also
+    bricht die Antwort gelegentlich mitten im JSON ab (live gemessen: 1 von 10
+    Laeufen bei max_tokens=512).
+    """
+
+    def test_parse_error_triggers_new_llm_call(self):
+        """Nach einem Parse-Fehler muss das Modell ERNEUT gefragt werden.
+
+        Vorher wurde derselbe kaputte Rohtext ein zweites Mal geparst — ein
+        Retry, der seine Eingabe nicht aendert, kann per Konstruktion nie
+        gelingen. Beide Fehlversuche landeten in derselben Millisekunde im Log.
+        """
+        truncated = _make_raw_llm_result(_TRUNCATED_JSON)
+        valid = _make_llm_result(_valid_response(intent="answer_to_question"))
+
+        with patch(
+            "services.layer1_extraction.call_pipeline_llm",
+            side_effect=[truncated, valid],
+        ) as mock_call:
+            result = extract_intent_features(
+                transcript="Der Moment war, als er seine eigene Liste erklaeren musste.",
+                tenant_id="tenant_test",
+            )
+
+        assert (
+            mock_call.call_count == 2
+        ), "Parse-Fehler muss einen echten zweiten LLM-Call ausloesen"
+        assert result.intent == "answer_to_question"
+        assert result.routed_to == "ok"
+
+    def test_parse_error_twice_routes_to_reviewer_queue(self):
+        """Scheitert auch der zweite echte Versuch, wird ehrlich eskaliert."""
+        truncated = _make_raw_llm_result(_TRUNCATED_JSON)
+
+        with patch(
+            "services.layer1_extraction.call_pipeline_llm",
+            side_effect=[truncated, truncated],
+        ) as mock_call:
+            result = extract_intent_features(
+                transcript="Irgendein Gedanke.",
+                tenant_id="tenant_test",
+            )
+
+        assert mock_call.call_count == 2
+        assert result.routed_to == "reviewer_queue"
+        assert "json_parse_error" in result.flag_reasons
+
+
+class TestThinkingModelTokenBudget:
+    """max_tokens muss Platz fuer unsichtbare Reasoning-Token lassen.
+
+    Die sichtbare LAYER1-Antwort ist ~300 Zeichen (~90 Token) und passt
+    theoretisch in 512. Auf einem Thinking-Modell zaehlt aber das Nachdenken
+    gegen dasselbe Budget. Live gemessen auf Server B (2026-07-30):
+    max_tokens=512 -> 1 von 10 Laeufen abgeschnitten;
+    max_tokens=2000 -> 0 von 15 Laeufen abgeschnitten.
+    """
+
+    THINKING_HEADROOM = 2000
+
+    def test_layer1_budget_has_thinking_headroom(self):
+        assert PROMPT_MAX_TOKENS["LAYER1"] >= self.THINKING_HEADROOM
+
+    def test_p08_budget_has_thinking_headroom(self):
+        """P08 ist die Interview-Maschine — gleiche Groesse, gleiches Modell, gleiches Risiko."""
+        assert PROMPT_MAX_TOKENS["P08"] >= self.THINKING_HEADROOM

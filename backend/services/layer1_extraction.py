@@ -352,7 +352,36 @@ def extract_intent_features(
                     flag_reasons=[*flag_reasons, "json_parse_error"],
                     routed_to="reviewer_queue",
                 )
-            # On first parse error, retry without schema reminder (raw_output unchanged — loop continues)
+            # Ein Parse-Fehler bedeutet hier fast immer: die Antwort wurde abgeschnitten,
+            # weil das Thinking-Modell das max_tokens-Budget beim Nachdenken verbraucht hat.
+            # Denselben Rohtext ein zweites Mal zu parsen kann per Konstruktion nicht
+            # gelingen — vorher taten beide "Versuche" genau das und scheiterten in
+            # derselben Millisekunde. Also das Modell wirklich erneut fragen.
+            retry_content = (
+                user_content + "\n\nDeine vorherige Antwort war unvollständig bzw. kein "
+                "gültiges JSON. Antworte NUR mit dem vollständigen JSON-Objekt."
+            )
+            try:
+                res_retry = call_pipeline_llm(
+                    prompt_key="LAYER1",
+                    system_prompt=prompt.system_prompt,
+                    user_content=retry_content,
+                    tenant_id=tenant_id,
+                )
+            except Exception as retry_exc:
+                # Der zusätzliche Call darf keinen NEUEN Fehlerpfad aufmachen: vorher
+                # konnte hier nichts werfen (es gab keinen Call). Transportfehler
+                # degradieren deshalb genauso wie ein zweiter Parse-Fehler.
+                logger.error("[Layer1] Retry-Call fehlgeschlagen: %s", type(retry_exc).__name__)
+                return ExtractionResult(
+                    intent="unclassified",
+                    session_context="no_session",
+                    extracted_features={},
+                    flagged_for_review=True,
+                    flag_reasons=[*flag_reasons, "json_parse_error"],
+                    routed_to="reviewer_queue",
+                )
+            raw_output = res_retry.text.strip()
 
     # --- 8. Merge flags from pattern check + LLM output ---
     llm_flagged = data.get("flagged_for_review", False)

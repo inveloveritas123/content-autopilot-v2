@@ -78,13 +78,19 @@ PROMPT_MAX_TOKENS: dict[str, int] = {
     "P02": 2000,  # Website-Analyse — kompakte JSON-Zusammenfassung (Issue #39)
     "P03": 16384,  # Voice-Profil-JSON (12 Dimensionen) — 8192 truncatete real (Hotpatch 2026-07-27, #62)
     "P04": 16384,  # Audience-Avatar-JSON — analog zu P01/P03
-    "P08": 512,  # Conversation turns — kurze JSON-Antworten (next_action/message/quality)
+    # ⚠️ Thinking-Modelle teilen sich max_tokens zwischen unsichtbarem Reasoning und
+    # der Antwort. In Produktion setzt PIPELINE_TIER_DEFAULT=S1 ALLE Prompts auf
+    # vertex/gemini-2.5-flash (ein Thinking-Modell), also ist ein Budget, das nur die
+    # sichtbare Antwort abdeckt, zu knapp — die Antwort bricht dann mitten im JSON ab.
+    # Live gemessen (Server B, 2026-07-30): 512 → 1 von 10 Läufen abgeschnitten,
+    # 2000 → 0 von 15. Kosten steigen dadurch nicht: abgerechnet wird, was erzeugt wird.
+    "P08": 2000,  # Conversation turns — kurze JSON-Antworten (next_action/message/quality)
     "P12": 8192,  # Post-Generierung aus Interview — 2000 truncatete real (#62)
     "P12B": 8192,  # P12b Nachbearbeitung, gleiche Groessenordnung wie P12 (#62)
     "P12C": 1024,
     "SENSITIVE_DETECT": 512,
     "MD_CONVERT_P03": 2000,
-    "LAYER1": 512,  # Kompaktes JSON (5 Felder) — gleiche Größenordnung wie P08
+    "LAYER1": 2000,  # Kompaktes JSON (5 Felder) — Thinking-Headroom, siehe Kommentar bei P08
     "VOICE_FALLBACK": 16384,  # Fallback-Voice-Profil JSON — P03-strukturiert, gleiche Größe
     "P17": 2000,  # Drift-Proposals (voice/values/avatar) als JSON
 }
