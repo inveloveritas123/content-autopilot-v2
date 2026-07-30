@@ -834,3 +834,70 @@ class TestManualIdeaPendingChoice:
         with patch.object(p13, "sync_session_factory", return_value=db):
             p13._create_manual_idea("tenant-1", "Ein Gedanke", "log-2")
         assert _captured_idea_ctx(db).get("chat_variant_choice_pending") is True
+
+
+# ---------------------------------------------------------------------------
+# 7. Gescheiterter Interview-Start gibt die Nachricht wieder frei (PR 2, Review B1)
+# ---------------------------------------------------------------------------
+
+
+class TestDetachSourceLogOnFailure:
+    """`start_targeted_session_task` lädt bei Fehlschlag zum erneuten Versuch ein.
+
+    Bliebe die Idee an ihre `source_log_id` gebunden, fände `_idea_exists_for_log`
+    sie beim zweiten Knopfdruck und der Bot antwortete „Daran arbeite ich schon" —
+    auf eine Wiederholung, zu der er selbst aufgefordert hat, während weder eine
+    Session noch ein Task existiert. Der Knopf wäre für diese Nachricht dauerhaft tot.
+    """
+
+    def test_fehlgeschlagener_start_loest_die_idee_von_der_nachricht(self):
+        with (
+            patch.object(p13, "_start_targeted_session", return_value=None),
+            patch.object(p13, "_send_start_failed_notice"),
+            patch.object(p13, "_detach_source_log") as detach,
+        ):
+            result = p13.start_targeted_session_task(None, "tenant-1", "idea-9")
+
+        assert result["status"] == "failed"
+        detach.assert_called_once_with("tenant-1", "idea-9")
+
+    def test_freigabe_kommt_vor_der_einladung_zum_wiederholen(self):
+        """Reihenfolge zählt: erst lösen, dann zum Retry einladen."""
+        calls: list[str] = []
+        with (
+            patch.object(p13, "_start_targeted_session", return_value=None),
+            patch.object(p13, "_detach_source_log", side_effect=lambda *a: calls.append("detach")),
+            patch.object(
+                p13, "_send_start_failed_notice", side_effect=lambda *a: calls.append("notice")
+            ),
+        ):
+            p13.start_targeted_session_task(None, "tenant-1", "idea-9")
+
+        assert calls == ["detach", "notice"]
+
+    def test_erfolgreicher_start_loest_nichts(self):
+        with (
+            patch.object(p13, "_start_targeted_session", return_value={"session_id": "s1"}),
+            patch.object(p13, "_detach_source_log") as detach,
+        ):
+            result = p13.start_targeted_session_task(None, "tenant-1", "idea-9")
+
+        assert result["status"] == "ok"
+        detach.assert_not_called()
+
+    def test_detach_ist_tenant_gescopet(self):
+        db = _make_db(fetchone_val=None)
+        with patch.object(p13, "sync_session_factory", return_value=db):
+            p13._detach_source_log("tenant-1", "idea-9")
+
+        sql = str(db.execute.call_args.args[0])
+        params = db.execute.call_args.args[1]
+        assert "tenant_id = :tid" in sql
+        assert "source_context - 'source_log_id'" in sql
+        assert params == {"iid": "idea-9", "tid": "tenant-1"}
+
+    def test_detach_db_fehler_bleibt_still(self):
+        broken = MagicMock()
+        broken.__enter__ = MagicMock(side_effect=RuntimeError("db down"))
+        with patch.object(p13, "sync_session_factory", return_value=broken):
+            p13._detach_source_log("tenant-1", "idea-9")  # kein Raise

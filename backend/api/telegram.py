@@ -969,7 +969,7 @@ def _load_message_text(tenant_id: str, log_id: str) -> str:
             row = db.execute(
                 text(
                     "SELECT transcript_text, original_payload FROM telegram_message_log "
-                    "WHERE id = :lid AND tenant_id = :tid"
+                    "WHERE id = :lid AND tenant_id = :tid AND direction = 'in'"
                 ),
                 {"lid": log_id, "tid": tenant_id},
             ).fetchone()
@@ -1073,6 +1073,15 @@ def _start_post_from_message(tenant_id: str, chat_id: int, log_id: str) -> None:
         start_targeted_session_task.delay(tenant_id=tenant_id, idea_id=idea_id)
     except Exception as exc:
         logger.warning("targeted session enqueue failed: %s", type(exc).__name__)
+        # Die Idee ist bereits committet. Ohne dieses Lösen wäre der gleich folgende
+        # Rat „versuch es gleich nochmal" eine Falle: der Doppeldruck-Schutz fände
+        # sie und antwortete „Daran arbeite ich schon", obwohl nichts läuft.
+        try:
+            from tasks.p13_variants_task import _detach_source_log
+
+            _detach_source_log(tenant_id, idea_id)
+        except Exception as detach_exc:
+            logger.warning("detach after enqueue failure: %s", type(detach_exc).__name__)
         _send_telegram_message(chat_id, _CHOICE_RETRY_TEXT, tenant_id=tenant_id)
         return
 

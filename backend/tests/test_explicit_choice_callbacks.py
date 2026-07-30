@@ -72,9 +72,12 @@ def _press(
     if enqueue_raises:
         p13.start_targeted_session_task.delay.side_effect = RuntimeError("broker down")
     p13._create_manual_idea = MagicMock(return_value=idea_id)
-    # Ruft der Produktionscode das je direkt auf, läuft ein LLM-Call synchron im
-    # Poller — der Mock macht das sichtbar, statt es zu verstecken.
+    p13._detach_source_log = MagicMock()
+    # Beide Wege in den LLM-Call, die den Poller blockieren würden. Ruft der
+    # Produktionscode einen davon direkt auf, macht der Mock es sichtbar.
     p13._start_targeted_session = MagicMock()
+    p08 = types.ModuleType("services.p08_service")
+    p08.p08_opener = MagicMock()
 
     tt = types.ModuleType("tasks.telegram_task")
     tt._load_active_session = MagicMock(return_value=object() if session_active else None)
@@ -86,10 +89,20 @@ def _press(
         patch("services.telegram_token_resolver.get_tenant_bot_token", return_value=None),
         patch.dict(
             sys.modules,
-            {"tasks.p13_variants_task": p13, "tasks.telegram_task": tt},
+            {
+                "tasks.p13_variants_task": p13,
+                "tasks.telegram_task": tt,
+                "services.p08_service": p08,
+            },
         ),
     ):
         tg._handle_callback_query(_cq(data), known_tenant_id=TENANT)
+
+    # Invariante für JEDEN Knopfdruck, nicht nur den Erfolgsfall: der Callback läuft
+    # im Poller, der Bots und Updates sequenziell abarbeitet. Ein LLM-Call mit bis zu
+    # 3×300 s Timeout blockiert dort die Zustellung für ALLE Tenants.
+    assert not p13._start_targeted_session.called, "Interview-Start lief synchron"
+    assert not p08.p08_opener.called, "p08_opener lief synchron im Callback"
     return p13, send
 
 
@@ -109,7 +122,6 @@ class TestMsgPostCallback:
         p13.start_targeted_session_task.delay.assert_called_once_with(
             tenant_id=TENANT, idea_id="idea-1"
         )
-        assert not p13._start_targeted_session.called, "LLM-Call darf nicht im Poller hängen"
         assert "Rückfragen" in _sent_text(send)
 
     def test_idee_wird_ohne_varianten_marker_angelegt(self):
@@ -165,6 +177,35 @@ class TestMsgPostCallback:
         assert "nicht geklappt" in _sent_text(send)
         assert "Rückfragen" not in _sent_text(send)
 
+    def test_broker_ausfall_gibt_die_nachricht_wieder_frei(self):
+        """Sonst wäre „versuch es gleich nochmal" eine Falle.
+
+        Die Idee ist beim Enqueue-Fehler schon committet. Bliebe sie an die log_id
+        gebunden, fände `_idea_exists_for_log` sie beim zweiten Druck und der Bot
+        antwortete „Daran arbeite ich schon" — auf eine Wiederholung, zu der er
+        selbst aufgefordert hat, während nichts läuft. Der Knopf wäre tot.
+        """
+        p13, _send = _press(f"cmd:msg_post:{LOG}", enqueue_raises=True)
+
+        p13._detach_source_log.assert_called_once_with(TENANT, "idea-1")
+
+
+class TestChoiceKeyboard:
+    def test_callback_data_bleibt_unter_telegrams_64_byte_grenze(self):
+        """Eine UUID als log_id ist der reale Fall — knapp genug, um es zu prüfen."""
+        markup = tg._choice_keyboard(LOG)
+        datas = [b["callback_data"] for row in markup["inline_keyboard"] for b in row]
+
+        assert datas == [f"cmd:msg_post:{LOG}", f"cmd:msg_keep:{LOG}"]
+        for d in datas:
+            assert len(d.encode("utf-8")) <= 64, f"{d} = {len(d.encode('utf-8'))} Byte"
+
+    def test_frisches_dict_je_aufruf(self):
+        """Ein geteiltes Modul-Dict könnte ein Caller mutieren."""
+        first = tg._choice_keyboard(LOG)
+        first["inline_keyboard"].clear()
+        assert len(tg._choice_keyboard(LOG)["inline_keyboard"]) == 2
+
 
 # ---------------------------------------------------------------------------
 # 2. [🗄 Nur merken]
@@ -205,6 +246,7 @@ class TestLoadMessageText:
         sql = str(db.execute.call_args.args[0])
         params = db.execute.call_args.args[1]
         assert "tenant_id = :tid" in sql
+        assert "direction = 'in'" in sql, "auch ausgehende Zeilen wären lesbar"
         assert params["tid"] == TENANT
 
     def test_nimmt_transkript_wenn_vorhanden(self):

@@ -556,9 +556,40 @@ def start_targeted_session_task(self, tenant_id: str, idea_id: str) -> dict:
     """
     result = _start_targeted_session(tenant_id, idea_id)
     if result is None:
+        # Erst die Idee von ihrer Ursprungsnachricht lösen, dann zum Wiederholen
+        # einladen — sonst ist die Einladung eine Falle (siehe _detach_source_log).
+        _detach_source_log(tenant_id, idea_id)
         _send_start_failed_notice(tenant_id)
         return {"status": "failed", "reason": "start_targeted_session_returned_none"}
     return {"status": "ok", "session_id": result.get("session_id")}
+
+
+def _detach_source_log(tenant_id: str, idea_id: str) -> None:
+    """Löst eine Idee von ihrer Ursprungsnachricht (tenant-gescopet).
+
+    Scheitert der Interview-Start, lädt der Bot wörtlich zum erneuten Versuch ein
+    („versuch es gleich nochmal"). Bliebe `source_log_id` im source_context stehen,
+    fände `_idea_exists_for_log` beim zweiten Knopfdruck genau diese Idee und der
+    Bot antwortete „Daran arbeite ich schon" — auf eine Wiederholung, zu der er
+    selbst aufgefordert hat, während nichts läuft: keine Session, kein Task.
+    Der Knopf wäre für diese Nachricht dauerhaft tot.
+
+    Die Idee selbst bleibt bestehen; sie taucht weiter im Ideen-Menü auf. Gelöscht
+    wird nichts — nur der Idempotenz-Schlüssel freigegeben.
+    """
+    try:
+        with sync_session_factory() as db:
+            db.execute(
+                text(
+                    "UPDATE content_ideas "
+                    "SET source_context = source_context - 'source_log_id' "
+                    "WHERE id = :iid AND tenant_id = :tid"
+                ),
+                {"iid": idea_id, "tid": tenant_id},
+            )
+            db.commit()
+    except Exception as exc:
+        logger.warning("p13_task: detach source_log failed: %s", type(exc).__name__)
 
 
 def _send_start_failed_notice(tenant_id: str) -> None:

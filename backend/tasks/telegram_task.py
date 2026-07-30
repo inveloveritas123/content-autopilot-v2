@@ -143,8 +143,12 @@ def _awaits_user_choice(tenant_id: str, text_content: str) -> bool:
     der Bot nach. Nur wenn ein bestehender Pfad die Nachricht nachweislich
     erwartet, bleibt es beim alten Verhalten.
 
-    Fail-open zu False — im Zweifel heutiges Verhalten, nie ein Absturz des
-    Chunk-Returns.
+    Fail-open zu False, und die Richtung ist Absicht: Wirft z. B.
+    `_load_active_session`, wissen wir nicht, ob ein Interview läuft. False führt
+    zurück in `_route_inbound_message`, das die Session selbst noch einmal lädt —
+    eine laufende Antwort geht also nicht verloren. True („im Zweifel fragen")
+    wäre hier gefährlicher: es würde die Antwort auf eine offene Interview-Frage
+    verwerfen und das Gespräch stehen lassen.
     """
     try:
         if _load_active_session(tenant_id) is not None:
@@ -706,9 +710,13 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
     # und es läuft kein LLM-Rateschritt. Nur für Telegram: die Buttons sind ein
     # Inline-Keyboard, das der WhatsApp-Adapter nicht kennt.
     if channel == "telegram" and _awaits_user_choice(tenant_id, transcript):
-        if chat_id_voice:
-            _send_choice_prompt(tenant_id, chat_id_voice, log_id, transcript, "🎤")
+        # Fallback auf den Tenant-Chat: fehlt „chat" im Payload, wäre die Nachricht
+        # sonst ohne jede Reaktion zu Ende — der Zustand, den diese PR beseitigt.
+        target_chat = chat_id_voice or _resolve_chat_id(tenant_id)
         result_dict["routed_to"] = "awaiting_user_choice"
+        result_dict["choice_prompt_sent"] = bool(target_chat) and _send_choice_prompt(
+            tenant_id, target_chat, log_id, transcript, "🎤"
+        )
         return result_dict
 
     # Bestätigung an den Nutzer senden
@@ -855,9 +863,11 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
 
     # PR 2 — dieselbe Weiche wie im Voice-Pfad (Louis, 30.07.: Text-Parität).
     if channel == "telegram" and _awaits_user_choice(tenant_id, text_content):
-        if chat_id:
-            _send_choice_prompt(tenant_id, chat_id, log_id, text_content, "📝")
+        target_chat = chat_id or _resolve_chat_id(tenant_id)
         result_dict["routed_to"] = "awaiting_user_choice"
+        result_dict["choice_prompt_sent"] = bool(target_chat) and _send_choice_prompt(
+            tenant_id, target_chat, log_id, text_content, "📝"
+        )
         return result_dict
 
     routing_info = _route_inbound_message(tenant_id, text_content, log_id=log_id)

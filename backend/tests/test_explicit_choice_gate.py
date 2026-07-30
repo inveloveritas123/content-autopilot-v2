@@ -15,10 +15,29 @@ telegram_task` (vgl. tests/_telegram_task_env.py).
 
 from __future__ import annotations
 
+import importlib.util as _ilu
+import os
+import sys
 import types as _types
 from unittest.mock import MagicMock, patch
 
 from tests._telegram_task_env import active_session, make_guard_db_mock, tt
+
+# `_telegram_task_env` legt für api.telegram einen Stub ohne `_choice_keyboard` ab.
+# `_send_choice_prompt` importiert den Helfer lazy und fängt ImportError still —
+# ohne echtes Modul liefe dieser Test grün ins Leere bzw. scheiterte mit einem
+# irreführenden AttributeError auf dem Sender-Mock. Verlassen wir uns darauf, dass
+# eine alphabetisch frühere Datei das echte Modul schon geladen hat, bricht der
+# Test beim ersten Umbenennen. Also hier selbst sicherstellen.
+_BACKEND = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+_existing_tg = sys.modules.get("api.telegram")
+if _existing_tg is None or not hasattr(_existing_tg, "_choice_keyboard"):
+    _tg_spec = _ilu.spec_from_file_location(
+        "api.telegram", os.path.join(_BACKEND, "api", "telegram.py")
+    )
+    _tg_mod = _ilu.module_from_spec(_tg_spec)
+    sys.modules["api.telegram"] = _tg_mod
+    _tg_spec.loader.exec_module(_tg_mod)
 
 # ---------------------------------------------------------------------------
 # 1. _awaits_user_choice — die Weiche selbst
@@ -205,3 +224,137 @@ class TestProcessVoiceSendsChoice:
         assert result.get("routed_to") != "awaiting_user_choice"
         mock_route.assert_called_once()
         assert sender.call_args.kwargs.get("reply_markup") is None
+
+
+# ---------------------------------------------------------------------------
+# 4. Abgrenzungen, die im Code stimmen und ungeschützt waren
+# ---------------------------------------------------------------------------
+
+
+class TestChannelBoundary:
+    @patch("tasks.telegram_task._route_inbound_message", return_value=None)
+    @patch("tasks.telegram_task._awaits_user_choice", return_value=True)
+    @patch("tasks.telegram_task._store_chunk_async", new_callable=MagicMock)
+    @patch("tasks.telegram_task.asyncio.run")
+    def test_whatsapp_bekommt_keine_inline_buttons(self, mock_run, _store, _gate, mock_route):
+        """Inline-Keyboards sind Telegram-spezifisch — der Adapter kennt sie nicht."""
+        mock_run.return_value = "chunk-w"
+        sender = MagicMock(return_value=True)
+        with (
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+            patch("api.telegram._send_telegram_message", sender),
+        ):
+            result = tt._process_text(
+                "log-wa",
+                "tenant-1",
+                {"text": "Ein Gedanke über WhatsApp geschickt.", "_channel": "whatsapp"},
+            )
+
+        assert result.get("routed_to") != "awaiting_user_choice"
+        mock_route.assert_called_once()
+        sender.assert_not_called()
+
+
+_cih_spec = _ilu.spec_from_file_location(
+    "chat_intent_heuristics_real_test",
+    os.path.join(_BACKEND, "services", "chat_intent_heuristics.py"),
+)
+_cih_real = _ilu.module_from_spec(_cih_spec)
+_cih_spec.loader.exec_module(_cih_real)
+
+
+class TestAwaitsUserChoiceMitEchterHeuristik:
+    """Mit der ECHTEN `is_idea_request` statt dem Stub aus `_telegram_task_env`.
+
+    „Einfach nicht patchen" genügt hier nicht: die Stub-Umgebung ersetzt
+    `services.chat_intent_heuristics` vollständig durch MagicMocks mit
+    `return_value=False`. Ein Test ohne Patch prüfte also nicht die Regex, sondern
+    einen Mock — grün, ohne irgendetwas zu belegen. Deshalb wird die echte Funktion
+    explizit eingesetzt.
+    """
+
+    @patch("services.chat_intent_heuristics.is_idea_request", _cih_real.is_idea_request)
+    @patch("tasks.telegram_task._is_pending_variant_choice", return_value=False)
+    @patch("tasks.telegram_task._load_active_session", return_value=None)
+    def test_echte_ideen_anfrage_wird_erkannt(self, _sess, _pend):
+        assert tt._awaits_user_choice("tenant-1", "gib mir Ideen für einen Post") is False
+
+    @patch("services.chat_intent_heuristics.is_idea_request", _cih_real.is_idea_request)
+    @patch("tasks.telegram_task._is_pending_variant_choice", return_value=False)
+    @patch("tasks.telegram_task._load_active_session", return_value=None)
+    def test_echte_erzaehlung_wartet_auf_wahl(self, _sess, _pend):
+        assert (
+            tt._awaits_user_choice(
+                "tenant-1", "Heute war ich bei einem Kunden und wir sprachen über Preise."
+            )
+            is True
+        )
+
+
+class TestChatIdFallback:
+    """Fehlt „chat" im Payload, wäre die Nachricht sonst ohne jede Reaktion zu Ende.
+
+    Genau der Zustand, den diese PR beseitigt — er darf nicht durch die Hintertür
+    zurückkommen, nur weil ein Payload-Feld fehlt.
+    """
+
+    @patch("tasks.telegram_task._resolve_chat_id", return_value=999)
+    @patch("tasks.telegram_task._route_inbound_message")
+    @patch("tasks.telegram_task._awaits_user_choice", return_value=True)
+    @patch("tasks.telegram_task._store_chunk_async", new_callable=MagicMock)
+    @patch("tasks.telegram_task.asyncio.run")
+    def test_ohne_chat_im_payload_wird_der_tenant_chat_genutzt(
+        self, mock_run, _store, _gate, _route, _resolve
+    ):
+        mock_run.return_value = "chunk-f"
+        sender = MagicMock(return_value=True)
+        with (
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+            patch("api.telegram._send_telegram_message", sender),
+        ):
+            result = tt._process_text(
+                "log-f1", "tenant-1", {"text": "Ein Gedanke ohne chat-Schlüssel im Payload."}
+            )
+
+        assert sender.call_args.args[0] == 999
+        assert result["choice_prompt_sent"] is True
+
+    @patch("tasks.telegram_task._resolve_chat_id", return_value=None)
+    @patch("tasks.telegram_task._route_inbound_message")
+    @patch("tasks.telegram_task._awaits_user_choice", return_value=True)
+    @patch("tasks.telegram_task._store_chunk_async", new_callable=MagicMock)
+    @patch("tasks.telegram_task.asyncio.run")
+    def test_kein_chat_auffindbar_wird_ehrlich_vermerkt(
+        self, mock_run, _store, _gate, _route, _resolve
+    ):
+        """Kein erfundener Erfolg: das Ergebnis-Dict sagt, dass nichts ankam."""
+        mock_run.return_value = "chunk-f2"
+        sender = MagicMock(return_value=True)
+        with (
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+            patch("api.telegram._send_telegram_message", sender),
+        ):
+            result = tt._process_text("log-f2", "tenant-1", {"text": "Ein Gedanke ins Leere."})
+
+        sender.assert_not_called()
+        assert result["choice_prompt_sent"] is False
+
+    @patch("tasks.telegram_task._resolve_chat_id", return_value=999)
+    @patch("tasks.telegram_task._route_inbound_message")
+    @patch("tasks.telegram_task._awaits_user_choice", return_value=True)
+    @patch("tasks.telegram_task._store_chunk_async", new_callable=MagicMock)
+    @patch("tasks.telegram_task.asyncio.run")
+    def test_nicht_zugestellter_prompt_wird_nicht_als_erfolg_verbucht(
+        self, mock_run, _store, _gate, _route, _resolve
+    ):
+        """_send_telegram_message WIRFT nicht, es gibt False zurück."""
+        mock_run.return_value = "chunk-f3"
+        sender = MagicMock(return_value=False)
+        with (
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+            patch("api.telegram._send_telegram_message", sender),
+        ):
+            result = tt._process_text("log-f3", "tenant-1", {"text": "Telegram antwortet 429."})
+
+        assert result["choice_prompt_sent"] is False
+        assert result["routed_to"] == "awaiting_user_choice"
