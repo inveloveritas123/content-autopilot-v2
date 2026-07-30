@@ -173,5 +173,13 @@ celery_app.conf.include = [
     "tasks.drift_monitor_task",
     "tasks.values_backfill_task",
     "tasks.telegram_poll_task",
+    # Beide werden aus api/telegram.py per .delay() aus dem Button-Callback
+    # angestoßen (C7 „Idee ausarbeiten", C8 „Neue Ideen generieren"). Ohne
+    # Eintrag hier hängt die Registrierung im Worker davon ab, ob irgendein
+    # anderer Codepfad das Modul im selben Prozess schon importiert hat —
+    # sonst NotRegistered. Beide haben nur leichte Modul-Importe (sqlalchemy,
+    # models.base, celery_app), also kein Zirkel-Risiko beim Worker-Start.
+    "tasks.p13_variants_task",
+    "tasks.p09_chat_ideas_task",
     "api.wizard",
 ]

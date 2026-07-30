@@ -29,6 +29,7 @@ os.environ.setdefault("DEFAULT_TENANT_KEY", "test-key-32-chars-padded-xxxxxxx")
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "x")
 
 import importlib.util as _ilu
+import pathlib
 import sys
 import types
 from unittest.mock import MagicMock, patch
@@ -150,3 +151,31 @@ class TestPickIdeaFailurePaths:
         assert (
             "nicht geklappt" in text or "nochmal" in text
         ), "Fehlgeschlagener Start bleibt für den Tester unsichtbar"
+
+
+class TestEnqueuedTaskIsRegisteredInTheWorker:
+    """Ein .delay() nützt nichts, wenn der Worker den Task nicht kennt.
+
+    `celery_app.conf.include` bestimmt, welche Module der Worker beim Start
+    importiert — nur dadurch landen ihre Tasks deterministisch in der Registry.
+    Fehlt das Modul, hängt es davon ab, ob zufällig ein anderer Codepfad es im
+    selben Worker-Prozess schon importiert hat; sonst NotRegistered.
+
+    Statischer Check gegen die Quelldatei, nicht gegen `celery_app.conf`:
+    `conftest.py` stubbt celery, dort wäre `conf.include` immer leer.
+    """
+
+    def _include_block(self) -> str:
+        return (pathlib.Path(_BACKEND) / "tasks" / "celery_app.py").read_text()
+
+    def test_p13_module_is_included(self):
+        assert '"tasks.p13_variants_task"' in self._include_block(), (
+            "start_targeted_session_task wird enqueued, das Modul steht aber nicht "
+            "in celery_app.conf.include → NotRegistered im Worker möglich"
+        )
+
+    def test_p09_module_is_included(self):
+        assert '"tasks.p09_chat_ideas_task"' in self._include_block(), (
+            "deliver_ideas_to_chat wird enqueued, das Modul steht aber nicht "
+            "in celery_app.conf.include → NotRegistered im Worker möglich"
+        )
