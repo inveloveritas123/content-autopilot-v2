@@ -178,8 +178,15 @@ if "api" not in sys.modules:
     _api_pkg.__path__ = []
 
 _api_tg = _ensure_stub("api.telegram")
-_dispatch_mock = MagicMock()
-_api_tg.dispatch_inbound_update = _dispatch_mock
+# NUR stubben, wenn hier wirklich ein Stub steht. _ensure_stub gibt ein bereits
+# geladenes ECHTES api.telegram unverändert zurück — ein unbedingtes Überschreiben
+# ersetzt dort die Produktionsfunktion DAUERHAFT (Modul-Ebene läuft beim Collect,
+# ohne Teardown). Jede alphabetisch später gesammelte Testdatei bekäme dann einen
+# No-Op-Mock statt dispatch_inbound_update und sähe stumme Nicht-Aufrufe.
+# Die Tests, die den Dispatch beobachten, patchen ihn ohnehin lokal per
+# patch.object() (:405/:446/:559) — hier muss das Attribut nur EXISTIEREN.
+if not hasattr(_api_tg, "dispatch_inbound_update"):
+    _api_tg.dispatch_inbound_update = MagicMock()
 
 # services.telegram_token_resolver — eigenes Stub-Modul (NICHT _ensure_stub —
 # test_telegram_outbound_pertenant lädt das echte Modul, _ensure_stub würde es

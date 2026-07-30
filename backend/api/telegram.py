@@ -328,6 +328,39 @@ def _send_admin_telegram_message(chat_id: int, text_msg: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _welcome_text(headline: str) -> str:
+    """Erstkontakt-Text: erklärt den Kernweg (Sprachnachricht → Post).
+
+    EIN Text für beide Eintrittspunkte — `/start <token>` (frisch verbunden) und
+    `/start` ohne Token (bereits verbunden, der Normalfall im Polling-Pfad). Vorher
+    hing die Anleitung daran, ob zufällig ein Token dabei war; ohne Token bekam der
+    Tester nur „✅ Du bist bereits verbunden!" und stand vor einer Sackgasse.
+
+    Die genannten Entwurfs-Buttons müssen mit `_draft_action_keyboard` übereinstimmen —
+    ein Hilfetext, der Knöpfe verspricht, die anders heißen, ist derselbe Defekt wie
+    ein falscher Zeitplan im /help.
+    """
+    return (
+        f"{headline}\n\n"
+        "So funktioniert's:\n"
+        "• 🎙 Schick mir eine Sprachnachricht mit einem Gedanken oder Erlebnis — "
+        "daraus wird ein LinkedIn-Post in deiner Stimme.\n"
+        "• 💡 Oder lass dir Ideen vorschlagen und wähl eine aus.\n"
+        "• Jeden Entwurf bekommst du mit [✅ Freigeben] [✏️ Nochmal anders] [❌ Verwerfen].\n\n"
+        "Tippe /help für die Übersicht."
+    )
+
+
+def _welcome_keyboard() -> dict:
+    """Beide Einstiege des Erstkontakts. Frisches Dict je Aufruf (Caller mutieren)."""
+    return {
+        "inline_keyboard": [
+            [{"text": "🧠 So liest KI mich", "callback_data": "cmd:ki_profil"}],
+            [{"text": "💡 Ideen holen", "callback_data": "cmd:brainstorming"}],
+        ]
+    }
+
+
 def _handle_start_command(message: dict, token: str, expected_tenant_id: str | None = None) -> None:
     """Verify one-time token, activate tenant_telegram_link.
 
@@ -417,9 +450,9 @@ def _handle_start_command(message: dict, token: str, expected_tenant_id: str | N
 
     _send_telegram_message(
         chat_id,
-        f"Verbunden mit {slug}. "
-        "Ab sofort schicke ich dir Fragen und du kannst mir Sprachnachrichten zurückgeben.",
+        _welcome_text(f"✅ Verbunden mit {slug}!"),
         tenant_id=str(tenant_id),
+        reply_markup=_welcome_keyboard(),
     )
 
 
@@ -1268,10 +1301,14 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
             if token_arg:
                 _handle_start_command(message, token_arg, expected_tenant_id=tenant_id)
             else:
+                # C1: derselbe Erstkontakt wie nach dem Token-Link. Ein bereits
+                # verbundener Tester tippt genau das — und bekam bisher nur eine
+                # Bestätigung ohne Anleitung und ohne Button.
                 _send_telegram_message(
                     chat_id_for_dispatch,
-                    "✅ Du bist bereits verbunden!\n\nSchick mir Gedanken, Sprachnachrichten oder Fotos — ich behalte alles im Gedächtnis.\n\n/help zeigt alle Kommandos.",
+                    _welcome_text("✅ Du bist verbunden!"),
                     tenant_id=tenant_id,
+                    reply_markup=_welcome_keyboard(),
                 )
             return
 
