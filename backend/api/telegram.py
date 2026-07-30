@@ -990,7 +990,16 @@ def _load_message_text(tenant_id: str, log_id: str) -> str:
     return ""
 
 
-_DOUBLE_PRESS_WINDOW_MIN = 15
+# ⚠️ Dieser Wert hat eine UNTERE Schranke, keine obere. Er muss länger sein als der
+# Worst Case von `p08_opener`: `pipeline_llm.py` rechnet `request_timeout =
+# max(300, …)` bei `max_retries=3`, also ≥ 900 s = 15 Minuten für einen einzigen
+# Opener — plus Wartezeit in der Queue. Wird das Fenster darunter gedrückt, ist es
+# genau dann blind, wenn es gebraucht wird: Der Nutzer sieht „Moment", der Opener
+# hängt in Retries, er drückt erneut — und bekommt eine zweite Idee, einen zweiten
+# Task und zwei aktive Sessions, von denen die ältere ohne TTL zurückbleibt.
+# Die Kosten sind asymmetrisch: ein zu langes Fenster kostet „Nachricht neu
+# schicken", ein zu kurzes eine Geister-Session. Im Zweifel also nach oben irren.
+_DOUBLE_PRESS_WINDOW_MIN = 30
 
 
 def _idea_exists_for_log(tenant_id: str, log_id: str) -> bool | None:

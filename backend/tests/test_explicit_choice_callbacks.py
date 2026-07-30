@@ -299,6 +299,18 @@ class TestIdeaExistsForLog:
         assert "make_interval(mins => :window)" in sql
         assert params["window"] == tg._DOUBLE_PRESS_WINDOW_MIN
 
+    def test_fenster_ist_laenger_als_der_opener_worst_case(self):
+        """Friert die Kopplung an `p08_opener` ein — keine Tautologie.
+
+        `pipeline_llm.py` rechnet `request_timeout = max(300, …)` bei
+        `max_retries=3`, also >= 900 s = 15 Minuten fuer einen einzigen Opener,
+        plus Queue-Wartezeit. Faellt das Fenster darunter, ist der
+        Doppeldruck-Schutz genau dann blind, wenn er gebraucht wird: der Nutzer
+        drueckt waehrend der Retries erneut und bekommt eine zweite Idee, einen
+        zweiten Task und zwei aktive Sessions — die aeltere bleibt ohne TTL zurueck.
+        """
+        assert tg._DOUBLE_PRESS_WINDOW_MIN >= 15
+
     def test_db_fehler_ist_None_nicht_geraten(self):
         """Weder fail-open noch fail-closed — beides wäre eine Behauptung."""
         broken = MagicMock()
