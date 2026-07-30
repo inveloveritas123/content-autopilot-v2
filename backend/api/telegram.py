@@ -825,8 +825,12 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
             "• 💬 Text — direkt ins Gedächtnis\n"
             "• 📸 Foto — Inhalt erkannt & gespeichert\n\n"
             "─────────────────────────\n"
-            "💡 Proaktiver Dialog (Mo – Fr, 10 Uhr)\n"
-            "Jeden Werktagmorgen stelle ich dir eine Frage. "
+            # Der Default-Cron ist "0 9 * * 1,4" (services/random_smart_config.py),
+            # also Montag und Donnerstag um 9:00 — nicht werktäglich um 10. Der Cron
+            # ist pro Tenant konfigurierbar, deshalb "standardmäßig": der Satz bleibt
+            # wahr, auch wenn jemand den Rhythmus ändert.
+            "💡 Proaktiver Dialog\n"
+            "Standardmäßig montags und donnerstags morgens stelle ich dir eine Frage. "
             "Deine Antwort fließt direkt in deinen Content-Pool.\n\n"
             "─────────────────────────\n"
             "🔍 Befehle\n"
@@ -932,6 +936,8 @@ def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = N
         # bleiben tippbar, obwohl der Wizard entfernt ist. Ein stiller No-Op wäre
         # für den Tester ein kaputter Button.
         _send_telegram_message(chat_id, _VOICE_PROFILE_ORIGIN_TEXT, tenant_id=tenant_id_str)
+    elif data == "cmd:bs_generate":
+        _brainstorming_generate_ideas(tenant_id_str, chat_id)
     elif data.startswith("cmd:bs_pick:"):
         idea_id = data.split(":", 2)[2]
         _brainstorming_pick_idea(tenant_id_str, chat_id, idea_id)
@@ -1072,6 +1078,31 @@ def _send_brainstorming_menu(tenant_id: str, chat_id: int) -> None:
         "\n".join(lines)[:3500],
         tenant_id=tenant_id,
         reply_markup={"inline_keyboard": buttons},
+    )
+
+
+def _brainstorming_generate_ideas(tenant_id: str, chat_id: int) -> None:
+    """Löst eine frische Ideen-Runde aus (Button „🔄 Neue Ideen generieren").
+
+    Der Button existierte, war aber in keinem Callback-Zweig behandelt — ein Tipp
+    darauf tat schlicht nichts. Ohne `trigger_text` generiert P09 auf eigene Faust
+    aus den vorhandenen Quellen, statt zu einem vorgegebenen Thema zu arbeiten.
+    """
+    try:
+        from tasks.p09_chat_ideas_task import deliver_ideas_to_chat
+
+        deliver_ideas_to_chat.delay(tenant_id=tenant_id)
+    except Exception as e:
+        logger.warning("brainstorming_generate_ideas task failed: %s", e)
+        _send_telegram_message(
+            chat_id, "Fehler beim Starten der Ideen-Generierung.", tenant_id=tenant_id
+        )
+        return
+
+    _send_telegram_message(
+        chat_id,
+        "🔄 Ich sammle neue Ideen — das dauert einen Moment. Sie kommen hier im Chat an.",
+        tenant_id=tenant_id,
     )
 
 
