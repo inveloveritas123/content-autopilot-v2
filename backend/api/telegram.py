@@ -1246,6 +1246,7 @@ def _cancel_active_session(tenant_id: str, chat_id: int) -> bool:
     Returns:
         True, wenn eine Session beendet wurde; sonst False.
     """
+    row = None
     try:
         with sync_session_factory() as db:
             row = db.execute(
@@ -1258,25 +1259,28 @@ def _cancel_active_session(tenant_id: str, chat_id: int) -> bool:
                 {"tid": tenant_id},
             ).fetchone()
 
-            if row is None:
-                _send_telegram_message(
-                    chat_id,
-                    "Es läuft gerade kein Gespräch. Schick mir einfach eine "
-                    "Sprachnachricht oder tippe /help.",
-                    tenant_id=tenant_id,
+            if row is not None:
+                db.execute(
+                    text(
+                        "UPDATE bot_session SET status = 'expired', updated_at = NOW() "
+                        "WHERE id = :sid AND tenant_id = :tid"
+                    ),
+                    {"sid": row[0], "tid": tenant_id},
                 )
-                return False
-
-            db.execute(
-                text(
-                    "UPDATE bot_session SET status = 'expired', updated_at = NOW() "
-                    "WHERE id = :sid AND tenant_id = :tid"
-                ),
-                {"sid": row[0], "tid": tenant_id},
-            )
-            db.commit()
+                db.commit()
     except Exception as exc:
         logger.warning("_cancel_active_session failed: %s", type(exc).__name__)
+        return False
+
+    # Senden erst NACH dem Schließen der DB-Session — _send_telegram_message
+    # macht einen HTTP-Call mit 5s Timeout, dafür bleibt keine Verbindung offen.
+    if row is None:
+        _send_telegram_message(
+            chat_id,
+            "Es läuft gerade kein Gespräch. Schick mir einfach eine "
+            "Sprachnachricht oder tippe /help.",
+            tenant_id=tenant_id,
+        )
         return False
 
     _send_telegram_message(
