@@ -1,10 +1,13 @@
 """
 Brand Voice Service — Persoenliche Stimme des Unternehmers lernen und anwenden.
 
-Drei Lernquellen:
-1. Onboarding-Fragebogen (explizit: Werte, Tonalitaet, Zielgruppe)
-2. Bestehende Texte (Posts, E-Mails, Website-Texte)
-3. Unternehmer-Antworten (fortlaufend: aus dem Dialog-Workflow)
+Zwei Lernquellen:
+1. Bestehende Texte (Posts, E-Mails, Website-Texte)
+2. Unternehmer-Antworten (fortlaufend: aus dem Dialog-Workflow)
+
+Der frueher hier gelistete Onboarding-Fragebogen ist entfernt: das Stimmprofil
+entsteht ausschliesslich aus dem Setup-Gespraech (Transkript) und entwickelt
+sich danach nur automatisch weiter — der Kunde stellt nichts daran ein.
 
 Das Brand-Voice-Profil wird als JSONB im Tenant gespeichert und bei jeder
 Content-Generierung als Kontext mitgegeben.

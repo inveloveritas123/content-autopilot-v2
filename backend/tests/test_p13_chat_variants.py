@@ -769,3 +769,15 @@ class TestTargetedOpenerOffersAnExit:
             "session_id": "sess-9",
             "question_text": "Was war der Auslöser?",
         }
+
+    def test_undelivered_opener_rolls_the_session_back(self):
+        """`_send_telegram_message` WIRFT nicht, es gibt False zurück.
+
+        Ohne Auswertung bliebe eine aktive Session zurück, deren Frage der Nutzer
+        nie gesehen hat — ab dann schluckt sie jede seiner Nachrichten als Antwort
+        auf eine unsichtbare Frage (`_load_active_session`, kein TTL).
+        """
+        with patch.object(p13, "_expire_session") as expire:
+            result = self._start(MagicMock(return_value=False))
+        assert result is None, "nicht zugestellter Opener gilt trotzdem als Erfolg"
+        assert expire.called, "aktive Session bleibt als Falle zurück"

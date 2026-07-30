@@ -128,11 +128,24 @@ class TestGenerateIdeasButtonWorks:
         strukturell nicht sehen, deshalb dieser Bind gegen die echte Signatur.
         """
         fake_task, _ = self._press()
-        from tasks.p09_chat_ideas_task import deliver_ideas_to_chat
+
+        # ⚠️ NICHT `from tasks.p09_chat_ideas_task import …`: in der Vollsuite (und
+        # damit im CI) steht unter dem Namen der MagicMock-Stub aus
+        # `_telegram_task_env.py`, dessen Signatur `(*args, **kwargs)` ist — der
+        # Bind würde alles akzeptieren und der Test hätte nur allein Zähne.
+        # Deshalb das ECHTE Modul per Pfad unter privatem Namen laden (Muster
+        # test_p09_chat_ideas.py).
+        _p09_spec = _ilu.spec_from_file_location(
+            "p09_chat_ideas_signature_probe",
+            os.path.join(_BACKEND, "tasks", "p09_chat_ideas_task.py"),
+        )
+        _p09 = _ilu.module_from_spec(_p09_spec)
+        _p09_spec.loader.exec_module(_p09)
+        deliver_ideas_to_chat = _p09.deliver_ideas_to_chat
 
         # `conftest.py` stubbt celery, wenn es fehlt — dann ist der Task die nackte
         # Funktion und `self` steht noch in der Signatur. Genau deshalb greift die
-        # echte celery-Prüfung hier nie und der Defekt überlebte. Also `self`
+        # echte celery-Prüfung im Test nie und der Defekt überlebte. Also `self`
         # abziehen und binden wie `.delay()` es täte.
         sig = inspect.signature(deliver_ideas_to_chat)
         params = list(sig.parameters.values())

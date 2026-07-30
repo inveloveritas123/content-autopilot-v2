@@ -181,5 +181,10 @@ celery_app.conf.include = [
     # models.base, celery_app), also kein Zirkel-Risiko beim Worker-Start.
     "tasks.p13_variants_task",
     "tasks.p09_chat_ideas_task",
+    # Gleicher Defekt, seit PR #135 live: „✏️ Nochmal anders" (cmd:regenerate)
+    # enqueued regenerate_post_from_feedback aus demselben Callback-Pfad. Ohne
+    # Eintrag verwirft der Worker die Nachricht als unregistered — der Tester liest
+    # „kommt gleich" und bekommt nie etwas. Auch hier nur leichte Modul-Importe.
+    "tasks.post_feedback_task",
     "api.wizard",
 ]
