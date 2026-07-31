@@ -167,26 +167,34 @@ def _create_manual_idea(
                 source_id = str(source_row[0])
             else:
                 source_id = str(uuid.uuid4())
+                # `sources` hat weder `title` noch `status` — der Name der Quelle steht
+                # in `name` (NOT NULL). language/is_active tragen Server-Defaults und
+                # bleiben deshalb weg; Python-seitige Modell-Defaults greifen bei
+                # Roh-SQL nicht. Vorbild: api/ideas.py:1300-1306.
                 db.execute(
                     text(
-                        "INSERT INTO sources (id, tenant_id, type, url, title, status) "
-                        "VALUES (:id, :tid, 'manual', 'manual://chat', 'Chat-Ideen', 'active')"
+                        "INSERT INTO sources (id, tenant_id, name, type, url) "
+                        "VALUES (:id, :tid, 'Chat-Ideen', 'manual', 'manual://chat')"
                     ),
                     {"id": source_id, "tid": tenant_id},
                 )
 
             # Stub-SourceItem (kein echtes Transkript — Muster api/ideas.py:1311-1320)
             item_id = str(uuid.uuid4())
+            # external_id ist NOT NULL ohne Default und trägt den Unique-Index
+            # (source_id, external_id). Die item_id selbst ist bereits eindeutig —
+            # ein konstanter Wert liesse die zweite Chat-Idee auflaufen.
             db.execute(
                 text(
                     "INSERT INTO source_items "
-                    "(id, source_id, tenant_id, title, status, content_type) "
-                    "VALUES (:id, :src, :tid, :title, 'analyzed', 'text')"
+                    "(id, source_id, tenant_id, external_id, title, status, content_type) "
+                    "VALUES (:id, :src, :tid, :ext, :title, 'analyzed', 'text')"
                 ),
                 {
                     "id": item_id,
                     "src": source_id,
                     "tid": tenant_id,
+                    "ext": item_id,
                     "title": idea_text[:80],
                 },
             )
