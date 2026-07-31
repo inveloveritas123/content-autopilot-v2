@@ -901,3 +901,189 @@ class TestDetachSourceLogOnFailure:
         broken.__enter__ = MagicMock(side_effect=RuntimeError("db down"))
         with patch.object(p13, "sync_session_factory", return_value=broken):
             p13._detach_source_log("tenant-1", "idea-9")  # kein Raise
+
+
+# ---------------------------------------------------------------------------
+# 8. _create_manual_idea — Roh-SQL gegen das echte Schema
+# ---------------------------------------------------------------------------
+
+# Spaltenlisten der Live-Datenbank (content_autopilot_v2, `\d <tabelle>`, 2026-07-31),
+# deckungsgleich mit models/source.py, models/source_item.py, models/content_idea.py.
+# REQUIRED = NOT NULL ohne Default, muss also vom INSERT geliefert werden.
+_LIVE_SCHEMA: dict[str, tuple[set[str], set[str]]] = {
+    "sources": (
+        {
+            "id",
+            "tenant_id",
+            "name",
+            "type",
+            "url",
+            "channel_id",
+            "language",
+            "polling_interval_minutes",
+            "auto_process",
+            "is_active",
+            "last_checked_at",
+            "created_at",
+            "project_id",
+            "keywords",
+        },
+        {"tenant_id", "name", "type"},
+    ),
+    "source_items": (
+        {
+            "id",
+            "source_id",
+            "tenant_id",
+            "external_id",
+            "title",
+            "url",
+            "published_at",
+            "duration_seconds",
+            "thumbnail_url",
+            "status",
+            "transcript_text",
+            "transcript_source",
+            "analysis",
+            "campaign_match_id",
+            "created_at",
+            "updated_at",
+            "description",
+            "view_count",
+            "view_history",
+            "keywords",
+            "channel_name",
+            "audio_url",
+            "content_type",
+            "is_archived",
+            "analysis_summary",
+            "deleted_at",
+            "deletion_request_id",
+        },
+        {"source_id", "tenant_id", "external_id"},
+    ),
+    "content_ideas": (
+        {
+            "id",
+            "source_item_id",
+            "tenant_id",
+            "title",
+            "description",
+            "angle",
+            "hook_suggestion",
+            "relevance_score",
+            "priority",
+            "entrepreneur_questions",
+            "source_quotes",
+            "source_context",
+            "status",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "deletion_request_id",
+        },
+        {"source_item_id", "tenant_id", "title"},
+    ),
+}
+
+
+def _parse_insert(sql: str) -> tuple[str, set[str]] | None:
+    """(tabelle, spaltenmenge) aus einem INSERT — None bei jedem anderen Statement."""
+    import re
+
+    m = re.search(r"INSERT\s+INTO\s+(\w+)\s*\(([^)]*)\)", sql, re.IGNORECASE)
+    if not m:
+        return None
+    return m.group(1).lower(), {c.strip() for c in m.group(2).split(",") if c.strip()}
+
+
+def _capture_manual_idea_sql() -> list[tuple[str, dict]]:
+    """Fährt _create_manual_idea und gibt die abgesetzten (sql, params) zurück.
+
+    `p13.text` wird durch die Identität ersetzt: der geteilte Stub-Helfer ersetzt
+    `sqlalchemy` global durch MagicMocks, `str(text(...))` wäre dann eine
+    Mock-Repr statt SQL. Mit der Identität liegt das rohe Statement vor —
+    unabhängig davon, welche Testdatei vorher lief.
+    """
+    captured: list[tuple[str, dict]] = []
+
+    class CapturingDb:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def execute(self, stmt, params=None):
+            captured.append((str(stmt), dict(params or {})))
+            result = MagicMock()
+            result.fetchone.return_value = None  # keine manual-Source → create-Zweig
+            return result
+
+        def commit(self):
+            pass
+
+    with (
+        patch.object(p13, "text", lambda s: s),
+        patch.object(p13, "sync_session_factory", side_effect=lambda: CapturingDb()),
+    ):
+        p13._create_manual_idea("11111111-1111-1111-1111-111111111111", "Testidee", "log-1")
+    return captured
+
+
+class TestManualIdeaSqlMatchesLiveSchema:
+    """Das Roh-SQL muss zu den echten Tabellen passen.
+
+    `_create_manual_idea` ist ein handgeschriebener Spiegel von
+    `api/ideas.py:1294-1335` (dort ORM). Der Spiegel war abgedriftet:
+    `sources` hat weder `title` noch `status`, dafür ein NOT-NULL `name`;
+    `source_items.external_id` ist NOT NULL ohne Default und wurde nicht geliefert.
+
+    Live-Folge am 31.07. um 04:52: `ProgrammingError` (UndefinedColumn) →
+    `_create_manual_idea` gab `None` zurück → `_start_post_from_message`
+    antwortete auf `[✍️ Daraus einen Post machen]` mit „Das hat gerade nicht
+    geklappt". Eine Mock-Session nimmt jedes SQL an und kann das nicht sehen —
+    deshalb friert dieser Test die Spaltenlisten ein.
+    """
+
+    def test_jede_genannte_spalte_existiert(self):
+        """Kein INSERT darf eine Spalte nennen, die es in der Tabelle nicht gibt."""
+        for sql, _params in _capture_manual_idea_sql():
+            parsed = _parse_insert(sql)
+            if parsed is None:
+                continue
+            table, columns = parsed
+            assert table in _LIVE_SCHEMA, f"unbekannte Tabelle im INSERT: {table}"
+            unknown = columns - _LIVE_SCHEMA[table][0]
+            assert not unknown, f"{table}: Spalte(n) existieren nicht: {sorted(unknown)}"
+
+    def test_jede_pflichtspalte_wird_geliefert(self):
+        """NOT NULL ohne Default → das INSERT muss die Spalte setzen."""
+        for sql, _params in _capture_manual_idea_sql():
+            parsed = _parse_insert(sql)
+            if parsed is None:
+                continue
+            table, columns = parsed
+            missing = _LIVE_SCHEMA[table][1] - columns
+            assert not missing, f"{table}: Pflichtspalte(n) fehlen: {sorted(missing)}"
+
+    def test_external_id_ist_je_item_verschieden(self):
+        """external_id trägt den Unique-Index (source_id, external_id).
+
+        Ein konstanter Wert liesse die zweite Idee derselben Quelle auflaufen —
+        derselbe stille Fehlschlag, nur einen Druck später.
+        """
+        seen = set()
+        for _lauf in range(3):
+            for sql, params in _capture_manual_idea_sql():
+                parsed = _parse_insert(sql)
+                if parsed is None or parsed[0] != "source_items":
+                    continue
+                key = next((k for k in params if "ext" in k.lower()), None)
+                assert (
+                    key is not None
+                ), f"external_id nicht als Parameter gebunden: {sorted(params)}"
+                value = params[key]
+                assert value, "external_id ist leer"
+                seen.add(value)
+        assert len(seen) == 3, f"external_id wiederholt sich: {seen}"
