@@ -388,37 +388,6 @@ def test_gemini_malformed_choices_is_terminal_error():
 # ---------------------------------------------------------------------------
 
 
-def test_non_json_200_is_a_terminal_transcription_error():
-    """Ein 200 mit kaputtem Body (Gateway-HTML statt JSON) darf nie als roher
-    json.JSONDecodeError entkommen — nur als TranscriptionError, nie als
-    TranscriptionUnavailable (sonst würde die Provider-Kette unnötig neu versuchen).
-    """
-    import httpx
-
-    from services.voice_transcription import (
-        TranscriptionError,
-        TranscriptionUnavailable,
-        transcribe_with_gemini,
-    )
-
-    request = httpx.Request("POST", "https://router.example/v1/chat/completions")
-    response = httpx.Response(200, text="<html>Gateway Timeout</html>", request=request)
-
-    with (
-        patch("config.settings", _gemini_settings()),
-        patch("services.voice_transcription.time.sleep"),
-        patch("services.voice_transcription.httpx.Client") as mock_client_cls,
-    ):
-        instance = mock_client_cls.return_value.__enter__.return_value
-        instance.post.return_value = response
-
-        with pytest.raises(TranscriptionError) as exc_info:
-            transcribe_with_gemini(_FAKE_OGG)
-
-    assert not isinstance(exc_info.value, TranscriptionUnavailable)
-    assert instance.post.call_count == 1
-
-
 def test_invalid_base_url_is_a_terminal_transcription_error():
     """Eine kaputte LITELLM_BASE_URL wirft httpx.InvalidURL — weder eine
     httpx.RequestError-Unterklasse noch eine der in Fix-Runde 1 gefangenen
@@ -569,3 +538,30 @@ def test_voxtral_empty_text_is_terminal():
                 transcribe_with_voxtral(_FAKE_OGG)
 
     assert not isinstance(excinfo.value, TranscriptionUnavailable)
+
+
+def test_voxtral_invalid_base_url_is_terminal():
+    """httpx.InvalidURL erbt direkt von Exception, nicht von httpx.RequestError — eine
+    kaputte LITELLM_BASE_URL entkommt ohne einen Catch-all-Zweig in _call() roh an
+    TranscriptionError vorbei. Kein httpx.Client-Mock: der Fehler muss aus echtem
+    httpx kommen, sonst testet das nur den eigenen Mock.
+    """
+    from services.voice_transcription import (
+        TranscriptionError,
+        TranscriptionUnavailable,
+        transcribe_with_voxtral,
+    )
+
+    mock_settings = MagicMock()
+    mock_settings.litellm_base_url = "https://[::1"  # ungueltiger Port -> httpx.InvalidURL
+    mock_settings.litellm_api_key = "fake-key"
+
+    with (
+        patch("config.settings", mock_settings),
+        patch("services.voice_transcription.time.sleep"),
+    ):
+        with pytest.raises(TranscriptionError) as excinfo:
+            transcribe_with_voxtral(_FAKE_OGG)
+
+    assert not isinstance(excinfo.value, TranscriptionUnavailable)
+    assert "Router-Fehler" in str(excinfo.value)

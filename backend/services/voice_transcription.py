@@ -281,6 +281,11 @@ def transcribe_with_voxtral(
             raise _classify_http_error(exc) from exc
         except httpx.RequestError as exc:
             raise TranscriptionUnavailable(f"Netzfehler: {exc}") from exc
+        except Exception as exc:
+            # Etwa eine kaputte LITELLM_BASE_URL: httpx.InvalidURL erbt direkt von
+            # Exception, nicht von RequestError, und würde sonst roh an TranscriptionError
+            # vorbei, an _with_retry und der Anbieterkette entkommen — siehe transcribe_with_gemini.
+            raise TranscriptionError(f"Router-Fehler: {exc}") from exc
 
         if not text:
             raise TranscriptionError("Leere Transkription von Voxtral")
