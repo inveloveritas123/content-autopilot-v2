@@ -25,6 +25,21 @@ from dataclasses import dataclass
 
 import httpx
 
+try:
+    from celery.exceptions import SoftTimeLimitExceeded
+except ImportError:  # pragma: no cover — ohne Celery gibt es kein Soft-Limit
+
+    class SoftTimeLimitExceeded(BaseException):
+        """Platzhalter, damit der except-Zweig auch ohne Celery gültig bleibt.
+
+        Erbt bewusst von BaseException statt Exception: eine echte Fehlerklasse
+        ist immer eine Exception-Unterklasse und würde diesen Platzhalter dann
+        NICHT matchen. `except SoftTimeLimitExceeded: raise` wird ohne Celery so
+        zu einem harmlosen No-op statt versehentlich einen echten Fehler
+        stillschweigend abzufangen.
+        """
+
+
 logger = logging.getLogger(__name__)
 
 _EU_VOICE_MODEL = "vertex/gemini-2.5-flash-lite@europe-north1"
@@ -227,6 +242,12 @@ def transcribe_with_gemini(
             # z. B. ein String statt eines Message-Dicts → AttributeError) sind ebenso
             # endgültig wie ein 403 — ein Retry würde dasselbe Ergebnis liefern.
             raise TranscriptionError(f"Unerwartete Router-Antwort: {exc}") from exc
+        except SoftTimeLimitExceeded:
+            # Celerys Soft-Limit erbt von Exception und würde sonst hier landen —
+            # als TranscriptionError verpackt startet die Anbieterkette danach
+            # den nächsten Adapter und verdoppelt die Überschreitung, statt dem
+            # Task das Abwickeln zu erlauben, für das das Soft-Limit da ist.
+            raise
         except Exception as exc:
             # Alles andere, was hier noch entkommen könnte — etwa eine kaputte
             # LITELLM_BASE_URL (httpx.InvalidURL, keine RequestError-Unterklasse) — ist
@@ -296,6 +317,11 @@ def transcribe_with_voxtral(
             raise _classify_http_error(exc) from exc
         except httpx.RequestError as exc:
             raise TranscriptionUnavailable(f"Netzfehler: {exc}") from exc
+        except SoftTimeLimitExceeded:
+            # Siehe transcribe_with_gemini — ohne diesen Vorrang würde die
+            # Anbieterkette nach einem Soft-Limit-Treffer noch den nächsten
+            # Adapter starten statt den Task abwickeln zu lassen.
+            raise
         except Exception as exc:
             # Etwa eine kaputte LITELLM_BASE_URL: httpx.InvalidURL erbt direkt von
             # Exception, nicht von RequestError, und würde sonst roh an TranscriptionError

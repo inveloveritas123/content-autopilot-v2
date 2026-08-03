@@ -20,6 +20,7 @@ import os
 import types
 
 import httpx
+from celery.exceptions import SoftTimeLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -513,6 +514,11 @@ def _route_inbound_message(
                     routing_info["post_generation_enqueued"] = False
 
         return routing_info
+    except SoftTimeLimitExceeded:
+        # Muss vor dem Exception-Katalog stehen: SoftTimeLimitExceeded erbt von
+        # Exception und würde sonst hier als gewöhnlicher Routing-Fehler enden —
+        # der Task liefe scheinbar normal weiter statt sich abwickeln zu lassen.
+        raise
     except Exception as exc:
         # E2: nur Exception-Typ loggen, nie str(exc) — könnte Prompt-/PII-Fragmente tragen.
         logger.warning("inbound routing failed: %s", type(exc).__name__)

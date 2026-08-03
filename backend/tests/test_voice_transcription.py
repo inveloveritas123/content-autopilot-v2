@@ -299,6 +299,26 @@ def test_invalid_base_url_is_a_terminal_transcription_error():
     assert "Router-Fehler" in str(exc_info.value)
 
 
+def test_soft_time_limit_propagates_unchanged_from_gemini():
+    """SoftTimeLimitExceeded erbt von Exception und wuerde ohne einen eigenen
+    except-Zweig VOR dem Catch-all als TranscriptionError verpackt — schlimmer
+    noch: die Anbieterkette wuerde danach den naechsten Adapter starten und die
+    Ueberschreitung verdoppeln, statt dem Task das Abwickeln zu erlauben."""
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    from services.voice_transcription import transcribe_with_gemini
+
+    mock_client = MagicMock()
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    mock_client.post.side_effect = SoftTimeLimitExceeded()
+
+    with patch("config.settings", _voxtral_settings()):
+        with patch("services.voice_transcription.httpx.Client", return_value=mock_client):
+            with pytest.raises(SoftTimeLimitExceeded):
+                transcribe_with_gemini(_FAKE_OGG)
+
+
 # ---------------------------------------------------------------------------
 # Test: Voxtral-Adapter
 # ---------------------------------------------------------------------------
