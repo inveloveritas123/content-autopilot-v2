@@ -671,21 +671,29 @@ def _dispatch_voice(task, log_id: str, tenant_id: str, payload: dict) -> dict:
         return {"status": "error", "reason": "unexpected"}
 
 
-# 240s/300s statt eines globalen Limits in celery_app.conf: Nach der 30s-httpx-
-# Timeout-Senkung kostet ein Adapter höchstens 3 × 30s + 1s + 2s Backoff = 93s,
-# die Chain durchläuft zwei Adapter = 186s. 240s liegt komfortabel über diesem
-# legitimen Worst-Case und feuert nicht spontan, deckelt einen hängenden Task
-# aber weit unter den ~726s, die er sonst belegen könnte. Der Worker läuft mit
-# -c 2 (docker-compose.v2.yml:89) — zwei Slots für den gesamten Stack —, ein
-# Task, der nie zurückkehrt, blockiert also alles dahinter. Ein globales Limit
-# in celery_app.conf würde stattdessen batch_transcribe erschlagen, das legitim
-# ca. 394s läuft.
+# 1200s/1260s statt eines globalen Limits in celery_app.conf: Dieser Task bedient
+# alle drei message_type-Zweige (voice/photo/text), und sowohl _process_voice als
+# auch _process_text laufen am Ende durch _route_inbound_message in
+# services/pipeline_llm.py, wo request_timeout = max(300, …) bei max_retries=3
+# gilt — ein einzelner Routing-Call darf legitim bis zu 900s dauern (eingefroren
+# in tests/test_explicit_choice_callbacks.py:302-311). Der Voice-Erfolgspfad
+# durchläuft Transkription UND danach dieses Routing, also addieren sich:
+#   ~40s  Telegram-Download   (zwei sequenzielle GETs, je timeout=20)
+#   ~186s Transkription       (zwei Adapter in Kette, je 3 × 30s + 1s/2s Backoff = 93s)
+#   ~900s Routing             (max(300, …) mit max_retries=3)
+#   ------------------------
+#   ~1126s realistischer Einzel-Worst-Case
+# 1200s/1260s liegen knapp über diesem legitimen Worst-Case — kein enges Limit,
+# sondern ein Riegel gegen einen echt hängenden Task. Die eigentliche Eindämmung
+# des Transkriptions-Beins ist der 30s-httpx-Timeout in
+# services/voice_transcription.py; dieses Limit greift nur, wenn trotzdem etwas
+# hängen bleibt.
 @celery_app.task(
     name="tasks.telegram_task.process_telegram_update",
     bind=True,
     max_retries=3,
-    soft_time_limit=240,
-    time_limit=300,
+    soft_time_limit=1200,
+    time_limit=1260,
 )
 def process_telegram_update(self, log_id: str) -> dict:
     """Verarbeitet eine telegram_message_log-Zeile.
