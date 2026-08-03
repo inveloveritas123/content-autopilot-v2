@@ -197,16 +197,22 @@ def transcribe_with_gemini(
                 )
                 resp.raise_for_status()
                 result = resp.json()
+
+            text = (
+                ((result.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+            ).strip()
+            if not text:
+                raise TranscriptionError("Leere Transkription vom Router")
         except httpx.HTTPStatusError as exc:
             raise _classify_http_error(exc) from exc
         except httpx.RequestError as exc:
             raise TranscriptionUnavailable(f"Netzfehler: {exc}") from exc
-
-        text = (
-            ((result.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
-        ).strip()
-        if not text:
-            raise TranscriptionError("Leere Transkription vom Router")
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:
+            # JSONDecodeError (ValueError-Unterklasse, z. B. Gateway-HTML statt JSON) und
+            # strukturell unerwartete Antworten (fehlende/falsch geformte choices/message,
+            # z. B. ein String statt eines Message-Dicts → AttributeError) sind ebenso
+            # endgültig wie ein 403 — ein Retry würde dasselbe Ergebnis liefern.
+            raise TranscriptionError(f"Unerwartete Router-Antwort: {exc}") from exc
 
         return TranscriptionResult(
             text=text,

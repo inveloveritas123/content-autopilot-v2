@@ -312,3 +312,71 @@ def test_terminal_error_is_not_retried():
 
     assert len(calls) == 1
     assert mock_sleep.call_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Test: kaputte 200er-Antwort — kein TranscriptionError, kein Retry, kein Silent-Escape
+# ---------------------------------------------------------------------------
+
+
+def _gemini_settings():
+    mock_settings = MagicMock()
+    mock_settings.litellm_base_url = "https://router.example/v1"
+    mock_settings.litellm_api_key = "fake-key"
+    return mock_settings
+
+
+def test_gemini_non_json_200_is_terminal_error():
+    import httpx
+
+    from services.voice_transcription import (
+        TranscriptionError,
+        TranscriptionUnavailable,
+        transcribe_with_gemini,
+    )
+
+    request = httpx.Request("POST", "https://router.example/v1/chat/completions")
+    response = httpx.Response(200, text="<html>502 Bad Gateway</html>", request=request)
+
+    with (
+        patch("config.settings", _gemini_settings()),
+        patch("services.voice_transcription.time.sleep"),
+        patch("httpx.Client") as mock_client_cls,
+    ):
+        instance = mock_client_cls.return_value.__enter__.return_value
+        instance.post.return_value = response
+
+        with pytest.raises(TranscriptionError) as exc_info:
+            transcribe_with_gemini(_FAKE_OGG)
+
+    assert not isinstance(exc_info.value, TranscriptionUnavailable)
+    assert instance.post.call_count == 1
+    assert "Unerwartete Router-Antwort" in str(exc_info.value)
+
+
+def test_gemini_malformed_choices_is_terminal_error():
+    import httpx
+
+    from services.voice_transcription import (
+        TranscriptionError,
+        TranscriptionUnavailable,
+        transcribe_with_gemini,
+    )
+
+    request = httpx.Request("POST", "https://router.example/v1/chat/completions")
+    response = httpx.Response(200, json={"choices": ["kein dict"]}, request=request)
+
+    with (
+        patch("config.settings", _gemini_settings()),
+        patch("services.voice_transcription.time.sleep"),
+        patch("httpx.Client") as mock_client_cls,
+    ):
+        instance = mock_client_cls.return_value.__enter__.return_value
+        instance.post.return_value = response
+
+        with pytest.raises(TranscriptionError) as exc_info:
+            transcribe_with_gemini(_FAKE_OGG)
+
+    assert not isinstance(exc_info.value, TranscriptionUnavailable)
+    assert instance.post.call_count == 1
+    assert "Unerwartete Router-Antwort" in str(exc_info.value)
