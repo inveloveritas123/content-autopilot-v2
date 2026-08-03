@@ -327,6 +327,19 @@ ein Podcast-Batch auf `vertex/gemini-2.5-flash-lite@europe-central2` das Konting
 leergefressen, an dem eine echte Sprachnachricht auf `…@europe-north1` starb — dieselbe
 Modellfamilie, derselbe Upstream. Zwei Wege auf einem Upstream sind keine Redundanz.
 
+**Was die Trennung NICHT abdeckt:** Beide Anbieter lösen über denselben Requesty-Router
+mit demselben API-Key und demselben Account auf. Ein Router-Ausfall, ein rotierter oder
+widerrufener Key, ein DNS-/Netzwerkfehler zu `router.eu.requesty.ai` oder eine kontoweite
+Budgetgrenze legt beide Wege gleichzeitig lahm. Die Trennung wirkt ausschließlich auf
+Modell-/Anbieter-Ebene, nicht auf Infrastruktur-Ebene.
+
+**Warnung, bevor das jemand rückgängig macht:** `backend/services/audio_transcription.py`
+(~Zeile 93–105) postet an denselben `/audio/transcriptions`-Endpunkt mit
+`model: "whisper-1"` — laut Tabelle oben nicht freigegeben. Wer diese Aufrufstelle
+repariert, darf sie NICHT auf `mistral/voxtral-mini-latest` umstellen — sonst teilen sich
+der Podcast-Batch-Loop und der Voice-Pfad wieder ein Modell und einen Upstream, genau die
+Konfiguration, die diese Arbeit beseitigen sollte.
+
 Voxtral antwortet mit **JSON** (`{"text": …}`), auch bei `response_format=text`, und nimmt
 OGG/Opus direkt an.
 
