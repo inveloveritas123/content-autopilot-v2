@@ -103,7 +103,11 @@ def _classify_http_error(exc: httpx.HTTPStatusError) -> TranscriptionError:
     if status == 429 or status >= 500:
         return TranscriptionUnavailable(f"HTTP {status} (vorübergehend): {body}")
 
-    logger.error("Transkription: HTTP %d (kein Retry): %s", status, body)
+    # WARNING statt ERROR: ein Voxtral-403 gefolgt von einem erfolgreichen
+    # Gemini-Fallback ist der vorgesehene Erfolgspfad der Anbieterkette, keine
+    # Störung. Wie schlimm ein einzelner Adapter-Fehler wirklich ist, entscheidet
+    # der Aufrufer (transcribe_voice sieht, ob am Ende alle Anbieter scheitern).
+    logger.warning("Transkription: HTTP %d (kein Retry): %s", status, body)
     return TranscriptionError(f"HTTP {status}: {body}")
 
 
@@ -180,13 +184,6 @@ def transcribe_with_gemini(
     mime_type: str = "audio/ogg",
     language_hint: str = "de",
 ) -> TranscriptionResult:
-    try:
-        from services.cost_cap import CostCapMiddleware
-
-        CostCapMiddleware().check(None, "gemini-flash")
-    except Exception as e:
-        logger.debug("CostCap check skipped: %s", type(e).__name__)
-
     base_url, api_key = _router_config()
 
     audio_b64 = base64.b64encode(audio_bytes).decode("ascii")

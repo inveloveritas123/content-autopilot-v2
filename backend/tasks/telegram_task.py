@@ -793,6 +793,9 @@ def _alert_admin_voice_failure(tenant_id: str, reason: str, category: str) -> No
     """
     try:
         if not settings.telegram_admin_chat_id:
+            logger.warning(
+                "_alert_admin_voice_failure: telegram_admin_chat_id not configured, skipping"
+            )
             return
 
         import datetime as _dt
