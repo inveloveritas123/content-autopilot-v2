@@ -29,6 +29,7 @@ from models.base import sync_session_factory
 from services.voice_transcription import (
     TranscriptionError,
     TranscriptionResult,
+    TranscriptionUnavailable,
     transcribe_voice,
 )
 from tasks.celery_app import celery_app
@@ -649,6 +650,81 @@ def process_telegram_update(self, log_id: str) -> dict:
         return _process_text(log_id, tenant_id, payload)
 
 
+# ── Voice-Fehlermeldungen (Spec §4.2) ───────────────────────────────────
+# Produkttext, kein Debug-Output. Die Ursache steht drin, die Technik nicht:
+# Ein Nutzer soll erfahren, was er tun kann, nicht welchen Statuscode der Router lieferte.
+_VOICE_MSG_NO_FILE = "🎤 Ich konnte die Sprachnachricht nicht lesen — bitte schick sie noch einmal."
+_VOICE_MSG_DOWNLOAD = (
+    "🎤 Ich konnte die Sprachnachricht nicht laden — ich versuche es gleich noch einmal."
+)
+_VOICE_MSG_BUSY = (
+    "🎤 Der Transkriptionsdienst ist gerade überlastet — ich versuche es gleich noch einmal."
+)
+_VOICE_MSG_TRANSCRIBE_FAILED = (
+    "🎤 Ich konnte die Sprachnachricht nicht transkribieren — bitte schick sie noch einmal."
+)
+_VOICE_MSG_EMPTY = "🎤 Die Sprachnachricht kam bei mir leer an — bitte schick sie noch einmal."
+# Wenn der Retry-Vorrat aufgebraucht ist: kein weiteres „gleich nochmal" versprechen.
+_VOICE_MSG_GAVE_UP = (
+    "🎤 Ich konnte deine Sprachnachricht leider nicht verarbeiten. Bitte schick sie noch einmal."
+)
+
+_VOICE_ALERT_REDIS_KEY = "voice-asr-alert"
+
+
+def _notify_voice_user(tenant_id: str, payload: dict, message: str) -> bool:
+    """Meldung an den Absender. Fail-open — eine misslungene Meldung darf nichts sprengen.
+
+    Fehlt 'chat' im Payload, wird der Tenant-Chat aufgelöst; ohne beides bleibt nur der
+    Betreiber-Alarm (der Nutzer ist dann schlicht nicht adressierbar).
+    """
+    chat_id = (payload.get("chat") or {}).get("id") or _resolve_chat_id(tenant_id)
+    if not chat_id:
+        logger.warning("voice failure: kein chat_id ermittelbar (tenant=%s)", tenant_id)
+        return False
+    try:
+        from api.telegram import _send_telegram_message
+
+        return _send_telegram_message(int(chat_id), message, tenant_id=tenant_id)
+    except Exception as exc:
+        logger.warning("voice failure notice send failed: %s", type(exc).__name__)
+        return False
+
+
+def _alert_admin_voice_failure(tenant_id: str, reason: str) -> None:
+    """Betreiber-Alarm, höchstens einmal pro UTC-Tag.
+
+    Muster 1:1 aus services/llm.py::_maybe_send_global_cap_alert. Ohne die Entprellung
+    erzeugt ein ausgefallener Transkriptionsdienst einen Alarm pro Sprachnachricht.
+    Fail-open in jedem Fall.
+    """
+    try:
+        if not settings.telegram_admin_chat_id:
+            return
+
+        import datetime as _dt
+
+        import redis as _redis
+
+        today = _dt.datetime.now(_dt.UTC).date().isoformat()
+        r = _redis.from_url(settings.redis_url, decode_responses=True)
+        try:
+            was_set = r.set(f"{_VOICE_ALERT_REDIS_KEY}:{today}", "1", nx=True, ex=86400)
+        finally:
+            r.close()
+        if not was_set:
+            return
+
+        from api.telegram import _send_admin_telegram_message
+
+        _send_admin_telegram_message(
+            int(settings.telegram_admin_chat_id),
+            f"⚠️ Sprachnachricht nicht verarbeitet (tenant={tenant_id}): {reason}",
+        )
+    except Exception as exc:
+        logger.warning("voice admin alert failed (non-fatal): %s", exc)
+
+
 def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
     voice_obj: dict = payload.get("voice") or {}
     file_id = voice_obj.get("file_id")
@@ -657,11 +733,23 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
 
     if not file_id:
         logger.warning("voice ohne file_id, log_id=%s", log_id)
-        return {"status": "error", "reason": "no_file_id"}
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_NO_FILE)
+        _alert_admin_voice_failure(tenant_id, "voice ohne file_id")
+        raise TranscriptionError("voice ohne file_id")
 
     audio_bytes = _telegram_get_file(file_id, tenant_id)
     if not audio_bytes:
-        return {"status": "error", "reason": "download_failed"}
+        # Bewusst vorübergehend: _telegram_get_file liefert auch bei endgültigen Ursachen
+        # None. Ein endgültiger Fehler dreimal wiederholt kostet drei wirkungslose Aufrufe,
+        # ein vorübergehender Fehler endgültig behandelt kostet die Nachricht.
+        #
+        # Der Nutzertext reist an der Ausnahme mit, statt hier gesendet zu werden: Bei drei
+        # Retries würde der Absender sonst dreimal „ich versuche es gleich noch einmal"
+        # lesen. Wann er ihn liest, entscheidet _dispatch_voice.
+        _alert_admin_voice_failure(tenant_id, "Telegram-Download fehlgeschlagen")
+        raise TranscriptionUnavailable(
+            "Telegram-Download fehlgeschlagen", user_message=_VOICE_MSG_DOWNLOAD
+        )
 
     try:
         result: TranscriptionResult = transcribe_voice(
@@ -670,13 +758,23 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
             language_hint="de",
             tenant_id=tenant_id,
         )
+    except TranscriptionUnavailable as exc:
+        logger.warning("transcribe_voice vorübergehend fehlgeschlagen: %s", exc)
+        _alert_admin_voice_failure(tenant_id, str(exc)[:200])
+        if not exc.user_message:
+            exc.user_message = _VOICE_MSG_BUSY
+        raise
     except TranscriptionError as exc:
-        logger.warning("transcribe_voice fail: %s", exc)
-        return {"status": "error", "reason": str(exc)[:80]}
+        logger.warning("transcribe_voice endgültig fehlgeschlagen: %s", exc)
+        _notify_voice_user(tenant_id, payload, exc.user_message or _VOICE_MSG_TRANSCRIBE_FAILED)
+        _alert_admin_voice_failure(tenant_id, str(exc)[:200])
+        raise
 
     transcript = (result.text or "").strip()
     if not transcript:
-        return {"status": "error", "reason": "empty_transcript"}
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_EMPTY)
+        _alert_admin_voice_failure(tenant_id, "leeres Transkript")
+        raise TranscriptionError("leeres Transkript")
 
     _update_log_transcript(log_id, transcript, result.model_id or "unknown", result.confidence)
 
