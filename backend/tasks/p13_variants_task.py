@@ -687,7 +687,19 @@ def _start_targeted_session(tenant_id: str, idea_id: str) -> dict | None:
 
         return {"session_id": opener.session_id, "question_text": opener.question_text}
     except Exception as exc:
-        logger.warning("p13_task: start_targeted_session failed: %s", type(exc).__name__)
+        # Nur der Typname reichte nicht: am 03.08.2026 stand hier wochenlang
+        # "HTTPStatusError" — ohne Statuscode, ohne Grund. Der Nutzer sah bloß
+        # "Das hat gerade nicht geklappt", das Log sagte nichts Verwertbares.
+        # exc_info bewahrt den Traceback; die Zeile bleibt WARNING, weil der Task
+        # bewusst fail-open ist und der Nutzer eine ehrliche Absage bekommt.
+        logger.warning(
+            "p13_task: start_targeted_session failed (tenant=%s idea=%s): %s: %s",
+            tenant_id,
+            idea_id,
+            type(exc).__name__,
+            exc,
+            exc_info=True,
+        )
         return None
 
 

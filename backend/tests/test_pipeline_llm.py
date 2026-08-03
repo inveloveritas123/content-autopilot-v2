@@ -736,3 +736,129 @@ class TestResolveModel:
         assert phases == set(MODEL_PER_PROMPT.keys())
         for r in rows:
             assert "default_model" in r and "effective_model" in r and "override" in r
+
+
+# ---------------------------------------------------------------------------
+# Regression: Provider-Key-Drift (Vorfall 2026-08-03)
+#
+# Der in der DB hinterlegte Requesty-Key war gegenueber LITELLM_API_KEY veraltet
+# und hatte kein Modell freigegeben -> jeder Pipeline-Call 403. Diagnostizierbar
+# war das nicht: 4xx wurde ohne jedes Logging re-raised, der Aufrufer protokollierte
+# nur den Exception-TYPNAMEN. Diese Tests frieren beide Lehren ein.
+# ---------------------------------------------------------------------------
+
+
+class TestFourXXDiagnosability:
+    """Ein 4xx muss Statuscode UND Response-Body ins Log schreiben."""
+
+    def _patch_provider(self, monkeypatch, base_url="https://router.requesty.ai/v1", api_key="k"):
+        monkeypatch.setattr(pipeline_llm, "_resolve_provider", lambda: (base_url, api_key, True))
+
+    def _patch_env_provider(self, monkeypatch, base_url, api_key):
+        monkeypatch.setattr(
+            pipeline_llm, "_resolve_env_provider", lambda: (base_url, api_key, True)
+        )
+
+    def test_403_logs_status_and_body(self, monkeypatch, caplog):
+        """Ohne Body im Log war der Grund ('model not approved') unsichtbar."""
+        import logging
+
+        self._patch_provider(monkeypatch)
+        # Identische Env-Config -> kein Fallback, der 403 bleibt stehen
+        self._patch_env_provider(monkeypatch, "https://router.requesty.ai/v1", "k")
+
+        body = '{"error":{"message":"The requested model is not approved for this API key"}}'
+        mock_resp = _make_mock_response({}, status_code=403)
+        mock_resp.text = body
+
+        with patch("httpx.Client") as MockClient:
+            instance = MockClient.return_value.__enter__.return_value
+            instance.post.return_value = mock_resp
+            with caplog.at_level(logging.WARNING, logger=pipeline_llm.logger.name):
+                with pytest.raises(Exception):
+                    call_pipeline_llm(
+                        prompt_key="P08", system_prompt="S", user_content="U", tenant_id="t1"
+                    )
+
+        logged = caplog.text
+        assert "403" in logged, "Statuscode fehlt im Log"
+        assert "not approved" in logged, "Response-Body fehlt im Log"
+
+    def test_4xx_still_not_retried(self, monkeypatch):
+        """Das Logging darf die Nicht-Retry-Regel fuer 4xx nicht aufweichen."""
+        self._patch_provider(monkeypatch)
+        self._patch_env_provider(monkeypatch, "https://router.requesty.ai/v1", "k")
+        calls = 0
+
+        def fake_post(url, json=None, headers=None):
+            nonlocal calls
+            calls += 1
+            r = _make_mock_response({}, status_code=403)
+            r.text = "nope"
+            return r
+
+        with patch("httpx.Client") as MockClient:
+            MockClient.return_value.__enter__.return_value.post.side_effect = fake_post
+            with pytest.raises(Exception):
+                call_pipeline_llm(
+                    prompt_key="P08",
+                    system_prompt="S",
+                    user_content="U",
+                    tenant_id="t1",
+                    max_retries=3,
+                )
+
+        assert calls == 1
+
+
+class TestAuthFallbackToEnv:
+    """401/403 vom DB-Provider -> einmaliger Fallback auf die Env-Config."""
+
+    def _patch(self, monkeypatch, db_key, env_key, base="https://router.requesty.ai/v1"):
+        monkeypatch.setattr(pipeline_llm, "_resolve_provider", lambda: (base, db_key, True))
+        monkeypatch.setattr(pipeline_llm, "_resolve_env_provider", lambda: (base, env_key, True))
+
+    def _responses(self, first_status, second_status=200):
+        """Erster Post -> first_status, zweiter -> second_status (OpenAI-Shape)."""
+        seq = []
+
+        def fake_post(url, json=None, headers=None):
+            status = first_status if not seq else second_status
+            seq.append(headers.get("Authorization"))
+            if status == 200:
+                return _make_mock_response(_make_openai_response(text="ok"))
+            r = _make_mock_response({}, status_code=status)
+            r.text = "denied"
+            return r
+
+        return fake_post, seq
+
+    @pytest.mark.parametrize("status", [401, 403])
+    def test_falls_back_when_env_key_differs(self, monkeypatch, status):
+        """Genau der Vorfall: DB-Key abgelehnt, Env-Key funktioniert."""
+        self._patch(monkeypatch, db_key="stale-db-key", env_key="good-env-key")
+        fake_post, seen_auth = self._responses(status)
+
+        with patch("httpx.Client") as MockClient:
+            MockClient.return_value.__enter__.return_value.post.side_effect = fake_post
+            res = call_pipeline_llm(
+                prompt_key="P08", system_prompt="S", user_content="U", tenant_id="t1"
+            )
+
+        assert res.text == "ok"
+        assert seen_auth == ["Bearer stale-db-key", "Bearer good-env-key"]
+
+    @pytest.mark.parametrize("status", [401, 403])
+    def test_no_pointless_retry_when_env_key_identical(self, monkeypatch, status):
+        """Sind beide Configs gleich, waere der Fallback ein reiner Doppel-Call."""
+        self._patch(monkeypatch, db_key="same-key", env_key="same-key")
+        fake_post, seen_auth = self._responses(status)
+
+        with patch("httpx.Client") as MockClient:
+            MockClient.return_value.__enter__.return_value.post.side_effect = fake_post
+            with pytest.raises(Exception):
+                call_pipeline_llm(
+                    prompt_key="P08", system_prompt="S", user_content="U", tenant_id="t1"
+                )
+
+        assert len(seen_auth) == 1

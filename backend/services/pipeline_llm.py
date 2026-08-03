@@ -425,26 +425,51 @@ def call_pipeline_llm(
                     headers=headers,
                 )
 
-                # 401 vom DB-Provider → einmaliger Fallback auf Env-Config
-                if resp.status_code == 401:
-                    logger.warning(
-                        "call_pipeline_llm: 401 vom konfigurierten Provider, "
-                        "Fallback auf Env-Config (einmalig)"
-                    )
+                # 401/403 vom DB-Provider → einmaliger Fallback auf Env-Config.
+                #
+                # 403 gehört hier genauso hin wie 401 (Vorfall 2026-08-03): der in
+                # `llm_providers` verschlüsselte Key war gegenüber LITELLM_API_KEY
+                # veraltet und hatte KEIN Modell freigegeben. Der Router antwortet
+                # darauf mit 403, nicht mit 401 — der Fallback lief also nie an und
+                # die gesamte Prompt-Pipeline stand wochenlang still, während die
+                # Transkription (eigener Env-Pfad) weiter lief und alles gesund aussehen ließ.
+                #
+                # Der Fallback feuert NUR bei abweichender Config. Sind DB- und
+                # Env-Provider identisch — der Normalfall — wäre der zweite Call eine
+                # bitgleiche Wiederholung und würde jede echte Freigabe-Ablehnung
+                # verdoppeln statt sie zu beheben.
+                if resp.status_code in (401, 403):
                     env_base, env_key, env_auto_cache = _resolve_env_provider()
-                    fallback_body = dict(request_body)
-                    if "extra_body" in fallback_body:
-                        fallback_body.pop("extra_body")
-                    if "requesty.ai" in env_base and env_auto_cache:
-                        fallback_body["extra_body"] = {"requesty": {"auto_cache": True}}
-                    fb_headers = {"Content-Type": "application/json"}
-                    if env_key:
-                        fb_headers["Authorization"] = f"Bearer {env_key}"
-                    resp = client.post(
-                        f"{env_base}/chat/completions",
-                        json=fallback_body,
-                        headers=fb_headers,
-                    )
+                    if (env_base, env_key) != (base_url, api_key):
+                        logger.warning(
+                            "call_pipeline_llm: HTTP %d vom konfigurierten Provider, "
+                            "Fallback auf Env-Config (einmalig) — prompt=%s model=%s",
+                            resp.status_code,
+                            prompt_key,
+                            model_id,
+                        )
+                        fallback_body = dict(request_body)
+                        if "extra_body" in fallback_body:
+                            fallback_body.pop("extra_body")
+                        if "requesty.ai" in env_base and env_auto_cache:
+                            fallback_body["extra_body"] = {"requesty": {"auto_cache": True}}
+                        fb_headers = {"Content-Type": "application/json"}
+                        if env_key:
+                            fb_headers["Authorization"] = f"Bearer {env_key}"
+                        resp = client.post(
+                            f"{env_base}/chat/completions",
+                            json=fallback_body,
+                            headers=fb_headers,
+                        )
+                    else:
+                        logger.warning(
+                            "call_pipeline_llm: HTTP %d — Env-Config ist mit der "
+                            "benutzten identisch, kein Fallback möglich (prompt=%s model=%s). "
+                            "Modell in der Requesty-Model-Library für diesen Key freigeben.",
+                            resp.status_code,
+                            prompt_key,
+                            model_id,
+                        )
 
                 # 412 = Router-Budget überschritten → kein Retry
                 if resp.status_code == 412:
@@ -466,7 +491,27 @@ def call_pipeline_llm(
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code if exc.response else 0
             if 400 <= status < 500 and status != 429:
-                # 4xx (ausser 429 Throttle) nicht retrien
+                # 4xx (ausser 429 Throttle) nicht retrien — aber IMMER protokollieren.
+                #
+                # Vorher flog der Fehler hier wortlos raus. Die Aufrufer loggen meist
+                # nur `type(exc).__name__`, im Worker-Log stand dann ausschließlich
+                # "HTTPStatusError" — ohne Code, ohne Grund. Der Router schreibt die
+                # eigentliche Ursache aber in den Body ("model is not approved for this
+                # API key"). Ohne diese Zeile ist ein 403 nicht von einem 400 zu
+                # unterscheiden und die Diagnose erfordert, den Call nachzubauen.
+                body = ""
+                try:
+                    body = (exc.response.text or "")[:400] if exc.response else ""
+                except Exception:  # pragma: no cover - Body darf die Diagnose nie sprengen
+                    body = "(Body nicht lesbar)"
+                logger.error(
+                    "call_pipeline_llm: HTTP %d (kein Retry) prompt=%s model=%s tenant=%s: %s",
+                    status,
+                    prompt_key,
+                    model_id,
+                    tenant_id,
+                    body,
+                )
                 raise
             last_error = exc
             wait = 2**attempt

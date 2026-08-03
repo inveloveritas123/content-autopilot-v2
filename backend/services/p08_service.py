@@ -12,7 +12,7 @@ import logging
 import os
 import random
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
 from sqlalchemy import text
@@ -83,18 +83,58 @@ class ResponseResult:
 
 
 def _load_p08_prompt():
-    """Load P08 prompt from NC via PromptLoader, fallback to local file, then hardcoded."""
+    """Lädt den P08-Prompt: Storage via PromptLoader, sonst lokale Datei, sonst hardcodiert.
+
+    ⚠️ Teilausfall wird TEILWEISE aufgefangen (Vorfall 2026-08-03):
+    `content-truth/prompts/P08-fragen-konversation.md` besitzt keine generische
+    `## User-Prompt`-Sektion, sondern nur `## User-Prompt: MODE OPENER` bzw.
+    `: MODE RESPONSE`. `_extract_user_prompt` verlangt die Überschrift exakt ohne
+    Suffix und liefert deshalb "" — der ~9000 Zeichen lange System-Prompt daneben
+    wird aber einwandfrei extrahiert.
+
+    Vorher warf ein leeres User-Template den GESAMTEN geladenen Prompt weg; P08 lief
+    dann auf einem ~400-Zeichen-Stub, ohne dass es jemandem auffiel (kein Absturz,
+    nur schlechtere Fragen). Jetzt gilt: was geladen werden konnte, wird behalten —
+    nur die fehlende Hälfte kommt aus dem Fallback.
+
+    Der mode-spezifische Kontrakt der Prompt-Datei (Themencluster, Fragenkatalog,
+    4-Wochen-Historie) ist bis heute NICHT implementiert; dieser Service formatiert
+    die sieben Platzhalter aus `_FALLBACK_USER_TEMPLATE`. Deshalb wird hier bewusst
+    dessen Template ergänzt und nicht versucht, die Doku-Sektionen zu formatieren —
+    ihre Platzhalter (`{grundton.charakterisierung}`, `{Vollständiger Katalog …}`)
+    sind Prosa und würden `str.format` sofort sprengen.
+    """
+    loaded = None
     try:
         from services.prompt_loader import get_default_prompt_loader
 
         loader = get_default_prompt_loader()
         loaded = loader.load("P08")
-        if not loaded.user_prompt_template:
-            raise ValueError("user_prompt_template leer (Section-Header-Mismatch in Prompt-Datei?)")
-        return loaded
+        if loaded.user_prompt_template and loaded.system_prompt:
+            return loaded
     except Exception as e:
         logger.warning(f"[P08] PromptLoader fehlgeschlagen, nutze lokalen Fallback: {e}")
+        loaded = None
 
+    fallback = _load_p08_fallback()
+
+    if loaded is not None and loaded.system_prompt:
+        logger.warning(
+            "[P08] User-Template fehlt (%s) — System-Prompt (%d Zeichen) bleibt erhalten, "
+            "nur das Template kommt aus dem Fallback.",
+            loaded.source_path,
+            len(loaded.system_prompt),
+        )
+        return replace(
+            loaded,
+            user_prompt_template=fallback.user_prompt_template,
+        )
+
+    return fallback
+
+
+def _load_p08_fallback():
+    """Vollständiger Ersatz-Prompt: lokale Datei, sonst hardcodiert."""
     # Try local file
     local_path = os.path.normpath(
         os.path.join(os.path.dirname(__file__), "..", "prompts", "P08_conversation.md")

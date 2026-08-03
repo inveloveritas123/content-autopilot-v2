@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import types
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -960,3 +961,97 @@ class TestP08ResponseRespectsMidflightCancel:
             "Nach dem Abbruch geht noch eine Folgefrage raus — der Nutzer hat gerade "
             "'Gespräch abgebrochen' gelesen"
         )
+
+
+# ---------------------------------------------------------------------------
+# Regression: P08-Prompt-Ladepfad (Vorfall 2026-08-03)
+#
+# content-truth/prompts/P08-fragen-konversation.md hat KEINE generische
+# '## User-Prompt'-Sektion, sondern nur '## User-Prompt: MODE OPENER' /
+# ': MODE RESPONSE'. Der Extraktor verlangt die Ueberschrift exakt ohne Suffix
+# und liefert deshalb "". Bisher verwarf _load_p08_prompt daraufhin den KOMPLETTEN
+# geladenen Prompt — samt des korrekt extrahierten, ~9000 Zeichen langen
+# System-Prompts — und fiel auf einen ~400-Zeichen-Stub zurueck. Erics Interview
+# lief damit auf einem Bruchteil der Anweisungen.
+# ---------------------------------------------------------------------------
+
+
+class TestP08PromptLoadingDegradesPartially:
+    def _loaded(self, system_prompt, user_template):
+        from services.prompt_loader import LoadedPrompt
+
+        return LoadedPrompt(
+            content="egal",
+            system_prompt=system_prompt,
+            user_prompt_template=user_template,
+            sha="deadbeef",
+            loaded_at=datetime.now(UTC),
+            source_path="content-truth/prompts/P08-fragen-konversation.md",
+        )
+
+    def test_keeps_real_system_prompt_when_only_user_template_missing(self):
+        """Fehlt NUR das User-Template, bleibt der echte System-Prompt erhalten."""
+        real_system = "ECHTER SYSTEM-PROMPT " * 400  # ~8000 Zeichen, wie in der Praxis
+        loader = MagicMock()
+        loader.load.return_value = self._loaded(real_system, "")
+
+        with patch("services.prompt_loader.get_default_prompt_loader", return_value=loader):
+            prompt = _p08_mod._load_p08_prompt()
+
+        assert prompt.system_prompt == real_system, (
+            "Der geladene System-Prompt darf nicht wegen des fehlenden User-Templates "
+            "verworfen werden"
+        )
+        assert prompt.user_prompt_template, "User-Template muss aus dem Fallback kommen"
+        # Der Fallback-Kontrakt: genau die Platzhalter, die p08_service formatiert
+        for placeholder in (
+            "{mode}",
+            "{topic}",
+            "{voice_profile}",
+            "{recent_messages}",
+            "{features_json}",
+            "{question_index}",
+            "{max_questions}",
+        ):
+            assert placeholder in prompt.user_prompt_template
+
+    def test_formatting_still_works_after_partial_degrade(self):
+        """Das zusammengesetzte Template muss formatierbar bleiben (kein KeyError)."""
+        loader = MagicMock()
+        loader.load.return_value = self._loaded("SYS", "")
+
+        with patch("services.prompt_loader.get_default_prompt_loader", return_value=loader):
+            prompt = _p08_mod._load_p08_prompt()
+
+        rendered = prompt.user_prompt_template.format(
+            mode="targeted",
+            topic="T",
+            voice_profile="V",
+            recent_messages="R",
+            features_json="{}",
+            question_index=1,
+            max_questions=3,
+        )
+        assert "targeted" in rendered
+
+    def test_full_prompt_is_used_unchanged_when_both_sections_present(self):
+        """Der Normalfall darf sich nicht aendern."""
+        loader = MagicMock()
+        loader.load.return_value = self._loaded("SYS", "USER {mode}")
+
+        with patch("services.prompt_loader.get_default_prompt_loader", return_value=loader):
+            prompt = _p08_mod._load_p08_prompt()
+
+        assert prompt.system_prompt == "SYS"
+        assert prompt.user_prompt_template == "USER {mode}"
+
+    def test_total_loader_failure_still_falls_back_completely(self):
+        """Wirft der Loader, bleibt es beim vollstaendigen Fallback."""
+        loader = MagicMock()
+        loader.load.side_effect = RuntimeError("Storage weg")
+
+        with patch("services.prompt_loader.get_default_prompt_loader", return_value=loader):
+            prompt = _p08_mod._load_p08_prompt()
+
+        assert prompt.system_prompt
+        assert "{mode}" in prompt.user_prompt_template
