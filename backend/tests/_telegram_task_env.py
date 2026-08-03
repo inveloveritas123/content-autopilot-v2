@@ -352,12 +352,20 @@ class _FakeCeleryApp:
         def deco(fn):
             fn.apply = _make_apply(fn)
             fn.apply_async = lambda *a, **kw: types.SimpleNamespace(id="fake-task-id")
+            # Muss mit conftest.py::_FakeCelery.task Schritt halten: tasks.telegram_task
+            # wird ueber diesen Loader ODER ueber einen gewoehnlichen `import
+            # tasks.telegram_task` geladen, je nachdem welche Testdatei zuerst
+            # sys.modules["tasks.telegram_task"] belegt (siehe Modul-Docstring oben).
+            # Ohne celery_opts hier waere test_voice_failure_paths.py's Decorator-Test
+            # ausschliesslich von der Collection-Reihenfolge abhaengig gruen oder rot.
+            fn.celery_opts = kw
             return fn
 
         if len(a) == 1 and callable(a[0]):
             fn = a[0]
             fn.apply = _make_apply(fn)
             fn.apply_async = lambda *a, **kw: types.SimpleNamespace(id="fake-task-id")
+            fn.celery_opts = {}
             return fn
         return deco
 

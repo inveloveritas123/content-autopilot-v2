@@ -284,6 +284,9 @@ def _fake_task(retries: int):
     task = MagicMock()
     task.request = _FakeRequest(retries)
     task.max_retries = 3
+    # RuntimeError statt eines echten Retry-Ablaufs: propagiert dieser RuntimeError
+    # unveraendert aus _dispatch_voice, kann der letzte-Riegel-`except Exception`
+    # dort den Retry nicht abfangen und stillschweigend in "unexpected" verwandeln.
     task.retry.side_effect = RuntimeError("celery-retry")
     return task
 
@@ -415,3 +418,16 @@ def test_soft_time_limit_reaches_the_sender():
     mock_notify.assert_called_once()
     assert mock_notify.call_args[0][2] == tt._VOICE_MSG_GAVE_UP
     mock_alert.assert_called_once()
+
+
+def test_process_telegram_update_decorator_matches_the_owner_decision():
+    """Einzige Stelle, die den echten Decorator prueft — nicht als vermeintlich
+    redundant loeschen. _fake_task oben codiert max_retries=3 hart statt es vom
+    echten Task abzuleiten; ohne diesen Test wuerde ein Revert des Decorators
+    auf z. B. max_retries=1 alle Tests gruen lassen, waehrend Produktion nur
+    noch einmal statt dreimal retryt — der stille Fehlermodus, den dieser
+    Branch beseitigen soll."""
+    opts = tt.process_telegram_update.celery_opts
+    assert opts["max_retries"] == 3
+    assert opts["soft_time_limit"] == 1200
+    assert opts["time_limit"] == 1260

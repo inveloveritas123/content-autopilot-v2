@@ -74,6 +74,10 @@ if "celery" not in sys.modules:
             def decorator(fn):
                 fn.apply = _make_apply(fn)
                 fn.apply_async = lambda *a, **kw: types.SimpleNamespace(id="fake-task-id")
+                # Ohne dies ist max_retries/soft_time_limit/time_limit am echten Task
+                # unprüfbar — Tests koennten die Decorator-Kwargs aendern, ohne dass
+                # ein Test rot wird.
+                fn.celery_opts = kw
                 return fn
 
             if len(a) == 1 and callable(a[0]):
@@ -81,6 +85,7 @@ if "celery" not in sys.modules:
                 fn = a[0]
                 fn.apply = _make_apply(fn)
                 fn.apply_async = lambda *a, **kw: types.SimpleNamespace(id="fake-task-id")
+                fn.celery_opts = {}
                 return fn
             return decorator
 
