@@ -273,6 +273,6 @@ def test_embed_sendet_dimensions_wenn_konfiguriert():
         asyncio.run(embed("Test-Text"))
 
     payload = mock_client.post.call_args.kwargs["json"]
-    assert payload["dimensions"] == 1536, (
-        f"Request muss dimensions=1536 enthalten — gesendet wurde: {payload!r}"
-    )
+    assert (
+        payload["dimensions"] == 1536
+    ), f"Request muss dimensions=1536 enthalten — gesendet wurde: {payload!r}"
