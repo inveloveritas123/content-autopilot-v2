@@ -89,6 +89,14 @@ if "celery" not in sys.modules:
     schedules_mod = _stub_module("celery.schedules")
     schedules_mod.crontab = lambda *a, **kw: None
 
+    # celery.exceptions — echte Klasse aus billiard (Celery-Abhaengigkeit, immer
+    # vorhanden), damit Tests dieselbe Exception-Klasse werfen koennen, die ein
+    # echter Worker beim Erreichen von soft_time_limit wirft.
+    exceptions_mod = _stub_module("celery.exceptions")
+    from billiard.exceptions import SoftTimeLimitExceeded as _SoftTimeLimitExceeded
+
+    exceptions_mod.SoftTimeLimitExceeded = _SoftTimeLimitExceeded
+
     signals_mod = _stub_module("celery.signals")
 
     class _FakeSignal:

@@ -261,3 +261,157 @@ def test_admin_alert_never_raises():
         patch("redis.from_url", side_effect=RuntimeError("redis weg")),
     ):
         tt._alert_admin_voice_failure("tenant-1", "HTTP 429", "transient")  # darf nicht werfen
+
+
+# ---------------------------------------------------------------------------
+# Task-Wrapper: Retry-Verdrahtung
+# ---------------------------------------------------------------------------
+
+
+class _FakeRequest:
+    def __init__(self, retries):
+        self.retries = retries
+
+
+def _fake_task(retries: int):
+    """Steht fuer den gebundenen Celery-Task.
+
+    Warum nicht process_telegram_update direkt aufrufen: Ein Task mit bind=True ist ein
+    Objekt, dessen __call__ das echte self selbst einsetzt — ein hier uebergebener
+    Fake-Task landete als log_id. Deshalb liegt die Retry-Entscheidung in der
+    gewoehnlichen Funktion _dispatch_voice, die den Task als Parameter nimmt.
+    """
+    task = MagicMock()
+    task.request = _FakeRequest(retries)
+    task.max_retries = 3
+    task.retry.side_effect = RuntimeError("celery-retry")
+    return task
+
+
+def test_transient_failure_triggers_retry_and_notifies_once():
+    from services.voice_transcription import TranscriptionUnavailable
+
+    task = _fake_task(retries=0)
+    exc = TranscriptionUnavailable("429", user_message="🎤 überlastet")
+    with (
+        patch.object(tt, "_process_voice", side_effect=exc),
+        patch.object(tt, "_notify_voice_user") as mock_notify,
+    ):
+        with pytest.raises(RuntimeError, match="celery-retry"):
+            tt._dispatch_voice(task, "log-1", "tenant-1", _PAYLOAD)
+
+    task.retry.assert_called_once()
+    assert task.retry.call_args.kwargs["countdown"] == 30
+    mock_notify.assert_called_once()
+    assert mock_notify.call_args[0][2] == "🎤 überlastet"
+
+
+def test_second_retry_does_not_repeat_the_notice():
+    """Der Nutzer soll 'gleich nochmal' genau einmal lesen, nicht dreimal."""
+    from services.voice_transcription import TranscriptionUnavailable
+
+    task = _fake_task(retries=1)
+    with (
+        patch.object(tt, "_process_voice", side_effect=TranscriptionUnavailable("429")),
+        patch.object(tt, "_notify_voice_user") as mock_notify,
+    ):
+        with pytest.raises(RuntimeError, match="celery-retry"):
+            tt._dispatch_voice(task, "log-1", "tenant-1", _PAYLOAD)
+
+    assert task.retry.call_args.kwargs["countdown"] == 60
+    mock_notify.assert_not_called()
+
+
+def test_third_retry_waits_two_minutes():
+    from services.voice_transcription import TranscriptionUnavailable
+
+    task = _fake_task(retries=2)
+    with (
+        patch.object(tt, "_process_voice", side_effect=TranscriptionUnavailable("429")),
+        patch.object(tt, "_notify_voice_user"),
+    ):
+        with pytest.raises(RuntimeError, match="celery-retry"):
+            tt._dispatch_voice(task, "log-1", "tenant-1", _PAYLOAD)
+
+    assert task.retry.call_args.kwargs["countdown"] == 120
+
+
+def test_exhausted_retries_send_an_honest_final_message():
+    """Kein weiteres 'gleich nochmal', wenn es kein 'gleich' mehr gibt."""
+    from services.voice_transcription import TranscriptionUnavailable
+
+    task = _fake_task(retries=3)
+    with (
+        patch.object(tt, "_process_voice", side_effect=TranscriptionUnavailable("429")),
+        patch.object(tt, "_notify_voice_user") as mock_notify,
+    ):
+        result = tt._dispatch_voice(task, "log-1", "tenant-1", _PAYLOAD)
+
+    task.retry.assert_not_called()
+    assert result["status"] == "error"
+    mock_notify.assert_called_once()
+    assert mock_notify.call_args[0][2] == tt._VOICE_MSG_GAVE_UP
+
+
+def test_terminal_failure_is_not_retried():
+    from services.voice_transcription import TranscriptionError
+
+    task = _fake_task(retries=0)
+    with (
+        patch.object(tt, "_process_voice", side_effect=TranscriptionError("HTTP 400")),
+        patch.object(tt, "_notify_voice_user") as mock_notify,
+    ):
+        result = tt._dispatch_voice(task, "log-1", "tenant-1", _PAYLOAD)
+
+    task.retry.assert_not_called()
+    assert result["status"] == "error"
+    # Die Meldung kam schon aus _process_voice — hier nicht doppeln.
+    mock_notify.assert_not_called()
+
+
+def test_success_passes_through_untouched():
+    task = _fake_task(retries=0)
+    with patch.object(tt, "_process_voice", return_value={"status": "ok", "transcript_chars": 42}):
+        result = tt._dispatch_voice(task, "log-1", "tenant-1", _PAYLOAD)
+
+    assert result == {"status": "ok", "transcript_chars": 42}
+    task.retry.assert_not_called()
+
+
+def test_unexpected_exception_notifies_and_does_not_retry():
+    """Letzter Riegel: ein RuntimeError ist von keiner der beiden spezifischen
+    Klauseln abgedeckt — trotzdem muss der Absender eine Antwort bekommen statt
+    dass der Task still stirbt."""
+    task = _fake_task(retries=0)
+    with (
+        patch.object(tt, "_process_voice", side_effect=RuntimeError("boom")),
+        patch.object(tt, "_notify_voice_user") as mock_notify,
+        patch.object(tt, "_alert_admin_voice_failure") as mock_alert,
+    ):
+        result = tt._dispatch_voice(task, "log-1", "tenant-1", _PAYLOAD)
+
+    task.retry.assert_not_called()
+    assert result == {"status": "error", "reason": "unexpected"}
+    mock_notify.assert_called_once()
+    assert mock_notify.call_args[0][2] == tt._VOICE_MSG_GAVE_UP
+    mock_alert.assert_called_once()
+
+
+def test_soft_time_limit_reaches_the_sender():
+    """SoftTimeLimitExceeded erbt von Exception — der letzte Riegel faengt es also,
+    und ein vom Soft-Limit getoeteter Task stirbt trotzdem nicht stumm."""
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    task = _fake_task(retries=0)
+    with (
+        patch.object(tt, "_process_voice", side_effect=SoftTimeLimitExceeded()),
+        patch.object(tt, "_notify_voice_user") as mock_notify,
+        patch.object(tt, "_alert_admin_voice_failure") as mock_alert,
+    ):
+        result = tt._dispatch_voice(task, "log-1", "tenant-1", _PAYLOAD)
+
+    task.retry.assert_not_called()
+    assert result == {"status": "error", "reason": "unexpected"}
+    mock_notify.assert_called_once()
+    assert mock_notify.call_args[0][2] == tt._VOICE_MSG_GAVE_UP
+    mock_alert.assert_called_once()

@@ -622,12 +622,71 @@ async def _store_chunk_async(
 # ── celery task ─────────────────────────────────────────────────────────
 
 
-@celery_app.task(name="tasks.telegram_task.process_telegram_update", bind=True, max_retries=1)
+def _dispatch_voice(task, log_id: str, tenant_id: str, payload: dict) -> dict:
+    """Voice-Zweig samt Retry-Entscheidung.
+
+    Bewusst eine gewöhnliche Funktion mit `task` als Parameter statt Code im Task-Rumpf:
+    Ein Celery-Task mit `bind=True` ist ein Objekt, dessen `__call__` das echte `self`
+    selbst einsetzt — ein von Hand übergebener Fake-Task landete als erstes Argument.
+    So ist die Retry-Logik ohne Celery-Laufzeit prüfbar.
+    """
+    try:
+        return _process_voice(log_id, tenant_id, payload)
+    except TranscriptionUnavailable as exc:
+        if task.request.retries < task.max_retries:
+            # 30/60/120s — ein einzelner Nachschlag überlebt ein Ratenlimit selten.
+            countdown = 30 * 2**task.request.retries
+            if task.request.retries == 0:
+                # Genau einmal ankündigen, nicht bei jedem Versuch.
+                _notify_voice_user(tenant_id, payload, exc.user_message or _VOICE_MSG_BUSY)
+            logger.warning(
+                "voice vorübergehend gescheitert, Retry %d/%d in %ds: %s",
+                task.request.retries + 1,
+                task.max_retries,
+                countdown,
+                exc,
+            )
+            raise task.retry(exc=exc, countdown=countdown) from exc
+
+        logger.error("voice: Retry-Vorrat erschöpft: %s", exc)
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_GAVE_UP)
+        return {"status": "error", "reason": "transcription_unavailable_exhausted"}
+    except TranscriptionError as exc:
+        # Der Nutzer wurde schon in _process_voice informiert — hier nicht doppeln.
+        logger.warning("voice endgültig gescheitert: %s", exc)
+        return {"status": "error", "reason": str(exc)[:120]}
+    except Exception as exc:
+        # Letzter Riegel. Alles, was hier ankommt, ist per Definition unerwartet —
+        # sonst hätte es eine der beiden Klauseln oben getroffen. Ohne diesen Fang
+        # stirbt der Task still und der Absender wartet auf eine Antwort, die nie kommt.
+        logger.exception("voice: unerwarteter Fehler")
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_GAVE_UP)
+        _alert_admin_voice_failure(tenant_id, f"unerwartet: {exc!r}"[:200], "unexpected")
+        return {"status": "error", "reason": "unexpected"}
+
+
+# 240s/300s statt eines globalen Limits in celery_app.conf: Nach der 30s-httpx-
+# Timeout-Senkung kostet ein Adapter höchstens 3 × 30s + 1s + 2s Backoff = 93s,
+# die Chain durchläuft zwei Adapter = 186s. 240s liegt komfortabel über diesem
+# legitimen Worst-Case und feuert nicht spontan, deckelt einen hängenden Task
+# aber weit unter den ~726s, die er sonst belegen könnte. Der Worker läuft mit
+# -c 2 (docker-compose.v2.yml:89) — zwei Slots für den gesamten Stack —, ein
+# Task, der nie zurückkehrt, blockiert also alles dahinter. Ein globales Limit
+# in celery_app.conf würde stattdessen batch_transcribe erschlagen, das legitim
+# ca. 394s läuft.
+@celery_app.task(
+    name="tasks.telegram_task.process_telegram_update",
+    bind=True,
+    max_retries=3,
+    soft_time_limit=240,
+    time_limit=300,
+)
 def process_telegram_update(self, log_id: str) -> dict:
     """Verarbeitet eine telegram_message_log-Zeile.
 
     Returns dict mit Statusinfo. Idempotent: wenn transcript_text
-    schon gesetzt, wird kein erneuter Transcribe-Call gemacht.
+    schon gesetzt, wird kein erneuter Transcribe-Call gemacht — ein Retry
+    kann deshalb keine Dopplung erzeugen.
     """
     row = _load_log_row(log_id)
     if row is None:
@@ -643,7 +702,7 @@ def process_telegram_update(self, log_id: str) -> dict:
     message_type = row["message_type"]
 
     if message_type == "voice":
-        return _process_voice(log_id, tenant_id, payload)
+        return _dispatch_voice(self, log_id, tenant_id, payload)
     elif message_type == "photo":
         return _process_photo(log_id, tenant_id, payload)
     else:
