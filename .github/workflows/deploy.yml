@@ -8,9 +8,10 @@ name: Deploy (Server B)
 # Postgres-Aenderungen, v1 unter /opt/zukunftsbund-content-autopilot/ tabu.
 # Dieses Deploy beruehrt ausschliesslich /opt/content-autopilot-v2.
 #
-# Runner: self-hosted im incus-Container 'content-autopilot' (kolonie-incus),
-# laeuft als User 'runner', hat direkten Zugriff auf /opt/content-autopilot-v2
-# und docker. Keine SSH-Secrets benoetigt.
+# Runner: der DEPLOY-Job laeuft self-hosted im incus-Container 'content-autopilot'
+# (kolonie-incus) als User 'runner' — er hat direkten Zugriff auf
+# /opt/content-autopilot-v2 und docker, deshalb sind keine SSH-Secrets noetig.
+# Der GATE-Job laeuft dagegen GitHub-hosted; Begruendung am Job selbst.
 
 on:
   workflow_run:
@@ -37,7 +38,18 @@ permissions:
 jobs:
   gate:
     name: CI-Gate (Tests + Lint gruen fuer diesen Commit?)
-    runs-on: [self-hosted, kolonie]
+    # BEWUSST GitHub-hosted, NICHT [self-hosted, kolonie]. Der Gate macht
+    # ausschliesslich `gh api`-Aufrufe — er braucht weder docker noch
+    # /opt/content-autopilot-v2. Auf dem self-hosted Runner waere er dagegen
+    # gefaehrlich: es gibt genau EINEN ('kolonie-incus'), der immer nur einen Job
+    # gleichzeitig bearbeitet. Der Gate wartet unten bis zu 30 Minuten auf
+    # lint.yml — und lint.yml braucht denselben Runner. Faellt der Gate-Job vor
+    # den Lint-Jobs auf den Runner, blockiert er genau das, worauf er wartet:
+    # Selbst-Deadlock, 30 Minuten eingefrorene CI, danach hart rot und kein
+    # Deploy. Die Queue-Reihenfolge (Gate wird immer erst nach Abschluss von
+    # tests.yml eingereiht) macht das unwahrscheinlich, aber nicht unmoeglich —
+    # und die Entkopplung kostet nur diese Zeile.
+    runs-on: ubuntu-latest
     # workflow_run: nur weitermachen, wenn der ausloesende Lauf selbst gruen war
     if: >-
       github.event_name == 'workflow_dispatch' ||
