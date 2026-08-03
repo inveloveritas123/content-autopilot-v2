@@ -212,3 +212,103 @@ def test_both_fail_raises():
         pytest.raises(TranscriptionError, match="Alle"),
     ):
         transcribe_voice(_FAKE_OGG)
+
+
+# ---------------------------------------------------------------------------
+# Test: Fehlerklassifikation — vorübergehend vs endgültig
+# ---------------------------------------------------------------------------
+
+
+def _http_error(status: int, body: str = "boom"):
+    """Baut einen httpx.HTTPStatusError mit echtem Response-Objekt."""
+    import httpx
+
+    request = httpx.Request("POST", "https://router.example/v1/x")
+    response = httpx.Response(status, text=body, request=request)
+    return httpx.HTTPStatusError("err", request=request, response=response)
+
+
+def test_429_is_transient():
+    from services.voice_transcription import (
+        TranscriptionUnavailable,
+        _classify_http_error,
+    )
+
+    assert isinstance(_classify_http_error(_http_error(429)), TranscriptionUnavailable)
+
+
+def test_503_is_transient():
+    from services.voice_transcription import (
+        TranscriptionUnavailable,
+        _classify_http_error,
+    )
+
+    assert isinstance(_classify_http_error(_http_error(503)), TranscriptionUnavailable)
+
+
+def test_403_is_terminal():
+    from services.voice_transcription import (
+        TranscriptionError,
+        TranscriptionUnavailable,
+        _classify_http_error,
+    )
+
+    err = _classify_http_error(_http_error(403, "not approved for this API key"))
+    assert isinstance(err, TranscriptionError)
+    assert not isinstance(err, TranscriptionUnavailable)
+    # Der Body MUSS in der Meldung stehen — sonst ist ein 403 nicht von einem 400
+    # zu unterscheiden und die Diagnose erfordert, den Call nachzubauen.
+    assert "not approved" in str(err)
+
+
+def test_retry_stops_after_three_attempts():
+    from services.voice_transcription import TranscriptionUnavailable, _with_retry
+
+    calls = []
+
+    def _always_busy():
+        calls.append(1)
+        raise TranscriptionUnavailable("429")
+
+    with patch("services.voice_transcription.time.sleep") as mock_sleep:
+        with pytest.raises(TranscriptionUnavailable):
+            _with_retry("test", _always_busy)
+
+    assert len(calls) == 3
+    # Zwischen drei Versuchen wird zweimal gewartet, mit 1s und 2s.
+    assert [c.args[0] for c in mock_sleep.call_args_list] == [1, 2]
+
+
+def test_retry_succeeds_on_second_attempt():
+    from services.voice_transcription import TranscriptionUnavailable, _with_retry
+
+    calls = []
+
+    def _busy_once():
+        calls.append(1)
+        if len(calls) == 1:
+            raise TranscriptionUnavailable("429")
+        return "fertig"
+
+    with patch("services.voice_transcription.time.sleep") as mock_sleep:
+        assert _with_retry("test", _busy_once) == "fertig"
+
+    assert len(calls) == 2
+    assert mock_sleep.call_count == 1
+
+
+def test_terminal_error_is_not_retried():
+    from services.voice_transcription import TranscriptionError, _with_retry
+
+    calls = []
+
+    def _rejected():
+        calls.append(1)
+        raise TranscriptionError("403")
+
+    with patch("services.voice_transcription.time.sleep") as mock_sleep:
+        with pytest.raises(TranscriptionError):
+            _with_retry("test", _rejected)
+
+    assert len(calls) == 1
+    assert mock_sleep.call_count == 0

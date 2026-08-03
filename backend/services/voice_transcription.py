@@ -14,6 +14,8 @@ import base64
 import logging
 import os
 import tempfile
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import httpx
@@ -25,7 +27,85 @@ _ACCEPTED_MIME_TYPES = {"audio/ogg", "audio/ogg; codecs=opus", "audio/opus"}
 
 
 class TranscriptionError(Exception):
-    pass
+    """Endgültig — ein weiterer Versuch würde dasselbe Ergebnis liefern.
+
+    `user_message` ist der Text, den der Absender lesen soll. Er wird gesetzt, wo die
+    Ursache eine eigene, verständliche Formulierung verdient (z. B. „zu lang"); sonst
+    bleibt er None und der Aufrufer nimmt seine Standardmeldung. Die technische Meldung
+    aus `str(exc)` geht ausschließlich ins Log und in den Betreiber-Alarm — ein
+    Router-Body wie `{"error":{"origin":"router",…}}` ist nichts, was ein Nutzer lesen will.
+    """
+
+    def __init__(self, message: str, user_message: str | None = None):
+        super().__init__(message)
+        self.user_message = user_message
+
+
+class TranscriptionUnavailable(TranscriptionError):
+    """Vorübergehend — 429, 5xx oder Netzfehler. Ein Retry ist der richtige Zug."""
+
+
+_MAX_ATTEMPTS = 3
+
+
+def _router_config() -> tuple[str, str]:
+    from config import settings
+
+    base_url = settings.litellm_base_url
+    if not base_url:
+        raise TranscriptionError("LiteLLM-Router nicht konfiguriert (LITELLM_BASE_URL fehlt)")
+    api_key = (
+        getattr(settings, "litellm_api_key", None)
+        or getattr(settings, "requesty_api_key", None)
+        or ""
+    )
+    return base_url, api_key
+
+
+def _classify_http_error(exc: httpx.HTTPStatusError) -> TranscriptionError:
+    """429 und 5xx sind vorübergehend, alles andere endgültig.
+
+    Der Response-Body gehört IMMER in die Meldung: Der Router schreibt die eigentliche
+    Ursache dort hinein („model is not approved for this API key"). Ohne ihn ist ein 403
+    nicht von einem 400 zu unterscheiden.
+    """
+    status = exc.response.status_code if exc.response is not None else 0
+    try:
+        body = (exc.response.text or "")[:300] if exc.response is not None else ""
+    except Exception:  # pragma: no cover — ein Body darf die Diagnose nie sprengen
+        body = "(Body nicht lesbar)"
+
+    if status == 429 or status >= 500:
+        return TranscriptionUnavailable(f"HTTP {status} (vorübergehend): {body}")
+
+    logger.error("Transkription: HTTP %d (kein Retry): %s", status, body)
+    return TranscriptionError(f"HTTP {status}: {body}")
+
+
+def _with_retry(label: str, call: Callable[[], "TranscriptionResult"]) -> "TranscriptionResult":
+    """Wiederholt NUR vorübergehende Fehler, mit 1s/2s Backoff.
+
+    Endgültige Fehler laufen ungebremst durch — sie sind kein Fall für einen zweiten Versuch.
+    """
+    last_error: TranscriptionUnavailable | None = None
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            return call()
+        except TranscriptionUnavailable as exc:
+            last_error = exc
+            if attempt < _MAX_ATTEMPTS - 1:
+                wait = 2**attempt
+                logger.warning(
+                    "%s: %s — Versuch %d/%d, warte %ds",
+                    label,
+                    exc,
+                    attempt + 1,
+                    _MAX_ATTEMPTS,
+                    wait,
+                )
+                time.sleep(wait)
+    assert last_error is not None
+    raise last_error
 
 
 @dataclass
@@ -75,8 +155,6 @@ def transcribe_with_gemini(
     mime_type: str = "audio/ogg",
     language_hint: str = "de",
 ) -> TranscriptionResult:
-    from config import settings
-
     try:
         from services.cost_cap import CostCapMiddleware
 
@@ -84,19 +162,10 @@ def transcribe_with_gemini(
     except Exception as e:
         logger.debug("CostCap check skipped: %s", type(e).__name__)
 
-    base_url = settings.litellm_base_url
-    if not base_url:
-        raise TranscriptionError("LiteLLM-Router nicht konfiguriert (LITELLM_BASE_URL fehlt)")
-
-    api_key = (
-        getattr(settings, "litellm_api_key", None)
-        or getattr(settings, "requesty_api_key", None)
-        or ""
-    )
+    base_url, api_key = _router_config()
 
     audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
     data_uri = f"data:{mime_type};base64,{audio_b64}"
-
     prompt = (
         f"Transcribe the following audio. Return ONLY the transcription text, "
         f"no explanation. Language hint: {language_hint}"
@@ -115,36 +184,39 @@ def transcribe_with_gemini(
         "max_tokens": 4096,
     }
 
-    try:
-        with httpx.Client(timeout=120) as client:
-            resp = client.post(
-                f"{base_url}/chat/completions",
-                json=payload,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-            )
-            resp.raise_for_status()
-            result = resp.json()
-    except httpx.HTTPStatusError as exc:
-        raise TranscriptionError(
-            f"Router HTTP {exc.response.status_code}: {exc.response.text[:200]}"
-        ) from exc
-    except Exception as exc:
-        raise TranscriptionError(f"Router-Fehler: {exc}") from exc
+    def _call() -> TranscriptionResult:
+        try:
+            with httpx.Client(timeout=120) as client:
+                resp = client.post(
+                    f"{base_url}/chat/completions",
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                )
+                resp.raise_for_status()
+                result = resp.json()
+        except httpx.HTTPStatusError as exc:
+            raise _classify_http_error(exc) from exc
+        except httpx.RequestError as exc:
+            raise TranscriptionUnavailable(f"Netzfehler: {exc}") from exc
 
-    text = (((result.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
-    if not text:
-        raise TranscriptionError("Leere Transkription vom Router")
+        text = (
+            ((result.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+        ).strip()
+        if not text:
+            raise TranscriptionError("Leere Transkription vom Router")
 
-    return TranscriptionResult(
-        text=text,
-        confidence=0.85,
-        model_id=_EU_VOICE_MODEL,
-        language_detected=language_hint,
-        duration_sec=_get_ogg_duration(audio_bytes),
-    )
+        return TranscriptionResult(
+            text=text,
+            confidence=0.85,
+            model_id=_EU_VOICE_MODEL,
+            language_detected=language_hint,
+            duration_sec=_get_ogg_duration(audio_bytes),
+        )
+
+    return _with_retry("gemini", _call)
 
 
 def transcribe_with_whisper(
