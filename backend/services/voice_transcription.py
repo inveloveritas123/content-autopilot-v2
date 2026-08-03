@@ -201,8 +201,6 @@ def transcribe_with_gemini(
             text = (
                 ((result.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
             ).strip()
-            if not text:
-                raise TranscriptionError("Leere Transkription vom Router")
         except httpx.HTTPStatusError as exc:
             raise _classify_http_error(exc) from exc
         except httpx.RequestError as exc:
@@ -213,6 +211,17 @@ def transcribe_with_gemini(
             # z. B. ein String statt eines Message-Dicts → AttributeError) sind ebenso
             # endgültig wie ein 403 — ein Retry würde dasselbe Ergebnis liefern.
             raise TranscriptionError(f"Unerwartete Router-Antwort: {exc}") from exc
+        except Exception as exc:
+            # Alles andere, was hier noch entkommen könnte — etwa eine kaputte
+            # LITELLM_BASE_URL (httpx.InvalidURL, keine RequestError-Unterklasse) — ist
+            # ebenso endgültig: derselbe Aufruf mit derselben Config liefert dasselbe
+            # Ergebnis. Ohne diesen Fang liefe der Fehler roh an TranscriptionError
+            # vorbei, an _with_retry, der Anbieterkette und _process_voice — genau der
+            # stille Verlust, den dieser Pfad nie wieder zulassen soll.
+            raise TranscriptionError(f"Router-Fehler: {exc}") from exc
+
+        if not text:
+            raise TranscriptionError("Leere Transkription vom Router")
 
         return TranscriptionResult(
             text=text,
