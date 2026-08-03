@@ -51,6 +51,12 @@ regexes = [
     # False-Positive: linkedin-client-id-Regel matcht das deutsche Prosa-Wort
     # "Besonderheiten" nach "linkedin_specific:" im Brand-Voice-Prompt (kein Secret).
     '''Besonderheiten''',
+    # False-Positive: generic-api-key matcht den hochentropen Konstantennamen in
+    # "from tasks.p12_pruning import AVATAR_KEYS_FOR_P12B, VOICE_KEYS_FOR_P12B"
+    # (backend/tasks/p12b_task.py). Ein Python-Import, kein Schluessel.
+    # Traf nur den History-Scan auf main (gitleaks detect ueber --full-history),
+    # nie den Diff-Scan der PRs — main war dadurch dauerhaft rot.
+    '''(AVATAR|VOICE)_KEYS_FOR_P12B''',
 ]
 paths = [
     # Alembic migrations may reference old values in comments
