@@ -677,12 +677,20 @@ def _notify_voice_user(tenant_id: str, payload: dict, message: str) -> bool:
 
     Fehlt 'chat' im Payload, wird der Tenant-Chat aufgelöst; ohne beides bleibt nur der
     Betreiber-Alarm (der Nutzer ist dann schlicht nicht adressierbar).
+
+    Die chat_id-Ermittlung sitzt bewusst mit im try: 'chat' kommt aus original_payload,
+    einem unvalidierten DB-Feld. Ist 'chat' wahrheitswertig, aber kein Dict (z. B. ein
+    kaputter String), würfe `.get("id")` sonst außerhalb jeder Absicherung — und würde
+    hier die TranscriptionError/-Unavailable ersetzen, die der Nutzer eigentlich erfahren
+    sollte. `if not chat_id: return False` bleibt aber ein eigener Zweig, kein except:
+    „kein Chat ermittelbar" ist etwas anderes als „Senden fehlgeschlagen".
     """
-    chat_id = (payload.get("chat") or {}).get("id") or _resolve_chat_id(tenant_id)
-    if not chat_id:
-        logger.warning("voice failure: kein chat_id ermittelbar (tenant=%s)", tenant_id)
-        return False
     try:
+        chat_id = (payload.get("chat") or {}).get("id") or _resolve_chat_id(tenant_id)
+        if not chat_id:
+            logger.warning("voice failure: kein chat_id ermittelbar (tenant=%s)", tenant_id)
+            return False
+
         from api.telegram import _send_telegram_message
 
         return _send_telegram_message(int(chat_id), message, tenant_id=tenant_id)
@@ -691,11 +699,17 @@ def _notify_voice_user(tenant_id: str, payload: dict, message: str) -> bool:
         return False
 
 
-def _alert_admin_voice_failure(tenant_id: str, reason: str) -> None:
-    """Betreiber-Alarm, höchstens einmal pro UTC-Tag.
+def _alert_admin_voice_failure(tenant_id: str, reason: str, category: str) -> None:
+    """Betreiber-Alarm, höchstens einmal pro UTC-Tag — entprellt pro Ursache UND Tenant.
 
-    Muster 1:1 aus services/llm.py::_maybe_send_global_cap_alert. Ohne die Entprellung
-    erzeugt ein ausgefallener Transkriptionsdienst einen Alarm pro Sprachnachricht.
+    Grundmuster aus services/llm.py::_maybe_send_global_cap_alert, aber NICHT dessen
+    globaler Key: dort ist die Kostengrenze eine einzige globale Größe, ein globaler
+    Key also richtig. Hier sind es mehrere Ursachen über mehrere Tenants — ein
+    gemeinsamer Key ließe einen Bedienfehler (z. B. eine Sprachnachricht ohne file_id)
+    frühmorgens den einzigen Alarm-Platz des Tages verbrauchen, und ein echter Ausfall
+    später am Tag verschwände spurlos dahinter. `category` ist bewusst ein Literal an
+    der Aufrufstelle, nicht aus `reason` abgeleitet — der Fehlertext variiert (jeder
+    Router-Body sieht anders aus) und würde damit gar nichts entprellen.
     Fail-open in jedem Fall.
     """
     try:
@@ -709,7 +723,12 @@ def _alert_admin_voice_failure(tenant_id: str, reason: str) -> None:
         today = _dt.datetime.now(_dt.UTC).date().isoformat()
         r = _redis.from_url(settings.redis_url, decode_responses=True)
         try:
-            was_set = r.set(f"{_VOICE_ALERT_REDIS_KEY}:{today}", "1", nx=True, ex=86400)
+            was_set = r.set(
+                f"{_VOICE_ALERT_REDIS_KEY}:{category}:{tenant_id}:{today}",
+                "1",
+                nx=True,
+                ex=86400,
+            )
         finally:
             r.close()
         if not was_set:
@@ -734,7 +753,7 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
     if not file_id:
         logger.warning("voice ohne file_id, log_id=%s", log_id)
         _notify_voice_user(tenant_id, payload, _VOICE_MSG_NO_FILE)
-        _alert_admin_voice_failure(tenant_id, "voice ohne file_id")
+        _alert_admin_voice_failure(tenant_id, "voice ohne file_id", "no_file_id")
         raise TranscriptionError("voice ohne file_id")
 
     audio_bytes = _telegram_get_file(file_id, tenant_id)
@@ -746,7 +765,7 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         # Der Nutzertext reist an der Ausnahme mit, statt hier gesendet zu werden: Bei drei
         # Retries würde der Absender sonst dreimal „ich versuche es gleich noch einmal"
         # lesen. Wann er ihn liest, entscheidet _dispatch_voice.
-        _alert_admin_voice_failure(tenant_id, "Telegram-Download fehlgeschlagen")
+        _alert_admin_voice_failure(tenant_id, "Telegram-Download fehlgeschlagen", "download")
         raise TranscriptionUnavailable(
             "Telegram-Download fehlgeschlagen", user_message=_VOICE_MSG_DOWNLOAD
         )
@@ -760,20 +779,20 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         )
     except TranscriptionUnavailable as exc:
         logger.warning("transcribe_voice vorübergehend fehlgeschlagen: %s", exc)
-        _alert_admin_voice_failure(tenant_id, str(exc)[:200])
+        _alert_admin_voice_failure(tenant_id, str(exc)[:200], "transient")
         if not exc.user_message:
             exc.user_message = _VOICE_MSG_BUSY
         raise
     except TranscriptionError as exc:
         logger.warning("transcribe_voice endgültig fehlgeschlagen: %s", exc)
         _notify_voice_user(tenant_id, payload, exc.user_message or _VOICE_MSG_TRANSCRIBE_FAILED)
-        _alert_admin_voice_failure(tenant_id, str(exc)[:200])
+        _alert_admin_voice_failure(tenant_id, str(exc)[:200], "terminal")
         raise
 
     transcript = (result.text or "").strip()
     if not transcript:
         _notify_voice_user(tenant_id, payload, _VOICE_MSG_EMPTY)
-        _alert_admin_voice_failure(tenant_id, "leeres Transkript")
+        _alert_admin_voice_failure(tenant_id, "leeres Transkript", "empty")
         raise TranscriptionError("leeres Transkript")
 
     _update_log_transcript(log_id, transcript, result.model_id or "unknown", result.confidence)

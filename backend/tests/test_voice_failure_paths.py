@@ -160,6 +160,15 @@ def test_notify_without_any_chat_id_is_survivable():
     mock_send.assert_not_called()
 
 
+def test_notify_survives_malformed_chat_in_payload():
+    """'chat' kommt unvalidiert aus original_payload. Ist es kein Dict (kaputter
+    String statt {'id': ...}), darf .get('id') die eigentliche TranscriptionError
+    nicht durch einen AttributeError ersetzen — fail-open gilt fuer den gesamten
+    Funktionsrumpf, nicht nur fuer den Send-Teil."""
+    with patch.object(tt, "_resolve_chat_id", return_value=None):
+        assert tt._notify_voice_user("tenant-1", {"voice": {}, "chat": "kaputt"}, "Text") is False
+
+
 def test_admin_alert_is_debounced_per_day():
     """Ohne Entprellung erzeugt ein ausgefallener Dienst einen Alarm pro Nachricht."""
     mock_redis = MagicMock()
@@ -174,7 +183,7 @@ def test_admin_alert_is_debounced_per_day():
         patch("redis.from_url", return_value=mock_redis),
         patch("api.telegram._send_admin_telegram_message") as mock_send,
     ):
-        tt._alert_admin_voice_failure("tenant-1", "HTTP 429")
+        tt._alert_admin_voice_failure("tenant-1", "HTTP 429", "transient")
 
     mock_send.assert_not_called()
 
@@ -192,10 +201,53 @@ def test_admin_alert_sent_on_first_failure_of_the_day():
         patch("redis.from_url", return_value=mock_redis),
         patch("api.telegram._send_admin_telegram_message") as mock_send,
     ):
-        tt._alert_admin_voice_failure("tenant-1", "HTTP 429")
+        tt._alert_admin_voice_failure("tenant-1", "HTTP 429", "transient")
 
     mock_send.assert_called_once()
     assert "HTTP 429" in mock_send.call_args[0][1]
+
+
+def test_admin_alert_key_carries_category_and_tenant():
+    """Der Key ist das eigentliche Verhalten des Fixes — ihn nicht zu pruefen hiesse,
+    den Fix nicht zu pruefen."""
+    mock_redis = MagicMock()
+    mock_redis.set.return_value = True
+
+    mock_settings = MagicMock()
+    mock_settings.telegram_admin_chat_id = "123"
+    mock_settings.redis_url = "redis://localhost:6379/0"
+
+    with (
+        patch("tasks.telegram_task.settings", mock_settings),
+        patch("redis.from_url", return_value=mock_redis),
+        patch("api.telegram._send_admin_telegram_message"),
+    ):
+        tt._alert_admin_voice_failure("tenant-1", "HTTP 429", "transient")
+
+    used_key = mock_redis.set.call_args[0][0]
+    assert "transient" in used_key
+    assert "tenant-1" in used_key
+
+
+def test_two_different_categories_both_alert_on_the_same_day():
+    """Kern des Befunds: ein Bedienfehler (no_file_id) darf den Alarm-Platz des Tages
+    nicht fuer einen echten Ausfall (transient) verbrauchen."""
+    mock_redis = MagicMock()
+    mock_redis.set.return_value = True
+
+    mock_settings = MagicMock()
+    mock_settings.telegram_admin_chat_id = "123"
+    mock_settings.redis_url = "redis://localhost:6379/0"
+
+    with (
+        patch("tasks.telegram_task.settings", mock_settings),
+        patch("redis.from_url", return_value=mock_redis),
+        patch("api.telegram._send_admin_telegram_message") as mock_send,
+    ):
+        tt._alert_admin_voice_failure("tenant-1", "kein file_id", "no_file_id")
+        tt._alert_admin_voice_failure("tenant-1", "HTTP 429", "transient")
+
+    assert mock_send.call_count == 2
 
 
 def test_admin_alert_never_raises():
@@ -208,4 +260,4 @@ def test_admin_alert_never_raises():
         patch("tasks.telegram_task.settings", mock_settings),
         patch("redis.from_url", side_effect=RuntimeError("redis weg")),
     ):
-        tt._alert_admin_voice_failure("tenant-1", "HTTP 429")  # darf nicht werfen
+        tt._alert_admin_voice_failure("tenant-1", "HTTP 429", "transient")  # darf nicht werfen
