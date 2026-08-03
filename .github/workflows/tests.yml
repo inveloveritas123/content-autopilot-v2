@@ -73,6 +73,4 @@ jobs:
             --deselect "tests/test_p0x_router.py::TestTaskModuleImports::test_tier_registry_has_s6" \
             --deselect "tests/test_p0x_router.py::TestTierResolutionIntegration::test_p01_resolves_to_s6_by_default" \
             --deselect "tests/test_model_mode.py::TestSetupPfadUnberührt::test_pipeline_llm_s6_tier_unverändert" \
-            --deselect "tests/test_idempotency_routing.py::TestLogIdThreaded::test_process_voice_threads_log_id" \
-            --deselect "tests/test_voice_transcription.py::test_gemini_adapter_success" \
             --deselect "tests/test_telegram_outbound_pertenant.py::TestSendTelegramMessagePerTenant::test_updates_last_active_on_success"
