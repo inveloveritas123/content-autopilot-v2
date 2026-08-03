@@ -138,6 +138,55 @@ def test_empty_transcript_notifies_user():
     mock_notify.assert_called_once()
 
 
+def test_chunk_store_failure_notifies_and_alerts():
+    """Scheitert das Chunk-Speichern, hoerte der Absender bisher nichts und der
+    Betreiber erfuhr nichts — vier Zeilen unterhalb von Code, das dieser Branch
+    bereits umgeschrieben hat, um genau das zu beenden."""
+    result = MagicMock()
+    result.text = "Ein Transkript."
+    result.model_id = "voxtral"
+    result.confidence = 0.9
+
+    with (
+        patch.object(tt, "_telegram_get_file", return_value=b"audio"),
+        patch.object(tt, "transcribe_voice", return_value=result),
+        patch.object(tt, "_update_log_transcript"),
+        patch.object(tt, "asyncio") as mock_asyncio,
+        patch.object(tt, "_notify_voice_user") as mock_notify,
+        patch.object(tt, "_alert_admin_voice_failure") as mock_alert,
+    ):
+        mock_asyncio.run.side_effect = RuntimeError("db down")
+        outcome = tt._process_voice("log-1", "tenant-1", _PAYLOAD)
+
+    assert outcome == {"status": "transcribed_no_chunk", "reason": "db down"}
+    mock_notify.assert_called_once()
+    assert mock_notify.call_args[0][2] == tt._VOICE_MSG_NOT_SAVED
+    mock_alert.assert_called_once()
+    assert mock_alert.call_args[0][2] == "chunk"
+
+
+def test_soft_time_limit_during_chunk_store_is_not_swallowed():
+    """SoftTimeLimitExceeded muss aus _process_voice entkommen statt in ein
+    transcribed_no_chunk-Dict verwandelt zu werden — sonst haelt genau der
+    Fehlerpfad die Ausnahme fest, den dieser Branch gerade gehaertet hat."""
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    result = MagicMock()
+    result.text = "Ein Transkript."
+    result.model_id = "voxtral"
+    result.confidence = 0.9
+
+    with (
+        patch.object(tt, "_telegram_get_file", return_value=b"audio"),
+        patch.object(tt, "transcribe_voice", return_value=result),
+        patch.object(tt, "_update_log_transcript"),
+        patch.object(tt, "asyncio") as mock_asyncio,
+    ):
+        mock_asyncio.run.side_effect = SoftTimeLimitExceeded()
+        with pytest.raises(SoftTimeLimitExceeded):
+            tt._process_voice("log-1", "tenant-1", _PAYLOAD)
+
+
 def test_notify_falls_back_to_resolved_chat_id():
     """Fehlt 'chat' im Payload, waere die Nachricht sonst ohne jede Reaktion zu Ende."""
     with (

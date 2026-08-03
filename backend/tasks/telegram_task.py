@@ -737,6 +737,12 @@ _VOICE_MSG_TRANSCRIBE_FAILED = (
     "🎤 Ich konnte die Sprachnachricht nicht transkribieren — bitte schick sie noch einmal."
 )
 _VOICE_MSG_EMPTY = "🎤 Die Sprachnachricht kam bei mir leer an — bitte schick sie noch einmal."
+# Transkript liegt vor, nur das Speichern ist gescheitert — eine der Meldungen oben
+# würde etwas anderes behaupten, als tatsächlich passiert ist.
+_VOICE_MSG_NOT_SAVED = (
+    "🎤 Ich habe deine Sprachnachricht verstanden, konnte sie aber nicht speichern — "
+    "bitte schick sie sicherheitshalber noch einmal."
+)
 # Wenn der Retry-Vorrat aufgebraucht ist: kein weiteres „gleich nochmal" versprechen.
 _VOICE_MSG_GAVE_UP = (
     "🎤 Ich konnte deine Sprachnachricht leider nicht verarbeiten. Bitte schick sie noch einmal."
@@ -818,6 +824,20 @@ def _alert_admin_voice_failure(tenant_id: str, reason: str, category: str) -> No
 
 
 def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
+    """Verarbeitet eine Sprachnachricht: Download, Transkription, Speichern, Routing.
+
+    Raises:
+        TranscriptionError: fehlende file_id, endgültig gescheiterte Transkription
+            oder leeres Transkript — der Nutzer wurde vor dem Raise bereits benachrichtigt.
+        TranscriptionUnavailable: Download- oder Transkriptionsfehler, die
+            `_dispatch_voice` retryt. Der Nutzer wird erst dort benachrichtigt.
+        SoftTimeLimitExceeded: reicht unverändert durch, statt in eines der obigen
+            Ergebnisse verpackt zu werden — siehe FIX 2.
+
+    Nur der Erfolgspfad (inkl. des Chunk-Speicher-Fehlers, der als
+    ``{"status": "transcribed_no_chunk", ...}`` zurückkommt) liefert das
+    annotierte ``dict`` regulär zurück.
+    """
     voice_obj: dict = payload.get("voice") or {}
     file_id = voice_obj.get("file_id")
     duration = int(voice_obj.get("duration") or 0)
@@ -883,8 +903,16 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         chunk_id = asyncio.run(
             _store_chunk_async(tenant_id, source_type, transcript, log_id, chunk_metadata)
         )
+    except SoftTimeLimitExceeded:
+        # Muss vor dem Exception-Katalog stehen — siehe _route_inbound_message.
+        raise
     except Exception as exc:
         logger.warning("store_voice_chunk failed: %s", exc)
+        # Ohne diese beiden Zeilen hört der Absender nichts und der Betreiber
+        # erfährt nichts — vier Zeilen unterhalb von Code, den dieser Branch
+        # gerade umgeschrieben hat, um genau das nie wieder zuzulassen.
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_NOT_SAVED)
+        _alert_admin_voice_failure(tenant_id, str(exc)[:200], "chunk")
         return {"status": "transcribed_no_chunk", "reason": str(exc)[:120]}
 
     chat_id_voice = (payload.get("chat") or {}).get("id")
