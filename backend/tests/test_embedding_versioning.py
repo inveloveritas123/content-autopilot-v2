@@ -214,3 +214,65 @@ def test_load_4week_avg_recall_returns_none_when_empty():
 
     result = asyncio.run(_load_4week_avg_recall(mock_db, "some-tenant-id"))
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# D) Modellwahl-Invariante + dimensions-Parameter (03.08.2026)
+# ---------------------------------------------------------------------------
+
+
+def test_aktives_embedding_modell_ist_eu_gepinnt_und_1536d():
+    """INVARIANTE: Das aktive Modell ist EU-region-gepinnt und liefert 1536 Dimensionen.
+
+    Zwei harte Randbedingungen, die dieser Test einfriert:
+    1. `memory_chunks.embedding` ist `vector(1536)` (Migration 039) — jede andere
+       Dimension wird von embed() verworfen und der Chunk landet vektorlos.
+    2. Requesty-IDs tragen den Region-Pin IM NAMEN. Ohne `@<region>` antwortet der
+       Router 403, ohne Provider-Prefix 404. Die nackte ID ist NICHT aequivalent.
+    """
+    from services.embedding_service import ACTIVE_EMBEDDING_MODEL, EMBEDDING_MODELS
+
+    config = EMBEDDING_MODELS[ACTIVE_EMBEDDING_MODEL]
+    assert config["dim"] == 1536, "muss zu memory_chunks.embedding vector(1536) passen"
+    assert config["model_name"] == "azure/openai/text-embedding-3-large@francecentral", (
+        "Modell-ID muss Provider-Prefix UND EU-Region-Pin tragen — "
+        f"ist: {config['model_name']!r}"
+    )
+
+
+def test_embed_sendet_dimensions_wenn_konfiguriert():
+    """embed() muss `dimensions` mitsenden, sonst liefert -large 3072 statt 1536.
+
+    text-embedding-3-large ist nativ 3072-dimensional und wird per MRL auf 1536
+    gekuerzt — aber nur, wenn der Parameter im Request steht. Fehlt er, verwirft
+    die Dimensionspruefung in embed() das Ergebnis und der Chunk bleibt vektorlos.
+    """
+    from services.embedding_service import ACTIVE_EMBEDDING_MODEL, EMBEDDING_MODELS
+
+    config = EMBEDDING_MODELS[ACTIVE_EMBEDDING_MODEL]
+    fake_vector = [0.1] * config["dim"]
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"data": [{"embedding": fake_vector}]}
+
+    mock_client = AsyncMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.post = AsyncMock(return_value=mock_response)
+
+    with (
+        patch("services.embedding_service.settings") as mock_settings,
+        patch("httpx.AsyncClient", return_value=mock_client),
+    ):
+        mock_settings.litellm_base_url = "http://fake-requesty"
+        mock_settings.litellm_api_key = "fake-key"
+
+        from services.embedding_service import embed
+
+        asyncio.run(embed("Test-Text"))
+
+    payload = mock_client.post.call_args.kwargs["json"]
+    assert (
+        payload["dimensions"] == 1536
+    ), f"Request muss dimensions=1536 enthalten — gesendet wurde: {payload!r}"
