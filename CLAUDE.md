@@ -286,20 +286,40 @@ Der dritte Claude ("Cowork") auf Roberts Desktop fungiert als QA-Lead und Archit
 
 ### LLM-Routing im Backend-Code (PFLICHT)
 
-Basierend auf LLM-ROUTING-STACK-v2 (Nextcloud: /zukunftsbund/Infrastruktur/LLM/):
+> ⚠️ Die frühere S1–S6-Tabelle an dieser Stelle beschrieb einen **Planungsstand**, nicht den Code.
+> Sie nannte S6 als `anthropic/claude-sonnet-4-6` (€0,20/Call) und S1 als ein Preview-Modell,
+> das in der Requesty-Allowlist gar nicht existiert. Wer danach Kosten schätzte, lag um
+> Größenordnungen daneben. Ersetzt am 03.08.2026 durch live gemessene Werte.
 
-| Tier | Modell | Kosten/Call | Einsatz im Backend |
-|------|--------|-------------|-------------------|
-| S1 | `google/gemini-2.5-flash-lite-preview-06-17` | €0.001 | Routing, Klassifikation, Tagging |
-| S2 | `mistral/mistral-small-latest` | €0.003 | Default Chat, einfache Analyse |
-| S3 | `mistral/devstral-small-latest` | €0.002 | Einfacher Code, Templates |
-| S4 | `mistral/mistral-large-latest` | €0.01 | Premium-Analyse, Voice Profile |
-| S5 | `mistral/devstral-latest` | €0.03 | Komplexer Code — CONFIRM noetig |
-| S6 | `anthropic/claude-sonnet-4-6` | €0.20 | Frontier — CONFIRM noetig |
+**Verbindlich ist `services/llm_mapping.py`.** Der Code kennt nur diese vier Keys — hier
+gegen den echten Router geprüft (03.08.2026):
+
+| Key im Code | löst auf zu | Router | Einsatz |
+|---|---|---|---|
+| `gemini-flash` | `vertex/gemini-2.5-flash-lite@europe-central2` | ✅ 200 | Analyse, Klassifikation, Tagging, Transkription |
+| `claude-sonnet` | `vertex/gemini-2.5-flash-lite@europe-central2` | ✅ 200 | Creative im **testmodus** (Remap auf Gemini seit 05/2026) |
+| `claude-sonnet-eu` | `bedrock/claude-sonnet-4-6@eu-central-1` | ❌ **403** | Creative im **produktiv**-Modus |
+| `gpt-4o-mini` | `openai/gpt-4.1-mini` | ❌ **403** | Vision-Fallback (`photo_pipeline.py`) |
+
+Embeddings: `azure/openai/text-embedding-3-large@francecentral` mit `dimensions: 1536`
+(Registry in `services/embedding_service.py`).
+
+**⚠️ Latenter Ausfall — `produktiv` ist nicht einsatzbereit.** `claude-sonnet-eu` ist für den
+API-Key nicht freigegeben. Solange alle Tenants im `testmodus` laufen (Stand 03.08.: alle),
+fällt das nicht auf. Wer einen Tenant auf `produktiv` stellt, bricht damit die
+Post-Generierung. Vorher in Requesty freigeben. Dasselbe gilt für den Vision-Fallback.
+
+**Requesty-Modell-IDs:** Die volle ID ist `<Provider>/<Name-wie-in-der-UI>` und enthält den
+Region-Pin. Fehlt der Provider-Prefix → **404**, fehlt der Region-Pin → **403**. Ein 404 sagt
+nichts über Berechtigungen, nur über die Schreibweise. `GET /v1/models` listet **nicht** alle
+nutzbaren Modelle und taugt nicht als Beleg — verbindlich ist nur der echte Call.
 
 **REGELN:**
-- S1-S4: Frei verwendbar, kein Confirm noetig
-- S5-S6: NUR mit explizitem Grund im Issue-Kommentar
-- `model="claude-sonnet"` ist VERBOTEN im Backend-Code — immer S1-S4 nutzen
+- Teure Frontier-Modelle (Anthropic, Mistral-large, devstral) NUR mit explizitem Grund im
+  Issue-Kommentar. Das war die Absicht hinter der alten S5/S6-Confirm-Regel und gilt weiter.
+- Das alte Verbot von `model="claude-sonnet"` ist **gegenstandslos**: Der Key löst seit dem
+  Remap 05/2026 auf Gemini-Flash-Lite auf, der Kostengrund dahinter existiert nicht mehr.
+  Teuer ist heute `claude-sonnet-eu` (Bedrock) — und der ist ohnehin nicht freigegeben.
+- Neue Modelle vor dem Einbauen gegen den Router prüfen, nicht nur in der UI freigeben
 - Alle Calls gehen ueber Requesty.ai Router (LITELLM_BASE_URL in .env)
 - Zielbudget: <€170/Monat fuer den gesamten Stack

@@ -541,3 +541,64 @@ def test_token_never_in_post_error_response():
     body_text = resp.text
     assert evil_token not in body_text
     assert "SUPERSECRETTOKEN_MUSTNOTLEAK12345" not in body_text
+
+
+# ---------------------------------------------------------------------------
+# POST — Telegram nicht erreichbar → 503 (NICHT 400)
+# ---------------------------------------------------------------------------
+
+
+def test_post_netzwerkfehler_returns_503_nicht_400():
+    """Ein Netzwerkfehler darf NICHT als Token-Ablehnung ausgegeben werden.
+
+    Am 03.08.2026 scheiterte eine Bot-Registrierung an einem ReadTimeout, die API
+    antwortete aber "Token von Telegram abgelehnt" (400). Derselbe Token lief
+    danach unveraendert durch. Wer der Meldung glaubt, widerruft einen intakten
+    Token und legt ihn neu an — ein irreversibler Schritt aufgrund einer
+    Falschaussage.
+
+    503 sagt: kein Urteil erhalten, nochmal versuchen. 400 sagt: Token ist
+    kaputt. Das sind verschiedene Aussagen und duerfen nicht denselben Code teilen.
+    """
+    db = _make_empty_db_session()
+    _app.dependency_overrides[bot_module.get_tenant_id] = _override_tenant_id()
+    _app.dependency_overrides[bot_module.get_db] = _override_db(db)
+    try:
+        unreachable = AsyncMock(side_effect=bot_module.TelegramUnavailable("ReadTimeout"))
+        with patch.object(bot_module, "_telegram_get_me", new=unreachable):
+            resp = client.post(
+                _URL,
+                json={"token": _VALID_TOKEN},
+                headers={"X-API-Key": "test-key"},
+            )
+    finally:
+        _app.dependency_overrides.clear()
+
+    assert resp.status_code == 503, f"erwartet 503, bekam {resp.status_code}"
+    body = resp.json()
+    detail = body.get("detail", "")
+    assert (
+        "abgelehnt" not in detail
+    ), f"Meldung darf keine Token-Ablehnung behaupten — ist: {detail!r}"
+    assert _VALID_TOKEN not in str(body)
+
+
+def test_telegram_get_me_wirft_bei_netzwerkfehler_statt_none():
+    """_telegram_get_me muss Netzwerkfehler von echter Ablehnung unterscheiden.
+
+    Frueher gab beides None zurueck — die Information, ob ueberhaupt ein Urteil
+    vorliegt, ging genau hier verloren.
+    """
+    import asyncio
+
+    import httpx as _httpx
+    import pytest as _pytest
+
+    failing_client = AsyncMock()
+    failing_client.__aenter__ = AsyncMock(return_value=failing_client)
+    failing_client.__aexit__ = AsyncMock(return_value=False)
+    failing_client.get = AsyncMock(side_effect=_httpx.ReadTimeout("timeout"))
+
+    with patch.object(bot_module.httpx, "AsyncClient", return_value=failing_client):
+        with _pytest.raises(bot_module.TelegramUnavailable):
+            asyncio.run(bot_module._telegram_get_me("123456:FAKE"))
