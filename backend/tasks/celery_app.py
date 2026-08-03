@@ -107,6 +107,12 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.drift_monitor_task.run_embedding_drift_monitor",
         "schedule": crontab(day_of_week=1, hour=3, minute=15),
     },
+    # Vektorlos-Wächter: täglich 03:45 — nach dem nightly-Backfill (03:15),
+    # damit gemeldet wird, was der Backfill NICHT reparieren konnte.
+    "embedding-health-daily": {
+        "task": "tasks.embedding_health_task.check_missing_embeddings",
+        "schedule": crontab(hour=3, minute=45),
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -171,6 +177,7 @@ celery_app.conf.include = [
     "tasks.cost_alert_task",
     "tasks.reembed_task",
     "tasks.drift_monitor_task",
+    "tasks.embedding_health_task",
     "tasks.values_backfill_task",
     "tasks.telegram_poll_task",
     # Beide werden aus api/telegram.py per .delay() aus dem Button-Callback
