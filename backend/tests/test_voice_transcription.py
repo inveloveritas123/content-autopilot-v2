@@ -1,6 +1,5 @@
 """Tests für services/voice_transcription.py — alle externen Calls gemockt."""
 
-import sys
 from dataclasses import fields
 from unittest.mock import MagicMock, patch
 
@@ -45,52 +44,32 @@ def test_transcription_result_fields():
 
 
 def test_gemini_adapter_success():
+    """Gegen den echten httpx-Pfad — der alte Test mockte google.generativeai,
+    das diese Funktion seit dem Umbau nicht mehr benutzt."""
+    import httpx
+
     from services.voice_transcription import TranscriptionResult, transcribe_with_gemini
 
-    mock_response = MagicMock()
-    mock_response.text = "Das ist ein Test."
+    request = httpx.Request("POST", "https://router.example/v1/chat/completions")
+    response = httpx.Response(
+        200,
+        json={"choices": [{"message": {"content": "Das ist ein Test."}}]},
+        request=request,
+    )
 
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value = mock_response
+    mock_client = MagicMock()
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    mock_client.post.return_value = response
 
-    mock_genai = MagicMock()
-    mock_genai.GenerativeModel.return_value = mock_model
-
-    mock_settings = MagicMock()
-    mock_settings.gemini_api_key = "fake-key"
-
-    with patch.dict(sys.modules, {"google.generativeai": mock_genai}):
-        with patch("config.settings", mock_settings):
-            result = transcribe_with_gemini(_FAKE_OGG)
+    with patch("config.settings", _voxtral_settings()):
+        with patch("services.voice_transcription.httpx.Client", return_value=mock_client):
+            with patch("services.voice_transcription._get_ogg_duration", return_value=4.0):
+                result = transcribe_with_gemini(_FAKE_OGG)
 
     assert isinstance(result, TranscriptionResult)
     assert result.text == "Das ist ein Test."
-    assert result.confidence == 0.85
-    assert result.model_id == "gemini-2.0-flash"
-
-
-# ---------------------------------------------------------------------------
-# Test: Whisper not installed → TranscriptionError
-# ---------------------------------------------------------------------------
-
-
-def test_whisper_not_installed_raises():
-    from services.voice_transcription import TranscriptionError, transcribe_with_whisper
-
-    with patch.dict(sys.modules, {"faster_whisper": None}):
-        # Ensure the import inside the function will raise ImportError
-        import builtins
-
-        real_import = builtins.__import__
-
-        def mock_import(name, *args, **kwargs):
-            if name == "faster_whisper":
-                raise ImportError("No module named 'faster_whisper'")
-            return real_import(name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=mock_import):
-            with pytest.raises(TranscriptionError, match="faster-whisper not installed"):
-                transcribe_with_whisper(_FAKE_OGG)
+    assert result.model_id == "vertex/gemini-2.5-flash-lite@europe-north1"
 
 
 # ---------------------------------------------------------------------------
@@ -116,102 +95,6 @@ def test_unknown_mime_type_rejected():
 
     with pytest.raises(TranscriptionError, match="Unbekanntes Format"):
         transcribe_voice(_FAKE_OGG, mime_type="audio/mp3")
-
-
-# ---------------------------------------------------------------------------
-# Test: Fallback to Whisper on low Gemini confidence
-# ---------------------------------------------------------------------------
-
-
-def test_fallback_to_whisper_on_low_confidence():
-    from services.voice_transcription import TranscriptionResult, transcribe_voice
-
-    gemini_result = TranscriptionResult(
-        text="unsicher",
-        confidence=0.5,
-        model_id="gemini-2.0-flash",
-        language_detected="de",
-        duration_sec=5.0,
-    )
-    whisper_result = TranscriptionResult(
-        text="sicher transkribiert",
-        confidence=0.9,
-        model_id="faster-whisper-large-v3",
-        language_detected="de",
-        duration_sec=5.0,
-    )
-
-    with (
-        patch("services.voice_transcription._get_ogg_duration", return_value=10.0),
-        patch("services.voice_transcription.transcribe_with_gemini", return_value=gemini_result),
-        patch(
-            "services.voice_transcription.transcribe_with_whisper", return_value=whisper_result
-        ) as mock_whisper,
-    ):
-        result = transcribe_voice(_FAKE_OGG)
-
-    mock_whisper.assert_called_once()
-    assert result.text == "sicher transkribiert"
-    assert result.model_id == "faster-whisper-large-v3"
-
-
-# ---------------------------------------------------------------------------
-# Test: Fallback to Whisper when Gemini raises exception
-# ---------------------------------------------------------------------------
-
-
-def test_fallback_to_whisper_on_gemini_failure():
-    from services.voice_transcription import (
-        TranscriptionError,
-        TranscriptionResult,
-        transcribe_voice,
-    )
-
-    whisper_result = TranscriptionResult(
-        text="Whisper hat es",
-        confidence=0.8,
-        model_id="faster-whisper-large-v3",
-        language_detected="de",
-        duration_sec=5.0,
-    )
-
-    with (
-        patch("services.voice_transcription._get_ogg_duration", return_value=10.0),
-        patch(
-            "services.voice_transcription.transcribe_with_gemini",
-            side_effect=TranscriptionError("Gemini down"),
-        ),
-        patch(
-            "services.voice_transcription.transcribe_with_whisper", return_value=whisper_result
-        ) as mock_whisper,
-    ):
-        result = transcribe_voice(_FAKE_OGG)
-
-    mock_whisper.assert_called_once()
-    assert result.text == "Whisper hat es"
-
-
-# ---------------------------------------------------------------------------
-# Test: Both providers fail → TranscriptionError("Alle")
-# ---------------------------------------------------------------------------
-
-
-def test_both_fail_raises():
-    from services.voice_transcription import TranscriptionError, transcribe_voice
-
-    with (
-        patch("services.voice_transcription._get_ogg_duration", return_value=10.0),
-        patch(
-            "services.voice_transcription.transcribe_with_gemini",
-            side_effect=TranscriptionError("Gemini down"),
-        ),
-        patch(
-            "services.voice_transcription.transcribe_with_whisper",
-            side_effect=TranscriptionError("Whisper down"),
-        ),
-        pytest.raises(TranscriptionError, match="Alle"),
-    ):
-        transcribe_voice(_FAKE_OGG)
 
 
 # ---------------------------------------------------------------------------
@@ -565,3 +448,150 @@ def test_voxtral_invalid_base_url_is_terminal():
 
     assert not isinstance(excinfo.value, TranscriptionUnavailable)
     assert "Router-Fehler" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# Test: Anbieterkette Voxtral → Gemini
+# ---------------------------------------------------------------------------
+
+
+def _ok_result(text: str, model: str):
+    from services.voice_transcription import TranscriptionResult
+
+    return TranscriptionResult(
+        text=text, confidence=1.0, model_id=model, language_detected="de", duration_sec=5.0
+    )
+
+
+def test_chain_prefers_voxtral():
+    from services.voice_transcription import transcribe_voice
+
+    with (
+        patch("services.voice_transcription._get_ogg_duration", return_value=10.0),
+        patch(
+            "services.voice_transcription.transcribe_with_voxtral",
+            return_value=_ok_result("aus voxtral", "mistral/voxtral-mini-latest"),
+        ),
+        patch("services.voice_transcription.transcribe_with_gemini") as mock_gemini,
+    ):
+        result = transcribe_voice(_FAKE_OGG)
+
+    assert result.text == "aus voxtral"
+    mock_gemini.assert_not_called()
+
+
+def test_chain_falls_back_to_gemini_on_voxtral_403():
+    """Ein 403 auf Voxtral darf den Pfad nicht toeten — genau das macht PR A
+    vor der Model-Library-Freigabe deploybar."""
+    from services.voice_transcription import TranscriptionError, transcribe_voice
+
+    with (
+        patch("services.voice_transcription._get_ogg_duration", return_value=10.0),
+        patch(
+            "services.voice_transcription.transcribe_with_voxtral",
+            side_effect=TranscriptionError("HTTP 403: not approved"),
+        ),
+        patch(
+            "services.voice_transcription.transcribe_with_gemini",
+            return_value=_ok_result("aus gemini", "vertex/gemini-2.5-flash-lite@europe-north1"),
+        ),
+    ):
+        result = transcribe_voice(_FAKE_OGG)
+
+    assert result.text == "aus gemini"
+
+
+def test_chain_both_transient_raises_unavailable():
+    from services.voice_transcription import TranscriptionUnavailable, transcribe_voice
+
+    with (
+        patch("services.voice_transcription._get_ogg_duration", return_value=10.0),
+        patch(
+            "services.voice_transcription.transcribe_with_voxtral",
+            side_effect=TranscriptionUnavailable("HTTP 429"),
+        ),
+        patch(
+            "services.voice_transcription.transcribe_with_gemini",
+            side_effect=TranscriptionUnavailable("HTTP 429"),
+        ),
+    ):
+        with pytest.raises(TranscriptionUnavailable) as excinfo:
+            transcribe_voice(_FAKE_OGG)
+
+    # Beide Ursachen muessen genannt sein — die alte Meldung „Alle Transkriptions-
+    # Provider gescheitert" behauptete Redundanz, die es nie gab.
+    assert "voxtral" in str(excinfo.value)
+    assert "gemini" in str(excinfo.value)
+
+
+def test_chain_one_transient_one_terminal_is_transient():
+    """Grosszuegig: ein wiederholbarer Fehler soll nicht dadurch endgueltig werden,
+    dass ein zweiter Anbieter zufaellig hart ablehnt."""
+    from services.voice_transcription import (
+        TranscriptionError,
+        TranscriptionUnavailable,
+        transcribe_voice,
+    )
+
+    with (
+        patch("services.voice_transcription._get_ogg_duration", return_value=10.0),
+        patch(
+            "services.voice_transcription.transcribe_with_voxtral",
+            side_effect=TranscriptionError("HTTP 403"),
+        ),
+        patch(
+            "services.voice_transcription.transcribe_with_gemini",
+            side_effect=TranscriptionUnavailable("HTTP 429"),
+        ),
+    ):
+        with pytest.raises(TranscriptionUnavailable):
+            transcribe_voice(_FAKE_OGG)
+
+
+def test_chain_both_terminal_raises_terminal():
+    from services.voice_transcription import (
+        TranscriptionError,
+        TranscriptionUnavailable,
+        transcribe_voice,
+    )
+
+    with (
+        patch("services.voice_transcription._get_ogg_duration", return_value=10.0),
+        patch(
+            "services.voice_transcription.transcribe_with_voxtral",
+            side_effect=TranscriptionError("HTTP 403"),
+        ),
+        patch(
+            "services.voice_transcription.transcribe_with_gemini",
+            side_effect=TranscriptionError("HTTP 400"),
+        ),
+    ):
+        with pytest.raises(TranscriptionError) as excinfo:
+            transcribe_voice(_FAKE_OGG)
+
+    assert not isinstance(excinfo.value, TranscriptionUnavailable)
+
+
+def test_too_long_carries_user_message():
+    from services.voice_transcription import TranscriptionError, transcribe_voice
+
+    with patch("services.voice_transcription._get_ogg_duration", return_value=181.0):
+        with pytest.raises(TranscriptionError) as excinfo:
+            transcribe_voice(_FAKE_OGG)
+
+    assert "3 Minuten" in excinfo.value.user_message
+
+
+def test_faster_whisper_is_gone():
+    """Regressionsschutz: die Fiktion darf nicht zurueckkehren.
+
+    faster_whisper stand in keiner requirements.txt — der Import scheiterte immer,
+    und die Meldung „Alle Transkriptions-Provider gescheitert" behauptete trotzdem
+    Redundanz."""
+    from pathlib import Path
+
+    import services.voice_transcription as vt
+
+    source = Path(vt.__file__).read_text(encoding="utf-8")
+    assert "faster_whisper" not in source
+    assert not hasattr(vt, "transcribe_with_whisper")

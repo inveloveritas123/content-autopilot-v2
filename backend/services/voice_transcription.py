@@ -2,9 +2,16 @@
 Voice Transcription Adapter — für Telegram-Sprachnachrichten (OGG-Opus).
 
 Strategie:
-1. Primary: Gemini Flash via EU-Router (kostengünstig, DSGVO-konform)
-2. Fallback: faster-whisper lokal (wenn Router schlägt fehl oder Confidence < 0.7)
-   - Achtung: faster-whisper ist optional (nicht überall installiert); graceful fallback
+1. Primary:  Voxtral (mistral/voxtral-mini-latest) über den EU-Router — dedizierter
+             ASR-Endpunkt, anderer Upstream als der Fallback.
+2. Fallback: Gemini Flash Lite über /chat/completions.
+
+Beide Wege liegen bewusst auf verschiedenen Upstreams. Am 03.08.2026 fraß ein
+Podcast-Batch das Gemini-Kontingent leer und eine echte Sprachnachricht ging
+verloren — zwei Wege auf demselben Modell wären dagegen wirkungslos gewesen.
+
+Fehler sind zweigeteilt: TranscriptionUnavailable (429/5xx/Netz) wird wiederholt,
+TranscriptionError nicht.
 
 DSGVO: Audio-Bytes werden NIE persistiert — nur das Transkript.
 Max-Länge: 180 Sekunden (3 Min) — längere Audio wird abgelehnt.
@@ -12,8 +19,6 @@ Max-Länge: 180 Sekunden (3 Min) — längere Audio wird abgelehnt.
 
 import base64
 import logging
-import os
-import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -191,7 +196,13 @@ def transcribe_with_gemini(
 
     def _call() -> TranscriptionResult:
         try:
-            with httpx.Client(timeout=120) as client:
+            # 30s statt 120s: _with_retry macht 3 Versuche, macht 120s => 363s pro
+            # Adapter; nach Task 3 laufen zwei Adapter nacheinander (726s pro
+            # Sprachnachricht). Der Celery-Worker faehrt mit -c 2 (zwei Slots fuer
+            # den ganzen Stack, docker-compose.v2.yml:89), ohne Celery-time_limit —
+            # zwei haengende Sprachnachrichten wuerden jeden anderen Job blockieren.
+            # Audio ist auf 180s gedeckelt, echte Transkription dauert Sekunden.
+            with httpx.Client(timeout=30) as client:
                 resp = client.post(
                     f"{base_url}/chat/completions",
                     json=payload,
@@ -264,7 +275,11 @@ def transcribe_with_voxtral(
 
     def _call() -> TranscriptionResult:
         try:
-            with httpx.Client(timeout=120) as client:
+            # 30s statt 120s — siehe transcribe_with_gemini: bei 3 Retries und zwei
+            # Adaptern in Kette summiert 120s sonst auf 726s pro Sprachnachricht,
+            # gegen einen Celery-Worker mit nur zwei Slots (-c 2) und ohne
+            # time_limit. 30s ist grosszuegig fuer max. 180s Audio.
+            with httpx.Client(timeout=30) as client:
                 resp = client.post(
                     f"{base_url}/audio/transcriptions",
                     files={"file": ("voice.ogg", audio_bytes, mime_type)},
@@ -304,59 +319,18 @@ def transcribe_with_voxtral(
     return _with_retry("voxtral", _call)
 
 
-def transcribe_with_whisper(
-    audio_bytes: bytes,
-    language_hint: str = "de",
-) -> TranscriptionResult:
-    try:
-        from faster_whisper import WhisperModel
-    except ImportError as exc:
-        raise TranscriptionError("faster-whisper not installed") from exc
-
-    duration = _get_ogg_duration(audio_bytes)
-    tmp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
-            tmp.write(audio_bytes)
-            tmp_path = tmp.name
-
-        model = WhisperModel("large-v3", device="cpu", compute_type="int8")
-        segments, info = model.transcribe(tmp_path, language=language_hint, beam_size=5)
-
-        texts = []
-        logprobs = []
-        for seg in segments:
-            texts.append(seg.text)
-            if hasattr(seg, "avg_logprob"):
-                logprobs.append(seg.avg_logprob)
-
-        text = " ".join(texts).strip()
-        if logprobs:
-            avg_logprob = sum(logprobs) / len(logprobs)
-            confidence = min(1.0, max(0.0, avg_logprob + 1.0))
-        else:
-            confidence = 0.0
-
-        detected_lang = getattr(info, "language", language_hint) or language_hint
-
-        return TranscriptionResult(
-            text=text,
-            confidence=confidence,
-            model_id="faster-whisper-large-v3",
-            language_detected=detected_lang,
-            duration_sec=duration,
-        )
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
-
 def transcribe_voice(
     audio_bytes: bytes,
     mime_type: str = "audio/ogg",
     language_hint: str = "de",
     tenant_id: str | None = None,
 ) -> TranscriptionResult:
+    """Voxtral zuerst, Gemini als Rückfall.
+
+    Die Anbieter liegen bewusst auf verschiedenen Upstreams: Am 03.08.2026 hat ein
+    Podcast-Batch das Gemini-Kontingent leergefressen, an dem dann eine echte
+    Sprachnachricht starb. Zwei Wege auf demselben Modell wären keine Redundanz gewesen.
+    """
     if not audio_bytes:
         raise TranscriptionError("Keine Audio-Daten")
 
@@ -366,23 +340,26 @@ def transcribe_voice(
 
     duration = _get_ogg_duration(audio_bytes)
     if duration > 180:
-        raise TranscriptionError(f"Audio zu lang: {duration:.0f}s (max 180s)")
-
-    gemini_result = None
-    try:
-        gemini_result = transcribe_with_gemini(audio_bytes, mime_type, language_hint)
-        if gemini_result.confidence >= 0.7:
-            return gemini_result
-        logger.info(
-            "Gemini Confidence niedrig (%.2f) — versuche Whisper-Fallback",
-            gemini_result.confidence,
+        raise TranscriptionError(
+            f"Audio zu lang: {duration:.0f}s (max 180s)",
+            user_message=(
+                "🎤 Die Sprachnachricht ist zu lang — höchstens 3 Minuten. "
+                "Schick sie gern in zwei Teilen."
+            ),
         )
-    except TranscriptionError as exc:
-        logger.warning("Gemini fehlgeschlagen: %s — versuche Whisper-Fallback", type(exc).__name__)
 
-    try:
-        return transcribe_with_whisper(audio_bytes, language_hint)
-    except TranscriptionError as exc:
-        logger.warning("Whisper fehlgeschlagen: %s", exc)
+    failures: list[tuple[str, TranscriptionError]] = []
+    for name, adapter in (
+        ("voxtral", transcribe_with_voxtral),
+        ("gemini", transcribe_with_gemini),
+    ):
+        try:
+            return adapter(audio_bytes, mime_type, language_hint)
+        except TranscriptionError as exc:
+            logger.warning("%s gescheitert: %s", name, exc)
+            failures.append((name, exc))
 
-    raise TranscriptionError("Alle Transkriptions-Provider gescheitert")
+    detail = " | ".join(f"{name}: {exc}" for name, exc in failures)
+    if any(isinstance(exc, TranscriptionUnavailable) for _, exc in failures):
+        raise TranscriptionUnavailable(f"Kein Anbieter verfügbar — {detail}")
+    raise TranscriptionError(f"Alle Anbieter haben abgelehnt — {detail}")
