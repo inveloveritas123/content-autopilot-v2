@@ -6,7 +6,7 @@ node_modules/
 dist/
 data/
 *.egg-info/
-.venv/
+.venv*/
 venv/
 celerybeat-schedule*
 *.wal

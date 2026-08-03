@@ -220,8 +220,19 @@ class LLMService:
             except Exception as e:
                 last_error = e
                 wait = 2**attempt
+                # httpx renders only "Client error '403 Forbidden' for url ..." — the
+                # REASON sits in the response body ("model is not approved for this API
+                # key"). Without it a 403 is indistinguishable from a quota or region
+                # problem and costs a full reproduction to diagnose (incident 2026-08-03).
+                detail = ""
+                response = getattr(e, "response", None)
+                if response is not None:
+                    try:
+                        detail = f" body={(response.text or '')[:300]}"
+                    except Exception:  # pragma: no cover - never let logging raise
+                        detail = " body=(unreadable)"
                 logger.warning(
-                    f"LLM call failed (attempt {attempt + 1}/{max_retries}, model={model}, purpose={purpose}): {e}"
+                    f"LLM call failed (attempt {attempt + 1}/{max_retries}, model={model}, purpose={purpose}): {e}{detail}"
                 )
                 if attempt < max_retries - 1:
                     await asyncio.sleep(wait)
@@ -409,27 +420,51 @@ class LLMService:
                 json=request_body,
                 headers=headers,
             )
-            # 401 from DB provider → fall back to env config (expired key)
-            if resp.status_code == 401 and provider:
-                logger.warning("DB provider returned 401, falling back to env LiteLLM config")
-                env_base = self._litellm_base_url or "https://router.requesty.ai/v1"
-                env_key = self._litellm_api_key or ""
-                env_headers = {"Content-Type": "application/json"}
-                if env_key:
-                    env_headers["Authorization"] = f"Bearer {env_key}"
-                is_requesty_fallback = "requesty.ai" in env_base
-                fallback_body = {
-                    "model": litellm_model,
-                    "messages": messages,
-                    "max_tokens": max_tokens,
-                }
-                if is_requesty_fallback and auto_cache_enabled:
-                    fallback_body["extra_body"] = {"requesty": {"auto_cache": True}}
-                resp = await client.post(
-                    f"{env_base}/chat/completions",
-                    json=fallback_body,
-                    headers=env_headers,
-                )
+            # 401/403 from DB provider → fall back to env config.
+            #
+            # 403 belongs here alongside 401 (incident 2026-08-03): the key encrypted
+            # in `llm_providers` had drifted from LITELLM_API_KEY and had no model
+            # approved. The router answers that with 403, not 401 — so this fallback
+            # never fired and every creative/tagging call died for weeks. Mirrors
+            # pipeline_llm.call_pipeline_llm; keep both in sync.
+            #
+            # Only retry when the env config actually DIFFERS. Identical configs —
+            # the normal case — would make the second call a bit-identical repeat and
+            # merely double every genuine approval rejection.
+            env_base = self._litellm_base_url or "https://router.requesty.ai/v1"
+            env_key = self._litellm_api_key or ""
+            if resp.status_code in (401, 403) and provider:
+                if (env_base, env_key) != (base_url, api_key):
+                    logger.warning(
+                        "DB provider returned %d, falling back to env LiteLLM config " "(model=%s)",
+                        resp.status_code,
+                        litellm_model,
+                    )
+                    env_headers = {"Content-Type": "application/json"}
+                    if env_key:
+                        env_headers["Authorization"] = f"Bearer {env_key}"
+                    is_requesty_fallback = "requesty.ai" in env_base
+                    fallback_body = {
+                        "model": litellm_model,
+                        "messages": messages,
+                        "max_tokens": max_tokens,
+                    }
+                    if is_requesty_fallback and auto_cache_enabled:
+                        fallback_body["extra_body"] = {"requesty": {"auto_cache": True}}
+                    resp = await client.post(
+                        f"{env_base}/chat/completions",
+                        json=fallback_body,
+                        headers=env_headers,
+                    )
+                else:
+                    logger.warning(
+                        "LLM %d and env config is identical to the one used — no fallback "
+                        "possible (model=%s). Approve the model for this key in the "
+                        "Requesty Model Library. Body: %s",
+                        resp.status_code,
+                        litellm_model,
+                        (resp.text or "")[:300],
+                    )
             if resp.status_code == 412:
                 raise BudgetExceededError(
                     "Requesty.ai portal budget exceeded (412). "

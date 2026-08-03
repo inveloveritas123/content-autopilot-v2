@@ -236,6 +236,34 @@ Wenn LLM-Budget erschoepft ist, sind statisch kuratierte Datensaetze besser als 
 SHK_HASHTAGS Konstante in Posts.jsx: 4 Kategorien, 40+ Hashtags, kein LLM-Call noetig.
 Warum wichtig: Budget-Ausfaelle duerfen UI-Features nicht komplett deaktivieren.
 
+### ⚠️ ZWEI Requesty-Keys — DB schlaegt Env (Vorfall 2026-08-03)
+
+Es gibt **nicht einen** API-Key, sondern zwei Quellen. `get_active_provider()` liest den in
+`llm_providers.api_key_encrypted` (Fernet) hinterlegten Key und hat **Vorrang** vor
+`LITELLM_API_KEY` aus der `.env`.
+
+| Codepfad | Key-Quelle |
+|---|---|
+| `services/pipeline_llm.py`, `services/llm.py`, `services/audio_transcription.py` | **DB** (`llm_providers`) |
+| `services/embedding_service.py`, `services/transcription.py`, `services/voice_transcription.py` | **Env** (`settings.litellm_api_key`) |
+
+Der DB-Key wird bei Erst-Start aus `settings.requesty_api_key` geseedet (`main.py`) und
+danach **nie wieder aktualisiert**. Wird der Key in der `.env` rotiert, driftet die
+DB-Kopie still auseinander. Genau das passierte: Der DB-Key hatte **kein einziges Modell
+freigegeben** → jeder Pipeline-Call 403, wochenlang. Sichtbar wurde es erst, als Erics
+Interview-Opener (P08) startete — die Transkription lief über den Env-Pfad weiter und
+ließ das System gesund aussehen.
+
+**Konsequenzen fuers Debugging:**
+- Ein Modelltest mit `LITELLM_API_KEY` beweist **nichts** ueber die Pipeline. Immer
+  `_resolve_provider()` benutzen, nicht `os.environ`.
+- 403 heisst „dieser Key darf das Modell nicht" — die Frage ist also immer *welcher* Key.
+- Drift pruefen: Fingerprints von `_resolve_provider()` und `_resolve_env_provider()`
+  vergleichen (nie den Key selbst loggen).
+
+Seit diesem Vorfall faellt `call_pipeline_llm` bei 401 **und 403** auf die Env-Config
+zurueck — aber nur, wenn diese abweicht; sonst waere es ein bitgleicher Doppel-Call.
+
 ### Carousel Templates: DB-Seeding via Container asyncio (Issue #37, 2026-04-13)
 Carousel-Templates werden via `async_session_factory()` direkt in DB geseeded (nicht via Alembic-Migration).
 Grund: Template-Daten sind konfigurierbar, kein Schema-Change.
