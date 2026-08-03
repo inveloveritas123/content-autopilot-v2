@@ -445,3 +445,127 @@ def test_invalid_base_url_is_a_terminal_transcription_error():
 
     assert not isinstance(exc_info.value, TranscriptionUnavailable)
     assert "Router-Fehler" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# Test: Voxtral-Adapter
+# ---------------------------------------------------------------------------
+
+
+def _voxtral_settings():
+    s = MagicMock()
+    s.litellm_base_url = "https://router.example/v1"
+    s.litellm_api_key = "fake-key"
+    return s
+
+
+def test_voxtral_parses_json_text():
+    """Der Router liefert JSON — auch bei response_format=text (live gemessen 03.08.)."""
+    import httpx
+
+    from services.voice_transcription import TranscriptionResult, transcribe_with_voxtral
+
+    request = httpx.Request("POST", "https://router.example/v1/audio/transcriptions")
+    response = httpx.Response(
+        200,
+        json={"text": "Das ist ein Test.", "usage": {"type": "duration", "seconds": 3}},
+        request=request,
+    )
+
+    mock_client = MagicMock()
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    mock_client.post.return_value = response
+
+    with patch("config.settings", _voxtral_settings()):
+        with patch("services.voice_transcription.httpx.Client", return_value=mock_client):
+            with patch("services.voice_transcription._get_ogg_duration", return_value=3.0):
+                result = transcribe_with_voxtral(_FAKE_OGG)
+
+    assert isinstance(result, TranscriptionResult)
+    assert result.text == "Das ist ein Test."
+    assert result.model_id == "mistral/voxtral-mini-latest"
+    assert result.confidence == 1.0
+
+    # Multipart-Form, nicht JSON-Body — und die Modell-ID mit Provider-Prefix.
+    _, kwargs = mock_client.post.call_args
+    assert kwargs["data"]["model"] == "mistral/voxtral-mini-latest"
+    assert "file" in kwargs["files"]
+
+
+def test_voxtral_403_is_terminal_and_not_retried():
+    import httpx
+
+    from services.voice_transcription import (
+        TranscriptionError,
+        TranscriptionUnavailable,
+        transcribe_with_voxtral,
+    )
+
+    request = httpx.Request("POST", "https://router.example/v1/audio/transcriptions")
+    response = httpx.Response(403, text="not approved for this API key", request=request)
+
+    mock_client = MagicMock()
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    mock_client.post.return_value = response
+
+    with patch("config.settings", _voxtral_settings()):
+        with patch("services.voice_transcription.httpx.Client", return_value=mock_client):
+            with patch("services.voice_transcription.time.sleep") as mock_sleep:
+                with pytest.raises(TranscriptionError) as excinfo:
+                    transcribe_with_voxtral(_FAKE_OGG)
+
+    assert not isinstance(excinfo.value, TranscriptionUnavailable)
+    assert mock_client.post.call_count == 1
+    assert mock_sleep.call_count == 0
+
+
+def test_voxtral_429_is_retried_then_succeeds():
+    import httpx
+
+    from services.voice_transcription import transcribe_with_voxtral
+
+    request = httpx.Request("POST", "https://router.example/v1/audio/transcriptions")
+    busy = httpx.Response(429, text="rate limited", request=request)
+    ok = httpx.Response(200, json={"text": "Endlich."}, request=request)
+
+    mock_client = MagicMock()
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    mock_client.post.side_effect = [busy, ok]
+
+    with patch("config.settings", _voxtral_settings()):
+        with patch("services.voice_transcription.httpx.Client", return_value=mock_client):
+            with patch("services.voice_transcription._get_ogg_duration", return_value=2.0):
+                with patch("services.voice_transcription.time.sleep") as mock_sleep:
+                    result = transcribe_with_voxtral(_FAKE_OGG)
+
+    assert result.text == "Endlich."
+    assert mock_client.post.call_count == 2
+    assert mock_sleep.call_count == 1
+
+
+def test_voxtral_empty_text_is_terminal():
+    import httpx
+
+    from services.voice_transcription import (
+        TranscriptionError,
+        TranscriptionUnavailable,
+        transcribe_with_voxtral,
+    )
+
+    request = httpx.Request("POST", "https://router.example/v1/audio/transcriptions")
+    response = httpx.Response(200, json={"text": "   "}, request=request)
+
+    mock_client = MagicMock()
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    mock_client.post.return_value = response
+
+    with patch("config.settings", _voxtral_settings()):
+        with patch("services.voice_transcription.httpx.Client", return_value=mock_client):
+            with pytest.raises(TranscriptionError) as excinfo:
+                transcribe_with_voxtral(_FAKE_OGG)
+
+    assert not isinstance(excinfo.value, TranscriptionUnavailable)

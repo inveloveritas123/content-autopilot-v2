@@ -25,6 +25,11 @@ logger = logging.getLogger(__name__)
 _EU_VOICE_MODEL = "vertex/gemini-2.5-flash-lite@europe-north1"
 _ACCEPTED_MIME_TYPES = {"audio/ogg", "audio/ogg; codecs=opus", "audio/opus"}
 
+# Live gemessen 03.08.2026: 200 über router.eu.requesty.ai. Anderer Upstream als der
+# Gemini-Fallback — genau das ist der Zweck (der Podcast-Loop hat am 03.08. das
+# Gemini-Kontingent leergefressen, an dem die Sprachnachricht dann starb).
+_VOXTRAL_MODEL = "mistral/voxtral-mini-latest"
+
 
 class TranscriptionError(Exception):
     """Endgültig — ein weiterer Versuch würde dasselbe Ergebnis liefern.
@@ -232,6 +237,66 @@ def transcribe_with_gemini(
         )
 
     return _with_retry("gemini", _call)
+
+
+def _extract_voxtral_text(resp: httpx.Response) -> str:
+    """Der Router antwortet mit JSON, auch bei response_format=text (gemessen 03.08.).
+
+    Der Text-Fallback bleibt für den Fall, dass sich das Verhalten ändert — er ist
+    billiger als ein Ausfall.
+    """
+    try:
+        return (resp.json().get("text") or "").strip()
+    except Exception:
+        return (resp.text or "").strip()
+
+
+def transcribe_with_voxtral(
+    audio_bytes: bytes,
+    mime_type: str = "audio/ogg",
+    language_hint: str = "de",
+) -> TranscriptionResult:
+    """Primärer ASR-Weg — dedizierter Transkriptionsdienst, nicht ein Chat-Modell.
+
+    Spiegelt den seit Wochen produktiven Voxtral-Node des ZB Kontakt-Bots.
+    """
+    base_url, api_key = _router_config()
+
+    def _call() -> TranscriptionResult:
+        try:
+            with httpx.Client(timeout=120) as client:
+                resp = client.post(
+                    f"{base_url}/audio/transcriptions",
+                    files={"file": ("voice.ogg", audio_bytes, mime_type)},
+                    data={
+                        "model": _VOXTRAL_MODEL,
+                        "language": language_hint,
+                        "response_format": "text",
+                    },
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                resp.raise_for_status()
+                text = _extract_voxtral_text(resp)
+        except httpx.HTTPStatusError as exc:
+            raise _classify_http_error(exc) from exc
+        except httpx.RequestError as exc:
+            raise TranscriptionUnavailable(f"Netzfehler: {exc}") from exc
+
+        if not text:
+            raise TranscriptionError("Leere Transkription von Voxtral")
+
+        # Ein reiner ASR-Endpunkt liefert keinen Confidence-Wert. 1.0 ist hier kein
+        # gemessener Wert, sondern die Aussage „es gibt nichts zu vergleichen" —
+        # die frühere confidence-Schwelle ist in Task 3 entfallen.
+        return TranscriptionResult(
+            text=text,
+            confidence=1.0,
+            model_id=_VOXTRAL_MODEL,
+            language_detected=language_hint,
+            duration_sec=_get_ogg_duration(audio_bytes),
+        )
+
+    return _with_retry("voxtral", _call)
 
 
 def transcribe_with_whisper(
