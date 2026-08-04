@@ -25,7 +25,7 @@ def test_batch_query_excludes_exhausted_and_inactive():
 
     sql = str(_build_batch_query(None).compile(compile_kwargs={"literal_binds": True}))
 
-    assert "transcription_attempts" in sql
+    assert "transcription_attempts <" in sql
     assert "is_active" in sql
     assert "transcription_abandoned" not in sql, (
         "Der Endzustand darf NICHT im Eingangsfilter stehen — sonst ist die "
