@@ -32,10 +32,13 @@ _THIS_DIR = Path(__file__).resolve().parent
 if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+# Dieselbe Konfiguration wie Backend und Worker — insbesondere httpx auf WARNING
+# und der SensitiveDataFilter. Ein blankes basicConfig() stand hier bis
+# 04.08.2026 und hätte bei jedem getUpdates-Poll (alle 2 s) den Bot-Token im
+# Klartext geloggt, sobald httpx auf INFO steht.
+import logging_config  # noqa: E402  — muss nach dem sys.path-Setup oben stehen
+
+logging_config.setup_logging()
 
 logger = logging.getLogger(__name__)
 
