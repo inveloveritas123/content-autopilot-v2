@@ -53,6 +53,7 @@ jobs:
           .ci-venv/bin/python -m pytest tests/ -p no:cacheprovider --tb=short \
             --ignore=tests/security \
             --ignore=tests/test_telegram_webhook.py \
+            --ignore=tests/test_transcribe_attempts.py \
             --deselect "tests/test_embedding_versioning.py::test_canary_task_unknown_model_id_returns_error" \
             --deselect "tests/test_random_smart.py::TestCronFiredInWindow::test_cron_fired_in_window_true" \
             --deselect "tests/test_random_smart.py::TestCheckRandomSmartTriggers::test_paused_tenant_not_triggered" \
@@ -76,3 +77,17 @@ jobs:
             --deselect "tests/test_idempotency_routing.py::TestLogIdThreaded::test_process_voice_threads_log_id" \
             --deselect "tests/test_voice_transcription.py::test_gemini_adapter_success" \
             --deselect "tests/test_telegram_outbound_pertenant.py::TestSendTelegramMessagePerTenant::test_updates_last_active_on_success"
+
+      # test_transcribe_attempts.py laeuft bewusst als eigener Schritt, nicht im
+      # Hauptlauf oben. tests/_telegram_task_env.py (von vielen anderen Testdateien
+      # importiert) ersetzt models.source/models.source_item dauerhaft durch
+      # MagicMocks fuer den Rest des Prozesses. test_batch_query_excludes_exhausted_and_inactive
+      # kompiliert eine echte SQLAlchemy-Query (SourceItem/Source, real gejoint) —
+      # sobald die Stubs im Speicher sind, gibt es nichts Echtes mehr zu pruefen
+      # (das .compile() liefe gegen MagicMocks statt echter Spalten). Ein eigener
+      # Prozess umgeht das, weil die Stubs dort nie gesetzt werden. NICHT wieder
+      # mit dem Hauptlauf zusammenlegen — das bringt exakt diesen Fehlschlag zurueck.
+      - name: Run batch-transcribe tests (isoliert)
+        run: |
+          .ci-venv/bin/python -m pytest tests/test_transcribe_attempts.py \
+            -p no:cacheprovider --tb=short
