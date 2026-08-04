@@ -391,18 +391,51 @@ class TestExtractSectionSynthetic(unittest.TestCase):
         sys_p = _extract_section(content, "System-Prompt")
         self.assertEqual(sys_p, "")
 
-    # --- User-Prompt: Variants mit Suffix werden NICHT als User-Prompt erkannt ---
+    # --- User-Prompt: Ueberschrift mit MODE-Suffix wird erkannt ---
 
-    def test_user_prompt_with_suffix_not_extracted_as_exact(self):
-        """'## User-Prompt: MODE OPENER' ist kein exakter Match — user_prompt bleibt leer."""
+    def test_user_prompt_mit_mode_suffix_wird_extrahiert(self):
+        """'## User-Prompt: MODE OPENER' MUSS greifen.
+
+        Umgeschrieben am 04.08.2026. Vorher stand hier das Gegenteil — und
+        genau diese Erwartung war der stille Totalausfall: `_extract_system_prompt`
+        beendete den System-Block an `^## User-Prompt\\b` (traf also den Suffix),
+        `_extract_user_prompt` verlangte `^## User-Prompt[ \\t]*$` (traf ihn nicht).
+        Ergebnis: leerer User-Prompt, Rueckfall auf einen 789-Byte-Stummel,
+        gemeldet als WARNING pro Aufruf, die niemand liest.
+
+        Der Test bewacht jetzt die Symmetrie: was den System-Block beendet, muss
+        den User-Block beginnen.
+        """
         content = (
             "## System-Prompt\n\n"
             "```\nSystem.\n```\n\n"
-            "## User-Prompt: MODE OPENER\n\n"
+            "## User-Prompt: MODE RESPONSE\n\n"
             "```\nOpener.\n```\n"
         )
         usr_p = _extract_section(content, "User-Prompt")
-        self.assertEqual(usr_p, "", f"Suffix-User-Prompt faelschlicherweise extrahiert: {usr_p!r}")
+        self.assertEqual(usr_p, "Opener.")
+
+    def test_mode_suffix_landet_nicht_im_text(self):
+        """Der Suffix selbst gehoert zur Ueberschrift, nicht zum Prompt-Text."""
+        content = "## System-Prompt\n\nSystem.\n\n## User-Prompt: MODE RESPONSE\n\nHier der Text.\n"
+        usr_p = _extract_section(content, "User-Prompt")
+        self.assertNotIn("MODE RESPONSE", usr_p)
+        self.assertEqual(usr_p, "Hier der Text.")
+
+    def test_system_und_user_teilen_sich_dieselbe_grenze(self):
+        """Kein Text darf zwischen den beiden Extraktoren verschwinden.
+
+        Die Asymmetrie liess einen ganzen Block ins Nichts fallen: er war weder
+        System- noch User-Prompt. Dieser Test faengt jede kuenftige Variante davon.
+        """
+        content = (
+            "## System-Prompt\n\nSystem-Teil.\n\n## User-Prompt: MODE RESPONSE\n\nUser-Teil.\n"
+        )
+        sys_p = _extract_section(content, "System-Prompt")
+        usr_p = _extract_section(content, "User-Prompt")
+        self.assertIn("System-Teil", sys_p)
+        self.assertNotIn("User-Teil", sys_p)
+        self.assertIn("User-Teil", usr_p)
 
     def test_user_prompt_exact_match_extracted(self):
         """Exakter ## User-Prompt wird korrekt extrahiert."""
