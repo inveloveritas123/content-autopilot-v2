@@ -43,21 +43,45 @@ def _redact(text: str) -> str:
     return text
 
 
+def _redact_value(value: Any) -> Any:
+    """Redigiert einen einzelnen Log-Wert — auch wenn er kein `str` ist.
+
+    Der Anlass ist konkret (Befund 04.08.2026): httpx loggt
+    `logger.info('HTTP Request: %s %s …', request.method, request.url, …)`.
+    `request.url` ist ein `httpx.URL`-OBJEKT, nicht `str` — die frühere
+    `isinstance(a, str)`-Prüfung ließ es unangetastet durch, der Bot-Token stand
+    im Klartext im Worker-Log.
+
+    Ersetzt wird nur, wenn die Redaktion tatsächlich etwas verändert hat. Damit
+    bleiben Zahlen Zahlen (`%d` formatiert weiter) und nur echte Geheimnisse
+    werden zu Text.
+    """
+    if isinstance(value, str):
+        return _redact(value)
+    try:
+        as_text = str(value)
+    except Exception:  # pragma: no cover — ein kaputtes __str__ darf nichts brechen
+        return value
+    redacted = _redact(as_text)
+    return redacted if redacted != as_text else value
+
+
 class SensitiveDataFilter(logging.Filter):
-    """Redacts bearer tokens, api keys and passwords from log messages."""
+    """Redacts bearer tokens, api keys and passwords from log messages.
+
+    ⚠️ Gehört an einen HANDLER, nicht an einen Logger. `Logger.filter()` wird nur
+    auf Records angewandt, die auf DIESEM Logger entstehen; beim Hochpropagieren
+    ruft `callHandlers` die Filter der Vorfahren-Logger nicht auf. Ein Filter am
+    Root-Logger würde also ausgerechnet die Fremdbibliotheken verfehlen.
+    """
 
     def filter(self, record: logging.LogRecord) -> bool:
-        # Redact the formatted message string
-        if isinstance(record.msg, str):
-            record.msg = _redact(record.msg)
-        # Also redact pre-formatted args if they are strings
+        record.msg = _redact_value(record.msg)
         if record.args:
             if isinstance(record.args, dict):
-                record.args = {
-                    k: _redact(v) if isinstance(v, str) else v for k, v in record.args.items()
-                }
+                record.args = {k: _redact_value(v) for k, v in record.args.items()}
             elif isinstance(record.args, tuple):
-                record.args = tuple(_redact(a) if isinstance(a, str) else a for a in record.args)
+                record.args = tuple(_redact_value(a) for a in record.args)
         return True
 
 
@@ -90,8 +114,22 @@ class ContextJsonFormatter(jsonlogger.JsonFormatter):
 # ---------------------------------------------------------------------------
 # Public setup function
 # ---------------------------------------------------------------------------
-def setup_logging(level: int = logging.INFO) -> None:
-    """Configure root logger with JSON output and sensitive-data filter."""
+# Fremdbibliotheken, die auf INFO pro Request eine Zeile schreiben. httpx loggt
+# dabei die VOLLE URL — bei Telegram-Downloads samt Bot-Token im Pfad. Zweite
+# Verteidigungslinie ist SensitiveDataFilter; diese hier ist die erste.
+_QUIET_LOGGERS = ("uvicorn.access", "httpx", "httpcore")
+
+
+def setup_logging(level: int | None = logging.INFO) -> None:
+    """Configure root logger with JSON output and sensitive-data filter.
+
+    ⚠️ Muss von JEDEM Entrypoint aufgerufen werden — FastAPI (`main.py`), der
+    Celery-Worker/Beat (`tasks/celery_app.py`) und der Telegram-Runner. Bis
+    04.08.2026 rief nur `main.py` auf; der Worker lief deshalb ungefiltert und
+    hat Bot-Tokens im Klartext geloggt.
+    """
+    if level is None:
+        level = logging.INFO
     formatter = ContextJsonFormatter(
         fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S",
@@ -111,5 +149,5 @@ def setup_logging(level: int = logging.INFO) -> None:
     root.setLevel(level)
 
     # Quiet noisy third-party loggers
-    for noisy in ("uvicorn.access", "httpx", "httpcore"):
+    for noisy in _QUIET_LOGGERS:
         logging.getLogger(noisy).setLevel(logging.WARNING)

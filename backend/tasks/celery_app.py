@@ -2,6 +2,7 @@ import os
 
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import setup_logging as setup_logging_signal
 from celery.signals import task_prerun
 
 from config import settings
@@ -127,6 +128,28 @@ if os.environ.get("TELEGRAM_POLLING_ENABLED", "false").lower() in ("1", "true", 
         "task": "tasks.telegram_poll_task.poll_all_active_bots",
         "schedule": 5.0,
     }
+
+
+# ---------------------------------------------------------------------------
+# Logging — Worker und Beat konfigurieren sich wie das Backend.
+#
+# Bis 04.08.2026 rief nur main.py logging_config.setup_logging() auf. Der Worker
+# lief damit auf Celerys Default-Konfiguration: httpx auf INFO und OHNE den
+# SensitiveDataFilter — 2486 Zeilen Bot-Token im Klartext in einer Stunde
+# (`HTTP Request: GET https://api.telegram.org/file/bot<ID>:<TOKEN>/voice/…`).
+#
+# Der `setup_logging`-Empfänger ist die einzige Stelle, an der sich Celerys
+# eigene Root-Logger-Konfiguration verhindern lässt: celery/app/log.py wertet
+# `if not receivers:` aus und lässt den Root-Logger in Ruhe, sobald jemand
+# angemeldet ist. `after_setup_logger` wäre zu spät — dort steht die Hijack-
+# Konfiguration bereits.
+# ---------------------------------------------------------------------------
+@setup_logging_signal.connect
+def _configure_worker_logging(loglevel=None, **kwargs) -> None:
+    from logging_config import setup_logging
+
+    # loglevel kommt als int aus Celerys `-l`-Flag; None → Default INFO.
+    setup_logging(level=loglevel)
 
 
 # ---------------------------------------------------------------------------

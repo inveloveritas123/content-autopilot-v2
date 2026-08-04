@@ -105,14 +105,34 @@ if "celery" not in sys.modules:
     signals_mod = _stub_module("celery.signals")
 
     class _FakeSignal:
+        # `receivers` macht die Verdrahtung pruefbar: ohne diese Liste laesst sich
+        # nicht testen, DASS ein Signal verbunden wurde — der Stub gaebe die
+        # Funktion nur unveraendert zurueck und ein vergessenes .connect() bliebe
+        # unsichtbar. Namensgleich mit dem echten celery.utils.dispatch.Signal.
+        def __init__(self):
+            self.receivers = []
+
         def connect(self, *a, **kw):
             def decorator(fn):
+                self.receivers.append(fn)
                 return fn
 
             if len(a) == 1 and callable(a[0]):
+                self.receivers.append(a[0])
                 return a[0]
             return decorator
 
     signals_mod.task_prerun = _FakeSignal()
     signals_mod.task_postrun = _FakeSignal()
     signals_mod.task_failure = _FakeSignal()
+    # Ohne Empfaenger auf setup_logging konfiguriert Celery den Root-Logger selbst
+    # (celery/app/log.py: `if not receivers:`) — dann greift unsere Redaktion nicht.
+    signals_mod.setup_logging = _FakeSignal()
+
+    # Submodule am Paket verankern. `import celery.signals` findet den Eintrag in
+    # sys.modules und kehrt zurueck, OHNE das Attribut am Paket zu setzen — das
+    # macht sonst nur der echte Import-Mechanismus. Ohne diese Zeilen scheitert
+    # `celery.signals.<x>` mit AttributeError, obwohl das Modul geladen ist.
+    celery_mod.signals = signals_mod
+    celery_mod.schedules = schedules_mod
+    celery_mod.exceptions = exceptions_mod
