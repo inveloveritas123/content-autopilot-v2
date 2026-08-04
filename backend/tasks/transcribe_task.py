@@ -11,6 +11,56 @@ from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
+MAX_TRANSCRIPTION_ATTEMPTS = 3
+
+# Eingangsfilter des Batch-Laufs. `transcription_abandoned` steht hier bewusst NICHT:
+# Der Endzustand darf kein Eingangszustand sein, sonst ist die Schleife zurück.
+BATCH_STATUSES = ("new", "transcription_failed", "needs_voicescriptor")
+
+# Der Einzel-Task nimmt zusätzlich den Endzustand — ein Mensch, der bewusst neu
+# anstößt, soll nicht vom Zähler blockiert werden.
+RETRYABLE_STATUSES = (*BATCH_STATUSES, "transcription_abandoned")
+
+
+def _build_batch_query(tenant_id: str | None):
+    """Items, die einen weiteren Transkriptionsversuch verdienen.
+
+    Zwei Riegel, bewusst unabhängig voneinander:
+      1. Versuchszähler — stoppt aussichtslose Items.
+      2. sources.is_active — stoppt ganze Quellen. Am 03.08.2026 waren beide
+         Podcast-Quellen bereits inaktiv, ohne dass es den Loop gestoppt hätte,
+         weil der Query über source_items geht und sources nie ansieht.
+    """
+    query = (
+        select(SourceItem)
+        .join(Source, Source.id == SourceItem.source_id)
+        .where(
+            SourceItem.status.in_(BATCH_STATUSES),
+            SourceItem.transcription_attempts < MAX_TRANSCRIPTION_ATTEMPTS,
+            Source.is_active.is_(True),
+        )
+    )
+    if tenant_id:
+        query = query.where(SourceItem.tenant_id == tenant_id)
+    return query.order_by(SourceItem.created_at.asc())
+
+
+def _apply_failure(item) -> None:
+    """Zählt den Fehlversuch und gibt beim Erreichen des Maximums auf."""
+    item.transcription_attempts = (item.transcription_attempts or 0) + 1
+    if item.transcription_attempts >= MAX_TRANSCRIPTION_ATTEMPTS:
+        item.status = "transcription_abandoned"
+    else:
+        item.status = "transcription_failed"
+
+
+def _apply_success(item, transcript_text: str, source_type: str) -> None:
+    """Erfolg setzt den Zähler zurück — eine später erneut eingereihte Quelle startet frisch."""
+    item.transcript_text = transcript_text
+    item.transcript_source = f"{source_type}_api"
+    item.status = "transcribed"
+    item.transcription_attempts = 0
+
 
 def _enqueue_transcript_observer(tenant_id, source_item_id) -> None:
     """Stößt den P17 je-Transkript-Beobachter an (#41) — parallel zur Analyse, fail-open.
@@ -34,7 +84,7 @@ def transcribe_item(item_id: str):
         if not item:
             return {"item_id": item_id, "status": "not_found"}
 
-        if item.status not in ("new", "transcription_failed", "needs_voicescriptor"):
+        if item.status not in RETRYABLE_STATUSES:
             return {"item_id": item_id, "status": item.status, "skipped": True}
 
         item.status = "transcribing"
@@ -56,9 +106,7 @@ def transcribe_item(item_id: str):
         )
 
         if transcript_text:
-            item.transcript_text = transcript_text
-            item.transcript_source = f"{source_type}_api"
-            item.status = "transcribed"
+            _apply_success(item, transcript_text, source_type)
             session.commit()
 
             # Auto-score transcription quality
@@ -98,23 +146,16 @@ def transcribe_item(item_id: str):
             _enqueue_transcript_observer(item.tenant_id, item.id)
             return {"item_id": item_id, "status": "transcribed", "source": f"{source_type}_api"}
         else:
-            item.status = "transcription_failed"
+            _apply_failure(item)
             session.commit()
-            return {"item_id": item_id, "status": "transcription_failed"}
+            return {"item_id": item_id, "status": item.status}
 
 
 @celery_app.task(name="tasks.transcribe_task.batch_transcribe")
 def batch_transcribe(tenant_id: str | None = None):
     """Batch transcribe 'new' items via unified transcribe_content() — full 4-step fallback chain."""
     with sync_session_factory() as session:
-        query = select(SourceItem).where(
-            SourceItem.status.in_(["new", "transcription_failed", "needs_voicescriptor"])
-        )
-        if tenant_id:
-            query = query.where(SourceItem.tenant_id == tenant_id)
-        query = query.order_by(SourceItem.created_at.asc())
-
-        items = session.execute(query).scalars().all()
+        items = session.execute(_build_batch_query(tenant_id)).scalars().all()
         total = len(items)
         success = 0
         failed = 0
@@ -140,9 +181,7 @@ def batch_transcribe(tenant_id: str | None = None):
             )
 
             if transcript_text:
-                item.transcript_text = transcript_text
-                item.transcript_source = f"{source_type}_api"
-                item.status = "transcribed"
+                _apply_success(item, transcript_text, source_type)
                 success += 1
                 logger.info(f"[{success}/{total}] OK: {item.title[:60]}")
                 from tasks.generate_task import analyze_item
@@ -151,9 +190,12 @@ def batch_transcribe(tenant_id: str | None = None):
                 # Parallel: P17 je-Transkript-Beobachter (#41)
                 _enqueue_transcript_observer(item.tenant_id, item.id)
             else:
-                item.status = "transcription_failed"
+                _apply_failure(item)
                 failed += 1
-                logger.warning(f"[{i + 1}/{total}] FAILED: {item.title[:60]}")
+                logger.warning(
+                    f"[{i + 1}/{total}] FAILED ({item.transcription_attempts}/"
+                    f"{MAX_TRANSCRIPTION_ATTEMPTS}): {item.title[:60]}"
+                )
 
             session.commit()
 

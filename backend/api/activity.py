@@ -70,7 +70,7 @@ async def get_pipeline_progress(
 
 STATUS_GROUP_MAP = {
     "success": ["transcribed", "analyzed", "content_ready", "approved"],
-    "error": ["needs_voicescriptor", "transcription_failed"],
+    "error": ["needs_voicescriptor", "transcription_failed", "transcription_abandoned"],
     "processing": ["transcribing", "analyzing", "generating"],
     "pending": ["new"],
 }

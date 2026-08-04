@@ -959,6 +959,7 @@ _LIVE_SCHEMA: dict[str, tuple[set[str], set[str]]] = {
             "analysis_summary",
             "deleted_at",
             "deletion_request_id",
+            "transcription_attempts",
         },
         {"source_id", "tenant_id", "external_id"},
     ),
