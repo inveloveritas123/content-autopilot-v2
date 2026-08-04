@@ -592,6 +592,62 @@ def test_chain_both_terminal_raises_terminal():
     assert not isinstance(excinfo.value, TranscriptionUnavailable)
 
 
+def test_chain_both_fail_logs_error(caplog):
+    """Totalausfall beider Anbieter muss auf ERROR-Ebene geloggt werden — nur ERROR
+    erreicht sentry_config.py (LoggingIntegration(level=ERROR, event_level=ERROR)).
+    Ohne diese Zeile entsteht fuer den 03.08.2026-Vorfallstyp kein Sentry-Event."""
+    import logging
+
+    from services.voice_transcription import TranscriptionError, transcribe_voice
+
+    with (
+        patch("services.voice_transcription._get_ogg_duration", return_value=10.0),
+        patch(
+            "services.voice_transcription.transcribe_with_voxtral",
+            side_effect=TranscriptionError("HTTP 403"),
+        ),
+        patch(
+            "services.voice_transcription.transcribe_with_gemini",
+            side_effect=TranscriptionError("HTTP 400"),
+        ),
+    ):
+        with caplog.at_level(logging.WARNING, logger="services.voice_transcription"):
+            with pytest.raises(TranscriptionError):
+                transcribe_voice(_FAKE_OGG)
+
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) == 1
+    assert "voxtral" in error_records[0].message
+    assert "gemini" in error_records[0].message
+
+
+def test_chain_fallback_success_logs_no_error(caplog):
+    """Mutationsschutz: Scheitert nur Voxtral und liefert Gemini ein Ergebnis, darf
+    KEIN ERROR geloggt werden — sonst erklaert ein Fix, der immer ERROR loggt, den
+    vorgesehenen Erfolgspfad (Fallback) faelschlich zur Stoerung."""
+    import logging
+
+    from services.voice_transcription import TranscriptionError, transcribe_voice
+
+    with (
+        patch("services.voice_transcription._get_ogg_duration", return_value=10.0),
+        patch(
+            "services.voice_transcription.transcribe_with_voxtral",
+            side_effect=TranscriptionError("HTTP 403: not approved"),
+        ),
+        patch(
+            "services.voice_transcription.transcribe_with_gemini",
+            return_value=_ok_result("aus gemini", "vertex/gemini-2.5-flash-lite@europe-north1"),
+        ),
+    ):
+        with caplog.at_level(logging.WARNING, logger="services.voice_transcription"):
+            result = transcribe_voice(_FAKE_OGG)
+
+    assert result.text == "aus gemini"
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records == []
+
+
 def test_too_long_carries_user_message():
     from services.voice_transcription import TranscriptionError, transcribe_voice
 

@@ -105,8 +105,8 @@ def _classify_http_error(exc: httpx.HTTPStatusError) -> TranscriptionError:
 
     # WARNING statt ERROR: ein Voxtral-403 gefolgt von einem erfolgreichen
     # Gemini-Fallback ist der vorgesehene Erfolgspfad der Anbieterkette, keine
-    # Störung. Wie schlimm ein einzelner Adapter-Fehler wirklich ist, entscheidet
-    # der Aufrufer (transcribe_voice sieht, ob am Ende alle Anbieter scheitern).
+    # Störung. Scheitern am Ende beide Anbieter, eskaliert transcribe_voice selbst
+    # auf ERROR — unmittelbar vor den beiden raise-Zweigen am Ende der Schleife.
     logger.warning("Transkription: HTTP %d (kein Retry): %s", status, body)
     return TranscriptionError(f"HTTP {status}: {body}")
 
@@ -383,6 +383,10 @@ def transcribe_voice(
             failures.append((name, exc))
 
     detail = " | ".join(f"{name}: {exc}" for name, exc in failures)
+    # ERROR statt WARNING: beide Anbieter sind ausgefallen — genau der Vorfallstyp
+    # (03.08.2026), an dem eine Sprachnachricht still verlorenging. sentry_config.py
+    # greift nur ab ERROR; ohne diese Zeile entsteht dafuer kein Sentry-Event.
+    logger.error("Alle Anbieter gescheitert — %s", detail)
     if any(isinstance(exc, TranscriptionUnavailable) for _, exc in failures):
         raise TranscriptionUnavailable(f"Kein Anbieter verfügbar — {detail}")
     raise TranscriptionError(f"Alle Anbieter haben abgelehnt — {detail}")
