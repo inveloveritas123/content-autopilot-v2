@@ -40,6 +40,9 @@ class SourceItem(Base):
     duration_seconds: Mapped[int | None] = mapped_column(Integer)
     thumbnail_url: Mapped[str | None] = mapped_column(String(500))
     status: Mapped[str] = mapped_column(String(50), default="new")
+    transcription_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     description: Mapped[str | None] = mapped_column(Text)
     view_count: Mapped[int | None] = mapped_column(Integer)
     view_history: Mapped[dict | None] = mapped_column(JSONB)  # {"2026-04-01T12:00": 1234, ...}
