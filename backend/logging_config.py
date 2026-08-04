@@ -120,13 +120,52 @@ class ContextJsonFormatter(jsonlogger.JsonFormatter):
 _QUIET_LOGGERS = ("uvicorn.access", "httpx", "httpcore")
 
 
+def quiet_noisy_loggers() -> None:
+    """Setzt die geschwätzigen Fremdbibliotheken auf WARNING.
+
+    Erste Verteidigungslinie gegen das Token-Leck: httpx loggt auf INFO die
+    VOLLE URL, bei Telegram-Downloads samt Bot-Token im Pfad.
+    """
+    for noisy in _QUIET_LOGGERS:
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+
+def install_redaction(logger: logging.Logger | None = None) -> int:
+    """Hängt den `SensitiveDataFilter` an die Handler von `logger` UND von root.
+
+    Gibt die Zahl der neu bestückten Handler zurück (für Tests/Diagnose).
+
+    ⚠️ Filter gehören an HANDLER, nicht an Logger: `Logger.filter()` greift nur
+    bei Records, die AUF DIESEM Logger entstehen — beim Hochpropagieren ruft
+    `callHandlers` die Filter der Vorfahren nicht auf. Ein Filter am Root-Logger
+    würde ausgerechnet die Fremdbibliotheken verfehlen.
+
+    Idempotent: ein Handler bekommt den Filter nie zweimal.
+    """
+    ziele = [logging.getLogger()]
+    if logger is not None and logger not in ziele:
+        ziele.append(logger)
+
+    bestueckt = 0
+    for ziel in ziele:
+        for handler in list(ziel.handlers):
+            if not any(isinstance(f, SensitiveDataFilter) for f in handler.filters):
+                handler.addFilter(SensitiveDataFilter())
+                bestueckt += 1
+    return bestueckt
+
+
 def setup_logging(level: int | None = logging.INFO) -> None:
     """Configure root logger with JSON output and sensitive-data filter.
 
-    ⚠️ Muss von JEDEM Entrypoint aufgerufen werden — FastAPI (`main.py`), der
-    Celery-Worker/Beat (`tasks/celery_app.py`) und der Telegram-Runner. Bis
-    04.08.2026 rief nur `main.py` auf; der Worker lief deshalb ungefiltert und
-    hat Bot-Tokens im Klartext geloggt.
+    Für Entrypoints, die ihr Logging selbst aufsetzen: FastAPI (`main.py`) und
+    der Telegram-Runner.
+
+    ⚠️ NICHT für Celery. Der Worker/Beat bringt eine eigene Logger-Konfiguration
+    mit; sie zu ersetzen hat am 04.08.2026 die Betriebslogs verstummen lassen
+    (Beat: 979 „Sending due task"-Zeilen in 68 min vorher, 0 danach). Celery wird
+    stattdessen NACHGEHÄRTET — siehe `quiet_noisy_loggers` + `install_redaction`
+    und die Empfänger in `tasks/celery_app.py`.
     """
     if level is None:
         level = logging.INFO
@@ -149,5 +188,4 @@ def setup_logging(level: int | None = logging.INFO) -> None:
     root.setLevel(level)
 
     # Quiet noisy third-party loggers
-    for noisy in _QUIET_LOGGERS:
-        logging.getLogger(noisy).setLevel(logging.WARNING)
+    quiet_noisy_loggers()
