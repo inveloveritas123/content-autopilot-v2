@@ -234,7 +234,13 @@ def _lade_celery_app_frisch():
 
     import celery.signals
 
-    namen = ("setup_logging", "after_setup_logger", "after_setup_task_logger")
+    namen = (
+        "setup_logging",
+        "after_setup_logger",
+        "after_setup_task_logger",
+        "worker_process_init",
+        "beat_init",
+    )
     vorher = {n: len(getattr(getattr(celery.signals, n), "receivers", [])) for n in namen}
 
     pfad = os.path.join(
@@ -270,13 +276,83 @@ class TestCeleryWorkerLogging:
             "after_setup_logger / after_setup_task_logger."
         )
 
-    def test_beide_after_setup_signale_sind_verbunden(self):
-        """`celery.task` trägt `propagate = 0` und eigene Handler — ein Signal
-        allein ließe dessen Records ungefiltert durch."""
+    def test_haertung_laeuft_schon_beim_import(self, _logging_state):
+        """⚠️ Der Anker. Signale allein haben im echten Worker NICHT gereicht.
+
+        Gemessen am laufenden Container: `after_setup_logger` war verbunden, in
+        einem frischen Prozess nachweislich wirksam (httpx 0 → 30) — und
+        ForkPoolWorker-2 loggte trotzdem 90 Token-Zeilen in 3 Minuten,
+        unredigiert. Welche Stelle in Celerys Startreihenfolge das aushebelt, ist
+        nicht sicher bestimmt.
+
+        Deshalb hängt die Härtung nicht mehr an einem Signal: der Import selbst
+        härtet. Er läuft im MainProcess, bevor der Pool forkt, und wird von jedem
+        Kind geerbt.
+        """
+        logging.getLogger("httpx").setLevel(logging.NOTSET)
+        assert logging.getLogger("httpx").level == logging.NOTSET
+
+        _lade_celery_app_frisch()  # nur der Import, kein Signal wird gefeuert
+
+        assert logging.getLogger("httpx").level == logging.WARNING, (
+            "tasks.celery_app muss beim Import haerten — ein Signal allein hat "
+            "im echten Worker nicht gereicht"
+        )
+
+    def test_httpx_logger_redigiert_selbst(self, _logging_state):
+        """Die Linie, die keine Startreihenfolge aushebeln kann.
+
+        Der Filter hängt am `httpx`-LOGGER, nicht am Handler. Für Records, die
+        AUF diesem Logger entstehen, ruft `Logger.handle()` `self.filter()` — er
+        greift also auch dann, wenn der Handler darunter ungehärtet ist. Genau
+        dieser Fall war am 04.08.2026 live: MainProcess gehärtet,
+        ForkPoolWorker-2 leckte trotzdem.
+        """
+        import io
+
+        import httpx
+
+        logging_config.quiet_noisy_loggers()
+
+        httpx_logger = logging.getLogger("httpx")
+        # Ungehärteter Handler, wie ihn Celery im Kindprozess hinterlässt,
+        # und ein Level, das die Zeile durchlässt.
+        stream = io.StringIO()
+        roher_handler = logging.StreamHandler(stream)
+        httpx_logger.handlers = [roher_handler]
+        httpx_logger.propagate = False
+        httpx_logger.setLevel(logging.INFO)
+
+        httpx_logger.info(
+            'HTTP Request: %s %s "%s %d %s"',
+            "GET",
+            httpx.URL(_FAKE_FILE_URL),
+            "HTTP/1.1",
+            200,
+            "OK",
+        )
+        roher_handler.flush()
+
+        ausgabe = stream.getvalue()
+        assert ausgabe, "Der Record muss den ungehärteten Handler erreicht haben"
+        assert _FAKE_TOKEN not in ausgabe, "Filter am Logger hat nicht gegriffen"
+
+    def test_alle_prozess_signale_sind_verbunden(self):
+        """Vier Wege zum selben Zustand.
+
+        `worker_process_init` feuert IN jedem geforkten Kind — genau dort war das
+        Leck sichtbar. `beat_init` deckt den Beat-Prozess ab. `celery.task` trägt
+        `propagate = 0` und eigene Handler, deshalb auch `after_setup_task_logger`.
+        """
         neue = _lade_celery_app_frisch()
 
-        assert neue["after_setup_logger"], "after_setup_logger nicht verbunden"
-        assert neue["after_setup_task_logger"], "after_setup_task_logger nicht verbunden"
+        for signal in (
+            "after_setup_logger",
+            "after_setup_task_logger",
+            "worker_process_init",
+            "beat_init",
+        ):
+            assert neue[signal], f"{signal} nicht verbunden"
 
     def test_empfaenger_haertet_die_uebergebenen_handler(self, _logging_state):
         """Der Empfänger muss httpx stummschalten UND den Filter an die Handler

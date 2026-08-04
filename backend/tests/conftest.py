@@ -133,6 +133,10 @@ if "celery" not in sys.modules:
     # Redaktion an die fertigen Handler.
     signals_mod.after_setup_logger = _FakeSignal()
     signals_mod.after_setup_task_logger = _FakeSignal()
+    # worker_process_init feuert IN jedem geforkten Kind, beat_init im Beat —
+    # dort war das Token-Leck sichtbar, obwohl der MainProcess gehaertet war.
+    signals_mod.worker_process_init = _FakeSignal()
+    signals_mod.beat_init = _FakeSignal()
 
     # Submodule am Paket verankern. `import celery.signals` findet den Eintrag in
     # sys.modules und kehrt zurueck, OHNE das Attribut am Paket zu setzen — das
