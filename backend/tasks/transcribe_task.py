@@ -87,6 +87,12 @@ def transcribe_item(item_id: str):
         if item.status not in RETRYABLE_STATUSES:
             return {"item_id": item_id, "status": item.status, "skipped": True}
 
+        # Reset gilt NUR fuer den Wiedereinstieg aus dem Endzustand — ein Reset bei
+        # jedem Eintritt wuerde das Hochzaehlen fuer normale Einzel-Retries zerstoeren
+        # und der Abbruch kaeme nie zustande.
+        if item.status == "transcription_abandoned":
+            item.transcription_attempts = 0
+
         item.status = "transcribing"
         session.commit()
 

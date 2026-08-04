@@ -11,7 +11,7 @@ from models.source import Source
 from models.source_item import SourceItem
 from models.tenant import Tenant
 from tasks.generate_task import analyze_item, generate_content
-from tasks.transcribe_task import batch_transcribe, transcribe_item
+from tasks.transcribe_task import BATCH_STATUSES, batch_transcribe, transcribe_item
 from tasks.views_task import update_all_views
 
 router = APIRouter()
@@ -138,6 +138,11 @@ async def update_item(
         item.is_archived = data.is_archived
     if data.status is not None:
         item.status = data.status
+        # Ein PATCH auf einen BATCH_STATUSES-Wert macht das Item wieder
+        # eingangsfaehig fuer den Batch-Lauf — ohne Reset bliebe es dort trotzdem
+        # fuer immer ausgeschlossen (_build_batch_query filtert ueber den Zaehler).
+        if data.status in BATCH_STATUSES:
+            item.transcription_attempts = 0
     await db.commit()
     return {"updated": True}
 
