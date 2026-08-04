@@ -302,7 +302,7 @@ async def pipeline_status(
                 select(func.count(SourceItem.id)).where(
                     SourceItem.tenant_id == tenant.id,
                     SourceItem.status == status,
-                    SourceItem.is_archived is False,
+                    SourceItem.is_archived.is_(False),
                 )
             )
         ).scalar() or 0
@@ -374,7 +374,7 @@ async def retry_failed_transcriptions(
                 .where(
                     SourceItem.tenant_id == tenant.id,
                     SourceItem.status == "transcription_failed",
-                    SourceItem.is_archived is False,
+                    SourceItem.is_archived.is_(False),
                 )
                 .limit(100)
             )
@@ -566,7 +566,7 @@ async def transcribed_breakdown(
                 SourceItem.tenant_id == tenant.id,
                 SourceItem.status == "transcribed",
                 SourceItem.transcript_text.isnot(None),
-                SourceItem.is_archived is False,
+                SourceItem.is_archived.is_(False),
             )
             .group_by(SourceModel.id, SourceModel.name)
             .order_by(func.count(SourceItem.id).desc())
@@ -599,7 +599,7 @@ async def queue_all_for_analysis(
         SourceItem.tenant_id == tenant.id,
         SourceItem.status == "transcribed",
         SourceItem.transcript_text.isnot(None),
-        SourceItem.is_archived is False,
+        SourceItem.is_archived.is_(False),
     )
     if source_id:
         query = query.where(SourceItem.source_id == _uuid.UUID(source_id))

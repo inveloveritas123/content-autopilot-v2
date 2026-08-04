@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
 
             await session.execute(
                 Source.__table__.update()
-                .where(Source.tenant_id == tenant.id, Source.project_id is None)
+                .where(Source.tenant_id == tenant.id, Source.project_id.is_(None))
                 .values(project_id=default_project.id)
             )
             await session.commit()

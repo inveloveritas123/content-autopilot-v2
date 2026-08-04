@@ -65,9 +65,9 @@ async def list_items(
         )
         query = query.where(SourceItem.source_id.in_(source_ids_q))
     if archived == "true":
-        query = query.where(SourceItem.is_archived is True)
+        query = query.where(SourceItem.is_archived.is_(True))
     elif archived != "all":
-        query = query.where(SourceItem.is_archived is False)
+        query = query.where(SourceItem.is_archived.is_(False))
     if search and search.strip():
         term = f"%{search.strip()}%"
         query = query.where(

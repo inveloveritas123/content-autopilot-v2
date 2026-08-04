@@ -20,7 +20,7 @@ def monitor_all_sources():
     with sync_session_factory() as session:
         now = datetime.utcnow()
         all_sources = (
-            session.execute(select(Source).where(Source.is_active is True)).scalars().all()
+            session.execute(select(Source).where(Source.is_active.is_(True))).scalars().all()
         )
 
         # Filter to sources that are due for polling

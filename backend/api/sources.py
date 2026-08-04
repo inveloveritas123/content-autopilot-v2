@@ -389,7 +389,7 @@ async def list_source_items(
     q = select(SourceItem).where(
         SourceItem.source_id == source.id,
         SourceItem.tenant_id == tenant.id,
-        SourceItem.is_archived is False,
+        SourceItem.is_archived.is_(False),
     )
     if status:
         q = q.where(SourceItem.status == status)
@@ -405,7 +405,7 @@ async def list_source_items(
         .where(
             SourceItem.source_id == source.id,
             SourceItem.tenant_id == tenant.id,
-            SourceItem.is_archived is False,
+            SourceItem.is_archived.is_(False),
         )
     )
     if status:
@@ -526,7 +526,7 @@ async def analyze_all_source_items(
         select(SourceItem).where(
             SourceItem.source_id == source.id,
             SourceItem.status == "transcribed",
-            SourceItem.is_archived is False,
+            SourceItem.is_archived.is_(False),
         )
     )
     items = result.scalars().all()
@@ -562,7 +562,7 @@ async def archive_source_items(
         sa_update(SourceItem)
         .where(
             SourceItem.source_id == source.id,
-            SourceItem.is_archived is False,
+            SourceItem.is_archived.is_(False),
         )
         .values(is_archived=True)
     )
