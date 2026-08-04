@@ -24,36 +24,62 @@ SQLAlchemy-Plugin gibt es fuer Ruff nicht.
 """
 
 import ast
+import subprocess
 from pathlib import Path
 
 import pytest
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
-# Aufrufe, deren Argumente als SQL-Ausdruecke ausgewertet werden. `filter_by`
-# fehlt bewusst: es nimmt Keyword-Argumente, dort ist `is` syntaktisch unmoeglich.
-SQL_PREDICATE_CALLS = frozenset({"where", "filter", "having", "and_", "or_", "not_"})
+# Praedikate in Methodenform: `query.where(...)`, `query.filter(...)`.
+# `filter` steht NUR hier, niemals als freie Funktion — das gleichnamige Python-Builtin
+# wird frei aufgerufen, und `filter(lambda x: x is not None, xs)` ist voellig korrekt.
+# `filter_by` fehlt bewusst: es nimmt Keyword-Argumente, dort ist `is` syntaktisch unmoeglich.
+PREDICATE_METHODS = frozenset({"where", "filter", "having"})
 
-# Verzeichnisse ohne Produktionsqueries.
-EXCLUDED_DIRS = frozenset({"tests", "alembic", "__pycache__", ".venv", "venv", "eval"})
+# Kombinatoren, die beide Schreibweisen kennen: `and_(...)` und `sa.and_(...)`.
+PREDICATE_FUNCTIONS = frozenset({"and_", "or_", "not_"})
+
+# Verzeichnisse ohne Produktionsqueries. Fremdcode steht hier NICHT drin: die Dateiliste
+# kommt aus git, das kennt keine venvs.
+EXCLUDED_DIRS = frozenset({"tests", "alembic", "eval"})
 
 
 def _iter_source_files() -> list[Path]:
+    """Alle versionierten Python-Dateien des Backends.
+
+    Bewusst git statt `rglob` plus Verzeichnis-Blacklist: eine Blacklist leckt per
+    Konstruktion. CI legt sein venv als `.ci-venv/` INNERHALB von backend/ an, womit der
+    Scanner ueber yt_dlp, reportlab und google.auth lief und deren korrektes
+    `filter(lambda x: x is not None, ...)` als Fehler meldete. Versionierte Dateien sind
+    die exakte Definition von "unser Code": neue Projektverzeichnisse sind automatisch
+    abgedeckt, Fremdcode ist es nie.
+
+    `check=True` ist Absicht — fehlt git, soll der Test hart fehlschlagen statt still
+    nichts zu scannen und gruen aus dem falschen Grund zu sein.
+    """
+    listing = subprocess.run(
+        ["git", "ls-files", "-z", "--", "*.py"],
+        cwd=BACKEND_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
     return sorted(
-        path
-        for path in BACKEND_ROOT.rglob("*.py")
-        if not EXCLUDED_DIRS.intersection(path.relative_to(BACKEND_ROOT).parts)
+        BACKEND_ROOT / name
+        for name in listing.stdout.split("\0")
+        if name and not EXCLUDED_DIRS.intersection(Path(name).parts)
     )
 
 
-def _called_name(node: ast.Call) -> str | None:
-    """Name der aufgerufenen Funktion — `sess.where(...)` und `and_(...)` gleichermassen."""
+def _is_predicate_call(node: ast.Call) -> bool:
+    """Wird dieser Aufruf seine Argumente als SQL-Ausdruecke auswerten?"""
     func = node.func
     if isinstance(func, ast.Attribute):
-        return func.attr
+        return func.attr in PREDICATE_METHODS or func.attr in PREDICATE_FUNCTIONS
     if isinstance(func, ast.Name):
-        return func.id
-    return None
+        return func.id in PREDICATE_FUNCTIONS
+    return False
 
 
 def _identity_comparisons(tree: ast.AST) -> list[ast.Compare]:
@@ -68,7 +94,7 @@ def _identity_comparisons(tree: ast.AST) -> list[ast.Compare]:
     # Schluessel, damit identische Ausdruecke in verschiedenen Zeilen erhalten bleiben.
     found: dict[tuple[int, int], ast.Compare] = {}
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or _called_name(node) not in SQL_PREDICATE_CALLS:
+        if not isinstance(node, ast.Call) or not _is_predicate_call(node):
             continue
         for argument in node.args:
             for inner in ast.walk(argument):
@@ -140,3 +166,43 @@ def test_scanner_finds_nested_identity_comparisons() -> None:
 
     assert len(offenders) == 1
     assert _suggested_fix(offenders[0]) == "X.tenant_id.is_(None)"
+
+
+def test_scanner_ignores_builtin_filter() -> None:
+    """`filter` ist auch ein Python-Builtin — dort ist `is not None` voellig korrekt.
+
+    Das Builtin wird als freie Funktion aufgerufen, SQLAlchemys `filter` ausschliesslich
+    als Methode. Ohne diese Unterscheidung meldet der Scanner gaengiges Python als Fehler:
+    genau daran ist er in CI ueber yt_dlp, reportlab und google.auth gelaufen.
+    """
+    builtin_use = ast.parse("xs = list(filter(lambda x: x is not None, items))")
+
+    assert _identity_comparisons(builtin_use) == []
+
+
+def test_scanner_still_flags_query_filter_method() -> None:
+    """Gegenprobe zum Builtin-Ausschluss: die Methodenform muss weiter anschlagen."""
+    orm_use = ast.parse("q = session.query(X).filter(X.tenant_id is None)")
+
+    offenders = _identity_comparisons(orm_use)
+
+    assert len(offenders) == 1
+    assert _suggested_fix(offenders[0]) == "X.tenant_id.is_(None)"
+
+
+def test_scanner_covers_the_project_and_only_the_project() -> None:
+    """Die Dateiliste stammt aus git — nicht aus einem Verzeichnis-Blacklist.
+
+    Eine Blacklist von venv-Namen leckt per Konstruktion: CI legt sein venv als
+    `.ci-venv/` INNERHALB von backend/ an, womit der Scanner ueber Third-Party-Pakete
+    lief. Versionierte Dateien sind die exakte Definition von "unser Code" — neue
+    Projektverzeichnisse sind automatisch abgedeckt, Fremdcode nie.
+    """
+    files = {str(path.relative_to(BACKEND_ROOT)) for path in _iter_source_files()}
+
+    # Nicht leer und nicht zufaellig richtig: die Datei mit dem schwersten Fund muss dabei sein.
+    assert "tasks/monitor_task.py" in files
+    assert len(files) > 50, f"Nur {len(files)} Dateien — die Auswahl greift zu kurz"
+    assert not [
+        f for f in files if "site-packages" in f or "venv" in f
+    ], "Fremdcode in der Dateiliste — der Scanner meldet fremde Builtin-Aufrufe als Fehler"
