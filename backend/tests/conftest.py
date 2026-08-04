@@ -125,9 +125,14 @@ if "celery" not in sys.modules:
     signals_mod.task_prerun = _FakeSignal()
     signals_mod.task_postrun = _FakeSignal()
     signals_mod.task_failure = _FakeSignal()
-    # Ohne Empfaenger auf setup_logging konfiguriert Celery den Root-Logger selbst
-    # (celery/app/log.py: `if not receivers:`) — dann greift unsere Redaktion nicht.
+    # setup_logging: Ein Empfaenger hier VERHINDERT Celerys eigene Konfiguration
+    # (celery/app/log.py: `if not receivers:`) und laesst Worker + Beat verstummen.
+    # Muss leer bleiben — Waechter in tests/test_logging_redaction.py.
     signals_mod.setup_logging = _FakeSignal()
+    # after_setup_*: feuern NACH Celerys Konfiguration — dort haengen wir die
+    # Redaktion an die fertigen Handler.
+    signals_mod.after_setup_logger = _FakeSignal()
+    signals_mod.after_setup_task_logger = _FakeSignal()
 
     # Submodule am Paket verankern. `import celery.signals` findet den Eintrag in
     # sys.modules und kehrt zurueck, OHNE das Attribut am Paket zu setzen — das

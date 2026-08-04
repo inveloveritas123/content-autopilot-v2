@@ -2,8 +2,7 @@ import os
 
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import setup_logging as setup_logging_signal
-from celery.signals import task_prerun
+from celery.signals import after_setup_logger, after_setup_task_logger, task_prerun
 
 from config import settings
 
@@ -138,25 +137,38 @@ if os.environ.get("TELEGRAM_POLLING_ENABLED", "false").lower() in ("1", "true", 
 
 
 # ---------------------------------------------------------------------------
-# Logging — Worker und Beat konfigurieren sich wie das Backend.
+# Logging — Celery konfiguriert selbst, wir haerten nur nach.
 #
-# Bis 04.08.2026 rief nur main.py logging_config.setup_logging() auf. Der Worker
-# lief damit auf Celerys Default-Konfiguration: httpx auf INFO und OHNE den
+# Der Anlass: bis 04.08.2026 rief nur main.py logging_config.setup_logging() auf.
+# Der Worker lief auf Celerys Default: httpx auf INFO und OHNE den
 # SensitiveDataFilter — 2486 Zeilen Bot-Token im Klartext in einer Stunde
 # (`HTTP Request: GET https://api.telegram.org/file/bot<ID>:<TOKEN>/voice/…`).
 #
-# Der `setup_logging`-Empfänger ist die einzige Stelle, an der sich Celerys
-# eigene Root-Logger-Konfiguration verhindern lässt: celery/app/log.py wertet
-# `if not receivers:` aus und lässt den Root-Logger in Ruhe, sobald jemand
-# angemeldet ist. `after_setup_logger` wäre zu spät — dort steht die Hijack-
-# Konfiguration bereits.
+# ⚠️ Der erste Anlauf hat dafuer das `setup_logging`-Signal verbunden. Das ist die
+# einzige Stelle, an der sich Celerys eigene Konfiguration VERHINDERN laesst
+# (celery/app/log.py: `if not receivers:`) — und genau deshalb war es falsch:
+# damit verstummten Worker und Beat vollstaendig. Am Artefakt gemessen schrieb
+# Beat vorher 979 „Sending due task"-Zeilen in 68 Minuten, danach null. Die
+# Betriebslogs sind aber genau das, woraus der 04.08.-Fehler ueberhaupt
+# diagnostiziert wurde. Kein Tausch, den man machen will.
+#
+# `after_setup_logger` / `after_setup_task_logger` feuern, NACHDEM Celery seine
+# Handler gesetzt hat. Beide Verteidigungslinien bleiben erhalten — httpx wird
+# stumm, und der Redaktionsfilter haengt an jedem Handler, den Celery angelegt
+# hat — ohne dass sich am gewohnten Logbild etwas aendert.
+#
+# `celery.task` traegt `propagate = 0` und eigene Handler, deshalb BEIDE Signale.
 # ---------------------------------------------------------------------------
-@setup_logging_signal.connect
-def _configure_worker_logging(loglevel=None, **kwargs) -> None:
-    from logging_config import setup_logging
+@after_setup_logger.connect
+@after_setup_task_logger.connect
+def _haerte_celery_logging(logger=None, **kwargs) -> None:
+    try:
+        from logging_config import install_redaction, quiet_noisy_loggers
 
-    # loglevel kommt als int aus Celerys `-l`-Flag; None → Default INFO.
-    setup_logging(level=loglevel)
+        quiet_noisy_loggers()
+        install_redaction(logger)
+    except Exception:  # pragma: no cover — Logging darf den Start nie verhindern
+        pass
 
 
 # ---------------------------------------------------------------------------

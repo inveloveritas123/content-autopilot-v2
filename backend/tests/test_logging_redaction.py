@@ -216,8 +216,8 @@ class TestEchterHttpxPfad:
 
 
 def _lade_celery_app_frisch():
-    """Lädt `tasks/celery_app.py` unter einem Wegwerf-Namen und gibt die neu
-    registrierten `setup_logging`-Empfänger zurück.
+    """Lädt `tasks/celery_app.py` unter einem Wegwerf-Namen und gibt die je Signal
+    NEU registrierten Empfänger zurück: `{signalname: [empfänger, …]}`.
 
     Warum nicht einfach `import tasks.celery_app`: `tests/_telegram_task_env.py`
     ersetzt `tasks.celery_app` dauerhaft durch einen Stub in `sys.modules`. Ob
@@ -234,42 +234,111 @@ def _lade_celery_app_frisch():
 
     import celery.signals
 
+    namen = ("setup_logging", "after_setup_logger", "after_setup_task_logger")
+    vorher = {n: len(getattr(getattr(celery.signals, n), "receivers", [])) for n in namen}
+
     pfad = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tasks", "celery_app.py"
     )
     spec = importlib.util.spec_from_file_location("_celery_app_frisch_fuer_test", pfad)
     modul = importlib.util.module_from_spec(spec)
-
-    vorher = list(getattr(celery.signals.setup_logging, "receivers", []))
     spec.loader.exec_module(modul)
-    nachher = list(getattr(celery.signals.setup_logging, "receivers", []))
-    return nachher[len(vorher) :]
+
+    return {
+        n: list(getattr(getattr(celery.signals, n), "receivers", []))[vorher[n] :] for n in namen
+    }
 
 
 class TestCeleryWorkerLogging:
-    """Der Worker war die undichte Stelle — er konfiguriert Logging jetzt selbst."""
+    """Celery konfiguriert sein Logging selbst — wir härten nur nach."""
 
-    def test_celery_verbindet_setup_logging_signal(self):
-        """Ohne Empfänger auf `setup_logging` konfiguriert Celery den Root-Logger
-        selbst (celery/app/log.py: `if not receivers:`) — unsere JSON-Handler samt
-        Redaktion kämen nie zum Zug."""
+    def test_celery_wird_NICHT_uebernommen(self):
+        """⚠️ Regressions-Wächter. Ein Empfänger auf `setup_logging` verhindert
+        Celerys eigene Konfiguration (celery/app/log.py: `if not receivers:`) —
+        und lässt damit Worker UND Beat vollständig verstummen.
+
+        Am Artefakt gemessen (04.08.2026): Beat schrieb vorher 979
+        „Sending due task"-Zeilen in 68 Minuten, nach der Übernahme null. Genau
+        diese Betriebslogs waren die Grundlage, auf der der Telegram-Fehler
+        überhaupt diagnostiziert wurde.
+        """
         neue = _lade_celery_app_frisch()
 
-        assert neue, (
-            "tasks.celery_app muss einen Empfänger auf celery.signals.setup_logging "
-            "registrieren, sonst hijackt Celery den Root-Logger"
+        assert not neue["setup_logging"], (
+            "tasks.celery_app darf celery.signals.setup_logging NICHT verbinden — "
+            "das schaltet die Betriebslogs von Worker und Beat ab. Nachhärten via "
+            "after_setup_logger / after_setup_task_logger."
         )
 
-    def test_empfaenger_installiert_unsere_konfiguration(self, _logging_state):
+    def test_beide_after_setup_signale_sind_verbunden(self):
+        """`celery.task` trägt `propagate = 0` und eigene Handler — ein Signal
+        allein ließe dessen Records ungefiltert durch."""
         neue = _lade_celery_app_frisch()
-        assert neue, "kein Empfänger registriert — siehe vorheriger Test"
 
-        for receiver in neue:
-            receiver(loglevel=logging.INFO, logfile=None, format="", colorize=False)
+        assert neue["after_setup_logger"], "after_setup_logger nicht verbunden"
+        assert neue["after_setup_task_logger"], "after_setup_task_logger nicht verbunden"
+
+    def test_empfaenger_haertet_die_uebergebenen_handler(self, _logging_state):
+        """Der Empfänger muss httpx stummschalten UND den Filter an die Handler
+        hängen, die Celery gerade angelegt hat."""
+        neue = _lade_celery_app_frisch()
+        empfaenger = neue["after_setup_logger"]
+        assert empfaenger, "kein Empfänger registriert — siehe vorheriger Test"
+
+        # Nachbau dessen, was Celery uebergibt: ein Logger mit eigenem Handler.
+        celery_logger = logging.getLogger("celery_test_nachbau")
+        celery_logger.handlers = [logging.StreamHandler()]
+        logging.getLogger("httpx").setLevel(logging.INFO)
+
+        for receiver in empfaenger:
+            receiver(logger=celery_logger, loglevel=logging.INFO, logfile=None, format="")
 
         assert logging.getLogger("httpx").level == logging.WARNING
         assert any(
             isinstance(f, logging_config.SensitiveDataFilter)
-            for handler in logging.getLogger().handlers
-            for f in handler.filters
+            for f in celery_logger.handlers[0].filters
+        ), "Der von Celery uebergebene Handler blieb ohne Redaktion"
+
+    def test_redaktion_wird_nicht_doppelt_gehaengt(self, _logging_state):
+        """Beide Signale feuern nacheinander auf denselben Root-Logger."""
+        logger = logging.getLogger("celery_test_doppelt")
+        logger.handlers = [logging.StreamHandler()]
+
+        logging_config.install_redaction(logger)
+        logging_config.install_redaction(logger)
+
+        filter_anzahl = sum(
+            isinstance(f, logging_config.SensitiveDataFilter) for f in logger.handlers[0].filters
         )
+        assert filter_anzahl == 1
+
+    def test_echte_zeile_aus_celery_handler_leckt_nicht(self, _logging_state):
+        """Beweis am Artefakt: ein von Celery angelegter Handler, nachgehärtet,
+        gibt den Token nicht mehr aus."""
+        import io
+
+        import httpx
+
+        celery_logger = logging.getLogger("celery_test_ausgabe")
+        celery_logger.propagate = False
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        celery_logger.handlers = [handler]
+        celery_logger.setLevel(logging.INFO)
+
+        logging_config.install_redaction(celery_logger)
+
+        celery_logger.info(
+            'HTTP Request: %s %s "%s %d %s"',
+            "GET",
+            httpx.URL(_FAKE_FILE_URL),
+            "HTTP/1.1",
+            200,
+            "OK",
+        )
+        handler.flush()
+
+        ausgabe = stream.getvalue()
+        assert ausgabe
+        assert _FAKE_TOKEN not in ausgabe
+        assert "***" in ausgabe
