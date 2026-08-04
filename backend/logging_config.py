@@ -121,13 +121,27 @@ _QUIET_LOGGERS = ("uvicorn.access", "httpx", "httpcore")
 
 
 def quiet_noisy_loggers() -> None:
-    """Setzt die geschwätzigen Fremdbibliotheken auf WARNING.
+    """Schaltet die geschwätzigen Fremdbibliotheken stumm UND redigiert sie.
 
-    Erste Verteidigungslinie gegen das Token-Leck: httpx loggt auf INFO die
-    VOLLE URL, bei Telegram-Downloads samt Bot-Token im Pfad.
+    Zwei Dinge an derselben Stelle, beide gegen dasselbe Leck: httpx loggt auf
+    INFO die VOLLE URL, bei Telegram-Aufrufen samt Bot-Token im Pfad.
+
+    1. Level auf WARNING — die Zeile entsteht gar nicht erst.
+    2. `SensitiveDataFilter` direkt AM LOGGER — nicht am Handler.
+
+    ⚠️ Zu (2), und das ist die Ausnahme von der Regel „Filter gehören an
+    Handler": `Logger.handle()` ruft `self.filter(record)` für Records, die AUF
+    DIESEM Logger entstehen. httpx erzeugt seine Records selbst — der Filter
+    greift hier also, ganz gleich welche Handler unten hängen und ob deren
+    Filter gesetzt wurden. Das ist die einzige Linie, die Celerys
+    Startreihenfolge nicht aushebeln kann: am 04.08.2026 war der MainProcess
+    gehärtet und ForkPoolWorker-2 loggte trotzdem 90 Token-Zeilen in 3 Minuten.
     """
     for noisy in _QUIET_LOGGERS:
-        logging.getLogger(noisy).setLevel(logging.WARNING)
+        lg = logging.getLogger(noisy)
+        lg.setLevel(logging.WARNING)
+        if not any(isinstance(f, SensitiveDataFilter) for f in lg.filters):
+            lg.addFilter(SensitiveDataFilter())
 
 
 def install_redaction(logger: logging.Logger | None = None) -> int:

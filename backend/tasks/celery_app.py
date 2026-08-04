@@ -1,8 +1,15 @@
+import logging
 import os
 
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import after_setup_logger, after_setup_task_logger, task_prerun
+from celery.signals import (
+    after_setup_logger,
+    after_setup_task_logger,
+    beat_init,
+    task_prerun,
+    worker_process_init,
+)
 
 from config import settings
 
@@ -158,17 +165,48 @@ if os.environ.get("TELEGRAM_POLLING_ENABLED", "false").lower() in ("1", "true", 
 # hat — ohne dass sich am gewohnten Logbild etwas aendert.
 #
 # `celery.task` traegt `propagate = 0` und eigene Handler, deshalb BEIDE Signale.
+#
+# ⚠️⚠️ Und deshalb NICHT NUR die Signale. Der zweite Anlauf hing allein an
+# `after_setup_logger` — im echten Worker kam die Haertung trotzdem nicht an:
+# ForkPoolWorker-2 loggte 90 Token-Zeilen in 3 Minuten, unredigiert. In einem
+# frisch gestarteten Prozess war derselbe Empfaenger nachweislich wirksam
+# (httpx 0 -> 30). Welche Stelle in Celerys Startreihenfolge das aushebelt, ist
+# nicht sicher bestimmt — also haengt die Haertung nicht mehr davon ab:
+#
+#   1. beim IMPORT dieses Moduls — laeuft im MainProcess, bevor der Pool forkt,
+#      und wird von jedem Kind geerbt. Das ist der Anker, der nicht ausfallen kann.
+#   2. `worker_process_init` — feuert IN jedem geforkten Kind, also genau dort,
+#      wo das Leck sichtbar war.
+#   3. `beat_init` — derselbe Schutz fuer den Beat-Prozess.
+#   4. `after_setup_logger` / `after_setup_task_logger` — haengt die Redaktion an
+#      die Handler, die Celery gerade angelegt hat.
+#
+# Vier Wege zum selben Zustand, alle idempotent. Und KEIN stilles `except: pass`
+# mehr: ein Fehler hier muss auffallen, sonst haelt man den Schutz fuer aktiv,
+# waehrend er fehlt.
 # ---------------------------------------------------------------------------
-@after_setup_logger.connect
-@after_setup_task_logger.connect
-def _haerte_celery_logging(logger=None, **kwargs) -> None:
-    try:
-        from logging_config import install_redaction, quiet_noisy_loggers
+def _haerte_logging(logger=None, **kwargs) -> None:
+    from logging_config import install_redaction, quiet_noisy_loggers
 
-        quiet_noisy_loggers()
-        install_redaction(logger)
-    except Exception:  # pragma: no cover — Logging darf den Start nie verhindern
-        pass
+    quiet_noisy_loggers()
+    bestueckt = install_redaction(logger)
+    # Einzeilige Selbstauskunft pro Prozess: beim naechsten Verdacht steht im Log,
+    # ob die Haertung lief — statt dass man es aus dem Ausbleiben von Lecks raet.
+    logging.getLogger(__name__).info(
+        "logging gehaertet: httpx=%s handler_mit_redaktion=%s",
+        logging.getLogger("httpx").level,
+        bestueckt,
+    )
+
+
+# 1. Import-Zeit: MainProcess, vor dem Fork. Der Anker.
+_haerte_logging()
+
+# 2.-4. Alle Stellen, an denen Celery Prozesse oder Logger neu aufsetzt.
+worker_process_init.connect(_haerte_logging)
+beat_init.connect(_haerte_logging)
+after_setup_logger.connect(_haerte_logging)
+after_setup_task_logger.connect(_haerte_logging)
 
 
 # ---------------------------------------------------------------------------
