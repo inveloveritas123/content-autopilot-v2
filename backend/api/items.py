@@ -291,6 +291,7 @@ async def retry_transcribe(
 
     item.status = "new"
     item.transcript_text = None
+    item.transcription_attempts = 0
     await db.commit()
     transcribe_item.delay(item_id)
     return {"status": "retry_started", "item_id": item_id}
@@ -315,6 +316,7 @@ async def bulk_retry_failed(
     for item in items:
         item.status = "new"
         item.transcript_text = None
+        item.transcription_attempts = 0
     await db.commit()
     batch_transcribe.delay(str(tenant.id))
     return {"status": "bulk_retry_started", "retried": len(items)}
