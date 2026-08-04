@@ -344,7 +344,7 @@ class TestLogIdThreaded:
         ):
             mock_asyncio.run.return_value = "voice-chunk"
             mock_transcribe.return_value = types.SimpleNamespace(
-                text="Gesprochene Antwort", model_name="whisper", confidence=0.9
+                text="Gesprochene Antwort", model_id="voxtral", confidence=0.9
             )
             mock_route.return_value = None
 

@@ -20,6 +20,7 @@ import os
 import types
 
 import httpx
+from celery.exceptions import SoftTimeLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -29,6 +30,7 @@ from models.base import sync_session_factory
 from services.voice_transcription import (
     TranscriptionError,
     TranscriptionResult,
+    TranscriptionUnavailable,
     transcribe_voice,
 )
 from tasks.celery_app import celery_app
@@ -512,6 +514,11 @@ def _route_inbound_message(
                     routing_info["post_generation_enqueued"] = False
 
         return routing_info
+    except SoftTimeLimitExceeded:
+        # Muss vor dem Exception-Katalog stehen: SoftTimeLimitExceeded erbt von
+        # Exception und würde sonst hier als gewöhnlicher Routing-Fehler enden —
+        # der Task liefe scheinbar normal weiter statt sich abwickeln zu lassen.
+        raise
     except Exception as exc:
         # E2: nur Exception-Typ loggen, nie str(exc) — könnte Prompt-/PII-Fragmente tragen.
         logger.warning("inbound routing failed: %s", type(exc).__name__)
@@ -621,12 +628,79 @@ async def _store_chunk_async(
 # ── celery task ─────────────────────────────────────────────────────────
 
 
-@celery_app.task(name="tasks.telegram_task.process_telegram_update", bind=True, max_retries=1)
+def _dispatch_voice(task, log_id: str, tenant_id: str, payload: dict) -> dict:
+    """Voice-Zweig samt Retry-Entscheidung.
+
+    Bewusst eine gewöhnliche Funktion mit `task` als Parameter statt Code im Task-Rumpf:
+    Ein Celery-Task mit `bind=True` ist ein Objekt, dessen `__call__` das echte `self`
+    selbst einsetzt — ein von Hand übergebener Fake-Task landete als erstes Argument.
+    So ist die Retry-Logik ohne Celery-Laufzeit prüfbar.
+    """
+    try:
+        return _process_voice(log_id, tenant_id, payload)
+    except TranscriptionUnavailable as exc:
+        if task.request.retries < task.max_retries:
+            # 30/60/120s — ein einzelner Nachschlag überlebt ein Ratenlimit selten.
+            countdown = 30 * 2**task.request.retries
+            if task.request.retries == 0:
+                # Genau einmal ankündigen, nicht bei jedem Versuch.
+                _notify_voice_user(tenant_id, payload, exc.user_message or _VOICE_MSG_BUSY)
+            logger.warning(
+                "voice vorübergehend gescheitert, Retry %d/%d in %ds: %s",
+                task.request.retries + 1,
+                task.max_retries,
+                countdown,
+                exc,
+            )
+            raise task.retry(exc=exc, countdown=countdown) from exc
+
+        logger.error("voice: Retry-Vorrat erschöpft: %s", exc)
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_GAVE_UP)
+        return {"status": "error", "reason": "transcription_unavailable_exhausted"}
+    except TranscriptionError as exc:
+        # Der Nutzer wurde schon in _process_voice informiert — hier nicht doppeln.
+        logger.warning("voice endgültig gescheitert: %s", exc)
+        return {"status": "error", "reason": str(exc)[:120]}
+    except Exception as exc:
+        # Letzter Riegel. Alles, was hier ankommt, ist per Definition unerwartet —
+        # sonst hätte es eine der beiden Klauseln oben getroffen. Ohne diesen Fang
+        # stirbt der Task still und der Absender wartet auf eine Antwort, die nie kommt.
+        logger.exception("voice: unerwarteter Fehler")
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_GAVE_UP)
+        _alert_admin_voice_failure(tenant_id, f"unerwartet: {exc!r}"[:200], "unexpected")
+        return {"status": "error", "reason": "unexpected"}
+
+
+# 1200s/1260s statt eines globalen Limits in celery_app.conf: Dieser Task bedient
+# alle drei message_type-Zweige (voice/photo/text), und sowohl _process_voice als
+# auch _process_text laufen am Ende durch _route_inbound_message in
+# services/pipeline_llm.py, wo request_timeout = max(300, …) bei max_retries=3
+# gilt — ein einzelner Routing-Call darf legitim bis zu 900s dauern (eingefroren
+# in tests/test_explicit_choice_callbacks.py:302-311). Der Voice-Erfolgspfad
+# durchläuft Transkription UND danach dieses Routing, also addieren sich:
+#   ~40s  Telegram-Download   (zwei sequenzielle GETs, je timeout=20)
+#   ~186s Transkription       (zwei Adapter in Kette, je 3 × 30s + 1s/2s Backoff = 93s)
+#   ~900s Routing             (max(300, …) mit max_retries=3)
+#   ------------------------
+#   ~1126s realistischer Einzel-Worst-Case
+# 1200s/1260s liegen knapp über diesem legitimen Worst-Case — kein enges Limit,
+# sondern ein Riegel gegen einen echt hängenden Task. Die eigentliche Eindämmung
+# des Transkriptions-Beins ist der 30s-httpx-Timeout in
+# services/voice_transcription.py; dieses Limit greift nur, wenn trotzdem etwas
+# hängen bleibt.
+@celery_app.task(
+    name="tasks.telegram_task.process_telegram_update",
+    bind=True,
+    max_retries=3,
+    soft_time_limit=1200,
+    time_limit=1260,
+)
 def process_telegram_update(self, log_id: str) -> dict:
     """Verarbeitet eine telegram_message_log-Zeile.
 
     Returns dict mit Statusinfo. Idempotent: wenn transcript_text
-    schon gesetzt, wird kein erneuter Transcribe-Call gemacht.
+    schon gesetzt, wird kein erneuter Transcribe-Call gemacht — ein Retry
+    kann deshalb keine Dopplung erzeugen.
     """
     row = _load_log_row(log_id)
     if row is None:
@@ -642,14 +716,131 @@ def process_telegram_update(self, log_id: str) -> dict:
     message_type = row["message_type"]
 
     if message_type == "voice":
-        return _process_voice(log_id, tenant_id, payload)
+        return _dispatch_voice(self, log_id, tenant_id, payload)
     elif message_type == "photo":
         return _process_photo(log_id, tenant_id, payload)
     else:
         return _process_text(log_id, tenant_id, payload)
 
 
+# ── Voice-Fehlermeldungen (Spec §4.2) ───────────────────────────────────
+# Produkttext, kein Debug-Output. Die Ursache steht drin, die Technik nicht:
+# Ein Nutzer soll erfahren, was er tun kann, nicht welchen Statuscode der Router lieferte.
+_VOICE_MSG_NO_FILE = "🎤 Ich konnte die Sprachnachricht nicht lesen — bitte schick sie noch einmal."
+_VOICE_MSG_DOWNLOAD = (
+    "🎤 Ich konnte die Sprachnachricht nicht laden — ich versuche es gleich noch einmal."
+)
+_VOICE_MSG_BUSY = (
+    "🎤 Der Transkriptionsdienst ist gerade überlastet — ich versuche es gleich noch einmal."
+)
+_VOICE_MSG_TRANSCRIBE_FAILED = (
+    "🎤 Ich konnte die Sprachnachricht nicht transkribieren — bitte schick sie noch einmal."
+)
+_VOICE_MSG_EMPTY = "🎤 Die Sprachnachricht kam bei mir leer an — bitte schick sie noch einmal."
+# Transkript liegt vor, nur das Speichern ist gescheitert — eine der Meldungen oben
+# würde etwas anderes behaupten, als tatsächlich passiert ist.
+_VOICE_MSG_NOT_SAVED = (
+    "🎤 Ich habe deine Sprachnachricht verstanden, konnte sie aber nicht speichern — "
+    "bitte schick sie sicherheitshalber noch einmal."
+)
+# Wenn der Retry-Vorrat aufgebraucht ist: kein weiteres „gleich nochmal" versprechen.
+_VOICE_MSG_GAVE_UP = (
+    "🎤 Ich konnte deine Sprachnachricht leider nicht verarbeiten. Bitte schick sie noch einmal."
+)
+
+_VOICE_ALERT_REDIS_KEY = "voice-asr-alert"
+
+
+def _notify_voice_user(tenant_id: str, payload: dict, message: str) -> bool:
+    """Meldung an den Absender. Fail-open — eine misslungene Meldung darf nichts sprengen.
+
+    Fehlt 'chat' im Payload, wird der Tenant-Chat aufgelöst; ohne beides bleibt nur der
+    Betreiber-Alarm (der Nutzer ist dann schlicht nicht adressierbar).
+
+    Die chat_id-Ermittlung sitzt bewusst mit im try: 'chat' kommt aus original_payload,
+    einem unvalidierten DB-Feld. Ist 'chat' wahrheitswertig, aber kein Dict (z. B. ein
+    kaputter String), würfe `.get("id")` sonst außerhalb jeder Absicherung — und würde
+    hier die TranscriptionError/-Unavailable ersetzen, die der Nutzer eigentlich erfahren
+    sollte. `if not chat_id: return False` bleibt aber ein eigener Zweig, kein except:
+    „kein Chat ermittelbar" ist etwas anderes als „Senden fehlgeschlagen".
+    """
+    try:
+        chat_id = (payload.get("chat") or {}).get("id") or _resolve_chat_id(tenant_id)
+        if not chat_id:
+            logger.warning("voice failure: kein chat_id ermittelbar (tenant=%s)", tenant_id)
+            return False
+
+        from api.telegram import _send_telegram_message
+
+        return _send_telegram_message(int(chat_id), message, tenant_id=tenant_id)
+    except Exception as exc:
+        logger.warning("voice failure notice send failed: %s", type(exc).__name__)
+        return False
+
+
+def _alert_admin_voice_failure(tenant_id: str, reason: str, category: str) -> None:
+    """Betreiber-Alarm, höchstens einmal pro UTC-Tag — entprellt pro Ursache UND Tenant.
+
+    Grundmuster aus services/llm.py::_maybe_send_global_cap_alert, aber NICHT dessen
+    globaler Key: dort ist die Kostengrenze eine einzige globale Größe, ein globaler
+    Key also richtig. Hier sind es mehrere Ursachen über mehrere Tenants — ein
+    gemeinsamer Key ließe einen Bedienfehler (z. B. eine Sprachnachricht ohne file_id)
+    frühmorgens den einzigen Alarm-Platz des Tages verbrauchen, und ein echter Ausfall
+    später am Tag verschwände spurlos dahinter. `category` ist bewusst ein Literal an
+    der Aufrufstelle, nicht aus `reason` abgeleitet — der Fehlertext variiert (jeder
+    Router-Body sieht anders aus) und würde damit gar nichts entprellen.
+    Fail-open in jedem Fall.
+    """
+    try:
+        if not settings.telegram_admin_chat_id:
+            logger.warning(
+                "_alert_admin_voice_failure: telegram_admin_chat_id not configured, skipping"
+            )
+            return
+
+        import datetime as _dt
+
+        import redis as _redis
+
+        today = _dt.datetime.now(_dt.UTC).date().isoformat()
+        r = _redis.from_url(settings.redis_url, decode_responses=True)
+        try:
+            was_set = r.set(
+                f"{_VOICE_ALERT_REDIS_KEY}:{category}:{tenant_id}:{today}",
+                "1",
+                nx=True,
+                ex=86400,
+            )
+        finally:
+            r.close()
+        if not was_set:
+            return
+
+        from api.telegram import _send_admin_telegram_message
+
+        _send_admin_telegram_message(
+            int(settings.telegram_admin_chat_id),
+            f"⚠️ Sprachnachricht nicht verarbeitet (tenant={tenant_id}): {reason}",
+        )
+    except Exception as exc:
+        logger.warning("voice admin alert failed (non-fatal): %s", exc)
+
+
 def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
+    """Verarbeitet eine Sprachnachricht: Download, Transkription, Speichern, Routing.
+
+    Raises:
+        TranscriptionError: fehlende file_id, endgültig gescheiterte Transkription
+            oder leeres Transkript — der Nutzer wurde vor dem Raise bereits benachrichtigt.
+        TranscriptionUnavailable: Download- oder Transkriptionsfehler, die
+            `_dispatch_voice` retryt. Der Nutzer wird erst dort benachrichtigt.
+        SoftTimeLimitExceeded: reicht unverändert durch, statt in eines der obigen
+            Ergebnisse verpackt zu werden — siehe FIX 2.
+
+    Nur der Erfolgspfad (inkl. des Chunk-Speicher-Fehlers, der als
+    ``{"status": "transcribed_no_chunk", ...}`` zurückkommt) liefert das
+    annotierte ``dict`` regulär zurück.
+    """
     voice_obj: dict = payload.get("voice") or {}
     file_id = voice_obj.get("file_id")
     duration = int(voice_obj.get("duration") or 0)
@@ -657,11 +848,23 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
 
     if not file_id:
         logger.warning("voice ohne file_id, log_id=%s", log_id)
-        return {"status": "error", "reason": "no_file_id"}
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_NO_FILE)
+        _alert_admin_voice_failure(tenant_id, "voice ohne file_id", "no_file_id")
+        raise TranscriptionError("voice ohne file_id")
 
     audio_bytes = _telegram_get_file(file_id, tenant_id)
     if not audio_bytes:
-        return {"status": "error", "reason": "download_failed"}
+        # Bewusst vorübergehend: _telegram_get_file liefert auch bei endgültigen Ursachen
+        # None. Ein endgültiger Fehler dreimal wiederholt kostet drei wirkungslose Aufrufe,
+        # ein vorübergehender Fehler endgültig behandelt kostet die Nachricht.
+        #
+        # Der Nutzertext reist an der Ausnahme mit, statt hier gesendet zu werden: Bei drei
+        # Retries würde der Absender sonst dreimal „ich versuche es gleich noch einmal"
+        # lesen. Wann er ihn liest, entscheidet _dispatch_voice.
+        _alert_admin_voice_failure(tenant_id, "Telegram-Download fehlgeschlagen", "download")
+        raise TranscriptionUnavailable(
+            "Telegram-Download fehlgeschlagen", user_message=_VOICE_MSG_DOWNLOAD
+        )
 
     try:
         result: TranscriptionResult = transcribe_voice(
@@ -670,13 +873,23 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
             language_hint="de",
             tenant_id=tenant_id,
         )
+    except TranscriptionUnavailable as exc:
+        logger.warning("transcribe_voice vorübergehend fehlgeschlagen: %s", exc)
+        _alert_admin_voice_failure(tenant_id, str(exc)[:200], "transient")
+        if not exc.user_message:
+            exc.user_message = _VOICE_MSG_BUSY
+        raise
     except TranscriptionError as exc:
-        logger.warning("transcribe_voice fail: %s", exc)
-        return {"status": "error", "reason": str(exc)[:80]}
+        logger.warning("transcribe_voice endgültig fehlgeschlagen: %s", exc)
+        _notify_voice_user(tenant_id, payload, exc.user_message or _VOICE_MSG_TRANSCRIBE_FAILED)
+        _alert_admin_voice_failure(tenant_id, str(exc)[:200], "terminal")
+        raise
 
     transcript = (result.text or "").strip()
     if not transcript:
-        return {"status": "error", "reason": "empty_transcript"}
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_EMPTY)
+        _alert_admin_voice_failure(tenant_id, "leeres Transkript", "empty")
+        raise TranscriptionError("leeres Transkript")
 
     _update_log_transcript(log_id, transcript, result.model_id or "unknown", result.confidence)
 
@@ -693,8 +906,16 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         chunk_id = asyncio.run(
             _store_chunk_async(tenant_id, source_type, transcript, log_id, chunk_metadata)
         )
+    except SoftTimeLimitExceeded:
+        # Muss vor dem Exception-Katalog stehen — siehe _route_inbound_message.
+        raise
     except Exception as exc:
         logger.warning("store_voice_chunk failed: %s", exc)
+        # Ohne diese beiden Zeilen hört der Absender nichts und der Betreiber
+        # erfährt nichts — vier Zeilen unterhalb von Code, den dieser Branch
+        # gerade umgeschrieben hat, um genau das nie wieder zuzulassen.
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_NOT_SAVED)
+        _alert_admin_voice_failure(tenant_id, str(exc)[:200], "chunk")
         return {"status": "transcribed_no_chunk", "reason": str(exc)[:120]}
 
     chat_id_voice = (payload.get("chat") or {}).get("id")

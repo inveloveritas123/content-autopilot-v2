@@ -314,6 +314,41 @@ Region-Pin. Fehlt der Provider-Prefix → **404**, fehlt der Region-Pin → **40
 nichts über Berechtigungen, nur über die Schreibweise. `GET /v1/models` listet **nicht** alle
 nutzbaren Modelle und taugt nicht als Beleg — verbindlich ist nur der echte Call.
 
+**ASR / Transkription (Voice-Pfad, `services/voice_transcription.py`):**
+
+| Modell-ID | Router | Einsatz |
+|---|---|---|
+| `mistral/voxtral-mini-latest` | ✅ 200 (03.08.26) | **primär** — dedizierter ASR-Endpunkt `/audio/transcriptions` |
+| `vertex/gemini-2.5-flash-lite@europe-north1` | ✅ 200 | Rückfall über `/chat/completions` |
+| `openai/whisper-1` | ❌ 403 | nicht freigegeben — nicht verwenden |
+
+Die beiden aktiven Wege liegen bewusst auf **verschiedenen Upstreams**. Am 03.08.2026 hat
+ein Podcast-Batch auf `vertex/gemini-2.5-flash-lite@europe-central2` das Kontingent
+leergefressen, an dem eine echte Sprachnachricht auf `…@europe-north1` starb — dieselbe
+Modellfamilie, derselbe Upstream. Zwei Wege auf einem Upstream sind keine Redundanz.
+
+**Was die Trennung NICHT abdeckt:** Beide Anbieter lösen über denselben Requesty-Router
+mit demselben API-Key und demselben Account auf. Ein Router-Ausfall, ein rotierter oder
+widerrufener Key, ein DNS-/Netzwerkfehler zu `router.eu.requesty.ai` oder eine kontoweite
+Budgetgrenze legt beide Wege gleichzeitig lahm. Die Trennung wirkt ausschließlich auf
+Modell-/Anbieter-Ebene, nicht auf Infrastruktur-Ebene.
+
+**Warnung, bevor das jemand rückgängig macht:** `backend/services/audio_transcription.py`
+(~Zeile 93–105) postet an denselben `/audio/transcriptions`-Endpunkt mit
+`model: "whisper-1"` — laut Tabelle oben nicht freigegeben. Wer diese Aufrufstelle
+repariert, darf sie NICHT auf `mistral/voxtral-mini-latest` umstellen — sonst teilen sich
+der Podcast-Batch-Loop und der Voice-Pfad wieder ein Modell und einen Upstream, genau die
+Konfiguration, die diese Arbeit beseitigen sollte.
+
+Voxtral antwortet mit **JSON** (`{"text": …}`), auch bei `response_format=text`, und nimmt
+OGG/Opus direkt an.
+
+**Einschränkung der Prefix-Regel oben:** „ohne Provider-Prefix → 404/400" gilt nicht
+durchgängig. `claude-sonnet-5@eu` antwortete ohne Prefix mit **200**,
+`voxtral-mini-latest` ohne Prefix mit 400. Requesty löst manche IDs über einen
+Default-Provider auf. Im Code immer die volle ID benutzen — explizit statt vom
+Router-Default abhängig.
+
 **REGELN:**
 - Teure Frontier-Modelle (Anthropic, Mistral-large, devstral) NUR mit explizitem Grund im
   Issue-Kommentar. Das war die Absicht hinter der alten S5/S6-Confirm-Regel und gilt weiter.
