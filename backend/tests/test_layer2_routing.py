@@ -74,6 +74,52 @@ class TestLayer2Routing:
         assert result.payload["session_id"] == "sess-abc"
         assert result.reason == "active_session_response"
 
+    def test_bestaetigung_nach_angebot_erreicht_p08_trotz_smalltalk(self):
+        """„ja" auf ein Abschluss-Angebot MUSS bei p08_response landen.
+
+        Seit 04.08.2026 bietet der Bot das Gesprächsende an, statt es zu
+        verhängen. Auf „Soll ich ihn schreiben?" antwortet der Nutzer mit „ja" —
+        und Schicht 1 ordnet ein blosses „ja" nicht zuverlässig als
+        `answer_to_question` ein. Ohne diese Weiche liefe die Bestätigung ins
+        Gedächtnis statt in den Post, und das Gespräch hinge für immer auf dem
+        Angebot fest.
+        """
+        from services.layer2_routing import route_telegram_intent
+
+        session = SimpleNamespace(id="sess-offer", status="active", awaiting_confirmation=True)
+        result = route_telegram_intent(
+            _extraction("smalltalk"),
+            tenant_id="t1",
+            current_session=session,
+        )
+        assert result.target == "p08_response"
+        assert result.payload["session_id"] == "sess-offer"
+
+    def test_ohne_angebot_bleibt_smalltalk_smalltalk(self):
+        """Die Weiche greift NUR nach einem Angebot — sonst wäre sie ein Freibrief,
+        der jede Nachricht ins Interview zwingt."""
+        from services.layer2_routing import route_telegram_intent
+
+        session = SimpleNamespace(id="sess-x", status="active", awaiting_confirmation=False)
+        result = route_telegram_intent(
+            _extraction("smalltalk"),
+            tenant_id="t1",
+            current_session=session,
+        )
+        assert result.target != "p08_response"
+
+    def test_angebot_bei_geschlossener_session_greift_nicht(self):
+        """Eine geschlossene Session darf auch mit offenem Angebot nichts routen."""
+        from services.layer2_routing import route_telegram_intent
+
+        session = SimpleNamespace(id="sess-zu", status="closed", awaiting_confirmation=True)
+        result = route_telegram_intent(
+            _extraction("smalltalk"),
+            tenant_id="t1",
+            current_session=session,
+        )
+        assert result.target != "p08_response"
+
     def test_answer_to_question_without_session_routes_reviewer_queue(self):
         from services.layer2_routing import route_telegram_intent
 

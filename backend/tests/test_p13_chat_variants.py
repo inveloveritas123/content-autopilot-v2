@@ -331,9 +331,21 @@ class TestP13Gate2Choice:
 
 
 class TestShortTextBypass:
+    """Kurztext-Gate.
+
+    Seit 04.08.2026 haengt es an einer zweiten Bedingung: laeuft gerade ein
+    Bot-Gespraech, zaehlt jede Laenge — „ja" ist die vorgesehene Bestaetigung
+    eines Abschluss-Angebots. Diese Tests decken den Fall OHNE Gespraech ab und
+    sagen das jetzt explizit; vorher verliessen sie sich darauf, dass das Gate
+    bedingungslos greift.
+    """
+
+    @patch("tasks.telegram_task.hat_aktives_gespraech", return_value=False)
     @patch("tasks.p13_variants_task._try_p13_variant_choice")
     @patch("tasks.telegram_task.asyncio.run")
-    def test_short_text_with_pending_marker_routed(self, mock_run, mock_try_choice):
+    def test_short_text_with_pending_marker_routed(
+        self, mock_run, mock_try_choice, _kein_gespraech
+    ):
         """'2' (len<10) + Pending-Marker → Choice verarbeitet, nicht too_short."""
         mock_run.return_value = "chunk-s1"
         mock_try_choice.return_value = {
@@ -347,14 +359,35 @@ class TestShortTextBypass:
         assert result["status"] == "ok"
         assert result["routed_to"] == "p13_choice"
 
+    @patch("tasks.telegram_task.hat_aktives_gespraech", return_value=False)
     @patch("tasks.p13_variants_task._try_p13_variant_choice", return_value=False)
     @patch("tasks.telegram_task.asyncio.run")
-    def test_short_text_without_pending_stays_too_short(self, mock_run, mock_try_choice):
-        """'2' ohne Pending-Marker → too_short wie bisher."""
+    def test_short_text_without_pending_stays_too_short(
+        self, mock_run, mock_try_choice, _kein_gespraech
+    ):
+        """'2' ohne Pending-Marker und ohne Gespraech → too_short wie bisher."""
         mock_run.return_value = "chunk-s2"
         result = tt._process_text("log-s2", "tenant-1", {"text": "hi"})
         assert result["status"] == "skipped"
         assert result["reason"] == "too_short"
+
+    @patch("tasks.telegram_task.hat_aktives_gespraech", return_value=True)
+    @patch("tasks.telegram_task._route_inbound_message", return_value={"routed_to": "p08_response"})
+    @patch("tasks.telegram_task.asyncio.run")
+    def test_kurztext_im_laufenden_gespraech_kommt_durch(
+        self, mock_run, mock_route, _gespraech_laeuft
+    ):
+        """Testfall 16: „ja" MIT aktiver Session passiert das Gate.
+
+        Ohne diese Weiche verschwaende die Bestaetigung eines Abschluss-Angebots
+        genau hier — der Bot haenge fuer immer auf „Soll ich ihn schreiben?".
+        """
+        mock_run.return_value = "chunk-s3"
+        result = tt._process_text("log-s3", "tenant-1", {"text": "ja"})
+
+        assert result["status"] == "ok"
+        assert result.get("routed_to") == "p08_response"
+        mock_route.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

@@ -109,12 +109,48 @@ def _load_active_session(tenant_id: str) -> object | None:
     if row is None:
         return None
     current_question = ""
+    awaiting_confirmation = False
     messages = row.messages or []
     if isinstance(messages, list) and messages:
         last_entry = messages[-1]
         if isinstance(last_entry, dict):
             current_question = (last_entry.get("bot") or "").strip()
-    return types.SimpleNamespace(id=row.id, status=row.status, current_question=current_question)
+            # Hat der Bot zuletzt ein Abschluss-Angebot gemacht? Dann ist die
+            # naechste Nachricht die Bestaetigung — sie MUSS bei p08_response
+            # ankommen, auch wenn Schicht 1 ein blosses „ja" als Smalltalk
+            # einordnet. Ohne diese Weiche haenge das Gespraech am Ja fest.
+            awaiting_confirmation = last_entry.get("next_action") == "offer"
+    return types.SimpleNamespace(
+        id=row.id,
+        status=row.status,
+        current_question=current_question,
+        awaiting_confirmation=awaiting_confirmation,
+    )
+
+
+#: Kürzester Text, der ausserhalb eines Gespraechs noch als Gedaechtnis-Eintrag
+#: durchgeht. Innerhalb eines Gespraechs zaehlt jede Laenge — „ja" ist die
+#: vorgesehene Bestaetigung eines Abschluss-Angebots.
+MIN_TEXT_LEN = 10
+
+
+def hat_aktives_gespraech(tenant_id: str) -> bool:
+    """True, wenn gerade ein Bot-Gespraech laeuft.
+
+    ⚠️ Gemeinsame Regel fuer BEIDE Kurztext-Filter — `api/telegram.py`
+    (vor dem Dispatch) und `_process_text` (danach). Wer nur einen der beiden
+    an die Session koppelt, laesst „ja" durch die Vordertuer und verliert es an
+    der Hintertuer.
+
+    Fail-open zu False, und die Richtung ist Absicht: bei einem DB-Fehler
+    verhaelt sich der Filter wie bisher (Hinweis statt Verarbeitung), statt
+    ungeprueft alles durchzulassen.
+    """
+    try:
+        return _load_active_session(tenant_id) is not None
+    except Exception as exc:
+        logger.warning("Kurztext-Gate: Session-Abfrage fehlgeschlagen: %s", type(exc).__name__)
+        return False
 
 
 def _is_pending_variant_choice(tenant_id: str, text_content: str) -> bool:
@@ -471,6 +507,14 @@ def _route_inbound_message(
                     # C5: Solange das Gespräch weiterläuft, hängt an der Frage ein
                     # sichtbarer Ausgang. An der Abschluss-Nachricht nicht — dann
                     # ist die Session ohnehin zu.
+                    #
+                    # ⚠️ Diese Annahme war bis 04.08.2026 FALSCH und der Grund,
+                    # warum Louis eine Frage ohne Abbrechen-Knopf bekam: `is_closed`
+                    # konnte vom Zähler gesetzt sein, während der Text vom LLM eine
+                    # frische Frage war. Seither garantiert der Typ es —
+                    # `is_closed` ist `outcome is CLOSED`, und CLOSED kann keinen
+                    # Fragetext tragen (ResponseResult.__post_init__). Ein Angebot
+                    # ist `OFFER`, hält die Session offen und behält den Ausgang.
                     if result.is_closed:
                         sent = _send_telegram_message(chat_id, result.message, tenant_id=tenant_id)
                     else:
@@ -1044,7 +1088,12 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
         text_content = ""
     if not text_content:
         return {"status": "skipped", "reason": "empty_text"}
-    if len(text_content) < 10:
+    if len(text_content) < MIN_TEXT_LEN and not hat_aktives_gespraech(tenant_id):
+        # Zweites Kurztext-Gate. Seit 04.08.2026 an dieselbe Session-Bedingung
+        # gekoppelt wie das erste in api/telegram.py — „ja" auf ein
+        # Abschluss-Angebot muss beide passieren, sonst verschwindet die
+        # Bestaetigung zwischen den beiden Filtern.
+        #
         # #36 S4 Kurztext-Bypass: „2" als Varianten-Wahl hat len<10 und würde
         # hier normalerweise gestoppt. Wenn ein Pending-Marker existiert und
         # der Text ein gültiges Choice-Token ist, durchlassen.

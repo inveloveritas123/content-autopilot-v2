@@ -1651,14 +1651,22 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
         # verschluckte eine offene Wizard-Session jede Nachricht als Antwort auf eine
         # Frage — auch tagelang später, weil Sessions kein TTL haben.
 
-        # Zu kurzer Text → Hinweis statt stilles Drop
-        if len(stripped) < 10:
-            _send_telegram_message(
-                chat_id_for_dispatch,
-                "💬 Zu kurz fürs Gedächtnis. Schreib einfach einen ganzen Satz!",
-                tenant_id=tenant_id,
-            )
-            return
+        # Zu kurzer Text → Hinweis statt stilles Drop.
+        #
+        # ⚠️ Die Laengenpruefung liegt seit 04.08.2026 HINTER der Session-Abfrage.
+        # Innerhalb eines Gespraechs zaehlt jede Laenge: „ja" ist die vorgesehene
+        # Bestaetigung eines Abschluss-Angebots und war vorher schon hier weg.
+        # Dieselbe Bedingung sichert `_process_text` — siehe hat_aktives_gespraech.
+        from tasks.telegram_task import MIN_TEXT_LEN, hat_aktives_gespraech
+
+        if len(stripped) < MIN_TEXT_LEN:
+            if not hat_aktives_gespraech(tenant_id):
+                _send_telegram_message(
+                    chat_id_for_dispatch,
+                    "💬 Zu kurz fürs Gedächtnis. Schreib einfach einen ganzen Satz!",
+                    tenant_id=tenant_id,
+                )
+                return
 
     # update_id-Deduplizierungs-Marker in payload injizieren
     update_id = update.get("update_id")

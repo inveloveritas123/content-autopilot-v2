@@ -64,11 +64,22 @@ def route_telegram_intent(
     if extraction_result.flagged_for_review:
         return RoutingDecision("reviewer_queue", {}, "flagged_in_schicht_1")
 
-    # 3. Antwort auf laufende Session-Frage
+    # 3. Antwort auf laufende Session-Frage.
+    #
+    #    `awaiting_confirmation` ist die zweite Bedingung, seit der Bot ein
+    #    Gespraechsende ANBIETET statt es zu verhaengen (04.08.2026): Auf ein
+    #    „Soll ich ihn schreiben?" antwortet der Nutzer mit „ja" — und Schicht 1
+    #    ordnet ein blosses „ja" nicht zuverlaessig als `answer_to_question` ein.
+    #    Ohne diese Weiche liefe die Bestaetigung ins Gedaechtnis statt in den
+    #    Post, und das Gespraech haenge fuer immer auf dem Angebot fest.
+    #    Deterministisch, kein LLM — passend zur Zusicherung dieser Schicht.
     if (
-        extraction_result.intent == "answer_to_question"
-        and current_session is not None
+        current_session is not None
         and getattr(current_session, "status", None) == "active"
+        and (
+            extraction_result.intent == "answer_to_question"
+            or getattr(current_session, "awaiting_confirmation", False)
+        )
     ):
         return RoutingDecision(
             "p08_response",

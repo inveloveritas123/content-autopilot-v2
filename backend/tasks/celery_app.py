@@ -113,6 +113,13 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.embedding_health_task.check_missing_embeddings",
         "schedule": crontab(hour=3, minute=45),
     },
+    # Bot-Sessions hatten kein TTL — eine unbeantwortete Session blieb fuer immer
+    # 'active' und verschluckte jede spaetere Nachricht als "Antwort" auf eine
+    # Frage von vorgestern. :45 ist frei (drift :00, memory :15, cost :30).
+    "expire-stale-bot-sessions-hourly": {
+        "task": "tasks.session_timeout_task.expire_stale_sessions",
+        "schedule": crontab(minute=45),
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -161,6 +168,7 @@ celery_app.conf.include = [
     "tasks.p12b_task",
     "tasks.p12c_task",
     "tasks.session_post_task",
+    "tasks.session_timeout_task",
     "tasks.voice_drift_task",
     "tasks.model_check_task",
     "tasks.backtest_task",
