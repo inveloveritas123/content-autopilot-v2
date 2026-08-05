@@ -482,16 +482,28 @@ _ZIELE_MIT_EIGENER_ANTWORT = frozenset(
 )
 
 
+#: Flags, mit denen ein Ziel meldet, ob sein antwortender Task wirklich in die
+#: Warteschlange kam. Steht eines auf False, hat NIEMAND den Nutzer erreicht —
+#: dann braucht es die Quittung, obwohl das Ziel in der Positivliste steht.
+_ENQUEUE_FLAGS = ("p13_enqueued", "regen_enqueued")
+
+
 def _braucht_sichtbare_quittung(routing_info: dict) -> bool:
     """True, wenn nach dem Routing niemand mehr mit dem Nutzer spricht.
 
-    `deduped` ist ausgenommen: das ist ein Doppel-Event auf eine bereits
-    zugestellte Nachricht — die erste Zustellung hat schon geantwortet, eine
-    zweite Quittung wäre eine Nachricht zu viel.
+    Zwei Bedingungen, nicht eine: das Ziel muss selbst antworten KÖNNEN (Positiv-
+    liste) UND sein Task muss tatsächlich enqueued worden sein. Ein gescheiterter
+    Enqueue behält den Zielnamen bei — ohne die zweite Prüfung wäre das wieder
+    Stille, diesmal im Mechanismus gegen Stille.
+
+    `deduped` bleibt ausgenommen: Doppel-Event auf eine bereits beantwortete
+    Nachricht.
     """
     if routing_info.get("deduped"):
         return False
-    return routing_info.get("routed_to") not in _ZIELE_MIT_EIGENER_ANTWORT
+    if routing_info.get("routed_to") not in _ZIELE_MIT_EIGENER_ANTWORT:
+        return True
+    return any(routing_info.get(flag) is False for flag in _ENQUEUE_FLAGS)
 
 
 def _route_inbound_message(

@@ -463,3 +463,29 @@ class TestKeineStilleNachDemRouting:
         sender = MagicMock(return_value=True)
         self._lauf({"routed_to": "ein_neues_ziel_das_es_noch_nicht_gibt"}, sender)
         sender.assert_called_once()
+
+    def test_gescheiterter_p13_enqueue_bekommt_eine_quittung(self):
+        """routed_to nennt ein antwortendes Ziel, aber der Task kam nie in die
+        Warteschlange — dann spricht niemand mehr mit dem Nutzer."""
+        sender = MagicMock(return_value=True)
+        self._lauf({"routed_to": "p13_variants", "p13_enqueued": False}, sender)
+        sender.assert_called_once()
+
+    def test_gescheiterter_regen_enqueue_bekommt_eine_quittung(self):
+        sender = MagicMock(return_value=True)
+        self._lauf({"routed_to": "voice_feedback_api", "regen_enqueued": False}, sender)
+        sender.assert_called_once()
+
+    def test_erfolgreicher_p13_enqueue_bekommt_keine_quittung(self):
+        """Der Varianten-Task sendet selbst — eine Quittung wäre eine zu viel."""
+        sender = MagicMock(return_value=True)
+        self._lauf({"routed_to": "p13_variants", "p13_enqueued": True}, sender)
+        sender.assert_not_called()
+
+    def test_gescheiterte_post_generierung_bekommt_keine_quittung(self):
+        """post_generation_enqueued=False heisst NICHT, dass der Nutzer nichts
+        bekam: p08_response hat die Abschluss-Nachricht bereits gesendet, nur die
+        nachgelagerte Post-Generierung wurde nicht enqueued."""
+        sender = MagicMock(return_value=True)
+        self._lauf({"routed_to": "p08_response", "post_generation_enqueued": False}, sender)
+        sender.assert_not_called()
