@@ -1044,3 +1044,90 @@ class TestP08ResponseRespectsMidflightCancel:
             "Nach dem Abbruch geht noch eine Folgefrage raus — der Nutzer hat gerade "
             "'Gespräch abgebrochen' gelesen"
         )
+
+
+# ---------------------------------------------------------------------------
+# erzeuge_bot_session — die eine Stelle, an der eine Session entsteht
+# ---------------------------------------------------------------------------
+
+
+class TestErzeugeBotSession:
+    """P14 schreibt dieselbe Zeile wie p08_opener, nicht eine zweite Form."""
+
+    def _insert_ctx(self):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        return ctx
+
+    @patch("services.p08_service.sync_session_factory")
+    def test_legt_aktive_session_an_und_gibt_die_id_zurueck(self, mock_factory):
+        ctx = self._insert_ctx()
+        mock_factory.return_value = ctx
+
+        session_id = _p08_mod.erzeuge_bot_session(
+            tenant_id="t1",
+            mode="targeted",
+            topic_idea_id=None,
+            frage="Worum ging es in dem Gespräch?",
+            category="targeted",
+        )
+
+        assert len(session_id) == 36
+        ctx.execute.assert_called_once()
+        ctx.commit.assert_called_once()
+        params = ctx.execute.call_args.args[1]
+        assert params["id"] == session_id
+        assert params["tid"] == "t1"
+        assert params["mode"] == "targeted"
+        assert params["topicid"] is None
+
+    @patch("services.p08_service.sync_session_factory")
+    def test_messages_null_hat_die_form_die_letzte_bot_aktion_erwartet(self, mock_factory):
+        """Spec §6: die Eroeffnungsfrage zaehlt als Frage 1 und ist ein ASK.
+
+        _letzte_bot_aktion liest messages[-1]["next_action"]; _load_active_session
+        leitet daraus awaiting_confirmation ab. Eine falsche Form hier laesst das
+        Folgegespraech ins Leere laufen.
+        """
+        ctx = self._insert_ctx()
+        mock_factory.return_value = ctx
+
+        _p08_mod.erzeuge_bot_session(
+            tenant_id="t1",
+            mode="targeted",
+            topic_idea_id=None,
+            frage="Worum ging es?",
+            category="targeted",
+        )
+
+        messages = json.loads(ctx.execute.call_args.args[1]["msgs"])
+        assert len(messages) == 1
+        assert messages[0] == {
+            "bot": "Worum ging es?",
+            "user_features_summary": None,
+            "category": "targeted",
+            "question_index": 1,
+            "next_action": "ask",
+        }
+        assert _p08_mod._letzte_bot_aktion(messages) == "ask"
+
+    @patch("services.p08_service.sync_session_factory")
+    def test_mode_ist_check_constraint_konform(self, mock_factory):
+        """ck_bot_session_mode erlaubt targeted|random_smart|onboarding
+        (Migration 056) — keine Migration noetig, aber auch kein vierter Wert."""
+        ctx = self._insert_ctx()
+        mock_factory.return_value = ctx
+
+        _p08_mod.erzeuge_bot_session(
+            tenant_id="t1",
+            mode="targeted",
+            topic_idea_id=None,
+            frage="Frage?",
+            category="targeted",
+        )
+        assert ctx.execute.call_args.args[1]["mode"] in (
+            "targeted",
+            "random_smart",
+            "onboarding",
+        )

@@ -474,6 +474,56 @@ def _close_session_db(session_id: str, tenant_id: str) -> None:
         s.commit()
 
 
+def erzeuge_bot_session(
+    *,
+    tenant_id: str,
+    mode: str,
+    topic_idea_id: str | None,
+    frage: str,
+    category: str,
+) -> str:
+    """Legt eine aktive bot_session mit `frage` als messages[0] an.
+
+    Herausgezogen aus p08_opener, damit der Eingangs-Zug P14 dieselbe Zeile
+    schreibt statt eine zweite Form derselben Sache zu erfinden. P14 kommt mit
+    einer fertigen Frage; p08_opener holt sie sich vorher beim LLM.
+
+    Der Zustand liegt als Gesprächsinhalt vor, nicht als eigene Spalte (siehe
+    _letzte_bot_aktion). Die erste Nachricht ist immer eine Frage, nie ein
+    Angebot — deshalb ASK, fest verdrahtet.
+
+    Returns:
+        Die neue session_id (UUID als str).
+    """
+    session_id = str(uuid.uuid4())
+    messages = [
+        {
+            "bot": frage,
+            "user_features_summary": None,
+            "category": category,
+            "question_index": 1,
+            "next_action": ResponseOutcome.ASK.value,
+        }
+    ]
+    with sync_session_factory() as s:
+        s.execute(
+            text(
+                "INSERT INTO bot_session "
+                "(id, tenant_id, mode, topic_idea_id, current_question_index, messages, status) "
+                "VALUES (:id, :tid, :mode, :topicid, 1, CAST(:msgs AS jsonb), 'active')"
+            ),
+            {
+                "id": session_id,
+                "tid": tenant_id,
+                "mode": mode,
+                "topicid": topic_idea_id,
+                "msgs": json.dumps(messages),
+            },
+        )
+        s.commit()
+    return session_id
+
+
 def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> OpenerResult:
     """Start a new bot session and return the opening question.
 
@@ -552,34 +602,13 @@ def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> O
     question_text = parsed.get("message", raw_output[:500])
 
     # 5. Create bot_session in DB
-    session_id = str(uuid.uuid4())
-    messages = [
-        {
-            "bot": question_text,
-            "user_features_summary": None,
-            "category": category,
-            "question_index": 1,
-            # Zustand als Gesprächsinhalt statt als eigene Spalte — siehe
-            # _letzte_bot_aktion. Der Opener ist immer eine Frage, nie ein Angebot.
-            "next_action": ResponseOutcome.ASK.value,
-        }
-    ]
-    with sync_session_factory() as s:
-        s.execute(
-            text(
-                "INSERT INTO bot_session "
-                "(id, tenant_id, mode, topic_idea_id, current_question_index, messages, status) "
-                "VALUES (:id, :tid, :mode, :topicid, 1, CAST(:msgs AS jsonb), 'active')"
-            ),
-            {
-                "id": session_id,
-                "tid": tenant_id,
-                "mode": mode,
-                "topicid": topic_idea_id,
-                "msgs": json.dumps(messages),
-            },
-        )
-        s.commit()
+    session_id = erzeuge_bot_session(
+        tenant_id=tenant_id,
+        mode=mode,
+        topic_idea_id=topic_idea_id,
+        frage=question_text,
+        category=category,
+    )
 
     # 6. Return result
     return OpenerResult(session_id=session_id, question_text=question_text, category=category)
