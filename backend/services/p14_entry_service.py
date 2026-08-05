@@ -140,7 +140,7 @@ def _load_p14_prompt():
                 source_path=_PROMPT_PFAD,
             )
         except Exception as exc:
-            _melde_fallback(f"{type(exc).__name__}: {exc}")
+            _melde_fallback(type(exc).__name__)
     else:
         _melde_fallback(f"Datei fehlt: {_PROMPT_PFAD}")
 
@@ -196,7 +196,15 @@ def p14_entry(tenant_id: str, nachricht: str) -> EntryDecision:
     if not text:
         return ABLEGEN
 
-    prompt = _load_p14_prompt()
+    try:
+        prompt = _load_p14_prompt()
+    except Exception as exc:
+        # Die Zusage „p14_entry wirft nie" darf nicht an den Interna einer
+        # Hilfsfunktion hängen. _load_p14_prompt fängt heute selbst alles ab —
+        # dieser Riegel hält, wenn das einmal nicht mehr stimmt.
+        logger.warning("[P14] Prompt nicht ladbar (%s) — ablegen", type(exc).__name__)
+        return ABLEGEN
+
     try:
         user_content = prompt.user_prompt_template.format(
             nachricht=_kapseln(text[:_MAX_INPUT_CHARS])

@@ -285,6 +285,13 @@ class TestP14FaelltImmerAufAblegen:
         with pytest.raises(ValueError):
             p14.EntryDecision("gespraech", "   ")
 
+    def test_prompt_laden_wirft_legt_ab(self):
+        """Die Zusage „wirft nie" darf nicht an den Interna von
+        _load_p14_prompt hängen — alle anderen Tests mocken es mit
+        return_value und würden einen Regress hier nicht bemerken."""
+        with patch.object(p14, "_load_p14_prompt", side_effect=RuntimeError("boom")):
+            assert p14.p14_entry("tenant-1", "Ich will einen Post machen").handlung == "ablegen"
+
 
 class TestP14PromptRueckfall:
     def test_fehlende_datei_faellt_auf_hardcode_zurueck(self, tmp_path):
