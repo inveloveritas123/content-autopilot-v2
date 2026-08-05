@@ -236,6 +236,113 @@ def _send_choice_prompt(
     return sent
 
 
+def _verwerfe_session(session_id: str) -> None:
+    """Rollback einer gerade angelegten Session (fail-open).
+
+    Kommt die Eroeffnungsfrage nicht an, bleibt sonst eine UNSICHTBARE Session
+    zurueck: `_load_active_session` findet sie, und jede weitere Nachricht des
+    Nutzers wird als Antwort auf eine Frage geroutet, die er nie gelesen hat.
+    Sessions haben kein TTL.
+
+    Status 'expired', nicht 'closed' — 'closed' stellt in
+    `tasks/session_post_task.py` die Post-Generierung scharf.
+    """
+    try:
+        with sync_session_factory() as db:
+            db.execute(
+                text(
+                    "UPDATE bot_session SET status = 'expired', updated_at = NOW() "
+                    "WHERE id = :id AND status = 'active'"
+                ),
+                {"id": session_id},
+            )
+            db.commit()
+    except Exception as exc:
+        logger.warning("p14 session rollback failed: %s", type(exc).__name__)
+
+
+def _markiere_chunk_als_anweisung(tenant_id: str, log_id: str) -> bool:
+    """Markiert die Chunks dieser Nachricht als Steuer-Anweisung (Spec §7).
+
+    Rumpf folgt in Task 7. Fail-open by design: ein Markierungsfehler darf nie
+    ein Gespraech verhindern.
+    """
+    return False
+
+
+def _versuche_gespraechsstart(
+    tenant_id: str, text_content: str, log_id: str, chat_id: int | None
+) -> dict | None:
+    """P14 — eine Anweisung wird ein Gespraech. None heisst: weiter zu den Buttons.
+
+    Laeuft NUR, wenn `_awaits_user_choice` True gesagt hat; Session, P13-Wahl und
+    P09 sind damit bereits ausgeschlossen (Gate-Reihenfolge der Spec §4).
+
+    Die Antwort des Zuges IST die Eroeffnungsfrage und zugleich messages[0] der
+    Session — sie ersetzt den p08_opener-Aufruf, sie kommt nicht obendrauf.
+
+    Jeder Fehler gibt None zurueck: der Aufrufer sendet dann die zwei Buttons.
+    Nie Stille, nie eine halbe Session.
+    """
+    try:
+        from services.p14_entry_service import HANDLUNG_GESPRAECH, p14_entry
+
+        entscheidung = p14_entry(tenant_id, text_content)
+    except Exception as exc:
+        logger.warning("p14 entry gate failed: %s", type(exc).__name__)
+        return None
+
+    if getattr(entscheidung, "handlung", None) != HANDLUNG_GESPRAECH:
+        return None
+
+    ziel_chat = chat_id or _resolve_chat_id(tenant_id)
+    if ziel_chat is None:
+        # Ohne Chat kaeme die Frage nie an. Dann lieber keine Session, die auf
+        # eine Antwort wartet, die niemand geben kann.
+        logger.warning("p14: kein chat auffindbar (tenant=%s) — kein Gespraechsstart", tenant_id)
+        return None
+
+    try:
+        from services.p08_service import erzeuge_bot_session
+
+        session_id = erzeuge_bot_session(
+            tenant_id=tenant_id,
+            mode="targeted",
+            topic_idea_id=None,
+            frage=entscheidung.antwort,
+            category="targeted",
+        )
+    except Exception as exc:
+        logger.warning("p14 session insert failed: %s", type(exc).__name__)
+        return None
+
+    try:
+        from api.telegram import _entry_keep_keyboard, _send_telegram_message
+
+        gesendet = _send_telegram_message(
+            ziel_chat,
+            entscheidung.antwort,
+            tenant_id=tenant_id,
+            reply_markup=_entry_keep_keyboard(),
+        )
+    except Exception as exc:
+        logger.warning("p14 opener send failed: %s", type(exc).__name__)
+        gesendet = False
+
+    if not gesendet:
+        # Die Session zuruecknehmen, sonst schluckt sie ab jetzt jede Nachricht.
+        _verwerfe_session(session_id)
+        return None
+
+    _markiere_chunk_als_anweisung(tenant_id, log_id)
+
+    return {
+        "routed_to": "p14_gespraech",
+        "bot_session_id": session_id,
+        "p14_message_sent": True,
+    }
+
+
 def _resolve_chat_id(tenant_id: str) -> int | None:
     """Lookup active Telegram chat_id for a tenant (Issue #17).
 
@@ -976,8 +1083,17 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
     # Inline-Keyboard, das der WhatsApp-Adapter nicht kennt.
     if channel == "telegram" and _awaits_user_choice(tenant_id, transcript):
         # Fallback auf den Tenant-Chat: fehlt „chat" im Payload, wäre die Nachricht
-        # sonst ohne jede Reaktion zu Ende — der Zustand, den diese PR beseitigt.
+        # sonst ohne jede Reaktion zu Ende — der Zustand, den PR 2 beseitigt hat.
         target_chat = chat_id_voice or _resolve_chat_id(tenant_id)
+
+        # P14 — eine Anweisung ist kein Inhalt. Greift der Zug nicht (oder faellt
+        # er aus), bleibt es bei den zwei Buttons: dieselbe Weiche, sichtbarer
+        # Ausgang statt Stille.
+        gespraech = _versuche_gespraechsstart(tenant_id, transcript, log_id, target_chat)
+        if gespraech is not None:
+            result_dict.update(gespraech)
+            return result_dict
+
         result_dict["routed_to"] = "awaiting_user_choice"
         result_dict["choice_prompt_sent"] = bool(target_chat) and _send_choice_prompt(
             tenant_id, target_chat, log_id, transcript, "🎤"
@@ -1134,6 +1250,12 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
     # PR 2 — dieselbe Weiche wie im Voice-Pfad (Louis, 30.07.: Text-Parität).
     if channel == "telegram" and _awaits_user_choice(tenant_id, text_content):
         target_chat = chat_id or _resolve_chat_id(tenant_id)
+
+        gespraech = _versuche_gespraechsstart(tenant_id, text_content, log_id, target_chat)
+        if gespraech is not None:
+            result_dict.update(gespraech)
+            return result_dict
+
         result_dict["routed_to"] = "awaiting_user_choice"
         result_dict["choice_prompt_sent"] = bool(target_chat) and _send_choice_prompt(
             tenant_id, target_chat, log_id, text_content, "📝"
