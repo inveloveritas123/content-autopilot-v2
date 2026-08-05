@@ -361,7 +361,10 @@ def _versuche_gespraechsstart(
             mode="targeted",
             topic_idea_id=None,
             frage=entscheidung.antwort,
-            category="targeted",
+            # Der Folgeprompt liest messages[0]["category"] als „Thema des
+            # Gespraechs" (p08_service.py). Die ausloesende Nachricht sagt darueber
+            # mehr als das Steuerwort „targeted".
+            category=(text_content or "").strip()[:120] or "targeted",
         )
     except Exception as exc:
         logger.warning("p14 session insert failed: %s", type(exc).__name__)
@@ -460,6 +463,35 @@ def _resolve_last_post(tenant_id: str) -> object | None:
     except Exception as exc:
         logger.warning("_resolve_last_post failed: %s", type(exc).__name__)
         return None
+
+
+#: Routing-Ziele, die dem Nutzer nachweislich selbst antworten (direkt oder über
+#: einen enqueueten Task). Alles andere braucht eine sichtbare Quittung, sonst
+#: endet die Nachricht still — der eine Zustand, den dieser Entwurf ausschliesst.
+#:
+#: Positivliste, nicht Negativliste: ein neues Routing-Ziel ist im Zweifel stumm,
+#: und dann soll die Quittung greifen statt zu fehlen.
+_ZIELE_MIT_EIGENER_ANTWORT = frozenset(
+    {
+        "p08_response",
+        "p09_ideation",
+        "p13_variants",
+        "voice_feedback_api",
+        "p14_gespraech",
+    }
+)
+
+
+def _braucht_sichtbare_quittung(routing_info: dict) -> bool:
+    """True, wenn nach dem Routing niemand mehr mit dem Nutzer spricht.
+
+    `deduped` ist ausgenommen: das ist ein Doppel-Event auf eine bereits
+    zugestellte Nachricht — die erste Zustellung hat schon geantwortet, eine
+    zweite Quittung wäre eine Nachricht zu viel.
+    """
+    if routing_info.get("deduped"):
+        return False
+    return routing_info.get("routed_to") not in _ZIELE_MIT_EIGENER_ANTWORT
 
 
 def _route_inbound_message(
@@ -1334,8 +1366,14 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
     routing_info = _route_inbound_message(tenant_id, text_content, log_id=log_id)
     if routing_info:
         result_dict.update(routing_info)
-    elif channel == "telegram" and chat_id:
-        # Kein Routing-Gate hat gegriffen → Memory-Default → Bestätigung senden
+    # F4: kein Routing-Gate hat gegriffen (routing_info is None) ODER das Ziel
+    # antwortet nicht selbst (truthy Dict, aber nicht in _ZIELE_MIT_EIGENER_ANTWORT)
+    # → Memory-Default-Quittung senden, sonst endet die Nachricht in Stille.
+    if (
+        channel == "telegram"
+        and chat_id
+        and (routing_info is None or _braucht_sichtbare_quittung(routing_info))
+    ):
         try:
             from api.telegram import _send_telegram_message
 

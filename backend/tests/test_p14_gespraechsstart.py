@@ -105,6 +105,11 @@ class TestTextEingang:
         assert kw["topic_idea_id"] is None
         assert kw["frage"] == "Und dann?"
         assert kw["tenant_id"] == "tenant-1"
+        # F5: category traegt das echte Thema (die ausloesende Nachricht),
+        # nicht mehr das Steuerwort "targeted" — das las der Folgeprompt sonst
+        # als "Thema des Gespraechs" (p08_service.py:828).
+        assert kw["category"] == _ANWEISUNG
+        assert kw["category"] != "targeted"
 
     def test_erkannte_anweisung_erzeugt_keine_content_idea(self):
         """Abnahmekriterium 6. Der [✍️]-Weg legt eine an, P14 braucht das nicht."""
@@ -402,3 +407,59 @@ class TestChunkMarkierung:
         ):
             result = tt._process_text("log-m", "tenant-1", {"text": _ANWEISUNG, "chat": {"id": 42}})
         assert result["routed_to"] == "p14_gespraech"
+
+
+# ---------------------------------------------------------------------------
+# 6. F4 — kein Routing-Ziel darf den Rueckfall-Zweig stumm ueberspringen
+# ---------------------------------------------------------------------------
+
+
+class TestKeineStilleNachDemRouting:
+    """Ein Routing-Ziel, das selbst nichts sendet, darf nicht in Stille enden.
+
+    Vor diesem Fix lieferte _route_inbound_message ein truthy Dict, der
+    „Gespeichert"-Rückfall griff nicht, und der Nutzer bekam gar nichts.
+    """
+
+    def _lauf(self, routing_info, sender):
+        with (
+            patch("tasks.telegram_task._route_inbound_message", return_value=routing_info),
+            patch("tasks.telegram_task._awaits_user_choice", return_value=False),
+            patch("tasks.telegram_task.asyncio.run", return_value="chunk-q"),
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+            patch("api.telegram._send_telegram_message", sender),
+        ):
+            return tt._process_text(
+                "log-q",
+                "tenant-1",
+                {"text": "Eine Antwort im laufenden Gespräch.", "chat": {"id": 42}},
+            )
+
+    def test_stummes_ziel_bekommt_eine_quittung(self):
+        sender = MagicMock(return_value=True)
+        self._lauf({"routed_to": "reviewer_queue"}, sender)
+        sender.assert_called_once()
+
+    def test_kostendeckel_bekommt_eine_quittung(self):
+        sender = MagicMock(return_value=True)
+        self._lauf({"routed_to": "paused"}, sender)
+        sender.assert_called_once()
+
+    def test_antwortendes_ziel_bekommt_keine_zweite_nachricht(self):
+        """p08_response sendet seine Folgefrage selbst — eine Quittung wäre eine zu viel."""
+        sender = MagicMock(return_value=True)
+        self._lauf({"routed_to": "p08_response", "p08_message_sent": True}, sender)
+        sender.assert_not_called()
+
+    def test_duplikat_bekommt_keine_zweite_nachricht(self):
+        """Doppel-Event auf eine bereits zugestellte Nachricht."""
+        sender = MagicMock(return_value=True)
+        self._lauf({"routed_to": "p08_response", "deduped": True}, sender)
+        sender.assert_not_called()
+
+    def test_unbekanntes_neues_ziel_bekommt_eine_quittung(self):
+        """Positivliste, nicht Negativliste: ein künftig ergänztes Ziel ist im
+        Zweifel stumm — dann soll die Quittung greifen statt zu fehlen."""
+        sender = MagicMock(return_value=True)
+        self._lauf({"routed_to": "ein_neues_ziel_das_es_noch_nicht_gibt"}, sender)
+        sender.assert_called_once()
