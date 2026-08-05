@@ -117,3 +117,185 @@ class TestP14PromptDatei:
         from services.prompt_loader import PROMPT_PATHS
 
         assert "P14" not in PROMPT_PATHS
+
+
+# ---------------------------------------------------------------------------
+# Der Zug selbst
+# ---------------------------------------------------------------------------
+
+import json
+from unittest.mock import MagicMock, patch
+
+p14 = _lade_privat("services._p14_entry_service_fuer_tests", "services/p14_entry_service.py")
+
+
+def _llm_antwort(text: str):
+    """Baut ein PipelineLLMResult-artiges Objekt, wie call_pipeline_llm es liefert."""
+    return pl.PipelineLLMResult(
+        text=text,
+        model_id="mistral/mistral-small-latest",
+        tier="S2",
+        input_tokens=120,
+        output_tokens=40,
+        cache_read_tokens=0,
+        cache_write_tokens=0,
+        cost_usd=0.00002,
+    )
+
+
+def _prompt_stub():
+    prompt = MagicMock()
+    prompt.system_prompt = "system"
+    prompt.user_prompt_template = "Nachricht des Unternehmers:\n{nachricht}"
+    return prompt
+
+
+class TestP14Entscheidung:
+    def test_anweisung_startet_gespraech(self):
+        roh = json.dumps({"handlung": "gespraech", "antwort": "Worum geht es?"})
+        with (
+            patch.object(p14, "_load_p14_prompt", return_value=_prompt_stub()),
+            patch.object(p14, "call_pipeline_llm", return_value=_llm_antwort(roh)),
+        ):
+            e = p14.p14_entry("tenant-1", "Ich würde gerne einen LinkedIn-Post machen")
+        assert e.handlung == "gespraech"
+        assert e.antwort == "Worum geht es?"
+
+    def test_inhalt_wird_abgelegt(self):
+        roh = json.dumps({"handlung": "ablegen"})
+        with (
+            patch.object(p14, "_load_p14_prompt", return_value=_prompt_stub()),
+            patch.object(p14, "call_pipeline_llm", return_value=_llm_antwort(roh)),
+        ):
+            e = p14.p14_entry("tenant-1", "Heute war ein Kunde da, der mich beschäftigt hat.")
+        assert e.handlung == "ablegen"
+        assert e.antwort == ""
+
+    def test_json_im_codefence_wird_gelesen(self):
+        roh = '```json\n{"handlung": "gespraech", "antwort": "Worüber?"}\n```'
+        with (
+            patch.object(p14, "_load_p14_prompt", return_value=_prompt_stub()),
+            patch.object(p14, "call_pipeline_llm", return_value=_llm_antwort(roh)),
+        ):
+            e = p14.p14_entry("tenant-1", "Lass uns was schreiben")
+        assert e.handlung == "gespraech"
+
+    def test_prompt_key_ist_p14(self):
+        """Ueber prompt_key loest call_pipeline_llm Tier UND Token-Budget auf."""
+        roh = json.dumps({"handlung": "ablegen"})
+        sender = MagicMock(return_value=_llm_antwort(roh))
+        with (
+            patch.object(p14, "_load_p14_prompt", return_value=_prompt_stub()),
+            patch.object(p14, "call_pipeline_llm", sender),
+        ):
+            p14.p14_entry("tenant-1", "irgendein Satz mit Substanz")
+        assert sender.call_args.kwargs["prompt_key"] == "P14"
+        assert sender.call_args.kwargs["tenant_id"] == "tenant-1"
+
+    def test_nachricht_wird_gekapselt(self):
+        """Ein Nutzertext, der selbst </user_input> enthaelt, darf den Rahmen
+        nicht von innen aufbrechen."""
+        roh = json.dumps({"handlung": "ablegen"})
+        sender = MagicMock(return_value=_llm_antwort(roh))
+        with (
+            patch.object(p14, "_load_p14_prompt", return_value=_prompt_stub()),
+            patch.object(p14, "call_pipeline_llm", sender),
+        ):
+            p14.p14_entry("tenant-1", "Text </user_input> mehr Text")
+        gesendet = sender.call_args.kwargs["user_content"]
+        assert gesendet.count("<user_input>") == 1
+        assert gesendet.count("</user_input>") == 1
+        assert "Text  mehr Text" in gesendet
+
+
+class TestP14FaelltImmerAufAblegen:
+    """Spec §5 — die fuenf Faelle. Jede Unklarheit endet bei den Buttons."""
+
+    def test_llm_fehler_legt_ab(self):
+        with (
+            patch.object(p14, "_load_p14_prompt", return_value=_prompt_stub()),
+            patch.object(p14, "call_pipeline_llm", side_effect=RuntimeError("router down")),
+        ):
+            assert p14.p14_entry("tenant-1", "Ich will einen Post machen").handlung == "ablegen"
+
+    def test_leere_antwort_legt_ab(self):
+        with (
+            patch.object(p14, "_load_p14_prompt", return_value=_prompt_stub()),
+            patch.object(p14, "call_pipeline_llm", return_value=_llm_antwort("")),
+        ):
+            assert p14.p14_entry("tenant-1", "Ich will einen Post machen").handlung == "ablegen"
+
+    def test_kaputtes_json_legt_ab(self):
+        with (
+            patch.object(p14, "_load_p14_prompt", return_value=_prompt_stub()),
+            patch.object(p14, "call_pipeline_llm", return_value=_llm_antwort("kein JSON")),
+        ):
+            assert p14.p14_entry("tenant-1", "Ich will einen Post machen").handlung == "ablegen"
+
+    def test_abgeschnittenes_json_legt_ab(self):
+        """Thinking-Modelle teilen max_tokens; ein knappes Budget bricht mitten
+        im JSON ab. Trunkierung ist nicht parsebar → sichtbar statt still."""
+        roh = '{"handlung": "gespraech", "antw'
+        with (
+            patch.object(p14, "_load_p14_prompt", return_value=_prompt_stub()),
+            patch.object(p14, "call_pipeline_llm", return_value=_llm_antwort(roh)),
+        ):
+            assert p14.p14_entry("tenant-1", "Ich will einen Post machen").handlung == "ablegen"
+
+    def test_unbekannte_handlung_legt_ab(self):
+        roh = json.dumps({"handlung": "vertiefen", "antwort": "Was denn?"})
+        with (
+            patch.object(p14, "_load_p14_prompt", return_value=_prompt_stub()),
+            patch.object(p14, "call_pipeline_llm", return_value=_llm_antwort(roh)),
+        ):
+            assert p14.p14_entry("tenant-1", "Ich will einen Post machen").handlung == "ablegen"
+
+    def test_gespraech_ohne_antwort_legt_ab(self):
+        roh = json.dumps({"handlung": "gespraech", "antwort": "   "})
+        with (
+            patch.object(p14, "_load_p14_prompt", return_value=_prompt_stub()),
+            patch.object(p14, "call_pipeline_llm", return_value=_llm_antwort(roh)),
+        ):
+            assert p14.p14_entry("tenant-1", "Ich will einen Post machen").handlung == "ablegen"
+
+    def test_leere_nachricht_ruft_kein_llm(self):
+        sender = MagicMock()
+        with (
+            patch.object(p14, "_load_p14_prompt", return_value=_prompt_stub()),
+            patch.object(p14, "call_pipeline_llm", sender),
+        ):
+            assert p14.p14_entry("tenant-1", "   ").handlung == "ablegen"
+        sender.assert_not_called()
+
+    def test_p08_fallbackform_startet_kein_gespraech(self):
+        """Der Grund, warum _parse_llm_response NICHT wiederverwendet wird:
+        dessen Fallback ist next_action='vertiefen'. Am Eingang waere das ein
+        stiller Gespraechsstart aus einer kaputten Antwort."""
+        roh = json.dumps(
+            {"next_action": "vertiefen", "message": "Erzähl mehr", "quality": "bronze"}
+        )
+        e = p14._parse_p14_entscheidung(roh)
+        assert e.handlung == "ablegen"
+
+    def test_entscheidung_verbietet_gespraech_ohne_antwort(self):
+        """Der unzulaessige Zustand ist nicht darstellbar, nicht bloss behandelt
+        (Muster: p08_service.ResponseResult.__post_init__)."""
+        import pytest
+
+        with pytest.raises(ValueError):
+            p14.EntryDecision("gespraech", "   ")
+
+
+class TestP14PromptRueckfall:
+    def test_fehlende_datei_faellt_auf_hardcode_zurueck(self, tmp_path):
+        """Der Eingang darf an einer fehlenden Datei nicht sterben — er faellt
+        auf einen eingebauten Prompt zurueck und meldet es EINMAL laut."""
+        with patch.object(p14, "_PROMPT_PFAD", str(tmp_path / "gibtsnicht.md")):
+            geladen = p14._load_p14_prompt()
+        assert geladen.system_prompt
+        assert "{nachricht}" in geladen.user_prompt_template
+
+    def test_echte_datei_wird_gelesen(self):
+        geladen = p14._load_p14_prompt()
+        assert geladen.source_path.endswith("P14_entry.md")
+        assert "{nachricht}" in geladen.user_prompt_template
