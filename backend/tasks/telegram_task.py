@@ -261,13 +261,52 @@ def _verwerfe_session(session_id: str) -> None:
         logger.warning("p14 session rollback failed: %s", type(exc).__name__)
 
 
+#: Steuerungsmerkmal fuer Nachrichten, die ein Gespraech eroeffnet haben.
+#: Bewusst in `metadata`, nicht in `classification` — dort steht eine
+#: INHALTLICHE Kategorie, die store_chunk(classify=True) selbst vergibt und die
+#: values_backfill_task auswertet.
+_ANWEISUNGS_MARKER = '{"intent": "start_instruction"}'
+
+
 def _markiere_chunk_als_anweisung(tenant_id: str, log_id: str) -> bool:
     """Markiert die Chunks dieser Nachricht als Steuer-Anweisung (Spec §7).
 
-    Rumpf folgt in Task 7. Fail-open by design: ein Markierungsfehler darf nie
-    ein Gespraech verhindern.
+    Die Nachricht liegt bereits als Memory-Chunk im Gedaechtnis —
+    `_store_chunk_async` laeuft VOR allen Weichen, und diese Chunks speisen die
+    Voice-Profil-Extraktion. Eine Anweisung ist kein Stimmmaterial.
+
+    ⚠️ Adressiert ueber `source_ref`, NICHT ueber die zurueckgegebene Chunk-ID:
+    `_store_chunk_async` gibt laut eigenem Docstring nur die ID des ERSTEN
+    Chunks zurueck; ein laengerer Text wird gechunkt, und die uebrigen blieben
+    unmarkiert.
+
+    Loeschen waere unumkehrbar; der Rohtext liegt ohnehin im
+    telegram_message_log. Fail-open: ein Markierungsfehler darf nie ein
+    Gespraech verhindern.
+
+    Returns:
+        True, wenn das UPDATE durchlief; sonst False.
     """
-    return False
+    try:
+        with sync_session_factory() as db:
+            db.execute(
+                text(
+                    "UPDATE memory_chunks "
+                    "SET metadata = COALESCE(metadata, CAST('{}' AS jsonb)) "
+                    "               || CAST(:patch AS jsonb) "
+                    "WHERE tenant_id = :tid AND source_ref = :ref"
+                ),
+                {
+                    "patch": _ANWEISUNGS_MARKER,
+                    "tid": tenant_id,
+                    "ref": f"telegram_message_log:{log_id}",
+                },
+            )
+            db.commit()
+        return True
+    except Exception as exc:
+        logger.warning("p14 chunk marking failed: %s", type(exc).__name__)
+        return False
 
 
 def _versuche_gespraechsstart(
@@ -334,7 +373,13 @@ def _versuche_gespraechsstart(
         _verwerfe_session(session_id)
         return None
 
-    _markiere_chunk_als_anweisung(tenant_id, log_id)
+    # Fail-open, und zwar hier zusaetzlich: der Vertrag „eine Markierung
+    # verhindert nie ein Gespraech" darf nicht davon abhaengen, dass der
+    # Aufgerufene sich benimmt.
+    try:
+        _markiere_chunk_als_anweisung(tenant_id, log_id)
+    except Exception as exc:
+        logger.warning("p14 chunk marking raised: %s", type(exc).__name__)
 
     return {
         "routed_to": "p14_gespraech",

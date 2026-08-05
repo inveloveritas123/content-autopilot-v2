@@ -319,3 +319,71 @@ class TestGateReihenfolge:
                 "log-sess", "tenant-1", {"text": "Ja, genau so war das.", "chat": {"id": 42}}
             )
         p14.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# 5. Der Memory-Chunk (Spec §7)
+# ---------------------------------------------------------------------------
+
+
+class TestChunkMarkierung:
+    def _db_mock(self):
+        db = MagicMock()
+        db.__enter__ = MagicMock(return_value=db)
+        db.__exit__ = MagicMock(return_value=False)
+        return db
+
+    def test_markiert_ueber_source_ref_nicht_ueber_die_chunk_id(self):
+        """_store_chunk_async gibt nur die ID des ERSTEN Chunks zurueck. Ein
+        laengerer Text wird gechunkt — die uebrigen blieben unmarkiert."""
+        db = self._db_mock()
+        with patch.object(tt, "sync_session_factory", return_value=db):
+            assert tt._markiere_chunk_als_anweisung("tenant-1", "log-55") is True
+
+        sql = str(db.execute.call_args.args[0])
+        params = db.execute.call_args.args[1]
+        assert "memory_chunks" in sql
+        assert "source_ref" in sql
+        assert params["ref"] == "telegram_message_log:log-55"
+        assert params["tid"] == "tenant-1"
+        db.commit.assert_called_once()
+
+    def test_schreibt_in_metadata_nicht_in_classification(self):
+        """classification ist besetzt: store_chunk(classify=True) vergibt dort
+        eine inhaltliche Kategorie, die values_backfill_task auswertet. Ein
+        Steuerungsmerkmal gehoert nicht in dieses Vokabular."""
+        db = self._db_mock()
+        with patch.object(tt, "sync_session_factory", return_value=db):
+            tt._markiere_chunk_als_anweisung("tenant-1", "log-56")
+
+        sql = str(db.execute.call_args.args[0])
+        params = db.execute.call_args.args[1]
+        assert "metadata" in sql
+        assert "classification" not in sql
+        assert '"intent"' in params["patch"]
+        assert "start_instruction" in params["patch"]
+
+    def test_fehler_verhindert_kein_gespraech(self):
+        """Fail-open: ein Markierungsfehler darf nie ein Gespraech verhindern."""
+        with patch.object(tt, "sync_session_factory", side_effect=RuntimeError("db weg")):
+            assert tt._markiere_chunk_als_anweisung("tenant-1", "log-57") is False
+
+    def test_gespraechsstart_laeuft_trotz_markierungsfehler_durch(self):
+        sender = MagicMock(return_value=True)
+        with (
+            patch(
+                "services.p14_entry_service.p14_entry",
+                return_value=_entscheidung("gespraech", "Worum?"),
+            ),
+            patch("services.p08_service.erzeuge_bot_session", return_value="sess-m"),
+            patch(
+                "tasks.telegram_task._markiere_chunk_als_anweisung",
+                side_effect=RuntimeError("darf nicht durchschlagen"),
+            ),
+            patch("tasks.telegram_task._awaits_user_choice", return_value=True),
+            patch("tasks.telegram_task.asyncio.run", return_value="chunk-m"),
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+            patch("api.telegram._send_telegram_message", sender),
+        ):
+            result = tt._process_text("log-m", "tenant-1", {"text": _ANWEISUNG, "chat": {"id": 42}})
+        assert result["routed_to"] == "p14_gespraech"
