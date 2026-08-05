@@ -181,6 +181,12 @@ def _awaits_user_choice(tenant_id: str, text_content: str) -> bool:
     der Bot nach. Nur wenn ein bestehender Pfad die Nachricht nachweislich
     erwartet, bleibt es beim alten Verhalten.
 
+    Seit P14 (services/p14_entry_service.py) laeuft hinter dieser Weiche bei
+    JEDER Nachricht, die sie passiert, ein eigener S2-Aufruf
+    (`_versuche_gespraechsstart`) — auch bei denen, die am Ende trotzdem die
+    zwei Buttons bekommen. Die Doktrin ("bei Substanz wird gefragt, nicht
+    geraten") gilt weiter, nur der Weg dorthin ist jetzt ein anderer.
+
     Fail-open zu False, und die Richtung ist Absicht: Wirft z. B.
     `_load_active_session`, wissen wir nicht, ob ein Interview läuft. False führt
     zurück in `_route_inbound_message`, das die Session selbst noch einmal lädt —
@@ -272,8 +278,11 @@ def _markiere_chunk_als_anweisung(tenant_id: str, log_id: str) -> bool:
     """Markiert die Chunks dieser Nachricht als Steuer-Anweisung (Spec §7).
 
     Die Nachricht liegt bereits als Memory-Chunk im Gedaechtnis —
-    `_store_chunk_async` laeuft VOR allen Weichen, und diese Chunks speisen die
-    Voice-Profil-Extraktion. Eine Anweisung ist kein Stimmmaterial.
+    `_store_chunk_async` laeuft VOR allen Weichen. Damit ist der Chunk fuer
+    spaetere Konsumenten filterbar. Das Filtern selbst ist NICHT Teil dieser
+    Arbeit: `p06_profile_extractor_task` liest das Merkmal heute noch nicht,
+    die Anweisung fliesst also weiterhin ins Voice-Profil. Hier entsteht nur
+    das Merkmal.
 
     ⚠️ Adressiert ueber `source_ref`, NICHT ueber die zurueckgegebene Chunk-ID:
     `_store_chunk_async` gibt laut eigenem Docstring nur die ID des ERSTEN
@@ -327,6 +336,9 @@ def _versuche_gespraechsstart(
         from services.p14_entry_service import HANDLUNG_GESPRAECH, p14_entry
 
         entscheidung = p14_entry(tenant_id, text_content)
+    except SoftTimeLimitExceeded:
+        # Muss vor dem Exception-Katalog stehen — siehe _route_inbound_message.
+        raise
     except Exception as exc:
         logger.warning("p14 entry gate failed: %s", type(exc).__name__)
         return None
@@ -879,6 +891,18 @@ def _dispatch_voice(task, log_id: str, tenant_id: str, payload: dict) -> dict:
 #   ~900s Routing             (max(300, …) mit max_retries=3)
 #   ------------------------
 #   ~1126s realistischer Einzel-Worst-Case
+#
+# Seit P14 (services/p14_entry_service.py) gilt das nur noch fuer den
+# _route_inbound_message-Zweig. _versuche_gespraechsstart laeuft VOR dem
+# Routing und schliesst es bei Treffer aus (siehe _process_voice/_process_text)
+# — P14 addiert sich also NICHT zu den ~900s Routing, sondern ersetzt sie in
+# diesem Zweig durch einen eigenen, vergleichbar teuren Call:
+#   P14 (Tier S2, max_tokens=2000): request_timeout = max(300, …) = 300s,
+#   max_retries=3 → bis zu 3 × 300s + Backoff (1s + 2s) ≈ 903s.
+#   ~40s Download + ~186s Transkription + ~903s P14 ≈ 1129s Einzel-Worst-Case
+#   im _awaits_user_choice-Zweig. Vor P14 lag dieser Zweig ohne LLM-Call bei
+#   ~226s und hatte ~975s Luft zu soft_time_limit=1200 — jetzt sind es ~70s.
+#
 # 1200s/1260s liegen knapp über diesem legitimen Worst-Case — kein enges Limit,
 # sondern ein Riegel gegen einen echt hängenden Task. Die eigentliche Eindämmung
 # des Transkriptions-Beins ist der 30s-httpx-Timeout in

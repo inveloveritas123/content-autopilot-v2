@@ -306,3 +306,25 @@ class TestP14PromptRueckfall:
         geladen = p14._load_p14_prompt()
         assert geladen.source_path.endswith("P14_entry.md")
         assert "{nachricht}" in geladen.user_prompt_template
+
+
+# ---------------------------------------------------------------------------
+# Die weiche Zeitgrenze (F1) — muss durchgereicht werden, nicht abgelegt
+# ---------------------------------------------------------------------------
+
+
+class TestP14SoftTimeLimit:
+    def test_soft_time_limit_wird_durchgereicht(self):
+        """Die weiche Zeitgrenze darf NICHT als gewöhnlicher Fehler enden —
+        sonst läuft der Task scheinbar normal weiter und wird mitten im
+        Button-Versand hart abgeschossen. Stille statt Buttons."""
+        from celery.exceptions import SoftTimeLimitExceeded
+
+        with (
+            patch.object(p14, "_load_p14_prompt", return_value=_prompt_stub()),
+            patch.object(p14, "call_pipeline_llm", side_effect=SoftTimeLimitExceeded()),
+        ):
+            import pytest
+
+            with pytest.raises(SoftTimeLimitExceeded):
+                p14.p14_entry("tenant-1", "Ich will einen Post machen")

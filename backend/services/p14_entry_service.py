@@ -25,6 +25,8 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from celery.exceptions import SoftTimeLimitExceeded
+
 from services.pipeline_llm import call_pipeline_llm
 
 logger = logging.getLogger(__name__)
@@ -221,6 +223,11 @@ def p14_entry(tenant_id: str, nachricht: str) -> EntryDecision:
             user_content=user_content,
             tenant_id=tenant_id,
         )
+    except SoftTimeLimitExceeded:
+        # Muss vor dem Exception-Katalog stehen: SoftTimeLimitExceeded erbt von
+        # Exception und würde sonst hier als gewöhnlicher Fehler enden — der Task
+        # liefe scheinbar normal weiter statt sich abwickeln zu lassen.
+        raise
     except Exception as exc:
         logger.warning("[P14] LLM-Aufruf fehlgeschlagen (%s) — ablegen", type(exc).__name__)
         return ABLEGEN

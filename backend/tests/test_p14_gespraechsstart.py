@@ -264,6 +264,21 @@ class TestAusfallrichtung:
         anleger.assert_not_called()
         assert result["routed_to"] == "awaiting_user_choice"
 
+    def test_soft_time_limit_reisst_den_task_ab_statt_weiterzulaufen(self):
+        """Muster von telegram_task.py:713 — die weiche Grenze muss nach oben."""
+        import pytest
+        from celery.exceptions import SoftTimeLimitExceeded
+
+        with (
+            patch("services.p14_entry_service.p14_entry", side_effect=SoftTimeLimitExceeded()),
+            patch("tasks.telegram_task._awaits_user_choice", return_value=True),
+            patch("tasks.telegram_task.asyncio.run", return_value="chunk-stl"),
+            patch.object(tt, "sync_session_factory", return_value=make_guard_db_mock(None)),
+            patch("api.telegram._send_telegram_message", MagicMock(return_value=True)),
+        ):
+            with pytest.raises(SoftTimeLimitExceeded):
+                tt._process_text("log-stl", "tenant-1", {"text": _ANWEISUNG, "chat": {"id": 42}})
+
 
 # ---------------------------------------------------------------------------
 # 4. Die Reihenfolge — P09 steht VOR P14
