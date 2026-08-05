@@ -68,6 +68,7 @@ MODEL_PER_PROMPT: dict[str, str] = {
     "SENSITIVE_DETECT": "S2",
     "MD_CONVERT_P03": "S2",
     "LAYER1": "S2",  # Strukturierte Intent/Feature-Extraktion — schnelle JSON-Klassifikation, kein Frontier nötig (Issue #15)
+    "P14": "S2",  # Eingangs-Zug: Anweisung oder Inhalt? — dieselbe Gattung Aufgabe wie LAYER1
     "VOICE_FALLBACK": "S6",  # Voice-Fallback-Generierung aus Kontext+Avatar — analytisch, Frontier-Qualität, EU via Bedrock-Frankfurt (Issue #40)
     "P17": "S2",  # je-Transkript-Beobachter (Voice/Werte/Avatar-Drift-Extraktion) — Testmodus S2/EU; Decisions werden reviewt; via #72 anhebbar (Issue #41)
 }
@@ -104,6 +105,7 @@ PROMPT_MAX_TOKENS: dict[str, int] = {
     "SENSITIVE_DETECT": 512,
     "MD_CONVERT_P03": 2000,
     "LAYER1": 2000,  # Kompaktes JSON (5 Felder) — Thinking-Headroom, siehe Kommentar bei P08
+    "P14": 2000,  # Eingangs-Zug: zwei Felder sichtbar, 2000 sind der Thinking-Headroom (wie LAYER1)
     "VOICE_FALLBACK": 16384,  # Fallback-Voice-Profil JSON — P03-strukturiert, gleiche Größe
     "P17": 2000,  # Drift-Proposals (voice/values/avatar) als JSON
 }

@@ -181,6 +181,12 @@ def _awaits_user_choice(tenant_id: str, text_content: str) -> bool:
     der Bot nach. Nur wenn ein bestehender Pfad die Nachricht nachweislich
     erwartet, bleibt es beim alten Verhalten.
 
+    Seit P14 (services/p14_entry_service.py) laeuft hinter dieser Weiche bei
+    JEDER Nachricht, die sie passiert, ein eigener S2-Aufruf
+    (`_versuche_gespraechsstart`) — auch bei denen, die am Ende trotzdem die
+    zwei Buttons bekommen. Die Doktrin ("bei Substanz wird gefragt, nicht
+    geraten") gilt weiter, nur der Weg dorthin ist jetzt ein anderer.
+
     Fail-open zu False, und die Richtung ist Absicht: Wirft z. B.
     `_load_active_session`, wissen wir nicht, ob ein Interview läuft. False führt
     zurück in `_route_inbound_message`, das die Session selbst noch einmal lädt —
@@ -234,6 +240,167 @@ def _send_choice_prompt(
             log_id,
         )
     return sent
+
+
+def _verwerfe_session(session_id: str) -> None:
+    """Rollback einer gerade angelegten Session (fail-open).
+
+    Kommt die Eroeffnungsfrage nicht an, bleibt sonst eine UNSICHTBARE Session
+    zurueck: `_load_active_session` findet sie, und jede weitere Nachricht des
+    Nutzers wird als Antwort auf eine Frage geroutet, die er nie gelesen hat.
+    Sessions haben kein TTL.
+
+    Status 'expired', nicht 'closed' — 'closed' stellt in
+    `tasks/session_post_task.py` die Post-Generierung scharf.
+    """
+    try:
+        with sync_session_factory() as db:
+            db.execute(
+                text(
+                    "UPDATE bot_session SET status = 'expired', updated_at = NOW() "
+                    "WHERE id = :id AND status = 'active'"
+                ),
+                {"id": session_id},
+            )
+            db.commit()
+    except Exception as exc:
+        logger.warning("p14 session rollback failed: %s", type(exc).__name__)
+
+
+#: Steuerungsmerkmal fuer Nachrichten, die ein Gespraech eroeffnet haben.
+#: Bewusst in `metadata`, nicht in `classification` — dort steht eine
+#: INHALTLICHE Kategorie, die store_chunk(classify=True) selbst vergibt und die
+#: values_backfill_task auswertet.
+_ANWEISUNGS_MARKER = '{"intent": "start_instruction"}'
+
+
+def _markiere_chunk_als_anweisung(tenant_id: str, log_id: str) -> bool:
+    """Markiert die Chunks dieser Nachricht als Steuer-Anweisung (Spec §7).
+
+    Die Nachricht liegt bereits als Memory-Chunk im Gedaechtnis —
+    `_store_chunk_async` laeuft VOR allen Weichen. Damit ist der Chunk fuer
+    spaetere Konsumenten filterbar. Das Filtern selbst ist NICHT Teil dieser
+    Arbeit: `p06_profile_extractor_task` liest das Merkmal heute noch nicht,
+    die Anweisung fliesst also weiterhin ins Voice-Profil. Hier entsteht nur
+    das Merkmal.
+
+    ⚠️ Adressiert ueber `source_ref`, NICHT ueber die zurueckgegebene Chunk-ID:
+    `_store_chunk_async` gibt laut eigenem Docstring nur die ID des ERSTEN
+    Chunks zurueck; ein laengerer Text wird gechunkt, und die uebrigen blieben
+    unmarkiert.
+
+    Loeschen waere unumkehrbar; der Rohtext liegt ohnehin im
+    telegram_message_log. Fail-open: ein Markierungsfehler darf nie ein
+    Gespraech verhindern.
+
+    Returns:
+        True, wenn das UPDATE durchlief; sonst False.
+    """
+    try:
+        with sync_session_factory() as db:
+            db.execute(
+                text(
+                    "UPDATE memory_chunks "
+                    "SET metadata = COALESCE(metadata, CAST('{}' AS jsonb)) "
+                    "               || CAST(:patch AS jsonb) "
+                    "WHERE tenant_id = :tid AND source_ref = :ref"
+                ),
+                {
+                    "patch": _ANWEISUNGS_MARKER,
+                    "tid": tenant_id,
+                    "ref": f"telegram_message_log:{log_id}",
+                },
+            )
+            db.commit()
+        return True
+    except Exception as exc:
+        logger.warning("p14 chunk marking failed: %s", type(exc).__name__)
+        return False
+
+
+def _versuche_gespraechsstart(
+    tenant_id: str, text_content: str, log_id: str, chat_id: int | None
+) -> dict | None:
+    """P14 — eine Anweisung wird ein Gespraech. None heisst: weiter zu den Buttons.
+
+    Laeuft NUR, wenn `_awaits_user_choice` True gesagt hat; Session, P13-Wahl und
+    P09 sind damit bereits ausgeschlossen (Gate-Reihenfolge der Spec §4).
+
+    Die Antwort des Zuges IST die Eroeffnungsfrage und zugleich messages[0] der
+    Session — sie ersetzt den p08_opener-Aufruf, sie kommt nicht obendrauf.
+
+    Jeder Fehler gibt None zurueck: der Aufrufer sendet dann die zwei Buttons.
+    Nie Stille, nie eine halbe Session.
+    """
+    try:
+        from services.p14_entry_service import HANDLUNG_GESPRAECH, p14_entry
+
+        entscheidung = p14_entry(tenant_id, text_content)
+    except SoftTimeLimitExceeded:
+        # Muss vor dem Exception-Katalog stehen — siehe _route_inbound_message.
+        raise
+    except Exception as exc:
+        logger.warning("p14 entry gate failed: %s", type(exc).__name__)
+        return None
+
+    if getattr(entscheidung, "handlung", None) != HANDLUNG_GESPRAECH:
+        return None
+
+    ziel_chat = chat_id or _resolve_chat_id(tenant_id)
+    if ziel_chat is None:
+        # Ohne Chat kaeme die Frage nie an. Dann lieber keine Session, die auf
+        # eine Antwort wartet, die niemand geben kann.
+        logger.warning("p14: kein chat auffindbar (tenant=%s) — kein Gespraechsstart", tenant_id)
+        return None
+
+    try:
+        from services.p08_service import erzeuge_bot_session
+
+        session_id = erzeuge_bot_session(
+            tenant_id=tenant_id,
+            mode="targeted",
+            topic_idea_id=None,
+            frage=entscheidung.antwort,
+            # Der Folgeprompt liest messages[0]["category"] als „Thema des
+            # Gespraechs" (p08_service.py). Die ausloesende Nachricht sagt darueber
+            # mehr als das Steuerwort „targeted".
+            category=(text_content or "").strip()[:120] or "targeted",
+        )
+    except Exception as exc:
+        logger.warning("p14 session insert failed: %s", type(exc).__name__)
+        return None
+
+    try:
+        from api.telegram import _entry_keep_keyboard, _send_telegram_message
+
+        gesendet = _send_telegram_message(
+            ziel_chat,
+            entscheidung.antwort,
+            tenant_id=tenant_id,
+            reply_markup=_entry_keep_keyboard(),
+        )
+    except Exception as exc:
+        logger.warning("p14 opener send failed: %s", type(exc).__name__)
+        gesendet = False
+
+    if not gesendet:
+        # Die Session zuruecknehmen, sonst schluckt sie ab jetzt jede Nachricht.
+        _verwerfe_session(session_id)
+        return None
+
+    # Fail-open, und zwar hier zusaetzlich: der Vertrag „eine Markierung
+    # verhindert nie ein Gespraech" darf nicht davon abhaengen, dass der
+    # Aufgerufene sich benimmt.
+    try:
+        _markiere_chunk_als_anweisung(tenant_id, log_id)
+    except Exception as exc:
+        logger.warning("p14 chunk marking raised: %s", type(exc).__name__)
+
+    return {
+        "routed_to": "p14_gespraech",
+        "bot_session_id": session_id,
+        "p14_message_sent": True,
+    }
 
 
 def _resolve_chat_id(tenant_id: str) -> int | None:
@@ -296,6 +463,47 @@ def _resolve_last_post(tenant_id: str) -> object | None:
     except Exception as exc:
         logger.warning("_resolve_last_post failed: %s", type(exc).__name__)
         return None
+
+
+#: Routing-Ziele, die dem Nutzer nachweislich selbst antworten (direkt oder über
+#: einen enqueueten Task). Alles andere braucht eine sichtbare Quittung, sonst
+#: endet die Nachricht still — der eine Zustand, den dieser Entwurf ausschliesst.
+#:
+#: Positivliste, nicht Negativliste: ein neues Routing-Ziel ist im Zweifel stumm,
+#: und dann soll die Quittung greifen statt zu fehlen.
+_ZIELE_MIT_EIGENER_ANTWORT = frozenset(
+    {
+        "p08_response",
+        "p09_ideation",
+        "p13_variants",
+        "voice_feedback_api",
+        "p14_gespraech",
+    }
+)
+
+
+#: Flags, mit denen ein Ziel meldet, ob sein antwortender Task wirklich in die
+#: Warteschlange kam. Steht eines auf False, hat NIEMAND den Nutzer erreicht —
+#: dann braucht es die Quittung, obwohl das Ziel in der Positivliste steht.
+_ENQUEUE_FLAGS = ("p13_enqueued", "regen_enqueued")
+
+
+def _braucht_sichtbare_quittung(routing_info: dict) -> bool:
+    """True, wenn nach dem Routing niemand mehr mit dem Nutzer spricht.
+
+    Zwei Bedingungen, nicht eine: das Ziel muss selbst antworten KÖNNEN (Positiv-
+    liste) UND sein Task muss tatsächlich enqueued worden sein. Ein gescheiterter
+    Enqueue behält den Zielnamen bei — ohne die zweite Prüfung wäre das wieder
+    Stille, diesmal im Mechanismus gegen Stille.
+
+    `deduped` bleibt ausgenommen: Doppel-Event auf eine bereits beantwortete
+    Nachricht.
+    """
+    if routing_info.get("deduped"):
+        return False
+    if routing_info.get("routed_to") not in _ZIELE_MIT_EIGENER_ANTWORT:
+        return True
+    return any(routing_info.get(flag) is False for flag in _ENQUEUE_FLAGS)
 
 
 def _route_inbound_message(
@@ -727,6 +935,18 @@ def _dispatch_voice(task, log_id: str, tenant_id: str, payload: dict) -> dict:
 #   ~900s Routing             (max(300, …) mit max_retries=3)
 #   ------------------------
 #   ~1126s realistischer Einzel-Worst-Case
+#
+# Seit P14 (services/p14_entry_service.py) gilt das nur noch fuer den
+# _route_inbound_message-Zweig. _versuche_gespraechsstart laeuft VOR dem
+# Routing und schliesst es bei Treffer aus (siehe _process_voice/_process_text)
+# — P14 addiert sich also NICHT zu den ~900s Routing, sondern ersetzt sie in
+# diesem Zweig durch einen eigenen, vergleichbar teuren Call:
+#   P14 (Tier S2, max_tokens=2000): request_timeout = max(300, …) = 300s,
+#   max_retries=3 → bis zu 3 × 300s + Backoff (1s + 2s) ≈ 903s.
+#   ~40s Download + ~186s Transkription + ~903s P14 ≈ 1129s Einzel-Worst-Case
+#   im _awaits_user_choice-Zweig. Vor P14 lag dieser Zweig ohne LLM-Call bei
+#   ~226s und hatte ~975s Luft zu soft_time_limit=1200 — jetzt sind es ~70s.
+#
 # 1200s/1260s liegen knapp über diesem legitimen Worst-Case — kein enges Limit,
 # sondern ein Riegel gegen einen echt hängenden Task. Die eigentliche Eindämmung
 # des Transkriptions-Beins ist der 30s-httpx-Timeout in
@@ -976,8 +1196,17 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
     # Inline-Keyboard, das der WhatsApp-Adapter nicht kennt.
     if channel == "telegram" and _awaits_user_choice(tenant_id, transcript):
         # Fallback auf den Tenant-Chat: fehlt „chat" im Payload, wäre die Nachricht
-        # sonst ohne jede Reaktion zu Ende — der Zustand, den diese PR beseitigt.
+        # sonst ohne jede Reaktion zu Ende — der Zustand, den PR 2 beseitigt hat.
         target_chat = chat_id_voice or _resolve_chat_id(tenant_id)
+
+        # P14 — eine Anweisung ist kein Inhalt. Greift der Zug nicht (oder faellt
+        # er aus), bleibt es bei den zwei Buttons: dieselbe Weiche, sichtbarer
+        # Ausgang statt Stille.
+        gespraech = _versuche_gespraechsstart(tenant_id, transcript, log_id, target_chat)
+        if gespraech is not None:
+            result_dict.update(gespraech)
+            return result_dict
+
         result_dict["routed_to"] = "awaiting_user_choice"
         result_dict["choice_prompt_sent"] = bool(target_chat) and _send_choice_prompt(
             tenant_id, target_chat, log_id, transcript, "🎤"
@@ -1134,6 +1363,12 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
     # PR 2 — dieselbe Weiche wie im Voice-Pfad (Louis, 30.07.: Text-Parität).
     if channel == "telegram" and _awaits_user_choice(tenant_id, text_content):
         target_chat = chat_id or _resolve_chat_id(tenant_id)
+
+        gespraech = _versuche_gespraechsstart(tenant_id, text_content, log_id, target_chat)
+        if gespraech is not None:
+            result_dict.update(gespraech)
+            return result_dict
+
         result_dict["routed_to"] = "awaiting_user_choice"
         result_dict["choice_prompt_sent"] = bool(target_chat) and _send_choice_prompt(
             tenant_id, target_chat, log_id, text_content, "📝"
@@ -1143,8 +1378,14 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
     routing_info = _route_inbound_message(tenant_id, text_content, log_id=log_id)
     if routing_info:
         result_dict.update(routing_info)
-    elif channel == "telegram" and chat_id:
-        # Kein Routing-Gate hat gegriffen → Memory-Default → Bestätigung senden
+    # F4: kein Routing-Gate hat gegriffen (routing_info is None) ODER das Ziel
+    # antwortet nicht selbst (truthy Dict, aber nicht in _ZIELE_MIT_EIGENER_ANTWORT)
+    # → Memory-Default-Quittung senden, sonst endet die Nachricht in Stille.
+    if (
+        channel == "telegram"
+        and chat_id
+        and (routing_info is None or _braucht_sichtbare_quittung(routing_info))
+    ):
         try:
             from api.telegram import _send_telegram_message
 

@@ -275,11 +275,33 @@ if not hasattr(_l2_mod, "SecurityException"):
 
     _l2_mod.SecurityException = _SecurityException
 
-# services.p08_service — lazy in _route_inbound_message importiert
+# services.p08_service — lazy in _route_inbound_message UND in
+# _versuche_gespraechsstart (P14) importiert.
 if "services.p08_service" not in sys.modules:
     _p08 = _stub("services.p08_service")
     _p08.p08_response = MagicMock()
+    _p08.erzeuge_bot_session = MagicMock(return_value="sess-p14")
 _services_pkg.p08_service = sys.modules["services.p08_service"]
+_p08_mod_stub = sys.modules["services.p08_service"]
+if not hasattr(_p08_mod_stub, "p08_response"):
+    _p08_mod_stub.p08_response = MagicMock()
+if not hasattr(_p08_mod_stub, "erzeuge_bot_session"):
+    _p08_mod_stub.erzeuge_bot_session = MagicMock(return_value="sess-p14")
+
+# services.p14_entry_service — Lazy-Import im Eingangs-Zug (Spec 05.08.2026).
+# Default ist ABLEGEN: das ist der Normalfall und der sichere Default. Tests,
+# die einen Gespraechsstart brauchen, patchen ihn explizit.
+if "services.p14_entry_service" not in sys.modules:
+    _p14 = _stub("services.p14_entry_service")
+    _p14.HANDLUNG_GESPRAECH = "gespraech"
+    _p14.HANDLUNG_ABLEGEN = "ablegen"
+    _p14.ABLEGEN = types.SimpleNamespace(handlung="ablegen", antwort="")
+    _p14.p14_entry = MagicMock(return_value=_p14.ABLEGEN)
+_services_pkg.p14_entry_service = sys.modules["services.p14_entry_service"]
+_p14_mod_stub = sys.modules["services.p14_entry_service"]
+if not hasattr(_p14_mod_stub, "p14_entry"):
+    _p14_mod_stub.ABLEGEN = types.SimpleNamespace(handlung="ablegen", antwort="")
+    _p14_mod_stub.p14_entry = MagicMock(return_value=_p14_mod_stub.ABLEGEN)
 
 # ---------------------------------------------------------------------------
 # api.telegram — Lazy-Import in _route_inbound_message (#17).
@@ -306,6 +328,11 @@ if "api.telegram" not in sys.modules:
     # in test_tier1_session_escape.py geprüft, hier zählt nur die Existenz.
     _at._interview_cancel_keyboard = MagicMock(
         return_value={"inline_keyboard": [[{"callback_data": "cmd:session_cancel"}]]}
+    )
+    # P14: der Ausstieg an der Eroeffnungsantwort. Inhalt wird gegen das ECHTE
+    # Modul in test_explicit_choice_callbacks.py geprueft, hier zaehlt die Existenz.
+    _at._entry_keep_keyboard = MagicMock(
+        return_value={"inline_keyboard": [[{"callback_data": "cmd:entry_keep"}]]}
     )
 # Als Paket-Attribut registrieren (für @patch-Auflösung via getattr)
 sys.modules["api"].telegram = sys.modules["api.telegram"]
@@ -435,6 +462,7 @@ if "tasks.p13_variants_task" not in sys.modules:
     _p13t._try_p13_variant_choice = MagicMock(return_value=False)
     _p13t._load_pending_idea = MagicMock(return_value=None)
     _p13t._parse_choice_token = MagicMock(return_value=None)
+    _p13t._create_manual_idea = MagicMock(return_value=None)
 # Als Paket-Attribut registrieren
 sys.modules["tasks"].p13_variants_task = sys.modules["tasks.p13_variants_task"]
 _p13t_mod = sys.modules["tasks.p13_variants_task"]
@@ -446,6 +474,8 @@ if not hasattr(_p13t_mod, "_load_pending_idea"):
     _p13t_mod._load_pending_idea = MagicMock(return_value=None)
 if not hasattr(_p13t_mod, "_parse_choice_token"):
     _p13t_mod._parse_choice_token = MagicMock(return_value=None)
+if not hasattr(_p13t_mod, "_create_manual_idea"):
+    _p13t_mod._create_manual_idea = MagicMock(return_value=None)
 
 # ---------------------------------------------------------------------------
 # tasks.telegram_task — genau EINMAL laden; bei Wiederholungsimport wiederverwenden

@@ -372,3 +372,65 @@ class TestCancelReleasesMessage:
 
         assert result is False
         p13._detach_source_log.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# 3. [🗄 Nur merken] an der Eroeffnungsantwort des Eingangs-Zugs (P14)
+# ---------------------------------------------------------------------------
+
+
+def _druecke_entry_keep(abbrecher: MagicMock) -> None:
+    """Knopfdruck ohne Netz: Token-Resolver und Sender sind gestubbt."""
+    with (
+        patch.object(tg, "_cancel_active_session", abbrecher),
+        patch.object(tg, "_send_telegram_message", MagicMock(return_value=True)),
+        patch("services.telegram_token_resolver.get_tenant_bot_token", return_value=None),
+    ):
+        tg._handle_callback_query(_cq("cmd:entry_keep"), known_tenant_id=TENANT)
+
+
+class TestEntryKeepBeendetDasGespraech:
+    """Der Ausstieg an der Eroeffnungsantwort (Spec §5/§11).
+
+    Ein falsches "gespraech" darf genau einen Tap kosten. `cmd:msg_keep` beendet
+    KEINE Session — an die Eroeffnung gehaengt waere es eine Attrappe: der Bot
+    bestaetigt, und die naechste Nachricht landet trotzdem im Interview.
+    """
+
+    def test_keyboard_traegt_genau_einen_knopf(self):
+        knoepfe = [b for row in tg._entry_keep_keyboard()["inline_keyboard"] for b in row]
+        assert len(knoepfe) == 1
+        assert knoepfe[0]["callback_data"] == "cmd:entry_keep"
+        assert "merken" in knoepfe[0]["text"].lower()
+
+    def test_keyboard_ist_je_aufruf_frisch(self):
+        """Ein geteiltes Modul-Dict koennte ein Caller mutieren."""
+        assert tg._entry_keep_keyboard() is not tg._entry_keep_keyboard()
+
+    def test_tap_beendet_die_aktive_session(self):
+        abbrecher = MagicMock(return_value=True)
+        _druecke_entry_keep(abbrecher)
+        abbrecher.assert_called_once_with(TENANT, CHAT)
+
+    def test_tap_sendet_keine_zweite_nachricht(self):
+        """_cancel_active_session bestaetigt selbst — zwei Nachrichten waeren
+        eine davon zu viel."""
+        abbrecher = MagicMock(return_value=True)
+        with (
+            patch.object(tg, "_cancel_active_session", abbrecher),
+            patch.object(tg, "_send_telegram_message") as send,
+            patch("services.telegram_token_resolver.get_tenant_bot_token", return_value=None),
+        ):
+            tg._handle_callback_query(_cq("cmd:entry_keep"), known_tenant_id=TENANT)
+        send.assert_not_called()
+
+    def test_msg_keep_beendet_weiterhin_keine_session(self):
+        """Abgrenzung: der alte Knopf bleibt, was er war."""
+        abbrecher = MagicMock(return_value=True)
+        with (
+            patch.object(tg, "_cancel_active_session", abbrecher),
+            patch.object(tg, "_send_telegram_message", MagicMock(return_value=True)),
+            patch("services.telegram_token_resolver.get_tenant_bot_token", return_value=None),
+        ):
+            tg._handle_callback_query(_cq(f"cmd:msg_keep:{LOG}"), known_tenant_id=TENANT)
+        abbrecher.assert_not_called()

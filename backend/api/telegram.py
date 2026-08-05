@@ -270,6 +270,22 @@ def _choice_keyboard(log_id: str) -> dict:
     }
 
 
+def _entry_keep_keyboard() -> dict:
+    """Der Ausstieg an der Eroeffnungsantwort des Eingangs-Zugs P14.
+
+    Sieht aus wie `🗄 Nur merken` aus `_choice_keyboard`, tut aber mehr: hier
+    LAEUFT bereits eine Session. `cmd:msg_keep` beendet keine — an dieser Stelle
+    waere es eine Attrappe (Bot bestaetigt, naechste Nachricht landet trotzdem
+    im Interview). Deshalb ein eigener Callback auf _cancel_active_session.
+
+    Keine log_id noetig: _cancel_active_session arbeitet tenant-weit, und ein
+    zweiter Tap sagt ehrlich „Es laeuft gerade kein Gespraech."
+
+    Frisches Dict je Aufruf — ein geteiltes Modul-Dict koennte ein Caller mutieren.
+    """
+    return {"inline_keyboard": [[{"text": "🗄 Nur merken", "callback_data": "cmd:entry_keep"}]]}
+
+
 def _approve_content_sync(content_id: str, tenant_id: str) -> str:
     """Gibt ein content_piece frei (Telegram-Button). Tenant-scoped + idempotent.
 
@@ -1221,6 +1237,12 @@ def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = N
         # Der Memory-Chunk liegt bereits — er wurde vor dem Senden der Buttons
         # angelegt. Hier noch etwas zu schreiben wäre gespielte Arbeit.
         _send_telegram_message(chat_id, "🗄 Gut — bleibt im Gedächtnis.", tenant_id=tenant_id_str)
+    elif data == "cmd:entry_keep":
+        # Der Memory-Chunk liegt bereits (vor allen Weichen gespeichert) und ist
+        # als Anweisung markiert. Zu beenden ist nur das Gespraech, das der
+        # Eingangs-Zug gerade eroeffnet hat. _cancel_active_session sendet die
+        # Bestaetigung selbst — hier keine zweite Nachricht.
+        _cancel_active_session(tenant_id_str, chat_id)
 
 
 def _send_ki_profil(tenant_id: str, chat_id: int) -> None:
