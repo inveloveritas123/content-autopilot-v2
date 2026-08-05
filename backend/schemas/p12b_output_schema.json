@@ -1,10 +1,28 @@
 {
+  "$comment": "Vertrag des LIVE-P12b-Prompts (DB-Fassung). Bis 05.08.2026 verlangte dieses Schema `decision` + `begruendung` — beide Namen kommen im Live-Prompt nicht vor, jeder echte Lauf loggte deshalb eine Schema-Warnung, die niemand mehr las. Wer diesen Vertrag aendert, muss _lies_entscheidung in tasks/p12b_task.py mitaendern.",
   "type": "object",
-  "required": ["decision", "begruendung"],
+  "required": ["status"],
   "properties": {
-    "decision": {"type": "string", "enum": ["optimiert", "zurueck_an_p12"]},
-    "optimierter_post": {"type": "string"},
-    "richtung_fuer_p12": {"type": "string"},
+    "status": {"type": "string", "enum": ["optimiert", "unveraendert", "zurueck_an_p12"]},
+    "optimierter_post": {"type": ["string", "null"]},
+    "aenderungen": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "was": {"type": "string"},
+          "warum": {"type": "string"}
+        }
+      }
+    },
+    "unveraendert_weil": {"type": "array", "items": {"type": "string"}},
+    "gesamt_einschaetzung": {"type": "object"},
+    "richtung_fuer_p12": {"type": ["string", "null"]},
+    "decision": {
+      "$comment": "Alt-Vertrag, wird von _lies_entscheidung noch gelesen.",
+      "type": "string",
+      "enum": ["optimiert", "zurueck_an_p12"]
+    },
     "begruendung": {"type": "string"}
   }
 }
