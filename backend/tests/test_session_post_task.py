@@ -225,7 +225,10 @@ class TestGeneratePostFromSession:
         assert result["status"] == "skipped"
         assert result["reason"] == "no_answers"
         pipeline_mock.assert_not_called()
-        send_mock.assert_not_called()
+        # Kein Pipeline-Lauf (Kostenschutz) — der Nutzer bekommt trotzdem eine
+        # Absage: der Bot hatte ihm mit CLOSE_MESSAGE einen Post zugesagt.
+        send_mock.assert_called_once()
+        assert result["user_notified"] is True
 
     def test_pipeline_called_with_none_idea_id_and_post_sent(self):
         gate_ctx = _make_ctx(None)
@@ -294,7 +297,10 @@ class TestGeneratePostFromSession:
         )
         assert result["status"] == "error"
         assert result["reason"] == "paused_for_cost"
-        send_mock.assert_not_called()
+        # Kein Raise (fail-open) — der Nutzer bekommt aber eine Absage, siehe
+        # TestZusageWirdEingeloest. Vor dem Fix vom 05.08.2026 stand hier
+        # `send_mock.assert_not_called()`: der Test hat das Schweigen eingefroren.
+        assert result["user_notified"] is True
 
     def test_no_chat_link_post_stored_not_sent(self):
         gate_ctx = _make_ctx(None)
@@ -345,3 +351,178 @@ class TestGeneratePostFromSession:
         assert result["status"] == "ok"
         assert result["sent"] is False
         assert result["reason"] == "send_failed"
+
+
+# ---------------------------------------------------------------------------
+# Die Zusage wird eingelöst (Blocker 04./05.08.2026)
+# ---------------------------------------------------------------------------
+
+
+class TestZusageWirdEingeloest:
+    """Jeder Ausgang muss dem Nutzer etwas sagen.
+
+    Befund 04.08.2026 (aus dem in Redis überlebenden Task-Ergebnis belegt):
+    Der Bot sagt mit `p08_service.CLOSE_MESSAGE` einen Post ZU
+    („Alles klar — ich schreibe ihn. Gleich hier im Chat."), der Task bricht
+    danach über einen von elf Ausgängen ab — und KEINER sagt ein Wort.
+    Louis wartete auf einen Post, der nie kam.
+
+    Gemessen wird deshalb nicht „Schritt 7 ist heil", sondern die Zusage selbst:
+    nach jedem Lauf trägt das Ergebnis `user_notified`, und wo eine Zusage offen
+    ist, ist genau eine Nachricht rausgegangen.
+    """
+
+    def _run(self, db_contexts, pipeline=None, chat_id=4711, send=None):
+        pipeline_mock = pipeline if pipeline is not None else MagicMock()
+        send_mock = send if send is not None else MagicMock(return_value=True)
+        with (
+            patch.object(spt, "sync_session_factory", side_effect=db_contexts),
+            patch("api.ideas._run_p12_p12b_pipeline", pipeline_mock, create=True),
+            patch("api.telegram._send_telegram_message", send_mock, create=True),
+            patch(
+                "tasks.telegram_task._resolve_chat_id",
+                MagicMock(return_value=chat_id),
+                create=True,
+            ),
+            patch(
+                "services.canonical_profiles.load_active_profiles",
+                MagicMock(
+                    return_value={
+                        "voice_profile": {"payload": {}},
+                        "audience_avatar": {"payload": {}},
+                    }
+                ),
+                create=True,
+            ),
+        ):
+            result = spt.generate_post_from_session(None, "sess-1", "tenant-1")
+        return result, send_mock
+
+    def _offene_session(self):
+        return [_make_ctx(None), _make_ctx(_closed_session_row(_SESSION_MESSAGES))]
+
+    def test_pipeline_exception_sagt_dem_nutzer_bescheid(self):
+        """DER Ausgang vom 04.08.: die Pipeline warf, der Task schwieg.
+
+        Beleg für genau diesen Ausgang: das Celery-Ergebnis in Redis,
+        date_done 2026-08-04T19:11:05.120755Z → reason='pipeline_exception'.
+        """
+        result, send_mock = self._run(
+            self._offene_session(),
+            pipeline=MagicMock(side_effect=RuntimeError("p12b explodiert")),
+        )
+        assert result["reason"] == "pipeline_exception"
+        # Der Typ muss im Ergebnis überleben — im Log darf er nicht ausführlich
+        # stehen (E2: Exception-TEXTE tragen Post-Fragmente, siehe p12 JSON-Fehler).
+        assert result["exception"] == "RuntimeError"
+        assert result["user_notified"] is True
+        send_mock.assert_called_once()
+
+    def test_leerer_post_sagt_dem_nutzer_bescheid(self):
+        result, send_mock = self._run(
+            self._offene_session(),
+            pipeline=MagicMock(return_value={"status": "ok", "final_post": ""}),
+        )
+        assert result["reason"] == "empty_post"
+        assert result["user_notified"] is True
+        send_mock.assert_called_once()
+
+    def test_send_returned_false_versucht_den_rueckfall(self):
+        """Erster Send scheitert (False) → zweite, andere Nachricht geht raus."""
+        send_mock = MagicMock(side_effect=[False, True])
+        result, send_mock = self._run(
+            [
+                _make_ctx(None),
+                _make_ctx(_closed_session_row(_SESSION_MESSAGES)),
+                _make_ctx(None),
+            ],
+            pipeline=MagicMock(
+                return_value={"status": "ok", "final_post": "POST", "p12_run_id": "run-9"}
+            ),
+            send=send_mock,
+        )
+        assert result["sent"] is False
+        assert result["reason"] == "send_returned_false"
+        assert send_mock.call_count == 2
+        assert result["user_notified"] is True
+        # Der Rückfall verweist auf den Entwurf — der Post ist NICHT verloren.
+        assert "Entw" in send_mock.call_args[0][1]
+
+    def test_ohne_chat_link_wird_die_luecke_nicht_beschoenigt(self):
+        """Kein Chat → wir KÖNNEN nicht reden. Das muss sichtbar bleiben."""
+        result, send_mock = self._run(
+            [
+                _make_ctx(None),
+                _make_ctx(_closed_session_row(_SESSION_MESSAGES)),
+                _make_ctx(None),
+            ],
+            pipeline=MagicMock(
+                return_value={"status": "ok", "final_post": "POST", "p12_run_id": "run-9"}
+            ),
+            chat_id=None,
+        )
+        assert result["reason"] == "no_chat_link"
+        assert result["user_notified"] is False
+        send_mock.assert_not_called()
+
+    def test_gelieferter_post_bekommt_keine_zweite_nachricht(self):
+        result, send_mock = self._run(
+            [
+                _make_ctx(None),
+                _make_ctx(_closed_session_row(_SESSION_MESSAGES)),
+                _make_ctx(None),
+            ],
+            pipeline=MagicMock(
+                return_value={"status": "ok", "final_post": "POST", "p12_run_id": "run-9"}
+            ),
+        )
+        assert result["sent"] is True
+        assert result["user_notified"] is True
+        send_mock.assert_called_once()
+
+    def test_already_generated_bleibt_still(self):
+        """Zweiter Enqueue derselben Session — der Post kam beim ersten Lauf."""
+        result, send_mock = self._run([_make_ctx((1,))])
+        assert result["status"] == "already_generated"
+        assert result["user_notified"] is True
+        send_mock.assert_not_called()
+
+    def test_kein_ausgang_ohne_quittung(self):
+        """Struktur-Test: JEDES Ergebnis trägt `user_notified`.
+
+        Das ist der eigentliche Schutz. Ein zwölfter Ausgang, der still
+        zurückkehrt, lässt diesen Test fallen — eine Einzelfallprüfung pro
+        Ausgang würde ihn durchwinken.
+        """
+        faelle = [
+            ("session_not_found", [_make_ctx(None), _make_ctx(None)], MagicMock()),
+            (
+                "session_not_closed",
+                [_make_ctx(None), _make_ctx((_SESSION_MESSAGES, "active", "random_smart", None))],
+                MagicMock(),
+            ),
+            (
+                "no_answers",
+                [
+                    _make_ctx(None),
+                    _make_ctx(_closed_session_row([{"bot": "Q", "user_transcript": ""}])),
+                ],
+                MagicMock(),
+            ),
+            (
+                "pipeline_exception",
+                self._offene_session(),
+                MagicMock(side_effect=RuntimeError("boom")),
+            ),
+            (
+                "empty_post",
+                self._offene_session(),
+                MagicMock(return_value={"status": "ok", "final_post": ""}),
+            ),
+        ]
+        for erwarteter_grund, ctxs, pipeline in faelle:
+            result, send_mock = self._run(ctxs, pipeline=pipeline)
+            assert result.get("reason") == erwarteter_grund, result
+            assert "user_notified" in result, f"{erwarteter_grund}: kein user_notified"
+            assert result["user_notified"] is True, f"{erwarteter_grund}: stumm"
+            assert send_mock.call_count == 1, f"{erwarteter_grund}: {send_mock.call_count} Sends"

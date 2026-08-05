@@ -23,6 +23,24 @@ Fail-open & Schicht-3
 * Geflaggte Posts (Sensitive-Detector) gehen NICHT roh in den Chat — stattdessen
   Review-Hinweis (Review-Queue-Pfad von #83 bleibt intakt).
 * Logs tragen NUR IDs/Typen, NIE Transkript-/Post-Fragmente (E2-Konvention).
+
+Die Zusage (Blocker 04./05.08.2026)
+-----------------------------------
+Bevor dieser Task startet, hat der Bot dem Nutzer bereits einen Post ZUGESAGT:
+``p08_service.CLOSE_MESSAGE`` — „Alles klar — ich schreibe ihn. Gleich hier im
+Chat." Diese Zusage ist der Vertrag, den der Task einlösen muss.
+
+Am 04.08.2026 hat er sie gebrochen, ohne ein Wort: die Pipeline warf, der Task
+kehrte über ``pipeline_exception`` still zurück (belegt am überlebenden
+Celery-Ergebnis in Redis, ``date_done`` 19:11:05.120755Z). Der Post lag als
+Entwurf in der DB, Louis wartete auf eine Nachricht, die nie kam.
+
+`_generate_post` hat ELF Ausgänge, und keiner sagte dem Nutzer etwas. Deshalb
+liegt die Quittung NICHT an den einzelnen Ausgängen, sondern in einer Klammer,
+die keiner von ihnen umgehen kann: `generate_post_from_session` ruft
+`_ensure_user_notified` über JEDES Ergebnis. Ein zwölfter Ausgang ist damit
+automatisch mitversorgt — die frühere Bauweise (Sorgfalt pro Zweig) hat genau
+daran versagt.
 """
 
 from __future__ import annotations
@@ -140,6 +158,99 @@ def _build_qa_pairs(messages: list) -> list[dict]:
     return pairs
 
 
+# Rückfall-Texte für den Fall, dass der zugesagte Post nicht im Chat landet.
+# Zwei Lagen, weil der Nutzer zwei verschiedene Dinge wissen muss: liegt der
+# Post irgendwo (dann hol ihn dir), oder gibt es ihn gar nicht (dann probier's
+# nochmal). Ein einziger Allzweck-Satz würde im ersten Fall den fertigen Post
+# verschweigen. Der Bot duzt (Entscheidung Louis, 05.08.2026).
+_FALLBACK_ENTWURF_LIEGT_BEREIT = (
+    "Dein Post ist fertig — ich konnte ihn hier im Chat aber nicht zustellen. "
+    "Du findest ihn im Dashboard unter „Entwürfe“."
+)
+_FALLBACK_KEIN_POST = (
+    "Beim Schreiben ist etwas schiefgegangen — ich hab den Post nicht fertig "
+    "bekommen. Magst du es gleich nochmal versuchen?"
+)
+
+
+def _ensure_user_notified(session_id: str, tenant_id: str, result: dict) -> dict:
+    """Löst die Zusage aus CLOSE_MESSAGE ein — oder nimmt sie zurück.
+
+    Stempelt ``user_notified`` in JEDES Ergebnis:
+      True  – der Nutzer hat eine Nachricht in der Hand (den Post selbst, den
+              Review-Hinweis oder einen der Rückfall-Texte) ODER es war gar
+              keine Zusage offen (``already_generated``: der frühere Lauf hat
+              geliefert).
+      False – wir schulden eine Nachricht und konnten sie NICHT zustellen.
+              Das ist der einzige Zustand, in dem der Nutzer im Dunkeln steht;
+              er wird auf ERROR geloggt, damit er sichtbar bleibt.
+
+    Fail-open wie der ganze Task: diese Funktion wirft nie. Sie ist die letzte
+    Instanz vor dem Schweigen und darf nicht selbst zur Fehlerquelle werden.
+    """
+    try:
+        # Der Post (oder der Review-Hinweis) ist raus — Zusage eingelöst.
+        if result.get("sent") is True:
+            result["user_notified"] = True
+            return result
+
+        # Zweiter Enqueue derselben Session: der ERSTE Lauf hat geliefert.
+        # Hier zu schreiben hieße, dem Nutzer dieselbe Sache zweimal zu sagen.
+        if result.get("status") == "already_generated":
+            result["user_notified"] = True
+            return result
+
+        # Ab hier ist eine Zusage offen. status == "ok" heißt: der Post
+        # existiert (er scheiterte erst am Versand) — dann darf der Text ihn
+        # nicht totschweigen. Alles andere heißt: es gibt keinen Post.
+        text_msg = (
+            _FALLBACK_ENTWURF_LIEGT_BEREIT if result.get("status") == "ok" else _FALLBACK_KEIN_POST
+        )
+
+        chat_id = _resolve_chat_id(tenant_id)
+        if chat_id is None:
+            # Kein Kanal — wir KÖNNEN nicht reden. Nicht beschönigen.
+            logger.error(
+                "session_post_task: Zusage offen, aber kein aktiver Chat-Link "
+                "(tenant=%s session=%s reason=%s) — Nutzer bleibt ohne Antwort",
+                tenant_id,
+                session_id,
+                result.get("reason"),
+            )
+            result["user_notified"] = False
+            return result
+
+        from api.telegram import _send_telegram_message
+
+        sent = _send_telegram_message(chat_id, text_msg, tenant_id=tenant_id)
+        result["user_notified"] = bool(sent)
+        if not sent:
+            logger.error(
+                "session_post_task: Rückfall-Nachricht nicht zustellbar "
+                "(tenant=%s session=%s reason=%s) — Nutzer bleibt ohne Antwort",
+                tenant_id,
+                session_id,
+                result.get("reason"),
+            )
+        else:
+            logger.info(
+                "session_post_task: Zusage per Rückfall eingelöst " "(session=%s reason=%s)",
+                session_id,
+                result.get("reason"),
+            )
+        return result
+    except Exception as exc:
+        # E2: nur der Typ, nie str(exc) — Exception-Texte tragen Post-Fragmente.
+        logger.error(
+            "session_post_task: Quittung selbst fehlgeschlagen " "(tenant=%s session=%s): %s",
+            tenant_id,
+            session_id,
+            type(exc).__name__,
+        )
+        result["user_notified"] = False
+        return result
+
+
 @celery_app.task(
     name="tasks.session_post_task.generate_post_from_session",
     bind=True,
@@ -148,12 +259,41 @@ def _build_qa_pairs(messages: list) -> list[dict]:
 def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
     """Generiert beim Session-Close einen Post und sendet ihn in den Chat.
 
+    Dünne Klammer um `_generate_post`: sie garantiert, dass der Nutzer nach
+    JEDEM Ausgang eine Antwort bekommt (siehe Modul-Docstring, „Die Zusage").
+    Die eigentliche Arbeit — und alle elf Ausgänge — stehen in `_generate_post`.
+
     Args:
         session_id: bot_session.id der geschlossenen Session.
         tenant_id:  Tenant (für E3-Scope + chat_id-Auflösung).
 
-    Returns ein Status-Dict (für Tests/Observability). Fail-open: keine
-    Exception verlässt diese Funktion.
+    Returns ein Status-Dict (für Tests/Observability), immer inklusive
+    ``user_notified``. Fail-open: keine Exception verlässt diese Funktion.
+    """
+    try:
+        result = _generate_post(session_id, tenant_id)
+    except Exception as exc:
+        # _generate_post ist selbst fail-open; das hier ist der Gürtel zum
+        # Hosenträger. Ohne ihn würde ein Fehler im Task-Rumpf den Nutzer
+        # wieder stumm zurücklassen — genau der Blocker vom 04.08.2026.
+        logger.error(
+            "session_post_task: Task-Rumpf warf (session=%s): %s",
+            session_id,
+            type(exc).__name__,
+        )
+        result = {
+            "status": "error",
+            "reason": "task_body_exception",
+            "exception": type(exc).__name__,
+        }
+    return _ensure_user_notified(session_id, tenant_id, result)
+
+
+def _generate_post(session_id: str, tenant_id: str) -> dict:
+    """Erzeugt den Post und versucht die Zustellung. Sagt dem Nutzer NICHTS.
+
+    Die Quittung an den Nutzer hängt bewusst NICHT hier, sondern in
+    `_ensure_user_notified` — siehe Modul-Docstring.
     """
     # 1. Idempotenz-Gate (zuerst!) — existiert schon ein Piece für diese Session?
     try:
@@ -273,8 +413,23 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             tenant_id, effective_idea_id, answers_list, voice_payload, avatar_payload
         )
     except Exception as exc:
-        logger.error("session_post_task: pipeline raised: %s", type(exc).__name__)
-        return {"status": "error", "reason": "pipeline_exception"}
+        # Der Typ gehört ins ERGEBNIS, nicht nur ins Log. Grund (Blocker
+        # 04.08.2026): der Lauf hinterließ nur `reason='pipeline_exception'`;
+        # welche Exception es war, ließ sich nachher NICHT mehr feststellen —
+        # die Worker-Logs waren durch den nächsten Deploy (--force-recreate)
+        # weg, das Celery-Ergebnis in Redis trug den Typ nicht.
+        # KEIN exc_info/str(exc): p12 packt bei Parse-Fehlern den halben Post
+        # in die Exception-Message (E2 — Logs tragen nur IDs/Typen).
+        logger.error(
+            "session_post_task: pipeline raised (session=%s): %s",
+            session_id,
+            type(exc).__name__,
+        )
+        return {
+            "status": "error",
+            "reason": "pipeline_exception",
+            "exception": type(exc).__name__,
+        }
 
     if not isinstance(pipeline_result, dict) or pipeline_result.get("status") != "ok":
         reason = (
@@ -376,7 +531,14 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
     # 7. Post in den Chat. Geflaggt → NICHT roh senden (Review-Queue-Pfad #83).
     chat_id = _resolve_chat_id(tenant_id)
     if chat_id is None:
-        logger.info("session_post_task: no active chat link for tenant — post stored, not sent")
+        # ERROR, nicht INFO: eine offene Zusage ohne Kanal ist ein Ausfall,
+        # kein Betriebszustand. Auf INFO war dieser Ausgang faktisch unsichtbar.
+        logger.error(
+            "session_post_task: kein aktiver Chat-Link (tenant=%s session=%s) — "
+            "Post gespeichert, nicht gesendet",
+            tenant_id,
+            session_id,
+        )
         return {
             "status": "ok",
             "sent": False,

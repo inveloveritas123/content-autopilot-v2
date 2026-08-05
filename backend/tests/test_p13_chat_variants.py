@@ -649,11 +649,17 @@ class TestBugCSessionPostSteering:
         return _load_real("session_post_real_test", "tasks/session_post_task.py")
 
     def test_session_load_includes_topic_idea_id(self):
-        """SELECT aus bot_session holt jetzt topic_idea_id (war vorher nicht dabei)."""
+        """SELECT aus bot_session holt jetzt topic_idea_id (war vorher nicht dabei).
+
+        Gelesen wird `_generate_post`: seit dem Zusage-Fix (05.08.2026) ist
+        `generate_post_from_session` nur noch die Klammer, die die Quittung an
+        den Nutzer garantiert — der SELECT steht im Rumpf. Geprüftes Verhalten
+        unverändert, nur die Fundstelle ist umgezogen.
+        """
         import inspect
 
         spt = self._load_spt()
-        source = inspect.getsource(spt.generate_post_from_session)
+        source = inspect.getsource(spt._generate_post)
         assert "topic_idea_id" in source, "topic_idea_id nicht im SELECT"
 
     def test_steering_keys_injected_when_topic_idea_id_set(self):
