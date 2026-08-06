@@ -500,9 +500,7 @@ class TestChronologieDesVerlaufs:
     @patch.object(p08, "sync_session_factory")
     @patch.object(p08, "call_pipeline_llm")
     @patch.object(p08, "_load_p08_prompt")
-    def test_die_laufende_antwort_steht_am_ende_des_verlaufs(
-        self, mock_prompt, mock_llm, mock_db
-    ):
+    def test_die_laufende_antwort_steht_am_ende_des_verlaufs(self, mock_prompt, mock_llm, mock_db):
         """Sie ist der jüngste Zug — steht sie weiter oben, antwortet der Bot
         wieder auf die vorletzte Nachricht."""
         mock_prompt.return_value = _prompt()
