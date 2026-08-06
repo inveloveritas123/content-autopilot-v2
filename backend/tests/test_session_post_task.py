@@ -142,12 +142,41 @@ _SESSION_MESSAGES = [
 
 
 class TestBuildQaPairs:
-    def test_qa_pairs_built_from_messages(self):
+    """⚠️ Umgedreht am 06.08.2026 — die Paarung war um eine Runde verschoben.
+
+    Ein Eintrag in `messages` trägt Züge aus ZWEI Runden: `user_transcript` ist
+    die Antwort, die die Runde auslöste, `bot` die daraus erzeugte NEUE Frage.
+    Die Antwort gehört also an die Frage des VORGÄNGER-Eintrags.
+
+    Bis hierher paarte der Code `entry["bot"]` mit `entry["user_transcript"]` —
+    Folge mit Frage vertauscht. An Louis' Session 5379b589 nachgemessen ging so
+    „Ich habe doch gerade erklärt, welches Problem wir gelöst haben" als Antwort
+    auf „Wie hat der Kunde seine Kontakte denn vorher verwaltet?" in P12, und
+    das Abschluss-Angebot („Soll ich ihn schreiben?") wurde als Interviewfrage
+    behandelt.
+
+    Die alten Zusicherungen hier haben genau das eingefroren: die Fixture heißt
+    „Frage 1?" / „Antwort 1 Text", als gehörten sie zusammen — dabei antwortete
+    „Antwort 1 Text" auf „Opener-Frage?". Der Name war die einzige Begründung.
+    """
+
+    def test_antwort_haengt_an_der_frage_die_ihr_vorausging(self):
         pairs = spt._build_qa_pairs(_SESSION_MESSAGES)
-        # Opener hat kein user_transcript → 3 Paare
+
+        # Der Opener hat kein user_transcript → er liefert kein Paar, aber er
+        # liefert die Frage für das erste.
         assert len(pairs) == 3
-        assert pairs[0] == {"question_text": "Frage 1?", "answer_text": "Antwort 1 Text"}
-        assert pairs[2] == {"question_text": "Danke!", "answer_text": "Antwort 3 Text"}
+        assert pairs[0] == {"question_text": "Opener-Frage?", "answer_text": "Antwort 1 Text"}
+        assert pairs[1] == {"question_text": "Frage 1?", "answer_text": "Antwort 2 Text"}
+        assert pairs[2] == {"question_text": "Frage 2?", "answer_text": "Antwort 3 Text"}
+
+    def test_kein_bot_text_wird_zweimal_verwendet(self):
+        """Gegenprobe zur Verschiebung: „Danke!" ist der LETZTE Bot-Zug und hat
+        keine Antwort mehr hinter sich — er darf in keinem Paar auftauchen."""
+        fragen = [p["question_text"] for p in spt._build_qa_pairs(_SESSION_MESSAGES)]
+
+        assert "Danke!" not in fragen
+        assert len(fragen) == len(set(fragen))
 
     def test_entries_without_transcript_skipped(self):
         msgs = [
@@ -156,7 +185,16 @@ class TestBuildQaPairs:
             {"bot": "Q3", "user_transcript": "echte Antwort"},
         ]
         pairs = spt._build_qa_pairs(msgs)
-        assert pairs == [{"question_text": "Q3", "answer_text": "echte Antwort"}]
+        # „echte Antwort" steht im dritten Eintrag → sie beantwortet Q2.
+        assert pairs == [{"question_text": "Q2", "answer_text": "echte Antwort"}]
+
+    def test_antwort_ohne_vorgaengerfrage_geht_nicht_verloren(self):
+        """Kommt in echten Sessions nicht vor (der Opener hat nie ein Transkript),
+        darf die Antwort aber nicht verschlucken — sonst entstünde aus einem
+        Datenfehler ein stiller Inhaltsverlust."""
+        pairs = spt._build_qa_pairs([{"bot": "Frage danach?", "user_transcript": "Antwort"}])
+
+        assert pairs == [{"question_text": "", "answer_text": "Antwort"}]
 
     def test_non_list_returns_empty(self):
         assert spt._build_qa_pairs(None) == []
