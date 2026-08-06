@@ -437,8 +437,77 @@ def _select_random_category(tenant_id: str) -> str:
         return random.choice(QUESTION_CATEGORIES)
 
 
+#: Was das Modell laut Prompt (Zeile 71) liefern darf. Alles andere ist kein
+#: Steuerwort, sondern Text, der zufaellig an dieser Stelle stand.
+_ERLAUBTE_ACTIONS = ("vertiefen", "pivot", "close")
+
+#: Die haeufigste Bruchform von JSON aus einem Sprachmodell: innere
+#: Anfuehrungszeichen ohne Escape — am 06.08.2026 live gemessen als
+#: `"message": "... diese "wichtigeren Themen" fuer ..."`.
+#:
+#: Zwei Muster in dieser Reihenfolge, nicht eines mit Alternative: ein greedy
+#: `.*` vor `(A|B)` laeuft bis zur SPAETESTEN Uebereinstimmung und schluckt bei
+#: `…Kunden?", "quality": "silber"}` den halben Rest mit. Erst den engen Anker
+#: (ein bekannter Folgeschluessel des Schemas) versuchen, dann den weiten.
+#:
+#: Die Ankerliste ist bewusst auf die Schluessel aus dem Prompt (Zeile 71)
+#: festgenagelt statt auf `[a-z_]+`: nach `message` kann laut Vertrag nur
+#: `next_action` oder `quality` kommen. Alles andere ist Text des Modells.
+_MESSAGE_MIT_FOLGESCHLUESSEL = re.compile(
+    r'"message"\s*:\s*"(?P<text>.*)"\s*,\s*"(?:next_action|quality)"\s*:',
+    re.DOTALL,
+)
+_MESSAGE_AM_ENDE = re.compile(r'"message"\s*:\s*"(?P<text>.*)"\s*\}\s*$', re.DOTALL)
+_ACTION_REPARATUR = re.compile(r'"next_action"\s*:\s*"([a-z_]+)"')
+_QUALITY_REPARATUR = re.compile(r'"quality"\s*:\s*"([a-z]+)"')
+
+#: Was der Nutzer hoert, wenn auch die Reparatur nicht greift. Bewusst ohne
+#: Entschuldigungsformel und ohne Fehlerjargon: er soll weiterreden koennen,
+#: nicht erfahren, dass ein Parser gescheitert ist.
+_UNLESBAR_TEXT = "Da hab ich mich verhaspelt. Sag das nochmal — wie meinst du das?"
+
+
+def _repariere_json(text_stripped: str) -> dict | None:
+    """Zieht die Felder aus kaputtem JSON. None, wenn nicht mal die Nachricht drin steht.
+
+    Kein zweiter LLM-Aufruf: der Bruch ist mechanisch und die Reparatur auch,
+    ein Korrektur-Call kostete zwei Sekunden mitten im Gespraech.
+    """
+    treffer = _MESSAGE_MIT_FOLGESCHLUESSEL.search(text_stripped) or _MESSAGE_AM_ENDE.search(
+        text_stripped
+    )
+    if not treffer:
+        return None
+    nachricht = treffer.group("text").strip()
+    if not nachricht:
+        return None
+
+    action_treffer = _ACTION_REPARATUR.search(text_stripped)
+    action = action_treffer.group(1) if action_treffer else ""
+    quality_treffer = _QUALITY_REPARATUR.search(text_stripped)
+
+    return {
+        "next_action": action if action in _ERLAUBTE_ACTIONS else "vertiefen",
+        "message": nachricht[:500],
+        # Nicht auf "leer" raten: das schliesst die Session (siehe unten,
+        # `next_action == "close" or quality == "leer"`). Ein Parse-Fehler darf
+        # kein Gespraech beenden.
+        "quality": quality_treffer.group(1) if quality_treffer else "bronze",
+    }
+
+
 def _parse_llm_response(raw: str) -> dict:
-    """Parse JSON response from LLM. Returns dict with next_action, message, quality."""
+    """Parse JSON response from LLM. Returns dict with next_action, message, quality.
+
+    Der Rueckfall hat bis zum 06.08.2026 `raw[:500]` als `message` gesetzt —
+    also das rohe Modell-JSON an den Nutzer geschickt. Louis bekam im Telegram
+    `{"next_action": "vertiefen", "message": ...}` als Gespraechsbeitrag zu
+    lesen. Der Parser-Rueckfall war der Absender, nicht ein Sonderfall: JEDES
+    kaputte JSON landete so im Chat.
+
+    Ausfallrichtung jetzt: reparieren, sonst ein neutraler Satz. Rohtext geht
+    nie mehr raus.
+    """
     text_stripped = raw.strip()
     if text_stripped.startswith("```"):
         parts = text_stripped.split("```")
@@ -446,10 +515,28 @@ def _parse_llm_response(raw: str) -> dict:
         if text_stripped.startswith("json"):
             text_stripped = text_stripped[4:]
     try:
-        return json.loads(text_stripped)
+        geparst = json.loads(text_stripped)
     except Exception:
-        logger.warning(f"[P08] JSON-Parse fehlgeschlagen: {raw[:200]}")
-        return {"next_action": "vertiefen", "message": raw[:500], "quality": "bronze"}
+        pass
+    else:
+        if isinstance(geparst, dict):
+            return geparst
+        # Eine Liste oder ein blanker String ist kein Ergebnis, auch wenn
+        # json.loads zufrieden war — sonst faellt `.get()` beim Aufrufer um.
+        logger.warning("[P08] JSON war kein Objekt (%s)", type(geparst).__name__)
+        return {"next_action": "vertiefen", "message": _UNLESBAR_TEXT, "quality": "bronze"}
+
+    repariert = _repariere_json(text_stripped)
+    if repariert is not None:
+        # Kein Rohtext ins Log: der reparierte Fall ist der haeufige, und die
+        # Nachricht traegt Kundenkontext. Die Laenge reicht, um zu sehen, ob
+        # das ueberhandnimmt.
+        logger.warning("[P08] JSON kaputt, Nachricht repariert (%d Zeichen)", len(text_stripped))
+        return repariert
+
+    # Hier muss ein Mensch hinsehen — nur an dieser Stelle das Rohmaterial.
+    logger.error("[P08] JSON weder parsebar noch reparierbar: %s", text_stripped[:200])
+    return {"next_action": "vertiefen", "message": _UNLESBAR_TEXT, "quality": "bronze"}
 
 
 def _close_session_db(session_id: str, tenant_id: str) -> None:
@@ -599,7 +686,9 @@ def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> O
     )
     raw_output = res.text.strip()
     parsed = _parse_llm_response(raw_output)
-    question_text = parsed.get("message", raw_output[:500])
+    # Kein `raw_output` als Default: das war dasselbe Leck wie im Parser-Rueckfall,
+    # nur eine Zeile weiter. `_parse_llm_response` liefert `message` immer.
+    question_text = parsed.get("message") or _UNLESBAR_TEXT
 
     # 5. Create bot_session in DB
     session_id = erzeuge_bot_session(
@@ -849,7 +938,9 @@ def p08_response(
     # 5. Parse JSON response
     parsed = _parse_llm_response(raw_output)
     next_action = parsed.get("next_action", "vertiefen")
-    response_message = parsed.get("message", raw_output[:500])
+    # Kein `raw_output` als Default — siehe _parse_llm_response. Dies war die
+    # dritte Stelle mit derselben Zeile; ueber sie ging das Modell-JSON in den Chat.
+    response_message = parsed.get("message") or _UNLESBAR_TEXT
     quality = parsed.get("quality", "bronze")
 
     # 6. Ausgang bestimmen. Der Zähler ist hier schon abgehandelt (Schritt 3) —
