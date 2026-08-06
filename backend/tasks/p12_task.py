@@ -65,6 +65,61 @@ _P12_SCHEMA = _load_schema()
 
 
 # ---------------------------------------------------------------------------
+# Der Platzhalter, ohne den P12 im Blindflug schreibt
+# ---------------------------------------------------------------------------
+
+#: Muss WÖRTLICH im User-Prompt stehen. Der Code ersetzt mit `str.replace()`,
+#: und das übergeht einen fehlenden Platzhalter stillschweigend.
+_CONTEXT_PLATZHALTER = "{context_json}"
+
+#: Der Notnagel, falls der geladene Prompt den Platzhalter nicht hat. Bewusst
+#: minimal: der System-Prompt trägt das Handwerk, hier zählt nur, DASS der
+#: Kontext ankommt.
+_USER_TEMPLATE_NOTNAGEL = (
+    "Erstelle einen LinkedIn-Post für folgende Daten:\n" + _CONTEXT_PLATZHALTER
+)
+
+#: Einmal laut je Prozess statt bei jedem Lauf leise.
+_platzhalter_gemeldet = False
+
+
+def _fuelle_kontext(template: str, context_json_str: str) -> str:
+    """Setzt den Kontext in den User-Prompt. Fehlt der Platzhalter, greift der Notnagel.
+
+    ⚠️ Bis zum 06.08.2026 stand hier ein blankes
+    `template.replace("{context_json}", …)`. Die geladene Prompt-Datei
+    (`content-truth/prompts/P12-post-generierung.md`) enthielt den Platzhalter
+    nicht — sie trug eine für Menschen geschriebene Feldliste. `str.replace()`
+    ersetzt dann nichts und meldet nichts, und **jeder Post entstand ohne einen
+    einzigen Kunden-Datenpunkt**: keine Antworten aus dem Gespräch, kein
+    Voice-Profil, kein Avatar. Das Modell erfand Unternehmer und Geschichte.
+
+    Sichtbar war es nur an einer Zahl, die niemand ansah: die Eingabegröße lag
+    bei jedem Lauf bei exakt 3.957 Token — also genau System- plus User-Prompt,
+    unabhängig davon, wie lang das Gespräch war.
+
+    Ausfallrichtung: **liefern, nicht schweigen.** Ein Lauf ohne Kontext
+    produziert plausiblen Text, der die Qualitätsprüfung mit 84 Punkten besteht
+    und trotzdem nichts mit dem Kunden zu tun hat — das ist schlimmer als ein
+    generischer Prompt. Deshalb der Notnagel statt eines Wurfs, und die Meldung
+    auf ERROR (Sentry-Schwelle).
+    """
+    global _platzhalter_gemeldet
+
+    if _CONTEXT_PLATZHALTER in (template or ""):
+        return template.replace(_CONTEXT_PLATZHALTER, context_json_str)
+
+    if not _platzhalter_gemeldet:
+        _platzhalter_gemeldet = True
+        logger.error(
+            "[P12] User-Prompt ohne %s — der Kontext hätte das Modell NIE erreicht. "
+            "Notnagel-Template greift. Prompt-Datei prüfen!",
+            _CONTEXT_PLATZHALTER,
+        )
+    return _USER_TEMPLATE_NOTNAGEL.replace(_CONTEXT_PLATZHALTER, context_json_str)
+
+
+# ---------------------------------------------------------------------------
 # Pruning-Konstanten — zentral + kanonisch-korrekt (Wortschatz-Bugfix 2026-06-12)
 # ---------------------------------------------------------------------------
 
@@ -372,7 +427,7 @@ def run_p12(
         if hook_inspirations:
             context_payload["hook_inspirations"] = hook_inspirations
         context_json_str = json.dumps(context_payload, ensure_ascii=False)
-        user_prompt = loaded.user_prompt_template.replace("{context_json}", context_json_str)
+        user_prompt = _fuelle_kontext(loaded.user_prompt_template, context_json_str)
 
         # ------------------------------------------------------------------
         # 7. LLM-Call über den Seam (kein direkter SDK-Aufruf)
