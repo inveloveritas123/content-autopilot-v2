@@ -270,8 +270,8 @@ def normalisiere_top_level_keys(prompt_key: str, payload: dict) -> tuple[dict, l
     return doc, umbenennungen
 
 
-def entferne_geheilte_luecken(prompt_key: str, payload: dict) -> tuple[dict, list]:
-    """Streicht Schema-Lücken aus ``_meta.luecken``, die die Validierung nicht mehr meldet.
+def aktualisiere_schema_luecken(prompt_key: str, payload: dict) -> tuple[dict, list, list]:
+    """Setzt die Schema-Einträge in ``_meta.luecken`` auf den aktuellen Validierungsstand.
 
     Nötig nach einer Reparatur am Bestand: `normalisiere_top_level_keys()` behebt
     den Strukturbruch, aber die bei der Erzeugung protokollierten Lücken bleiben
@@ -280,47 +280,51 @@ def entferne_geheilte_luecken(prompt_key: str, payload: dict) -> tuple[dict, lis
     grundlos "Re-Run empfohlen". Ein Wächter, der ohne Anlass meckert, wird
     ignoriert; genau so wurde das Lücken-Signal ursprünglich wertlos.
 
-    Entfernt wird ausschließlich, was die aktuelle Validierung NICHT mehr meldet.
+    Bloßes STREICHEN reicht dabei nicht. Solange ein Pflichtfeld auf Wurzelebene
+    fehlt, prüft jsonschema das zugehörige Unterobjekt gar nicht erst — erst die
+    Reparatur legt die darunterliegenden Fehler frei (bei Erics Kundenkontext am
+    06.08.2026: neun Stück). Wer nur streicht, hinterlässt eine leere Liste an
+    einer Row mit neun echten Befunden und macht den Wächter blind statt ehrlich.
+    Deshalb werden die Schema-Einträge ERSETZT, nicht gefiltert.
+
     Freitext-Notizen (ohne ``schema: ``-Präfix) bleiben unangetastet — sie sind
     inhaltliche Hinweise und gehen die Strukturprüfung nichts an.
 
     Returns:
-        (doc, entfernt): ``doc`` mit bereinigter Lückenliste, ``entfernt`` als
-        Liste der gestrichenen Einträge.
+        (doc, entfernt, neu): ``doc`` mit aktualisierter Lückenliste, dazu die
+        weggefallenen und die neu hinzugekommenen Schema-Einträge.
     """
     if not isinstance(payload, dict):
-        return {}, []
+        return {}, [], []
 
     meta = payload.get("_meta")
-    if not isinstance(meta, dict) or not meta.get("luecken"):
-        return payload, []
+    if not isinstance(meta, dict):
+        return payload, [], []
 
     try:
-        aktuell = {f"schema: {e}" for e in validate_canonical(prompt_key, payload)}
+        aktuell = [f"schema: {e}" for e in validate_canonical(prompt_key, payload)]
     except Exception as exc:
         logger.error(
-            "entferne_geheilte_luecken(%s): Validierung nicht moeglich (%s: %s) — "
+            "aktualisiere_schema_luecken(%s): Validierung nicht moeglich (%s: %s) — "
             "Lueckenliste bleibt unveraendert.",
             prompt_key,
             type(exc).__name__,
             exc,
         )
-        return payload, []
+        return payload, [], []
 
-    behalten, entfernt = [], []
-    for luecke in meta["luecken"]:
-        ist_schema_befund = isinstance(luecke, str) and luecke.startswith("schema: ")
-        if ist_schema_befund and luecke not in aktuell:
-            entfernt.append(luecke)
-        else:
-            behalten.append(luecke)
+    bisher = list(meta.get("luecken") or [])
+    freitext = [x for x in bisher if not (isinstance(x, str) and x.startswith("schema: "))]
+    schema_bisher = [x for x in bisher if isinstance(x, str) and x.startswith("schema: ")]
 
-    if not entfernt:
-        return payload, []
+    entfernt = [x for x in schema_bisher if x not in aktuell]
+    neu = [x for x in aktuell if x not in schema_bisher]
+    if not entfernt and not neu:
+        return payload, [], []
 
     doc = dict(payload)
-    doc["_meta"] = {**meta, "luecken": behalten}
-    return doc, entfernt
+    doc["_meta"] = {**meta, "luecken": freitext + aktuell}
+    return doc, entfernt, neu
 
 
 # ---------------------------------------------------------------------------

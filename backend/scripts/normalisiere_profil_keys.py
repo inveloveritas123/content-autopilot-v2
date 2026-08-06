@@ -26,7 +26,7 @@ import sys
 from sqlalchemy import text
 
 from models.base import sync_session_factory
-from services.schema_transformer import entferne_geheilte_luecken, normalisiere_top_level_keys
+from services.schema_transformer import aktualisiere_schema_luecken, normalisiere_top_level_keys
 
 #: Profiltabelle → Schema-Schlüssel, gegen den ihre Keys geprüft werden.
 TABELLEN = {
@@ -81,9 +81,11 @@ def main() -> int:
             # Die bei der Erzeugung protokollierten Lücken ziehen nicht von selbst
             # mit. Bleiben sie stehen, meldet is_canonical() die reparierte Row
             # weiter als kaputt — ein Wächter, der grundlos meckert, wird ignoriert.
-            doc, geheilt = entferne_geheilte_luecken(prompt_key, doc)
+            # Umgekehrt legt die Reparatur Unterobjekt-Fehler frei, die vorher
+            # verdeckt waren; deshalb wird die Liste ersetzt, nicht nur gefiltert.
+            doc, geheilt, aufgedeckt = aktualisiere_schema_luecken(prompt_key, doc)
 
-            if not umbenennungen and not geheilt:
+            if not umbenennungen and not geheilt and not aufgedeckt:
                 continue
 
             betroffen += 1
@@ -93,6 +95,8 @@ def main() -> int:
                 print(f"    {alt:>26}  ->  {neu}")
             if geheilt:
                 print(f"    {len(geheilt)} veraltete Schema-Luecke(n) gestrichen")
+            if aufgedeckt:
+                print(f"    {len(aufgedeckt)} bisher verdeckte(r) Schema-Fehler dokumentiert")
 
             if args.schreiben:
                 session.execute(
