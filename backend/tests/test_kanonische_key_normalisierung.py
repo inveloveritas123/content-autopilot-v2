@@ -195,12 +195,18 @@ LOUIS_KEYS_ECHT_KLEIN = [
 ]
 
 
-class TestGeheilteLueckenVerschwinden:
-    """Nach der Reparatur muss die Lückenliste mitziehen — sonst meckert der Wächter grundlos.
+class TestSchemaLueckenAktualisieren:
+    """Nach einer Reparatur muss die Lückenliste den AKTUELLEN Stand zeigen.
 
-    Prod-Befund 06.08.2026, direkt nach der Migration: die drei reparierten Rows
-    hatten 0 echte Wurzelfehler, trugen aber weiter ihre acht alten `luecken`.
+    Prod-Befund 06.08.2026: direkt nach der Migration hatten die reparierten Rows
+    0 echte Wurzelfehler, trugen aber weiter ihre acht alten `luecken` —
     `is_canonical()` las die alte Liste und meldete sie dauerhaft als kaputt.
+
+    Der zweite Befund kam im Trockenlauf: bloßes STREICHEN reicht nicht. Solange
+    `person` als Top-Level-Key fehlte, kam jsonschema gar nicht dazu, das
+    Unterobjekt zu prüfen. Erst die Reparatur legt die darunterliegenden Fehler
+    frei — bei Erics Kundenkontext neun Stück. Wer nur streicht, hinterlässt eine
+    leere Liste an einer Row mit neun echten Befunden.
     """
 
     def test_veraltete_schema_luecke_verschwindet(self):
@@ -209,19 +215,39 @@ class TestGeheilteLueckenVerschwinden:
             "prompt_version": "p04-v1.0",
             "luecken": ["schema: (root): 'identitaet' is a required property"],
         }
-        doc, entfernt = st.entferne_geheilte_luecken("p04", payload)
+        doc, entfernt, _ = st.aktualisiere_schema_luecken("p04", payload)
 
-        assert doc["_meta"]["luecken"] == []
-        assert len(entfernt) == 1
+        veraltet = "schema: (root): 'identitaet' is a required property"
+        assert veraltet not in doc["_meta"]["luecken"]
+        assert entfernt == [veraltet]
 
     def test_noch_bestehende_schema_luecke_bleibt(self):
         """Was die Validierung weiterhin meldet, darf nicht weggeputzt werden."""
-        payload = {"_meta": {"prompt_version": "p04-v1.0", "luecken": []}}
-        payload["_meta"]["luecken"] = ["schema: (root): 'identitaet' is a required property"]
-        doc, entfernt = st.entferne_geheilte_luecken("p04", payload)
+        payload = {
+            "_meta": {
+                "prompt_version": "p04-v1.0",
+                "luecken": ["schema: (root): 'identitaet' is a required property"],
+            }
+        }
+        doc, entfernt, _ = st.aktualisiere_schema_luecken("p04", payload)
 
-        assert doc["_meta"]["luecken"] == ["schema: (root): 'identitaet' is a required property"]
+        assert "schema: (root): 'identitaet' is a required property" in doc["_meta"]["luecken"]
         assert entfernt == []
+
+    def test_neu_aufgedeckte_fehler_kommen_in_die_liste(self):
+        """Erst die Reparatur macht Unterobjekt-Fehler sichtbar — sie müssen dokumentiert werden.
+
+        `identitaet` ist ein String statt eines Objekts. Solange der Key noch
+        `IDENTITÄT` hieß, meldete die Validierung nur das fehlende Pflichtfeld.
+        """
+        payload = {k: {} for k in LOUIS_KEYS_ECHT_KLEIN}
+        payload["identitaet"] = "kein Objekt"
+        payload["_meta"] = {"prompt_version": "p04-v1.0", "luecken": []}
+
+        doc, _, neu = st.aktualisiere_schema_luecken("p04", payload)
+
+        assert neu, "neu aufgedeckte Fehler fehlen"
+        assert any("identitaet" in eintrag for eintrag in doc["_meta"]["luecken"])
 
     def test_freitext_luecke_bleibt_immer(self):
         """Inhaltliche Notizen sind keine Schema-Befunde und gehen die Validierung nichts an."""
@@ -230,21 +256,28 @@ class TestGeheilteLueckenVerschwinden:
             "prompt_version": "p04-v1.0",
             "luecken": ["Kein Transkript verfügbar, Ableitung aus P01"],
         }
-        doc, entfernt = st.entferne_geheilte_luecken("p04", payload)
+        doc, entfernt, _ = st.aktualisiere_schema_luecken("p04", payload)
 
-        assert doc["_meta"]["luecken"] == ["Kein Transkript verfügbar, Ableitung aus P01"]
+        assert "Kein Transkript verfügbar, Ableitung aus P01" in doc["_meta"]["luecken"]
         assert entfernt == []
 
-    def test_ohne_luecken_bleibt_alles_stehen(self):
+    def test_zweiter_lauf_aendert_nichts(self):
+        """Idempotenz: steht die Liste auf dem aktuellen Stand, gibt es nichts zu tun.
+
+        Wichtig, weil das Migrationsskript nur schreibt, wenn sich etwas ändert —
+        sonst würde jeder Lauf alle Rows anfassen.
+        """
         payload = {k: {} for k in LOUIS_KEYS_ECHT_KLEIN}
         payload["_meta"] = {"prompt_version": "p04-v1.0"}
-        doc, entfernt = st.entferne_geheilte_luecken("p04", payload)
+
+        doc, _, _ = st.aktualisiere_schema_luecken("p04", payload)
+        _, entfernt, neu = st.aktualisiere_schema_luecken("p04", doc)
 
         assert entfernt == []
-        assert doc["_meta"] == {"prompt_version": "p04-v1.0"}
+        assert neu == []
 
     def test_reparierte_row_besteht_danach_den_waechter(self):
-        """Die Kette: umbenannt → Lücken bereinigt → is_canonical sagt wieder True."""
+        """Die Kette: umbenannt → Lücken aktualisiert → is_canonical sagt wieder True."""
         payload = {k: {} for k in LOUIS_KEYS_ECHT}
         payload["_meta"] = {
             "prompt_version": "p04-v1.0",
@@ -252,7 +285,7 @@ class TestGeheilteLueckenVerschwinden:
         }
 
         doc, _ = st.normalisiere_top_level_keys("p04", payload)
-        doc, entfernt = st.entferne_geheilte_luecken("p04", doc)
+        doc, entfernt, _ = st.aktualisiere_schema_luecken("p04", doc)
 
         assert len(entfernt) == 8
         assert cp.is_canonical(doc) is True
