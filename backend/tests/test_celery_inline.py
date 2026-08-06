@@ -14,15 +14,9 @@ Worker-Zustand nach: `celery.concurrency.prefork.process_initializer` setzt
 
 from __future__ import annotations
 
-import json
-import os
-import subprocess
-import sys
-from pathlib import Path
-
 import pytest
 
-_BACKEND = Path(__file__).resolve().parents[1]
+from tests._subprozess_probe import fahre_probe
 
 # Ein Skript, zwei Messungen: erst die rohe Form (muss werfen), dann run_inline
 # (muss liefern). Beide im selben Prozess und im selben Flag-Zustand — sonst
@@ -75,24 +69,7 @@ print("BEFUND:" + json.dumps(befund))
 @pytest.fixture(scope="module")
 def befund() -> dict:
     """Faehrt die Probe einmal und gibt ihre Messwerte zurueck."""
-    umgebung = {**os.environ, "PYTHONPATH": str(_BACKEND)}
-    lauf = subprocess.run(
-        [sys.executable, "-c", _PROBE],
-        capture_output=True,
-        text=True,
-        cwd=str(_BACKEND),
-        env=umgebung,
-        timeout=120,
-    )
-    zeile = next(
-        (z for z in lauf.stdout.splitlines() if z.startswith("BEFUND:")),
-        None,
-    )
-    if zeile is None:
-        pytest.fail(
-            f"Probe lieferte keinen Befund.\nSTDOUT:\n{lauf.stdout}\nSTDERR:\n{lauf.stderr}"
-        )
-    return json.loads(zeile[len("BEFUND:") :])
+    return fahre_probe(_PROBE)
 
 
 def test_sperre_ist_real_und_kein_phantom(befund):
