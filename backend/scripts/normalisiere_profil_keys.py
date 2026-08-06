@@ -26,7 +26,7 @@ import sys
 from sqlalchemy import text
 
 from models.base import sync_session_factory
-from services.schema_transformer import normalisiere_top_level_keys
+from services.schema_transformer import entferne_geheilte_luecken, normalisiere_top_level_keys
 
 #: Profiltabelle → Schema-Schlüssel, gegen den ihre Keys geprüft werden.
 TABELLEN = {
@@ -71,7 +71,19 @@ def main() -> int:
                 continue
 
             doc, umbenennungen = normalisiere_top_level_keys(prompt_key, payload)
-            if not umbenennungen:
+
+            # Verlustkontrolle direkt nach dem Umbenennen: gleiche Anzahl Felder,
+            # und jeder umbenannte Wert ist identisch wiederzufinden.
+            assert len(doc) == len(payload), f"Feldzahl weicht ab in {row_id}"
+            for alt, neu in umbenennungen:
+                assert doc[neu] == payload[alt], f"Wert verändert bei {alt} in {row_id}"
+
+            # Die bei der Erzeugung protokollierten Lücken ziehen nicht von selbst
+            # mit. Bleiben sie stehen, meldet is_canonical() die reparierte Row
+            # weiter als kaputt — ein Wächter, der grundlos meckert, wird ignoriert.
+            doc, geheilt = entferne_geheilte_luecken(prompt_key, doc)
+
+            if not umbenennungen and not geheilt:
                 continue
 
             betroffen += 1
@@ -79,12 +91,8 @@ def main() -> int:
             print(f"\n{tabelle} {str(row_id)[:8]} tenant={str(tenant_id)[:8]} ({zustand})")
             for alt, neu in umbenennungen:
                 print(f"    {alt:>26}  ->  {neu}")
-
-            # Verlustkontrolle vor dem Schreiben: gleiche Anzahl Felder, und
-            # jeder umbenannte Wert ist identisch wiederzufinden.
-            assert len(doc) == len(payload), f"Feldzahl weicht ab in {row_id}"
-            for alt, neu in umbenennungen:
-                assert doc[neu] == payload[alt], f"Wert verändert bei {alt} in {row_id}"
+            if geheilt:
+                print(f"    {len(geheilt)} veraltete Schema-Luecke(n) gestrichen")
 
             if args.schreiben:
                 session.execute(
