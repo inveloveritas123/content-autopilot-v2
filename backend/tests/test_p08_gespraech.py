@@ -426,77 +426,53 @@ class TestSchicht3:
 
 
 class TestPromptRueckfall:
-    def test_unbekannte_platzhalter_werden_abgelehnt(self):
-        """Der Loader-Fix darf keinen KeyError in .format() erzeugen.
+    """⚠️ Umgebaut am 06.08.2026 — der Ladepfad hat eine Stufe weniger.
 
-        Die Nextcloud-Datei will `{name}`, `{branche}`, `{teamgroesse}` … Ohne
-        diese Prüfung stürbe `.format()` in p08_response — also NACH dem Laden
-        und damit ausserhalb jedes Rückfalls.
+    Die Platzhalter-Probe und das „einmal laut, dann leise" sind nach
+    `services/repo_prompt.py` gewandert und werden in `test_repo_prompt.py`
+    geprüft. Hier bleibt, was P08-spezifisch ist: dass der Prompt aus dem Repo
+    kommt und content-truth gar nicht mehr gefragt wird.
+    """
+
+    def test_p08_fragt_content_truth_nicht_mehr(self):
+        """Der Kern des Fixes: die Stufe, die immer scheiterte, ist weg.
+
+        Bis zum 06.08.2026 lief hier zuerst `loader.load("P08")` gegen
+        content-truth. Die Datei dort verlangte `{name}`, `{branche}` & Co. und
+        fiel bei JEDEM Aufruf an der Platzhalter-Probe durch — der Bot lief
+        immer über den Rückfall, ohne dass es jemandem auffiel.
+
+        Der Loader wird hier zur Sprengfalle: wird er doch gerufen, wirft er.
         """
-        with pytest.raises(KeyError):
-            p08._pruefe_platzhalter("Hallo {name}, du arbeitest in {branche}.")
 
-    def test_bekannte_platzhalter_gehen_durch(self):
-        p08._pruefe_platzhalter(_TEMPLATE)  # darf nicht werfen
+        def _explodiert():
+            raise AssertionError("content-truth darf für P08 nicht mehr gefragt werden")
 
-    def test_loader_lehnt_unbekannte_platzhalter_ab_und_faellt_zurueck(self):
-        """Die Prüfung muss im Ladepfad HÄNGEN, nicht nur existieren.
+        with patch("services.prompt_loader.get_default_prompt_loader", _explodiert):
+            geladen = p08._load_p08_prompt()
 
-        Genau das ist der neue Risikofall: seit der Loader `## User-Prompt: MODE
-        <X>` erkennt, liefert die alte Nextcloud-Datei erstmals ein nicht-leeres
-        Template — mit `{name}`, `{branche}`, `{teamgroesse}`. Ohne Prüfung IM
-        Ladepfad käme es bis `.format()` in p08_response und risse dort das
-        Gespräch mit einem KeyError ab. Vorher war der Ausfall still, danach wäre
-        er hart gewesen.
-        """
-        boeses_template = "Hallo {name}, du arbeitest in {branche} mit {teamgroesse} Leuten."
-
-        class _Loader:
-            def load(self, key):
-                return MagicMock(
-                    user_prompt_template=boeses_template,
-                    system_prompt="system",
-                )
-
-        p08._fallback_gemeldet.clear()
-        try:
-            with patch("services.prompt_loader.get_default_prompt_loader", return_value=_Loader()):
-                geladen = p08._load_p08_prompt()
-        finally:
-            p08._fallback_gemeldet.clear()
-
-        assert (
-            geladen.user_prompt_template != boeses_template
-        ), "Der Loader hat ein Template durchgelassen, das .format() sprengt"
-        # Und das Ergebnis muss mit den Schlüsseln des Codes formatierbar sein.
+        assert geladen.source_path.endswith("P08_conversation.md")
         geladen.user_prompt_template.format(**p08._PLATZHALTER_PROBE)
 
-    def test_nicht_ladbarer_prompt_meldet_einmal_laut(self, caplog):
-        """Testfall 20: ERROR einmalig statt WARNING pro Aufruf.
+    def test_ohne_repo_datei_bleibt_der_notnagel(self):
+        """Eine fehlende Datei macht den Bot dümmer, nicht tot.
 
-        Dass monatelang ein 789-Byte-Stummel lief, lag nicht am Header, sondern
-        daran, dass der Ausfall eine WARNING pro Aufruf war, die niemand liest.
+        Der Notnagel muss mit denselben Schlüsseln formatierbar sein wie die
+        echte Datei — sonst stürbe `.format()` in p08_response, also nach dem
+        Laden und damit ausserhalb jeder Absicherung.
         """
-        import logging
+        with patch.object(p08, "lade_repo_prompt", return_value=None):
+            geladen = p08._load_p08_prompt()
 
-        p08._fallback_gemeldet.clear()
-        try:
-            with caplog.at_level(logging.DEBUG, logger=p08.logger.name):
-                p08._melde_fallback("Testgrund")
-                p08._melde_fallback("Testgrund")
-                p08._melde_fallback("Testgrund")
-
-            errors = [r for r in caplog.records if r.levelno == logging.ERROR]
-            assert len(errors) == 1, "genau einmal laut, danach leise"
-            assert not [r for r in caplog.records if r.levelno == logging.WARNING]
-        finally:
-            p08._fallback_gemeldet.clear()
+        assert geladen.source_path == "hardcoded"
+        assert geladen.system_prompt
+        geladen.user_prompt_template.format(**p08._PLATZHALTER_PROBE)
 
     def test_mitgelieferter_prompt_erfuellt_den_vertrag(self):
         """Beweis am Artefakt: die Datei im Repo muss ladbar UND formatierbar sein.
 
-        Sie ist der Rückfall, der produktiv läuft, solange Nextcloud die alte
-        Fassung trägt.
+        Sie ist seit dem 06.08.2026 die DEKLARIERTE Quelle für P08, nicht mehr
+        der Rückfall — jedes Gespräch im Telegram läuft auf ihr.
         """
         from services.prompt_loader import _extract_section
 

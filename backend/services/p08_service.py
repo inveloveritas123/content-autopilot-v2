@@ -6,10 +6,8 @@ Schicht-3-Sicherheit: Response bekommt NUR features, NICHT Original-Transkript.
 
 from __future__ import annotations  # Python 3.9-Kompatibilität: str | None Syntax
 
-import hashlib
 import json
 import logging
-import os
 import random
 import re
 import uuid
@@ -21,6 +19,7 @@ from sqlalchemy import text
 
 from models.base import sync_session_factory
 from services.pipeline_llm import call_pipeline_llm
+from services.repo_prompt import lade_repo_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -159,23 +158,11 @@ class ResponseResult:
         return self.outcome is ResponseOutcome.CLOSED
 
 
-# Ein nicht ladbarer Prompt hat monatelang als WARNING pro Aufruf gemeldet, dass
-# statt der 18-KB-Datei ein 789-Byte-Stummel läuft. Diese Zeile hat niemand
-# gelesen — deshalb einmal laut (ERROR, Sentry-Schwelle) statt dauernd leise.
-_fallback_gemeldet: set[str] = set()
-
-
-def _melde_fallback(grund: str) -> None:
-    if "P08" not in _fallback_gemeldet:
-        _fallback_gemeldet.add("P08")
-        logger.error(
-            "[P08] Prompt nicht ladbar — der Bot läuft auf dem Notnagel-Prompt. Grund: %s", grund
-        )
-    else:
-        logger.debug("[P08] Prompt weiterhin nicht ladbar: %s", grund)
-
-
 # Genau die Schlüssel, die p08_opener und p08_response an .format() übergeben.
+# `lade_repo_prompt` probiert das Template damit BEIM LADEN durch — schlägt es
+# fehl, greift der Notnagel. Ohne die Probe stürbe `.format()` erst in
+# p08_opener/p08_response, also nach dem Laden und ausserhalb jedes Rückfalls:
+# aus einem dümmeren Bot würde ein harter Ausfall des Gesprächs.
 _PLATZHALTER_PROBE = {
     "mode": "",
     "topic": "",
@@ -187,55 +174,25 @@ _PLATZHALTER_PROBE = {
 }
 
 
-def _pruefe_platzhalter(template: str) -> None:
-    """Wirft, wenn das Template Platzhalter enthält, die der Code nicht liefert.
-
-    ⚠️ Notwendig geworden durch den Loader-Fix vom 04.08.2026: `## User-Prompt:
-    MODE <X>` wird jetzt erkannt. Die Datei in Nextcloud will aber `{name}`,
-    `{branche}`, `{teamgroesse}`, `{du_oder_sie}`, `{signalwoerter}`,
-    `{themencluster}` — Platzhalter, die es im Code nicht gibt. Ohne diese
-    Prüfung stürbe `.format()` in p08_opener/p08_response mit einem KeyError,
-    also NACH dem Laden und damit ausserhalb jedes Rückfalls: aus einem stillen
-    Stummel-Prompt wäre ein harter Ausfall des Gesprächs geworden.
-    """
-    template.format(**_PLATZHALTER_PROBE)
+#: Der P08-Prompt lebt im REPO, nicht in content-truth. Begruendung und
+#: Vorgeschichte: services/repo_prompt.py.
+_P08_DATEI = "P08_conversation.md"
 
 
 def _load_p08_prompt():
-    """Load P08 prompt from NC via PromptLoader, fallback to local file, then hardcoded."""
-    try:
-        from services.prompt_loader import get_default_prompt_loader
+    """Laedt den P08-Prompt aus backend/prompts/, sonst den eingebauten Notnagel.
 
-        loader = get_default_prompt_loader()
-        loaded = loader.load("P08")
-        if not loaded.user_prompt_template:
-            raise ValueError("user_prompt_template leer (Section-Header-Mismatch in Prompt-Datei?)")
-        _pruefe_platzhalter(loaded.user_prompt_template)
-        return loaded
-    except Exception as e:
-        _melde_fallback(f"{type(e).__name__}: {e}")
-
-    # Try local file
-    local_path = os.path.normpath(
-        os.path.join(os.path.dirname(__file__), "..", "prompts", "P08_conversation.md")
-    )
-    if os.path.exists(local_path):
-        try:
-            with open(local_path, encoding="utf-8") as f:
-                content = f.read()
-            from services.prompt_loader import LoadedPrompt, _extract_section
-
-            sha = hashlib.sha256(content.encode()).hexdigest()
-            return LoadedPrompt(
-                content=content,
-                system_prompt=_extract_section(content, "System-Prompt"),
-                user_prompt_template=_extract_section(content, "User-Prompt"),
-                sha=sha,
-                loaded_at=datetime.now(UTC),
-                source_path=local_path,
-            )
-        except Exception as le:
-            logger.warning(f"[P08] Lokaler Fallback fehlgeschlagen: {le}")
+    ⚠️ Bis zum 06.08.2026 stand hier zuerst ein `loader.load("P08")` gegen
+    content-truth. Die dortige Datei (18.694 Bytes, Stand 12.06.2026) verlangt
+    `{name}`, `{branche}`, `{standort}`, `{teamgroesse}`, `{du_oder_sie}`,
+    `{signalwoerter}` — Platzhalter, die es im Code nicht gibt. Die
+    Platzhalter-Probe warf deshalb bei JEDEM Aufruf `KeyError: 'name'`, und der
+    Bot lief immer auf der Repo-Datei. Der Rueckfall war die Quelle, hiess aber
+    nicht so. Die content-truth-Datei ist entfernt, der Schritt hier auch.
+    """
+    geladen = lade_repo_prompt(_P08_DATEI, platzhalter_probe=_PLATZHALTER_PROBE)
+    if geladen is not None:
+        return geladen
 
     # Hardcoded fallback
     from services.prompt_loader import LoadedPrompt

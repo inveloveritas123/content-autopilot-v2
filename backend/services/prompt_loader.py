@@ -38,7 +38,13 @@ PROMPT_PATHS: dict[str, str] = {
     "P03": "prompts/P03-voice-analyse.md",
     "P04": "prompts/P04-kundenavatar-vertiefung.md",
     "P07": "prompts/P07-themen-research.md",
-    "P08": "prompts/P08-fragen-konversation.md",
+    # "P08" ist hier bewusst NICHT registriert (06.08.2026). Der P08-Prompt lebt
+    # im Repo (backend/prompts/P08_conversation.md, geladen ueber
+    # services/repo_prompt.py). Die frueher hier eingetragene content-truth-Datei
+    # verlangte `{name}`, `{branche}`, `{standort}`, `{teamgroesse}`,
+    # `{du_oder_sie}`, `{signalwoerter}` — Platzhalter ohne Entsprechung im Code.
+    # Sie war damit strukturell nicht ladbar, und der Bot lief zwei Monate lang
+    # ueber den Rueckfall, ohne dass es jemandem auffiel. Die Datei ist entfernt.
     "P09": "prompts/P09-content-ideen.md",
     "P10": "prompts/P10-content-kern-aufbau.md",
     "P12": "prompts/P12-post-generierung.md",
