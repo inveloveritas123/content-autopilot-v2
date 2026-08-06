@@ -5,7 +5,6 @@ Sicherheitskritisch: Injection-Schutz via Pattern-Check vor LLM-Call.
 
 from __future__ import annotations  # Python 3.9-Kompatibilität: str | None Syntax
 
-import hashlib
 import json
 import logging
 import os
@@ -14,6 +13,7 @@ from datetime import UTC
 
 from models.base import sync_session_factory
 from services.pipeline_llm import call_pipeline_llm
+from services.repo_prompt import lade_repo_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -154,39 +154,26 @@ def _parse_llm_output(raw: str) -> dict:
         raise ValueError(f"JSON parse error: {raw[:200]}")
 
 
+#: Schicht 1 liegt im REPO. `schicht1_extraktion` stand nie in
+#: `prompt_loader.PROMPT_PATHS`, und die Datei existiert auch in content-truth
+#: nicht — der Loader-Versuch konnte also nur scheitern.
+_SCHICHT1_DATEI = "schicht1_extraktion.md"
+
+
 def _load_prompt():
-    """Laedt schicht1_extraktion Prompt: NC → lokale Datei → Hardcoded."""
-    try:
-        from services.prompt_loader import get_default_prompt_loader
+    """Laedt den Schicht-1-Prompt aus backend/prompts/, sonst den Notnagel.
 
-        loader = get_default_prompt_loader()
-        return loader.load("schicht1_extraktion")
-    except Exception as e:
-        logger.warning("[Layer1] PromptLoader fehlgeschlagen, nutze lokalen Fallback: %s", e)
-
-    # Try local file
-    local_path = os.path.normpath(
-        os.path.join(os.path.dirname(__file__), "..", "prompts", "schicht1_extraktion.md")
-    )
-    if os.path.exists(local_path):
-        try:
-            with open(local_path, encoding="utf-8") as f:
-                content = f.read()
-            from datetime import datetime
-
-            from services.prompt_loader import LoadedPrompt, _extract_section
-
-            sha = hashlib.sha256(content.encode()).hexdigest()
-            return LoadedPrompt(
-                content=content,
-                system_prompt=_extract_section(content, "System-Prompt"),
-                user_prompt_template=_extract_section(content, "User-Prompt"),
-                sha=sha,
-                loaded_at=datetime.now(UTC),
-                source_path=local_path,
-            )
-        except Exception as le:
-            logger.warning("[Layer1] Lokaler Fallback fehlgeschlagen: %s", le)
+    ⚠️ Bis zum 06.08.2026 lief hier zuerst ein `loader.load("schicht1_extraktion")`
+    gegen content-truth. Der Prompt ist dort nicht registriert und die Datei
+    liegt dort nicht, also warf der Aufruf zuverlaessig — und protokollierte das
+    als WARNING **pro eingehender Nachricht**. In Louis' Testlauf am 06.08. war
+    das die haeufigste Logzeile ueberhaupt; sie hat echte Warnungen zugedeckt.
+    Inhaltlich lief Schicht 1 die ganze Zeit korrekt, nur eben ueber den
+    Rueckfall und ohne Cache: Datei lesen und sha256 bei jeder Nachricht.
+    """
+    geladen = lade_repo_prompt(_SCHICHT1_DATEI)
+    if geladen is not None:
+        return geladen
 
     # Hardcoded fallback
     from datetime import datetime
