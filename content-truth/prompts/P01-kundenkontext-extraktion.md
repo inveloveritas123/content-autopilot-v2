@@ -95,6 +95,12 @@ Hier sammelst du alles, was im Gespräch aufgetaucht ist und als Content-Materia
 
 Antworte AUSSCHLIESSLICH mit einem validen JSON-Objekt. Kein einleitender Text, keine Erklärung, keine Markdown-Backticks um das JSON. Nur das JSON.
 
+**Die nummerierten Überschriften oben sind Lesehilfen, KEINE Feldnamen.** Die Top-Level-Keys des JSON lauten exakt:
+
+`person` · `zielkunde` · `angebot` · `positionierung` · `markt` · `vertrauen` · `sprache` · `content_reservoir`
+
+Kleinbuchstaben, Unterstriche, ohne Gliederungsnummer (`person`, nicht `1. PERSON` oder `1_PERSON`; `content_reservoir`, nicht `8_CONTENT-RESERVOIR`). Wer die Überschriften abschreibt, erzeugt ein Dokument, das die Pipeline nicht lesen kann.
+
 Verwende null für felder die nicht im Transkript vorkommen. Erfinde NICHTS.
 
 Arrays (wie fehler_und_learnings, starke_meinungen) können leer sein [] wenn nichts gefunden wurde.
