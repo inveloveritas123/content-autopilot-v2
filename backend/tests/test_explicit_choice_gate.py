@@ -358,3 +358,73 @@ class TestChatIdFallback:
 
         assert result["choice_prompt_sent"] is False
         assert result["routed_to"] == "awaiting_user_choice"
+
+
+# ---------------------------------------------------------------------------
+# 5. Die Quittung — was sie über den gespeicherten Text behauptet
+# ---------------------------------------------------------------------------
+
+
+class TestQuittungsZitat:
+    """Die Quittung ist eine Aussage darüber, was im Gedächtnis liegt.
+
+    Gemeldet am 06.08.2026 von einem Nutzer, der 675 Zeichen einsprach: der Bot
+    antwortete `🎤 Gespeichert: „…in ein Bus…"` — der harte Schnitt bei 80 Zeichen
+    fiel mitten in „Business-Netzwerk". Gespeichert war alles; die Quittung behauptete
+    etwas anderes, und der Nutzer las daraus, es werde nur der erste Satz gemerkt.
+    """
+
+    def test_kurzer_text_wird_ganz_zitiert_ohne_zusatz(self):
+        """Passt der Text ganz hinein, gibt es nichts zu relativieren.
+
+        Rot, sobald das Zitat auch bei vollständigem Text eine Längenangabe anhängt.
+        """
+        zitat = tt._quittungs_zitat("Kurz und vollständig.")
+
+        assert "Kurz und vollständig." in zitat
+        assert "…" not in zitat
+        assert "Zeichen" not in zitat
+
+    def test_schneidet_nie_mitten_im_wort(self):
+        """Der Bus-Fall: bei 80 Zeichen endet der Text mitten in einem Wort.
+
+        Rot, sobald das Zitat wieder hart bei `grenze` kappt statt an der Wortgrenze.
+        """
+        anfang = "Ich möchte einen Beitrag über unser neues Werkstatt-Netzwerk schreiben, das "
+        volltext = anfang + "Buchhaltung komplett ersetzt und niemanden langweilt."
+        assert volltext[:80].endswith(
+            "Buch"
+        ), "Vorbedingung der Probe: der harte Schnitt muss mitten im Wort liegen"
+
+        zitat = tt._quittungs_zitat(volltext)
+
+        assert "Buch…" not in zitat, "das Zitat erfindet ein Wort, das niemand gesagt hat"
+        assert "Buch“" not in zitat
+        assert zitat.count("Buchhaltung") in (0, 1)
+        # Der Auszug endet an einem echten Wortende — das letzte Wort vor der Grenze.
+        assert "schreiben, das…" in zitat
+
+    def test_nennt_die_gesamtlaenge_wenn_gekuerzt(self):
+        """Wird gekürzt, muss die Quittung sagen, wie viel wirklich gespeichert ist.
+
+        Rot, sobald das Zitat kürzt, ohne den Umfang des Gespeicherten zu nennen.
+        """
+        volltext = "Wort " * 60  # 300 Zeichen, deutlich über der Grenze
+
+        zitat = tt._quittungs_zitat(volltext)
+
+        assert "…" in zitat
+        assert str(len(volltext)) in zitat, "die Gesamtlänge fehlt"
+        assert "Zeichen" in zitat
+
+    def test_ueberlanges_einzelwort_ergibt_kein_leeres_zitat(self):
+        """Ohne Leerzeichen vor der Grenze gibt es keine Wortgrenze zum Schneiden.
+
+        Rot, sobald der Wortgrenzen-Schnitt in diesem Fall einen leeren Auszug liefert.
+        """
+        volltext = "A" * 200
+
+        zitat = tt._quittungs_zitat(volltext)
+
+        assert "A" * 40 in zitat, "der Auszug ist leer oder unbrauchbar kurz"
+        assert "…" in zitat

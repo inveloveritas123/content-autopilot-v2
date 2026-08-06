@@ -209,6 +209,35 @@ def _awaits_user_choice(tenant_id: str, text_content: str) -> bool:
         return False
 
 
+#: Wie viel Text die Quittung zitiert, bevor sie zum Auszug wird.
+_QUITTUNG_GRENZE = 80
+
+
+def _quittungs_zitat(text_content: str, grenze: int = _QUITTUNG_GRENZE) -> str:
+    """Der zitierte Teil einer Quittung — nie mitten im Wort, als Auszug erkennbar.
+
+    Die Quittung ist eine Aussage darüber, was im Gedächtnis liegt. Ein harter Schnitt
+    bei `grenze` macht daraus eine falsche Aussage: aus „in ein Business-Netzwerk" wurde
+    live am 06.08.2026 „in ein Bus…" — ein Wort, das niemand gesagt hat — und der Nutzer
+    las daraus, es werde nur sein erster Satz gespeichert. Gespeichert wird immer alles.
+
+    Deshalb zwei Änderungen gegenüber dem harten Schnitt: an der letzten Wortgrenze
+    trennen, und den tatsächlichen Umfang danebenstellen, statt ihn zu verschweigen.
+
+    Die Längenangabe zählt den übergebenen Text, nicht den gekürzten — sie soll ja
+    gerade sagen, wie viel mehr gespeichert ist als hier steht.
+    """
+    voll = text_content or ""
+    if len(voll) <= grenze:
+        return f"„{voll.rstrip()}“"
+
+    kopf = voll[:grenze]
+    # Ein einzelnes überlanges Wort hat keine Wortgrenze — dann ist der harte Schnitt
+    # die einzige Möglichkeit, und ein leerer Auszug wäre die schlechtere.
+    schnitt = kopf.rsplit(" ", 1)[0].rstrip(" ,;:–—-") if " " in kopf else kopf.rstrip()
+    return f"„{schnitt}…“ (von {len(voll)} Zeichen)"
+
+
 def _send_choice_prompt(
     tenant_id: str, chat_id: int, log_id: str, text_content: str, icon: str
 ) -> bool:
@@ -219,14 +248,12 @@ def _send_choice_prompt(
     Aber protokollieren statt schlucken — dieser Prompt ist der einzige sichtbare
     Ausgang der Nachricht.
     """
-    preview = text_content[:80].rstrip()
-    suffix = "…" if len(text_content) > 80 else ""
     try:
         from api.telegram import _choice_keyboard, _send_telegram_message
 
         sent = _send_telegram_message(
             chat_id,
-            f"{icon} Notiert: „{preview}{suffix}“\n\nWas soll ich damit machen?",
+            f"{icon} Notiert: {_quittungs_zitat(text_content)}\n\nWas soll ich damit machen?",
             tenant_id=tenant_id,
             reply_markup=_choice_keyboard(log_id),
         )
@@ -1215,14 +1242,12 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
 
     # Bestätigung an den Nutzer senden
     if chat_id_voice and channel == "telegram":
-        preview = transcript[:80].rstrip()
-        suffix = "…" if len(transcript) > 80 else ""
         try:
             from api.telegram import _send_telegram_message
 
             _send_telegram_message(
                 chat_id_voice,
-                f"🎤 Gespeichert: „{preview}{suffix}“",
+                f"🎤 Gespeichert: {_quittungs_zitat(transcript)}",
                 tenant_id=tenant_id,
             )
         except Exception as exc:

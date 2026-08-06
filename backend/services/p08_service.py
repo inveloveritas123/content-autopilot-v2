@@ -610,20 +610,28 @@ def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> O
                 with sync_session_factory() as s:
                     # Bug-Fix #36/§2.3: ursprünglich las der SELECT nicht-existente
                     # Spalten topic_keyword + category (kein ORM-Feld, keine Migration).
-                    # Jetzt: title, hook_suggestion, angle — alle verifiziert in
-                    # models/content_idea.py:39-44. Das echte Thema + Aufhänger fließen
-                    # so in die Opener-Frage ein.
+                    # Jetzt: title, hook_suggestion, angle, description — alle verifiziert
+                    # in models/content_idea.py:39-44.
+                    #
+                    # ⚠️ `description` gehört zwingend dazu: für Chat-Ideen schreibt
+                    # `_create_manual_idea` (p13_variants_task.py) `title = idea_text[:80]`
+                    # und `description = idea_text[:600]`, `hook_suggestion` aber NIE.
+                    # Ohne description war `title` deshalb kein Rückfall, sondern der
+                    # einzige Weg — das Modell sah 80 Zeichen und fragte nach dem
+                    # abgeschnittenen Wort ("In welchen Bus denn?", live 06.08.2026).
                     row = s.execute(
                         text(
-                            "SELECT title, hook_suggestion, angle FROM content_ideas "
+                            "SELECT title, hook_suggestion, angle, description "
+                            "FROM content_ideas "
                             "WHERE id = :id AND tenant_id = :tid LIMIT 1"
                         ),
                         {"id": topic_idea_id, "tid": tenant_id},
                     ).fetchone()
                     if row:
-                        # Bevorzuge hook_suggestion (Aufhänger) als Topic-Beschreibung,
-                        # Fallback auf title, dann Generic.
-                        topic = row[1] or row[0] or "Dein Thema"
+                        # Bevorzuge hook_suggestion (Aufhänger, von der Recherche
+                        # formuliert), dann description (der volle Text der Nachricht),
+                        # dann title (nur noch die Überschrift), dann Generic.
+                        topic = row[1] or row[3] or row[0] or "Dein Thema"
                         # angle als category (z.B. 'manual', 'howto', 'story')
                         if row[2]:
                             category = row[2]
