@@ -136,24 +136,40 @@ def _resolve_branche(tenant_id: str) -> str:
 def _build_qa_pairs(messages: list) -> list[dict]:
     """Baut Q/A-Paare aus bot_session.messages für den P12-Input.
 
-    messages[i]["bot"]            = die vom Bot gestellte Frage
-    messages[i]["user_transcript"] = die Roh-Antwort des Kunden (#19a)
+    ⚠️ Ein Eintrag trägt Züge aus ZWEI Runden:
 
-    Jeder Eintrag mit nicht-leerem user_transcript wird zu einem Paar
-    {"question_text": <bot-Frage>, "answer_text": <transkript>} (Format wie
-    api.ideas._run_p12_p12b_pipeline erwartet). Einträge ohne Transkript
-    (z.B. der Opener) werden übersprungen.
+        messages[i]["user_transcript"] = die Antwort, die Runde i auslöste
+        messages[i]["bot"]             = die daraus erzeugte NEUE Frage
+
+    Der Nutzertext ist also ÄLTER als der Bot-Text daneben; die Antwort gehört
+    an die Frage des VORGÄNGER-Eintrags. Bis zum 06.08.2026 paarte diese
+    Funktion beide Felder desselben Eintrags — Frage und Folge vertauscht.
+
+    An Louis' Session 5379b589 nachgemessen ging so sein Einspruch „Ich habe
+    doch gerade erklärt, welches Problem wir gelöst haben" als Antwort auf „Wie
+    hat der Kunde seine Kontakte denn vorher verwaltet?" in P12, und das
+    Abschluss-Angebot („Soll ich ihn schreiben?") wurde als Interviewfrage
+    behandelt. Dieselbe Verschiebung saß in `services/p08_service.py`
+    (`_get_recent_messages`) und war dort die Ursache für „er versteht meine
+    Eingabe erst um +1 Antwort verzögert".
+
+    Einträge ohne Transkript (z.B. der Opener) liefern kein Paar — wohl aber die
+    Frage für das nächste. Format wie api.ideas._run_p12_p12b_pipeline erwartet.
     """
     pairs: list[dict] = []
     if not isinstance(messages, list):
         return pairs
-    for entry in messages:
+    for i, entry in enumerate(messages):
         if not isinstance(entry, dict):
             continue
         answer = (entry.get("user_transcript") or "").strip()
         if not answer:
             continue
-        question = (entry.get("bot") or "").strip()
+        # Die Frage steht im Eintrag DAVOR. Fehlt der (nur bei kaputten Daten —
+        # der Opener hat nie ein Transkript), lieber eine leere Frage als eine
+        # verschluckte Antwort.
+        vorgaenger = messages[i - 1] if i > 0 and isinstance(messages[i - 1], dict) else {}
+        question = (vorgaenger.get("bot") or "").strip()
         pairs.append({"question_text": question, "answer_text": answer})
     return pairs
 
