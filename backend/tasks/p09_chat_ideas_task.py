@@ -11,7 +11,7 @@ Datenfluss
 2. Ideen vorhanden → Chat-Nachricht (Top-5-Format, max. 4000 Zeichen).
 3. Keine Ideen → On-demand-Ideation NUR bei positivem Cost-Cap-Vorcheck:
    jüngstes analysiertes SourceItem ohne eigene Ideen →
-   auto_generate_ideas.apply(...).get() in-process → Schritt 1 wiederholen.
+   auto_generate_ideas via run_inline() in-process → Schritt 1 wiederholen.
    Kein analysiertes Item → freundliche Notiz.
    Cap erschöpft → Kosten-Notiz statt Ideation (wie post_feedback_task.py:368-381).
 
@@ -184,11 +184,14 @@ def _generate_on_demand(tenant_id: str, log_id: str | None) -> dict:
         _send_no_sources_notice(tenant_id)
         return {"status": "skipped", "reason": "no_source_item"}
 
-    # auto_generate_ideas in-process (Muster api/ideas.py:504 — .apply().get())
+    # auto_generate_ideas in-process. `timeout=120` stand hier bis 06.08.2026 und
+    # war wirkungslos: `EagerResult.get()` wertet ihn nicht aus, die Task ist beim
+    # Aufruf laengst gelaufen. Wer eine Zeitgrenze braucht, setzt sie in der Task.
     try:
+        from services.celery_inline import run_inline
         from tasks.ideation_task import auto_generate_ideas
 
-        result = auto_generate_ideas.apply(args=[item_id]).get(timeout=120)
+        result = run_inline(auto_generate_ideas, args=[item_id])
         if isinstance(result, dict) and result.get("status") not in ("ok", "already_exists"):
             logger.info("p09_task: ideation not ok: %s", result.get("status"))
             return {"status": "skipped", "reason": "ideation_failed"}

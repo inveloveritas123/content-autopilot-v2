@@ -11,7 +11,7 @@ Datenfluss
 3. Manuelle Idee anlegen (sync-SQL-Spiegel von api/ideas.py:1294-1335):
    find-or-create Source type='manual' → Stub-SourceItem → content_ideas-INSERT.
    State-Marker chat_variant_choice_pending=true in source_context (JSONB, migrationsfrei).
-4. Varianten generieren: generate_variants.apply(args=[idea_id]).get() in-process.
+4. Varianten generieren: generate_variants via run_inline() in-process.
 5. Varianten in den Chat: hook→1, story→2, these→3 (Reihenfolge wie api/ideas.py:1386).
    Fehler / no_valid_variants → Marker entfernen + Notiz.
 
@@ -237,10 +237,13 @@ def _run_generate_variants(idea_id: str) -> list[dict]:
     Gibt leere Liste zurück bei Fehler oder keinen Varianten.
     Upsert in p12_variants_task ist idempotent → Race mit Pump unschädlich.
     """
+    # `timeout=120` stand hier bis 06.08.2026 und war wirkungslos — siehe
+    # services/celery_inline.py.
     try:
+        from services.celery_inline import run_inline
         from tasks.p12_variants_task import generate_variants
 
-        result = generate_variants.apply(args=[idea_id]).get(timeout=120)
+        result = run_inline(generate_variants, args=[idea_id])
         if not isinstance(result, dict) or result.get("status") not in ("ok", "already_exists"):
             logger.info(
                 "p13_task: generate_variants not ok: %s",
