@@ -1242,7 +1242,7 @@ def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = N
         # als Anweisung markiert. Zu beenden ist nur das Gespraech, das der
         # Eingangs-Zug gerade eroeffnet hat. _cancel_active_session sendet die
         # Bestaetigung selbst — hier keine zweite Nachricht.
-        _cancel_active_session(tenant_id_str, chat_id)
+        _cancel_active_session(tenant_id_str, chat_id, bestaetigung=_NUR_MERKEN_TEXT)
 
 
 def _send_ki_profil(tenant_id: str, chat_id: int) -> None:
@@ -1435,8 +1435,37 @@ def _brainstorming_pick_idea(tenant_id: str, chat_id: int, idea_id: str) -> None
         )
 
 
-def _cancel_active_session(tenant_id: str, chat_id: int) -> bool:
+#: Was der Nutzer liest, wenn er das Interview aktiv abbricht (/abbrechen,
+#: [Abbrechen] an der Folgefrage). Ein Abbruch ist eine Korrektur — das Kreuz
+#: gehört dazu.
+_ABBRUCH_TEXT = (
+    "❌ Gespräch abgebrochen. Deine bisherigen Antworten bleiben im Gedächtnis, "
+    "aber ich frage nicht weiter.\n\n"
+    "Schick mir jederzeit eine Sprachnachricht oder tippe /help."
+)
+
+#: Was [🗄 Nur merken] am Eingangs-Zug beantwortet. Technisch derselbe Vorgang
+#: (die eben eröffnete Session wird beendet), fachlich das Gegenteil eines
+#: Abbruchs: der Nutzer WÄHLT den kürzeren Weg, er korrigiert nichts.
+#:
+#: ⚠️ Bis zum 06.08.2026 kam auf diesen Knopf `_ABBRUCH_TEXT` zurück. Louis las
+#: „❌ Gespräch abgebrochen" auf einen Knopf, der „🗄 Nur merken" heißt, und
+#: verstand es als Absturz („bei nur merken bricht der Chat ab"). Der Wortlaut
+#: des Knopfes und der Wortlaut der Antwort müssen dieselbe Sache meinen.
+_NUR_MERKEN_TEXT = (
+    "🗄 Gut — bleibt im Gedächtnis. Ich frage nicht weiter.\n\n"
+    "Schick mir jederzeit eine Sprachnachricht oder tippe /help."
+)
+
+
+def _cancel_active_session(
+    tenant_id: str, chat_id: int, *, bestaetigung: str | None = None
+) -> bool:
     """Beendet ein laufendes Interview auf Wunsch des Nutzers (C5).
+
+    `bestaetigung` überschreibt NUR den Text, nicht den Vorgang: das Beenden
+    bleibt eine Stelle. Zwei Kopien dieser UPDATE-Logik wären ein zweiter Ort,
+    an dem 'expired' zu 'closed' verrutschen kann (siehe Warnung unten).
 
     Solange eine bot_session aktiv ist, routet `tasks/telegram_task.py`
     (`_load_active_session`) JEDE eingehende Nachricht als Antwort auf die
@@ -1516,13 +1545,7 @@ def _cancel_active_session(tenant_id: str, chat_id: int) -> bool:
         )
         return False
 
-    _send_telegram_message(
-        chat_id,
-        "❌ Gespräch abgebrochen. Deine bisherigen Antworten bleiben im Gedächtnis, "
-        "aber ich frage nicht weiter.\n\n"
-        "Schick mir jederzeit eine Sprachnachricht oder tippe /help.",
-        tenant_id=tenant_id,
-    )
+    _send_telegram_message(chat_id, bestaetigung or _ABBRUCH_TEXT, tenant_id=tenant_id)
     return True
 
 

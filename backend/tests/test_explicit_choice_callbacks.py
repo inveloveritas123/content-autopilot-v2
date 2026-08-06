@@ -367,6 +367,25 @@ class TestCancelReleasesMessage:
         assert result is True
         p13._detach_source_log.assert_not_called()
 
+    def test_abbruch_behaelt_seinen_eigenen_wortlaut(self):
+        """Der Default darf nicht mitwandern, wenn ein Aufrufer ihn überschreibt.
+
+        `bestaetigung` ist optional — ohne Angabe bleibt [❌ Abbrechen] und
+        /abbrechen bei der Abbruch-Sprache.
+        """
+        db = MagicMock()
+        db.__enter__ = MagicMock(return_value=db)
+        db.__exit__ = MagicMock(return_value=False)
+        db.execute.return_value.fetchall.return_value = [("sess-1", None)]
+
+        with (
+            patch.object(tg, "sync_session_factory", return_value=db),
+            patch.object(tg, "_send_telegram_message") as send,
+        ):
+            tg._cancel_active_session(TENANT, CHAT)
+
+        assert "abgebrochen" in send.call_args.args[1].lower()
+
     def test_nichts_abzubrechen_gibt_nichts_frei(self):
         p13, result, _db = self._cancel([])
 
@@ -410,7 +429,33 @@ class TestEntryKeepBeendetDasGespraech:
     def test_tap_beendet_die_aktive_session(self):
         abbrecher = MagicMock(return_value=True)
         _druecke_entry_keep(abbrecher)
-        abbrecher.assert_called_once_with(TENANT, CHAT)
+        abbrecher.assert_called_once_with(TENANT, CHAT, bestaetigung=tg._NUR_MERKEN_TEXT)
+
+    def test_bestaetigung_kommt_im_register_des_knopfes(self):
+        """Der Knopf heißt „Nur merken" — die Antwort darf kein Abbruch sein.
+
+        ⚠️ Bis zum 06.08.2026 kam hier `_ABBRUCH_TEXT` zurück: „❌ Gespräch
+        abgebrochen." Louis hat das am 06.08. als Fehlfunktion gemeldet („bei
+        nur merken bricht der Chat ab") — technisch lief alles richtig, gelesen
+        hat er einen Absturz. Der Wortlaut IST hier das Verhalten.
+        """
+        db = MagicMock()
+        db.__enter__ = MagicMock(return_value=db)
+        db.__exit__ = MagicMock(return_value=False)
+        db.execute.return_value.fetchall.return_value = [("sess-1", None)]
+
+        with (
+            patch.object(tg, "sync_session_factory", return_value=db),
+            patch.object(tg, "_send_telegram_message") as send,
+        ):
+            tg._cancel_active_session(TENANT, CHAT, bestaetigung=tg._NUR_MERKEN_TEXT)
+
+        gesendet = send.call_args.args[1]
+        # Dieselbe Sprache wie der Schwesterknopf `cmd:msg_keep`
+        # („🗄 Gut — bleibt im Gedächtnis."): Behalten, nicht Abbrechen.
+        assert "gedächtnis" in gesendet.lower()
+        assert "abgebrochen" not in gesendet.lower()
+        assert "❌" not in gesendet
 
     def test_tap_sendet_keine_zweite_nachricht(self):
         """_cancel_active_session bestaetigt selbst — zwei Nachrichten waeren

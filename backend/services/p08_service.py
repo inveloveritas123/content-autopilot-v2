@@ -220,8 +220,25 @@ def _kapseln(user_text: str) -> str:
     return f"<user_input>{_USER_INPUT_MARKER.sub('', user_text)}</user_input>"
 
 
-def _get_recent_messages(messages: list, max_messages: int = 40) -> str:
+def _get_recent_messages(
+    messages: list, aktuelle_antwort: str | None = None, max_messages: int = 40
+) -> str:
     """Gesprächsverlauf DIESER Session — mit den echten Sätzen des Nutzers.
+
+    ⚠️ Ein Eintrag in `messages` trägt Züge aus ZWEI Runden: `user_transcript`
+    ist die Antwort, die die Runde auslöste, `bot` die daraus erzeugte NEUE
+    Frage. Der Nutzertext ist also ÄLTER als der Bot-Text daneben. Bis zum
+    06.08.2026 stand hier `Bot:` vor `Nutzer:` — jedes Paar ging verdreht in den
+    Prompt, das Modell las A1 als Antwort auf Q2.
+
+    `aktuelle_antwort` ist der Satz, auf den der Bot gerade antworten soll. Er
+    steht noch nicht in `messages` (angehängt wird erst in `_persistiere_runde`,
+    also NACH dem LLM-Aufruf) und erreichte das Modell vorher nur als
+    `features_json`. Belegt an Louis' Lauf vom 06.08.2026, 12:25 UTC: sein
+    Einspruch „Ich habe doch gerade erklärt, welches Problem wir gelöst haben"
+    kam als `{"topic_keywords": ["erklärt", "Problem", "gelöst"]}` an — das liest
+    sich wie ein Sachbeitrag, und der Bot fragte munter weiter. Genau das war das
+    „er versteht mich erst eine Antwort später".
 
     Schicht-3 wurde neu gezogen, nicht gestrichen (Entscheid Louis, 04.08.2026).
     Vorher bekam das LLM ausschließlich `bot` + `user_features_summary`, also:
@@ -243,20 +260,28 @@ def _get_recent_messages(messages: list, max_messages: int = 40) -> str:
     `max_messages` ist eine Ausreißer-Bremse, keine Gesprächsgrenze: bei den
     vorgesehenen 3–5 Runden greift sie nie.
     """
-    if not messages:
-        return "(Noch keine Nachrichten)"
-    recent = messages[-max_messages:]
     parts = []
-    for m in recent:
-        bot_text = m.get("bot", "")
+    for m in messages[-max_messages:] if messages else []:
         user_text = (m.get("user_transcript") or "").strip()
         if user_text:
-            nutzer = _kapseln(user_text)
+            parts.append(f"Nutzer: {_kapseln(user_text)}")
         else:
-            # Altbestand ohne Rohtext (vor #19) bzw. die Opener-Zeile.
+            # Altbestand ohne Rohtext (vor #19). Die Opener-Zeile hat weder das
+            # eine noch das andere — sie bekommt gar keine Nutzer-Zeile, denn zu
+            # diesem Zeitpunkt hatte der Nutzer noch nichts gesagt.
             summary = m.get("user_features_summary")
-            nutzer = summary if summary else "(noch keine Antwort)"
-        parts.append(f"Bot: {bot_text}\nNutzer: {nutzer}")
+            if summary:
+                parts.append(f"Nutzer: {summary}")
+        bot_text = m.get("bot", "")
+        if bot_text:
+            parts.append(f"Bot: {bot_text}")
+
+    frisch = (aktuelle_antwort or "").strip()
+    if frisch:
+        parts.append(f"Nutzer: {_kapseln(frisch)}")
+
+    if not parts:
+        return "(Noch keine Nachrichten)"
     return "\n\n".join(parts)
 
 
@@ -853,7 +878,10 @@ def p08_response(
 
     # 4. Build LLM call
     features_json = json.dumps(features)
-    recent_messages = _get_recent_messages(messages_list)
+    # `raw_transcript` mitgeben: er landet erst in `_persistiere_runde` (nach
+    # diesem Aufruf) in `messages_list` — ohne ihn fehlt dem Modell ausgerechnet
+    # der Satz, auf den es antworten soll.
+    recent_messages = _get_recent_messages(messages_list, aktuelle_antwort=raw_transcript)
 
     voice_profile = ""
     try:

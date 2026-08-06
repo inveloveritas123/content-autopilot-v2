@@ -742,9 +742,22 @@ class TestP08Response:
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.call_pipeline_llm")
     @patch("services.p08_service._load_p08_prompt")
-    def test_raw_transcript_never_in_prompt(self, mock_load_prompt, mock_call_llm, mock_db_factory):
-        """#19a Schicht-3-Wächter: raw_transcript darf NIE in den P08-Prompt gelangen."""
-        SECRET = "GEHEIMER_ROHTEXT_DER_NICHT_AN_DAS_LLM_GEHT"
+    def test_raw_transcript_erreicht_den_prompt_nur_gekapselt(
+        self, mock_load_prompt, mock_call_llm, mock_db_factory
+    ):
+        """Schicht 3 in der Fassung vom 04.08.2026: der Rohtext DIESER Session
+        darf in den Prompt — aber ausschließlich in `<user_input>`.
+
+        ⚠️ Dieser Test hieß bis zum 06.08.2026 `test_raw_transcript_never_in_prompt`
+        (#19a) und verlangte das Gegenteil. Überholt war er schon seit dem
+        Entscheid vom 04.08. (`_get_recent_messages`: „Schicht-3 wurde neu
+        gezogen, nicht gestrichen") — der Verlauf trug die Rohtexte längst.
+        Grün blieb er trotzdem, weil ausgerechnet die LAUFENDE Antwort das
+        Modell nie erreichte. Genau das hat Louis am 06.08. als „er versteht
+        meine Eingabe erst um +1 Antwort verzögert" gemeldet: der Test hat den
+        Fehler bewacht, statt ihn zu finden.
+        """
+        SECRET = "DER_ROHTEXT_DIESER_RUNDE"
         prompt = MagicMock()
         prompt.system_prompt = "system"
         prompt.user_prompt_template = (
@@ -777,7 +790,8 @@ class TestP08Response:
         p08_response(session_id="sess-1", features={"key": "value"}, raw_transcript=SECRET)
 
         user_content = mock_call_llm.call_args.kwargs["user_content"]
-        assert SECRET not in user_content
+        assert SECRET in user_content, "der Satz, auf den der Bot antworten soll, fehlte im Prompt"
+        assert f"<user_input>{SECRET}</user_input>" in user_content
 
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.call_pipeline_llm")
