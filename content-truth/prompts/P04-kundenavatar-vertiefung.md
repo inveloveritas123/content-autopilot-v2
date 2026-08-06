@@ -126,6 +126,12 @@ Der exakte Punkt an dem jemand von "Ich sollte mal..." zu "Ich muss jetzt." kipp
 
 Antworte AUSSCHLIESSLICH mit einem validen JSON-Objekt. Kein einleitender Text, keine Erklärung, keine Markdown-Backticks. Nur das JSON.
 
+**Die Überschriften unter „Output-Felder" sind Lesehilfen, KEINE Feldnamen.** Die Top-Level-Keys des JSON lauten exakt:
+
+`identitaet` · `innenwelt` · `wunschbild` · `content_trigger` · `sprache_der_zielgruppe` · `alltagsszenen` · `blockaden` · `ausloesemoment` — dazu optional `avatar_basis`.
+
+Kleinbuchstaben, Unterstriche, keine Umlaute (`identitaet`, nicht `IDENTITÄT`), keine Leerzeichen (`sprache_der_zielgruppe`, nicht `SPRACHE DER ZIELGRUPPE`), keine Gliederungsnummern. Wer die Überschriften abschreibt, erzeugt ein Dokument, das die Pipeline nicht lesen kann.
+
 Markiere Hypothesen mit [HYPOTHESE] am Ende des Strings.
 
 WICHTIG zu Array-Feldern: Felder die im Schema/Beispiel als JSON-Array (`[...]`) definiert sind, MÜSSEN als Array mit einzelnen String-Items geliefert werden — NIE als ein einziger zusammenhängender Fließtext-String. Auch wenn der Inhalt narrativ zusammenhängt: lieber in 3-5 getrennte Items splitten als zu einem Absatz verschmelzen. Das gilt für ALLE Array-Felder im Output (scroll_stopper, resonanz_saetze, vertrauens_trigger, abstoss_trigger, redewendungen, tabu_woerter, szenen, wiederkehrende_muster, glaubenssaetze, denkfehler, schutzverhalten, trigger_events, etc.).
