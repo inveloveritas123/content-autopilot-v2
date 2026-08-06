@@ -27,6 +27,7 @@ from sqlalchemy.orm import sessionmaker
 
 from config import settings
 from models.base import sync_session_factory
+from services.anweisungs_marker import MARKER_PATCH_JSON
 from services.voice_transcription import (
     TranscriptionError,
     TranscriptionResult,
@@ -271,7 +272,10 @@ def _verwerfe_session(session_id: str) -> None:
 #: Bewusst in `metadata`, nicht in `classification` — dort steht eine
 #: INHALTLICHE Kategorie, die store_chunk(classify=True) selbst vergibt und die
 #: values_backfill_task auswertet.
-_ANWEISUNGS_MARKER = '{"intent": "start_instruction"}'
+#:
+#: Wert und Auswerter leben in services/anweisungs_marker.py — hier steht nur noch
+#: der Zeiger, damit Setzer und Filter nicht auseinanderlaufen koennen.
+_ANWEISUNGS_MARKER = MARKER_PATCH_JSON
 
 
 def _markiere_chunk_als_anweisung(tenant_id: str, log_id: str) -> bool:
