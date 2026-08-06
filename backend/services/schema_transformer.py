@@ -270,6 +270,59 @@ def normalisiere_top_level_keys(prompt_key: str, payload: dict) -> tuple[dict, l
     return doc, umbenennungen
 
 
+def entferne_geheilte_luecken(prompt_key: str, payload: dict) -> tuple[dict, list]:
+    """Streicht Schema-Lücken aus ``_meta.luecken``, die die Validierung nicht mehr meldet.
+
+    Nötig nach einer Reparatur am Bestand: `normalisiere_top_level_keys()` behebt
+    den Strukturbruch, aber die bei der Erzeugung protokollierten Lücken bleiben
+    im ``_meta`` stehen. `is_canonical()` liest genau diese Liste — die reparierte
+    Row gälte also weiterhin als kaputt, und der Wächter meldete bei jedem Lauf
+    grundlos "Re-Run empfohlen". Ein Wächter, der ohne Anlass meckert, wird
+    ignoriert; genau so wurde das Lücken-Signal ursprünglich wertlos.
+
+    Entfernt wird ausschließlich, was die aktuelle Validierung NICHT mehr meldet.
+    Freitext-Notizen (ohne ``schema: ``-Präfix) bleiben unangetastet — sie sind
+    inhaltliche Hinweise und gehen die Strukturprüfung nichts an.
+
+    Returns:
+        (doc, entfernt): ``doc`` mit bereinigter Lückenliste, ``entfernt`` als
+        Liste der gestrichenen Einträge.
+    """
+    if not isinstance(payload, dict):
+        return {}, []
+
+    meta = payload.get("_meta")
+    if not isinstance(meta, dict) or not meta.get("luecken"):
+        return payload, []
+
+    try:
+        aktuell = {f"schema: {e}" for e in validate_canonical(prompt_key, payload)}
+    except Exception as exc:
+        logger.error(
+            "entferne_geheilte_luecken(%s): Validierung nicht moeglich (%s: %s) — "
+            "Lueckenliste bleibt unveraendert.",
+            prompt_key,
+            type(exc).__name__,
+            exc,
+        )
+        return payload, []
+
+    behalten, entfernt = [], []
+    for luecke in meta["luecken"]:
+        ist_schema_befund = isinstance(luecke, str) and luecke.startswith("schema: ")
+        if ist_schema_befund and luecke not in aktuell:
+            entfernt.append(luecke)
+        else:
+            behalten.append(luecke)
+
+    if not entfernt:
+        return payload, []
+
+    doc = dict(payload)
+    doc["_meta"] = {**meta, "luecken": behalten}
+    return doc, entfernt
+
+
 # ---------------------------------------------------------------------------
 # Deklarative Mapping-Tabellen
 # ---------------------------------------------------------------------------

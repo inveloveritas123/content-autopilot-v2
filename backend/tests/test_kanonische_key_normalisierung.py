@@ -182,6 +182,81 @@ LOUIS_KEYS_ECHT = [
     "AUSLOESEMOMENT",
 ]
 
+#: Dieselben acht Felder in kanonischer Schreibweise — der Zustand NACH der Reparatur.
+LOUIS_KEYS_ECHT_KLEIN = [
+    "identitaet",
+    "innenwelt",
+    "wunschbild",
+    "content_trigger",
+    "sprache_der_zielgruppe",
+    "alltagsszenen",
+    "blockaden",
+    "ausloesemoment",
+]
+
+
+class TestGeheilteLueckenVerschwinden:
+    """Nach der Reparatur muss die Lückenliste mitziehen — sonst meckert der Wächter grundlos.
+
+    Prod-Befund 06.08.2026, direkt nach der Migration: die drei reparierten Rows
+    hatten 0 echte Wurzelfehler, trugen aber weiter ihre acht alten `luecken`.
+    `is_canonical()` las die alte Liste und meldete sie dauerhaft als kaputt.
+    """
+
+    def test_veraltete_schema_luecke_verschwindet(self):
+        payload = {k: {} for k in LOUIS_KEYS_ECHT_KLEIN}
+        payload["_meta"] = {
+            "prompt_version": "p04-v1.0",
+            "luecken": ["schema: (root): 'identitaet' is a required property"],
+        }
+        doc, entfernt = st.entferne_geheilte_luecken("p04", payload)
+
+        assert doc["_meta"]["luecken"] == []
+        assert len(entfernt) == 1
+
+    def test_noch_bestehende_schema_luecke_bleibt(self):
+        """Was die Validierung weiterhin meldet, darf nicht weggeputzt werden."""
+        payload = {"_meta": {"prompt_version": "p04-v1.0", "luecken": []}}
+        payload["_meta"]["luecken"] = ["schema: (root): 'identitaet' is a required property"]
+        doc, entfernt = st.entferne_geheilte_luecken("p04", payload)
+
+        assert doc["_meta"]["luecken"] == ["schema: (root): 'identitaet' is a required property"]
+        assert entfernt == []
+
+    def test_freitext_luecke_bleibt_immer(self):
+        """Inhaltliche Notizen sind keine Schema-Befunde und gehen die Validierung nichts an."""
+        payload = {k: {} for k in LOUIS_KEYS_ECHT_KLEIN}
+        payload["_meta"] = {
+            "prompt_version": "p04-v1.0",
+            "luecken": ["Kein Transkript verfügbar, Ableitung aus P01"],
+        }
+        doc, entfernt = st.entferne_geheilte_luecken("p04", payload)
+
+        assert doc["_meta"]["luecken"] == ["Kein Transkript verfügbar, Ableitung aus P01"]
+        assert entfernt == []
+
+    def test_ohne_luecken_bleibt_alles_stehen(self):
+        payload = {k: {} for k in LOUIS_KEYS_ECHT_KLEIN}
+        payload["_meta"] = {"prompt_version": "p04-v1.0"}
+        doc, entfernt = st.entferne_geheilte_luecken("p04", payload)
+
+        assert entfernt == []
+        assert doc["_meta"] == {"prompt_version": "p04-v1.0"}
+
+    def test_reparierte_row_besteht_danach_den_waechter(self):
+        """Die Kette: umbenannt → Lücken bereinigt → is_canonical sagt wieder True."""
+        payload = {k: {} for k in LOUIS_KEYS_ECHT}
+        payload["_meta"] = {
+            "prompt_version": "p04-v1.0",
+            "luecken": list(LOUIS_META_ECHT["luecken"]),
+        }
+
+        doc, _ = st.normalisiere_top_level_keys("p04", payload)
+        doc, entfernt = st.entferne_geheilte_luecken("p04", doc)
+
+        assert len(entfernt) == 8
+        assert cp.is_canonical(doc) is True
+
 
 class TestFinalizeCanonicalNormalisiert:
     def test_versalien_erzeugen_keine_wurzel_luecke_mehr(self):
