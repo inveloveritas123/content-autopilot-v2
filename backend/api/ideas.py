@@ -488,7 +488,15 @@ async def submit_answer(
 
 
 def _run_p12_p12b_pipeline(tenant_id, idea_id, answers_list, voice_payload, avatar_payload):
-    """Sync-Wrapper um P12 → P12b Pipeline (läuft in asyncio.to_thread)."""
+    """Sync-Wrapper um P12 → P12b Pipeline.
+
+    Zwei Aufrufer mit verschiedenen Prozessarten: der API-Endpunkt unten (via
+    `asyncio.to_thread`) und `tasks.session_post_task` im Celery-Worker. Die
+    In-Process-Aufrufe laufen deshalb ueber `run_inline` — `.apply().get()`
+    wirft im Worker `RuntimeError: Never call result.get() within a task!`,
+    im FastAPI-Prozess nicht. Begruendung: services/celery_inline.py.
+    """
+    from services.celery_inline import run_inline
     from tasks.p12_task import run_p12
     from tasks.p12b_task import run_p12b
 
@@ -501,7 +509,7 @@ def _run_p12_p12b_pipeline(tenant_id, idea_id, answers_list, voice_payload, avat
 
     # P12 ausführen
     try:
-        p12_result = run_p12.apply(args=[tenant_id, idea_id, answers_dict]).get()
+        p12_result = run_inline(run_p12, args=[tenant_id, idea_id, answers_dict])
     except MaxRetriesExceededError as exc:
         logger.error("_run_p12_p12b_pipeline: P12 MaxRetriesExceeded: %s", exc)
         return {"status": "error", "reason": "failed", "p12_run_id": None}
@@ -519,9 +527,9 @@ def _run_p12_p12b_pipeline(tenant_id, idea_id, answers_list, voice_payload, avat
 
     # P12b — erste Iteration (loop_iteration=0)
     try:
-        p12b_result = run_p12b.apply(
-            args=[tenant_id, p12_output, voice_payload, avatar_payload, 0]
-        ).get()
+        p12b_result = run_inline(
+            run_p12b, args=[tenant_id, p12_output, voice_payload, avatar_payload, 0]
+        )
     except MaxRetriesExceededError as exc:
         logger.warning(
             "_run_p12_p12b_pipeline: P12b MaxRetriesExceeded, P12-Output direkt: %s", exc
@@ -547,7 +555,7 @@ def _run_p12_p12b_pipeline(tenant_id, idea_id, answers_list, voice_payload, avat
         richtung = p12b_result.get("richtung_fuer_p12", "")
         answers_with_richtung = {**answers_dict, "_richtung_fuer_p12": richtung}
         try:
-            p12_result2 = run_p12.apply(args=[tenant_id, idea_id, answers_with_richtung]).get()
+            p12_result2 = run_inline(run_p12, args=[tenant_id, idea_id, answers_with_richtung])
         except MaxRetriesExceededError as exc:
             logger.warning("_run_p12_p12b_pipeline: P12-Loop MaxRetriesExceeded: %s", exc)
             p12_result2 = None
@@ -557,9 +565,9 @@ def _run_p12_p12b_pipeline(tenant_id, idea_id, answers_list, voice_payload, avat
             p12_loop_output = p12_result2["output"]
             design_notes_output = p12_loop_output
             try:
-                p12b_result = run_p12b.apply(
-                    args=[tenant_id, p12_loop_output, voice_payload, avatar_payload, 1]
-                ).get()
+                p12b_result = run_inline(
+                    run_p12b, args=[tenant_id, p12_loop_output, voice_payload, avatar_payload, 1]
+                )
             except MaxRetriesExceededError:
                 p12b_result = {
                     "status": "loop_break",
