@@ -8,21 +8,47 @@ RAG-Abruf. Diese Datei haelt beide Seiten zusammen.
 
 import asyncio
 import json
+import os
+import sys
+import types
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-# Modulweiter Vorab-Import: registriert das ECHTE `tasks`-Paket in sys.modules,
-# bevor TestSetzerZiehtAusDemModul (unten) ueber tests._telegram_task_env einen
-# pfadlosen `tasks`-Stub anlegt. `_telegram_task_env._stub()` ersetzt ein bereits
-# vorhandenes Modul NICHT — ohne diesen Vorab-Import wuerde der spaetere Test in
-# dieser Klasse `tasks.p06_profile_extractor_task` je nach Sammelreihenfolge nicht
-# mehr importieren koennen (Muster wie in test_p08_gespraech.py, test_p14_entry.py).
-import tasks.p06_profile_extractor_task  # noqa: F401
 from services.anweisungs_marker import (
     INTENT_START_INSTRUCTION,
     MARKER_PATCH_JSON,
     SQL_OHNE_ANWEISUNGEN,
 )
+
+# `tests._telegram_task_env` (siehe TestSetzerZiehtAusDemModul unten) legt
+# `sys.modules["tasks"]` als pfadloses `types.ModuleType` an, FALLS "tasks" noch nicht
+# registriert ist — der `_stub()`-Guard dort ersetzt einen bereits vorhandenen Eintrag
+# nicht. Ohne Gegenmassnahme haengt der spaetere `from tasks.p06_profile_extractor_task
+# import run_for_tenant` (unten) an der Sammelreihenfolge: laeuft irgendeine Datei mit
+# demselben Muster vor dieser hier, bricht der Import mit `ModuleNotFoundError: 'tasks'
+# is not a package` (Task-3-Review, 2026-08-07).
+#
+# Ein Vorwaerm-Import in conftest.py (immer zuerst geladen) wurde geprueft und
+# verworfen: er zieht transitiv das ECHTE `config`-Modul (ueber
+# tasks.celery_app -> config, models.base -> config) und unterlaeuft damit
+# test_admin_auth.py:102 (`if "config" not in sys.modules: ...`) VOR dessen eigenem
+# Stub — NameError: `_FakeSettings` in der gesamten Suite. Ein Hand-Loader per
+# `importlib.util.spec_from_file_location` muesste denselben Import-Graphen
+# (tasks.celery_app, models.base, config, services.*) von Hand nachbauen und bei jeder
+# kuenftigen Import-Aenderung in p06 mitgepflegt werden.
+#
+# Stattdessen: `sys.modules["tasks"]` bekommt ein echtes `__path__`, falls es fehlt —
+# genau das Muster, das `_telegram_task_env.py` bereits fuer `models` verwendet
+# (Zeile 114-117 dort). Damit loest der normale Python-Importmechanismus
+# `tasks.p06_profile_extractor_task` (und dessen eigene Importe) selbst auf, ganz
+# gleich ob "tasks" hier zuerst als echtes Paket oder als fremder Stub auftaucht —
+# und ganz gleich, was p06 kuenftig zusaetzlich importiert.
+if "tasks" not in sys.modules:
+    sys.modules["tasks"] = types.ModuleType("tasks")
+if not hasattr(sys.modules["tasks"], "__path__"):
+    sys.modules["tasks"].__path__ = [
+        os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "tasks"))
+    ]
 
 
 class TestMarkerUndAuswerterPassenZusammen:
