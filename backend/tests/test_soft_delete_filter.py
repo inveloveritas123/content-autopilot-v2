@@ -6,8 +6,11 @@ generierte SQL ab, messen nicht gegen eine echte Datenbank.
 
 from __future__ import annotations
 
+import ast
 import asyncio
+import io
 import re
+import tokenize
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -312,3 +315,113 @@ class TestMemoryVizNutztDieKonstante:
             )
         )
         assert SQL_NICHT_GELOESCHT in db.queries[0]
+
+
+_FROM_JOIN_RE = re.compile(r"\b(FROM|JOIN)\s+memory_chunks\b")
+
+# Verifiziert per grep am 07.08.2026 gegen den fertigen Zustand dieser Runde (Tasks 1-8).
+# Neue oder verschwundene Stelle -> Test wird rot -> bewusst nachziehen, nicht ignorieren.
+_READER_FILES = {
+    "api/memory.py": 5,
+    "api/memory_viz.py": 7,
+    "services/embedding_service.py": 1,
+    "tasks/p06_profile_extractor_task.py": 1,
+    "tasks/values_backfill_task.py": 1,
+    "tasks/memory_backfill_task.py": 2,
+    "tasks/embedding_health_task.py": 1,
+    "tasks/drift_monitor_task.py": 3,
+    "tasks/reembed_task.py": 6,
+    # Hard-Delete-Cron: adressiert per deletion_request_id, kein Lesefilter noetig.
+    "tasks/deletion_purge_task.py": 1,
+}
+
+
+def _backend_dir() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def _quelltext_ohne_kommentare_und_docstrings(pfad: Path) -> str:
+    """Liest eine Datei fuer den Allowlist-Scan, mit ausgeblendeten Kommentaren/Docstrings.
+
+    Notwendig, weil `services/soft_delete_filter.py` (Modul-Docstring) und
+    `services/anweisungs_marker.py` (#-Kommentarblock) woertlich "...memory_chunks a
+    JOIN memory_chunks b..." als Selbst-Join-Beispiel dokumentieren (verifiziert
+    07.08.2026 beim Bau dieses Tests) -- ohne dieses Ausblenden meldet
+    test_keine_weiteren_dateien_lesen_memory_chunks diese beiden Dateien faelschlich
+    als neue Leser, obwohl dort keine Zeile Code memory_chunks liest. Echte
+    SQL-String-Literale (die tatsaechlichen Fundstellen in den Allowlist-Dateien)
+    bleiben unberuehrt: sie sind weder Kommentare noch Docstrings.
+    """
+    quelltext = pfad.read_text()
+    zeilen = quelltext.splitlines(keepends=True)
+
+    def _leeren(lineno: int, col: int, end_lineno: int, end_col: int) -> None:
+        if lineno == end_lineno:
+            zeile = zeilen[lineno - 1]
+            zeilen[lineno - 1] = zeile[:col] + " " * (end_col - col) + zeile[end_col:]
+            return
+        erste = zeilen[lineno - 1]
+        nl0 = "\n" if erste.endswith("\n") else ""
+        zeilen[lineno - 1] = erste[:col] + " " * (len(erste) - len(nl0) - col) + nl0
+        for i in range(lineno, end_lineno - 1):
+            mitte = zeilen[i]
+            nl = "\n" if mitte.endswith("\n") else ""
+            zeilen[i] = " " * (len(mitte) - len(nl)) + nl
+        letzte = zeilen[end_lineno - 1]
+        zeilen[end_lineno - 1] = " " * end_col + letzte[end_col:]
+
+    for tok in tokenize.generate_tokens(io.StringIO(quelltext).readline):
+        if tok.type == tokenize.COMMENT:
+            _leeren(tok.start[0], tok.start[1], tok.end[0], tok.end[1])
+
+    baum = ast.parse(quelltext)
+    for node in ast.walk(baum):
+        if not isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        if not node.body or not isinstance(node.body[0], ast.Expr):
+            continue
+        wert = getattr(node.body[0], "value", None)
+        if isinstance(wert, ast.Constant) and isinstance(wert.value, str):
+            docstring = node.body[0]
+            _leeren(
+                docstring.lineno,
+                docstring.col_offset,
+                docstring.end_lineno,
+                docstring.end_col_offset,
+            )
+
+    return "".join(zeilen)
+
+
+class TestInventarBekannteFundstellen:
+    def test_from_join_anzahl_pro_datei_unveraendert(self):
+        for rel_path, expected in _READER_FILES.items():
+            src = _quelltext_ohne_kommentare_und_docstrings(_backend_dir() / rel_path)
+            found = len(_FROM_JOIN_RE.findall(src))
+            assert found == expected, (
+                f"{rel_path}: {found} FROM/JOIN-memory_chunks-Stellen gefunden, "
+                f"{expected} erwartet. Neue oder entfernte Stelle -- Zahl hier bewusst "
+                f"nachziehen, nachdem der Filter geprueft wurde."
+            )
+
+    def test_keine_weiteren_dateien_lesen_memory_chunks(self):
+        gefunden = set()
+        for sub in ("api", "services", "tasks"):
+            for path in (_backend_dir() / sub).rglob("*.py"):
+                if "__pycache__" in path.parts:
+                    continue
+                rel = str(path.relative_to(_backend_dir()))
+                if _FROM_JOIN_RE.search(_quelltext_ohne_kommentare_und_docstrings(path)):
+                    gefunden.add(rel)
+        neu = gefunden - set(_READER_FILES)
+        assert not neu, f"Neue memory_chunks-Leser ohne Allowlist-Eintrag: {sorted(neu)}"
+
+    def test_kein_handgeschriebenes_literal_statt_der_konstante(self):
+        for rel_path in _READER_FILES:
+            if rel_path == "tasks/deletion_purge_task.py":
+                continue  # adressiert per deletion_request_id, kein Lesefilter
+            src = _quelltext_ohne_kommentare_und_docstrings(_backend_dir() / rel_path)
+            assert "deleted_at IS NULL" not in src, (
+                f"{rel_path} traegt ein handgeschriebenes 'deleted_at IS NULL' statt "
+                f"SQL_NICHT_GELOESCHT zu importieren."
+            )
