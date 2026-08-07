@@ -9,8 +9,15 @@ RAG-Abruf. Diese Datei haelt beide Seiten zusammen.
 import asyncio
 import json
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+# Modulweiter Vorab-Import: registriert das ECHTE `tasks`-Paket in sys.modules,
+# bevor TestSetzerZiehtAusDemModul (unten) ueber tests._telegram_task_env einen
+# pfadlosen `tasks`-Stub anlegt. `_telegram_task_env._stub()` ersetzt ein bereits
+# vorhandenes Modul NICHT — ohne diesen Vorab-Import wuerde der spaetere Test in
+# dieser Klasse `tasks.p06_profile_extractor_task` je nach Sammelreihenfolge nicht
+# mehr importieren koennen (Muster wie in test_p08_gespraech.py, test_p14_entry.py).
+import tasks.p06_profile_extractor_task  # noqa: F401
 from services.anweisungs_marker import (
     INTENT_START_INSTRUCTION,
     MARKER_PATCH_JSON,
@@ -152,3 +159,27 @@ class TestSearchSimilarFiltertPerDefault:
             )
 
         assert aufrufe["include_instructions"] is True
+
+
+class TestVoiceProfilScanUeberspringtAnweisungen:
+    @patch("tasks.p06_profile_extractor_task.sync_session_factory")
+    def test_p06_stellt_das_praedikat_in_seine_abfrage(self, mock_factory):
+        """Ohne Filter lernt das Voice-Profil den Klang von Steueranweisungen.
+
+        „Ich will einen neuen LinkedIn-Post machen" ist kein Sprachbeispiel des Nutzers,
+        sondern ein Knopfdruck in Worten. Rot, sobald das Praedikat aus dem SELECT faellt.
+        """
+        from tasks.p06_profile_extractor_task import run_for_tenant
+
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        # Leeres Ergebnis => run_for_tenant kehrt direkt nach dem ersten SELECT zurueck.
+        ctx.execute.return_value.fetchall.return_value = []
+        mock_factory.return_value = ctx
+
+        with patch("services.llm.set_llm_tenant"):
+            run_for_tenant("tenant-1")
+
+        erstes_sql = str(ctx.execute.call_args_list[0].args[0])
+        assert SQL_OHNE_ANWEISUNGEN in erstes_sql
