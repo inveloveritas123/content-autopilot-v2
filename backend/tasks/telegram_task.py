@@ -284,9 +284,10 @@ def _markiere_chunk_als_anweisung(tenant_id: str, log_id: str) -> bool:
     Die Nachricht liegt bereits als Memory-Chunk im Gedaechtnis —
     `_store_chunk_async` laeuft VOR allen Weichen. Damit ist der Chunk fuer
     spaetere Konsumenten filterbar. Das Filtern selbst ist NICHT Teil dieser
-    Arbeit: `p06_profile_extractor_task` liest das Merkmal heute noch nicht,
-    die Anweisung fliesst also weiterhin ins Voice-Profil. Hier entsteht nur
-    das Merkmal.
+    Arbeit: heute wird das Merkmal per Default von `search_similar` (RAG),
+    von `p06_profile_extractor_task` (Voice-Profil) und von `memory_picker`
+    ausgewertet — die eine Wahrheit dazu liegt in
+    `services/anweisungs_marker.py`. Hier entsteht nur das Merkmal.
 
     ⚠️ Adressiert ueber `source_ref`, NICHT ueber die zurueckgegebene Chunk-ID:
     `_store_chunk_async` gibt laut eigenem Docstring nur die ID des ERSTEN

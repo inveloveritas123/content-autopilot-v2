@@ -1565,7 +1565,18 @@ def _memory_search_sync(tenant_id: str, query: str, limit: int = 5) -> list[dict
         try:
             async with SessionMaker() as db:
                 return await search_similar(
-                    db, tenant_id=tenant_id, query_text=query, limit=limit, min_similarity=0.0
+                    db,
+                    tenant_id=tenant_id,
+                    query_text=query,
+                    limit=limit,
+                    min_similarity=0.0,
+                    # Diese Stelle ist eine ANSICHT, kein Erzeuger: der einzige Aufrufer ist
+                    # der /such-Zweig in _try_memory_command, und das Ergebnis geht direkt
+                    # als Nachricht an den Nutzer. Sie ist das Telegram-Gegenstueck zu
+                    # /memory/search und muss wie dieses den Rohbestand zeigen — sonst waere
+                    # Markiertes in keinem Kanal mehr sichtbar, den Louis taeglich benutzt,
+                    # und ein Markierungsfehler fiele niemandem mehr auf.
+                    include_instructions=True,
                 )
         finally:
             await engine.dispose()

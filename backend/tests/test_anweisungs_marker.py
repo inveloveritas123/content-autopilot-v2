@@ -9,6 +9,7 @@ RAG-Abruf. Diese Datei haelt beide Seiten zusammen.
 import asyncio
 import json
 import os
+import re
 import sys
 import types
 from types import SimpleNamespace
@@ -63,12 +64,17 @@ class TestMarkerUndAuswerterPassenZusammen:
         assert f"'{INTENT_START_INSTRUCTION}'" in SQL_OHNE_ANWEISUNGEN
 
     def test_filter_faengt_chunks_ohne_metadata_nicht_mit_ab(self):
-        """`metadata` ist nullable — ohne COALESCE ergibt der Vergleich NULL.
+        """Der COALESCE-Rueckfallwert muss der LEERE String sein, kein anderer.
 
-        Eine Zeile mit `metadata IS NULL` faellt dann stumm aus JEDEM Ergebnis, und der
-        Filter wird von einem Ausschluss zu einer Loeschung. Rot, sobald COALESCE fehlt.
+        `metadata` ist nullable — ohne COALESCE ergibt der Vergleich NULL, und eine
+        Zeile mit `metadata IS NULL` faellt stumm aus JEDEM Ergebnis (Ausschluss wird
+        Loeschung). Ein bloßes „COALESCE( ist da" reicht nicht: ein Rueckfallwert
+        gleich `INTENT_START_INSTRUCTION` waere fuer jede solche Zeile
+        `'start_instruction' <> 'start_instruction'` → FALSE — derselbe Fehlermodus,
+        nur unsichtbar hinter einem vorhandenen COALESCE. Rot, sobald der Rueckfallwert
+        von `''` abweicht.
         """
-        assert "COALESCE(" in SQL_OHNE_ANWEISUNGEN
+        assert "COALESCE(metadata->>'intent', '')" in SQL_OHNE_ANWEISUNGEN
 
     def test_fragment_traegt_kein_eigenes_AND(self):
         """`search_similar` fuegt Praedikate in eine Liste und joint mit ' AND '.
@@ -76,6 +82,19 @@ class TestMarkerUndAuswerterPassenZusammen:
         Ein Fragment mit eigenem `AND` erzeugte dort `AND AND`. Rot, sobald es eins traegt.
         """
         assert not SQL_OHNE_ANWEISUNGEN.strip().upper().startswith("AND")
+
+    def test_marker_wert_ist_sql_sicher(self):
+        """`INTENT_START_INSTRUCTION` landet an drei Stellen als SQL-LITERAL, nicht als
+        gebundener Parameter: per f-String in `SQL_OHNE_ANWEISUNGEN`, im JSON-Patch
+        `MARKER_PATCH_JSON` (der als Text in ein `text()`-UPDATE eingebettet wird) und
+        ueberall dort, wo Aufrufer die Konstante direkt in einen `text()`-String
+        interpolieren. Heute ist der Wert `"start_instruction"` — harmlos. Ein
+        kuenftiger Wert mit `'` braeche das SQL-Literal, einer mit `:` den
+        Bindparam-Parser von SQLAlchemys `text()`. Billige Versicherung: der Wert
+        bleibt alphanumerisch plus Unterstrich. Rot, sobald jemand `'`, `:` oder ein
+        anderes SQL-Sonderzeichen in den Marker schmuggelt.
+        """
+        assert re.fullmatch(r"[A-Za-z0-9_]+", INTENT_START_INSTRUCTION)
 
 
 class TestSetzerZiehtAusDemModul:
@@ -226,3 +245,70 @@ class TestPickerSchlaegtKeineAnweisungenVor:
         asyncio.run(memory_picker(days_min=7, days_max=60, limit=5, tenant=tenant, db=db))
 
         assert SQL_OHNE_ANWEISUNGEN in db.sql
+
+
+def _load_real_api_telegram():
+    """Laedt `api/telegram.py` unter einem privaten Modulnamen via Datei-Pfad.
+
+    `sys.modules["api.telegram"]` kann je nach Sammelreihenfolge der Testsuite
+    bereits ein Stub sein (siehe `tests/_telegram_task_env.py`), der
+    `_memory_search_sync` gar nicht kennt. Ein normaler `import api.telegram`
+    waere davon abhaengig, welche Testdatei zuerst lief. Der direkte Datei-Load
+    umgeht das und liefert immer das echte Modul, unabhaengig von sonstigem
+    sys.modules-Zustand — dasselbe Muster wie in
+    `tests/test_telegram_outbound_pertenant.py` und `tests/test_p09_chat_ideas.py`.
+    """
+    import importlib.util as _ilu
+
+    backend_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+    spec = _ilu.spec_from_file_location(
+        "test_anweisungs_marker_api_telegram_real",
+        os.path.join(backend_dir, "api", "telegram.py"),
+    )
+    mod = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestTelegramSucheBleibtUngefiltert:
+    """FR-1: `_memory_search_sync` ist eine ANSICHT, kein RAG-Erzeuger.
+
+    Ihr einziger Aufrufer ist der `/such` `/suche` `/erinner`-Zweig in
+    `_try_memory_command` — das Ergebnis geht direkt als Telegram-Nachricht an
+    den Nutzer. Sie ist das Telegram-Gegenstueck zu `/memory/search` und muss
+    wie dieses `include_instructions=True` setzen, sonst waere Markiertes in
+    keinem Kanal mehr sichtbar, den Louis taeglich benutzt.
+    """
+
+    def test_memory_search_sync_fordert_den_rohbestand_an(self):
+        """Rot, sobald `include_instructions=True` aus dem Aufruf entfernt wird.
+
+        `_memory_search_sync` baut vor dem Aufruf eine echte Async-Engine
+        (`create_async_engine(_s.database_url)`). Ohne DB-Verbindung ist das
+        unschaedlich — SQLAlchemy verbindet lazy erst beim ersten Checkout, und
+        `search_similar` ist unten vollstaendig gemockt, macht also nie einen
+        echten Checkout. Die einzige Bedingung ist eine PARSEBARE URL in
+        `config.settings.database_url`; das wird hier isoliert erzwungen, weil
+        andere Testdateien in derselben Suite `config.settings` global und ohne
+        Teardown durch ein MagicMock ersetzen (z. B. `test_telegram_webhook.py`),
+        was `create_async_engine` sonst mit einer MagicMock-URL zum Scheitern
+        braechte — unabhaengig von diesem Fix.
+        """
+        telegram_mod = _load_real_api_telegram()
+
+        aufrufe = {}
+
+        async def _fake_search_similar(db, **kwargs):
+            aufrufe.update(kwargs)
+            return []
+
+        with (
+            patch(
+                "config.settings.database_url",
+                "postgresql+asyncpg://autopilot:changeme@localhost:5432/content_autopilot",
+            ),
+            patch("services.embedding_service.search_similar", _fake_search_similar),
+        ):
+            telegram_mod._memory_search_sync("t1", "irgendwas")
+
+        assert aufrufe["include_instructions"] is True

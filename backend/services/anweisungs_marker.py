@@ -26,4 +26,10 @@ MARKER_PATCH_JSON = json.dumps({"intent": INTENT_START_INSTRUCTION})
 #: `COALESCE` ist nicht kosmetisch: `metadata` ist nullable, und `NULL <> 'x'` ergibt in
 #: SQL `NULL`, nicht `TRUE`. Ohne COALESCE fiele jeder Chunk ohne `metadata` stumm aus
 #: jedem Ergebnis — aus dem Ausschluss weniger Chunks wuerde die Loeschung der meisten.
+#:
+#: Grenze des Fragments: `metadata` ist ein UNQUALIFIZIERTER Spaltenname. Das gilt nur
+#: fuer Abfragen mit einem einzigen, nicht-aliasierten `memory_chunks` (der Normalfall
+#: bei allen bisherigen Lesern). Bei einem Self-Join oder Alias (z. B. `memory_chunks a
+#: JOIN memory_chunks b` wie in `api/memory_viz.py`) ist `metadata` mehrdeutig — dort
+#: muss der Aufrufer die Spalte qualifizieren, bevor er dieses Praedikat einspleisst.
 SQL_OHNE_ANWEISUNGEN = f"COALESCE(metadata->>'intent', '') <> '{INTENT_START_INSTRUCTION}'"
