@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from config import settings
+from services.soft_delete_filter import SQL_NICHT_GELOESCHT
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ async def _backfill_async(limit: int) -> dict:
                     text(
                         "SELECT id, content_text, classification "
                         "FROM memory_chunks "
-                        "WHERE embedding IS NULL "
+                        f"WHERE embedding IS NULL AND {SQL_NICHT_GELOESCHT} "
                         "ORDER BY created_at DESC "
                         "LIMIT :lim"
                     ),
@@ -96,6 +97,7 @@ async def _backfill_async(limit: int) -> dict:
                         "SELECT id, content_text "
                         "FROM memory_chunks "
                         "WHERE classification IS NULL AND length(content_text) >= 20 "
+                        f"AND {SQL_NICHT_GELOESCHT} "
                         "ORDER BY created_at DESC "
                         "LIMIT :lim"
                     ),

@@ -161,3 +161,52 @@ class TestP06FiltertGeloeschteChunks:
 
         erstes_sql = str(ctx.execute.call_args_list[0].args[0])
         assert SQL_NICHT_GELOESCHT in erstes_sql
+
+
+class _FakeBackfillResult:
+    def fetchall(self):
+        return []
+
+
+class _FakeBackfillDb:
+    def __init__(self):
+        self.queries = []
+
+    async def execute(self, sql, params=None):
+        self.queries.append(str(sql))
+        return _FakeBackfillResult()
+
+    async def commit(self):
+        pass
+
+
+class _FakeSessionCtx:
+    def __init__(self, db):
+        self._db = db
+
+    async def __aenter__(self):
+        return self._db
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class TestMemoryBackfillFiltertBeidePaesse:
+    def test_beide_selects_schliessen_geloeschte_aus(self):
+        from tasks.memory_backfill_task import _backfill_async
+
+        fake_db = _FakeBackfillDb()
+        fake_engine = MagicMock()
+        fake_engine.dispose = AsyncMock()
+
+        with (
+            patch("tasks.memory_backfill_task.create_async_engine", return_value=fake_engine),
+            patch(
+                "tasks.memory_backfill_task.sessionmaker",
+                return_value=lambda: _FakeSessionCtx(fake_db),
+            ),
+        ):
+            asyncio.run(_backfill_async(limit=10))
+
+        assert len(fake_db.queries) == 2
+        assert all(SQL_NICHT_GELOESCHT in q for q in fake_db.queries)
