@@ -209,3 +209,20 @@ class TestVoiceProfilScanUeberspringtAnweisungen:
 
         erstes_sql = str(ctx.execute.call_args_list[0].args[0])
         assert SQL_OHNE_ANWEISUNGEN in erstes_sql
+
+
+class TestPickerSchlaegtKeineAnweisungenVor:
+    def test_picker_stellt_das_praedikat_in_seine_abfrage(self):
+        """Der Picker spielt alte Chunks aktiv als „vergessene Erinnerung" zurueck.
+
+        Er laeuft an `search_similar` vorbei und hat eigenes SQL — der Default aus Task 2
+        schuetzt ihn also nicht. Ohne Filter bekaeme der Nutzer eine alte Absichts-
+        erklaerung als Post-Vorschlag angeboten. Rot, sobald das Praedikat fehlt.
+        """
+        from api.memory import memory_picker
+
+        db = _FakeDb(rows=[])
+        tenant = SimpleNamespace(id="t1")
+        asyncio.run(memory_picker(days_min=7, days_max=60, limit=5, tenant=tenant, db=db))
+
+        assert SQL_OHNE_ANWEISUNGEN in db.sql
