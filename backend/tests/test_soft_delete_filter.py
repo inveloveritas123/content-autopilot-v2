@@ -142,3 +142,22 @@ class TestMemoryStatsRedesign:
 
         assert SQL_NICHT_GELOESCHT in db.queries[1]  # by_source
         assert SQL_NICHT_GELOESCHT in db.queries[2]  # by_classification
+
+
+class TestP06FiltertGeloeschteChunks:
+    def test_scan_stellt_das_praedikat_in_seine_abfrage(self):
+        from tasks.p06_profile_extractor_task import run_for_tenant
+
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        ctx.execute.return_value.fetchall.return_value = []
+
+        with (
+            patch("tasks.p06_profile_extractor_task.sync_session_factory", return_value=ctx),
+            patch("services.llm.set_llm_tenant"),
+        ):
+            run_for_tenant("tenant-1")
+
+        erstes_sql = str(ctx.execute.call_args_list[0].args[0])
+        assert SQL_NICHT_GELOESCHT in erstes_sql
