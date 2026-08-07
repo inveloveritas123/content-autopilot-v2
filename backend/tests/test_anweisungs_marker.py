@@ -85,13 +85,17 @@ class TestMarkerUndAuswerterPassenZusammen:
 
     def test_marker_wert_ist_sql_sicher(self):
         """`INTENT_START_INSTRUCTION` landet an drei Stellen als SQL-LITERAL, nicht als
-        gebundener Parameter: per f-String in `SQL_OHNE_ANWEISUNGEN`, im JSON-Patch
-        `MARKER_PATCH_JSON` (der als Text in ein `text()`-UPDATE eingebettet wird) und
-        ueberall dort, wo Aufrufer die Konstante direkt in einen `text()`-String
-        interpolieren. Heute ist der Wert `"start_instruction"` — harmlos. Ein
-        kuenftiger Wert mit `'` braeche das SQL-Literal, einer mit `:` den
-        Bindparam-Parser von SQLAlchemys `text()`. Billige Versicherung: der Wert
-        bleibt alphanumerisch plus Unterstrich. Rot, sobald jemand `'`, `:` oder ein
+        gebundener Parameter — ueberall dort, wo `SQL_OHNE_ANWEISUNGEN` (das den Wert
+        per f-String traegt) selbst wieder per f-String/Interpolation in `text()`
+        eingebettet wird: `services/embedding_service.py::search_similar`,
+        `tasks/p06_profile_extractor_task.py::run_for_tenant` und
+        `api/memory.py::memory_picker`. Der SETZER (`_markiere_chunk_als_anweisung` in
+        `tasks/telegram_task.py`) ist davon NICHT betroffen — er bindet den Wert als
+        `:patch`-Parameter, kein Literal. Heute ist der Wert `"start_instruction"` —
+        harmlos. Ein kuenftiger Wert mit `'` braeche das SQL-Literal an den drei
+        Lesestellen, einer mit `:` den Bindparam-Parser von SQLAlchemys `text()`.
+        Billige Versicherung: der Wert bleibt alphanumerisch plus Unterstrich. Rot,
+        sobald jemand `'`, `:` oder ein
         anderes SQL-Sonderzeichen in den Marker schmuggelt.
         """
         assert re.fullmatch(r"[A-Za-z0-9_]+", INTENT_START_INSTRUCTION)
