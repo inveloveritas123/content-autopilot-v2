@@ -335,8 +335,11 @@ class TestP08Opener:
         mock_load_prompt.return_value = prompt
         mock_call_llm.return_value = _make_llm_result("Was war dein erster Schritt?")
 
+        # Reihenfolge wie im SELECT: title, hook_suggestion, angle, description.
+        # description bleibt None — damit prueft dieser Fall weiterhin den Rueckfall
+        # auf `title` (eine Idee ohne Beschreibung, z.B. aus der Recherche).
         idea_row = MagicMock()
-        idea_row.__getitem__ = lambda self, i: ("Mein Thema", None, "kategorie")[i]
+        idea_row.__getitem__ = lambda self, i: ("Mein Thema", None, "kategorie", None)[i]
         voice_row = MagicMock()
         voice_row.__getitem__ = lambda self, i: ("freundlich, direkt",)[i]
 
@@ -369,6 +372,72 @@ class TestP08Opener:
         kw = mock_call_llm.call_args.kwargs
         assert kw["prompt_key"] == "P08"
         assert kw["tenant_id"] == "t1"
+
+    @patch("services.p08_service.sync_session_factory")
+    @patch("services.p08_service.call_pipeline_llm")
+    @patch("services.p08_service._load_p08_prompt")
+    def test_opener_nimmt_description_statt_des_gekappten_titels(
+        self, mock_load_prompt, mock_call_llm, mock_db_factory
+    ):
+        """Der Opener muss den ganzen Text sehen, nicht die 80-Zeichen-Ueberschrift.
+
+        `_create_manual_idea` (p13_variants_task.py) schreibt denselben Text zweimal:
+        `title = idea_text[:80]` und `description = idea_text[:600]`. `hook_suggestion`
+        schreibt es NIE — fuer Chat-Ideen ist die Spalte immer NULL. Las der Opener nur
+        `hook_suggestion or title`, war `title` damit nicht der Rueckfall, sondern der
+        einzige Weg: das Modell sah 80 Zeichen und fragte nach dem abgeschnittenen Wort.
+        Live gemessen am 06.08.2026 — aus „…in ein Bus" wurde „In welchen Bus denn?".
+
+        Die Zusicherung sitzt bewusst auf Text HINTER Zeichen 80: `title` ist ein Praefix
+        von `description`, ein Test auf das Fehlen des Titel-Anfangs waere auch nach dem
+        Fix rot.
+
+        Rot wird dieser Test, sobald `p08_opener` `description` nicht mehr liest.
+        """
+        anfang = "Ich möchte einen Beitrag über unser neues Werkstatt-Netzwerk schreiben, das "
+        volltext = anfang + "Buchhaltung" + " komplett überfluessig macht. Bitte nicht angeberisch."
+        assert volltext[:80].endswith(
+            "Buch"
+        ), "Vorbedingung der Probe: der Schnitt bei 80 muss mitten im Wort liegen"
+
+        prompt = MagicMock()
+        prompt.system_prompt = "system"
+        prompt.user_prompt_template = (
+            "mode={mode} topic={topic} voice_profile={voice_profile} "
+            "recent_messages={recent_messages} features_json={features_json} "
+            "question_index={question_index} max_questions={max_questions}"
+        )
+        mock_load_prompt.return_value = prompt
+        mock_call_llm.return_value = _make_llm_result("Was war der ausloesende Moment?")
+
+        # Reihenfolge wie im SELECT: title, hook_suggestion, angle, description
+        idea_row = MagicMock()
+        idea_row.__getitem__ = lambda self, i: (volltext[:80], None, "manual", volltext)[i]
+
+        def make_session_ctx(execute_result):
+            ctx = MagicMock()
+            ctx.__enter__ = MagicMock(return_value=ctx)
+            ctx.__exit__ = MagicMock(return_value=False)
+            ctx.execute.return_value.fetchone.return_value = execute_result
+            return ctx
+
+        insert_ctx = MagicMock()
+        insert_ctx.__enter__ = MagicMock(return_value=insert_ctx)
+        insert_ctx.__exit__ = MagicMock(return_value=False)
+
+        mock_db_factory.side_effect = [
+            make_session_ctx(idea_row),
+            make_session_ctx(None),
+            insert_ctx,
+        ]
+
+        p08_opener(tenant_id="t1", mode="targeted", topic_idea_id="idea-uuid-123")
+
+        user_content = mock_call_llm.call_args.kwargs["user_content"]
+        assert (
+            "komplett überfluessig macht" in user_content
+        ), "Der Opener sieht nur die ersten 80 Zeichen — der Rest der Nachricht fehlt"
+        assert "Bitte nicht angeberisch" in user_content
 
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.call_pipeline_llm")
