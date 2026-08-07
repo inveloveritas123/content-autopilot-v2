@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from config import settings
+from services.soft_delete_filter import SQL_NICHT_GELOESCHT
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ def _tenant_hash_fraction(tenant_id: str, seed: str = "canary-v1") -> float:
 async def _get_all_tenant_ids(db: AsyncSession) -> list[str]:
     rows = (
         await db.execute(
-            text("SELECT DISTINCT tenant_id FROM memory_chunks WHERE deleted_at IS NULL")
+            text(f"SELECT DISTINCT tenant_id FROM memory_chunks WHERE {SQL_NICHT_GELOESCHT}")
         )
     ).fetchall()
     return [str(r[0]) for r in rows]
@@ -55,7 +56,7 @@ async def _count_chunks_for_tenant(db: AsyncSession, tenant_id: str) -> int:
         await db.execute(
             text(
                 "SELECT COUNT(*) FROM memory_chunks "
-                "WHERE tenant_id = CAST(:tid AS uuid) AND deleted_at IS NULL"
+                f"WHERE tenant_id = CAST(:tid AS uuid) AND {SQL_NICHT_GELOESCHT}"
             ),
             {"tid": tenant_id},
         )
@@ -79,7 +80,7 @@ async def _get_canary_chunk_ids(
             text(
                 "SELECT id FROM memory_chunks "
                 "WHERE tenant_id = CAST(:tid AS uuid) "
-                "  AND deleted_at IS NULL "
+                f"  AND {SQL_NICHT_GELOESCHT} "
                 "  AND embedding IS NOT NULL "
                 "  AND ('x' || md5(id::text))::bit(32)::int / 4294967295.0 < :threshold "
                 "ORDER BY id "
@@ -163,7 +164,7 @@ async def _compute_recall_at_k(
                 f"SELECT id, {emb_col} AS qemb "
                 f"FROM memory_chunks "
                 f"WHERE tenant_id = CAST(:tid AS uuid) "
-                f"  AND deleted_at IS NULL "
+                f"  AND {SQL_NICHT_GELOESCHT} "
                 f"  AND {emb_col} IS NOT NULL "
                 f"ORDER BY random() LIMIT :n"
             ),
@@ -188,7 +189,7 @@ async def _compute_recall_at_k(
                 text(
                     f"SELECT id FROM memory_chunks "
                     f"WHERE tenant_id = CAST(:tid AS uuid) "
-                    f"  AND deleted_at IS NULL "
+                    f"  AND {SQL_NICHT_GELOESCHT} "
                     f"  AND {emb_col} IS NOT NULL "
                     f"ORDER BY {emb_col} <=> CAST(:qemb AS vector) "
                     f"LIMIT :k"
@@ -222,7 +223,7 @@ async def _roll_canary_to_production(
             "    updated_at = NOW() "
             "WHERE tenant_id = CAST(:tid AS uuid) "
             "  AND embedding_canary IS NOT NULL "
-            "  AND deleted_at IS NULL"
+            f"  AND {SQL_NICHT_GELOESCHT}"
         ),
         {"tid": tenant_id, "model_id": new_model_id},
     )

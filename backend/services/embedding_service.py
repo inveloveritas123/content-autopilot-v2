@@ -44,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings
 from services.anweisungs_marker import SQL_OHNE_ANWEISUNGEN
 from services.llm import llm_service
+from services.soft_delete_filter import SQL_NICHT_GELOESCHT
 
 logger = logging.getLogger(__name__)
 
@@ -406,7 +407,11 @@ async def search_similar(
     if query_emb is None:
         return []
 
-    where_extra = ["embedding IS NOT NULL", "tenant_id = CAST(:tid AS uuid)"]
+    where_extra = [
+        "embedding IS NOT NULL",
+        "tenant_id = CAST(:tid AS uuid)",
+        SQL_NICHT_GELOESCHT,
+    ]
     params = {
         "tid": tenant_id,
         "qemb": _embedding_to_pg(query_emb),

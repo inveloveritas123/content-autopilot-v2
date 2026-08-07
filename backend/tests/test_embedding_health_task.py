@@ -86,3 +86,14 @@ def test_mehrere_tenants_werden_einzeln_bewertet():
     alarme = _pruefe_vektorlose_chunks(session)
 
     assert [a["tenant_id"] for a in alarme] == ["krank"]
+
+
+def test_query_nutzt_die_geteilte_konstante():
+    from services.soft_delete_filter import SQL_NICHT_GELOESCHT
+    from tasks.embedding_health_task import _pruefe_vektorlose_chunks
+
+    session = _session_mit([])
+    _pruefe_vektorlose_chunks(session)
+
+    sql = str(session.execute.call_args.args[0])
+    assert SQL_NICHT_GELOESCHT in sql

@@ -92,12 +92,19 @@ if "tasks.celery_app" not in sys.modules:
 # config — minimal stub; muss alle Felder enthalten die Downstream-Module nutzen.
 # max_calls_per_tenant_per_hour + max_calls_global_per_hour: services.throttle liest
 # sie zur Laufzeit (patch.object braucht pre-existente Attribute).
+# nextcloud_url/_user/_password: services/__init__.py -> nextcloud.py instanziiert
+# NextcloudClient() beim Modul-Import (gleiches Muster wie test_admin_auth.py:122-125) —
+# seit dem `services.soft_delete_filter`-Import unten (Task 6) zieht selbst dieser
+# dependency-freie Import transitiv services/__init__.py mit.
 if "config" not in sys.modules:
     _cfg = _stub("config")
     _cfg.settings = types.SimpleNamespace(
         database_url="postgresql+asyncpg://test:test@localhost/test",
         max_calls_per_tenant_per_hour=200,
         max_calls_global_per_hour=1000,
+        nextcloud_url="",
+        nextcloud_user="",
+        nextcloud_password="",
     )
 
 # services.llm — BudgetExceededError + llm_service
@@ -393,6 +400,28 @@ class TestTenantScope:
         tenant_params = [p for p in received_params if not p["write"] and "t" in p["params"]]
         for p in tenant_params:
             assert p["params"]["t"] == "my-unique-tenant-id", f"Falscher tenant_id in Query: {p}"
+
+    def test_werte_query_schliesst_geloeschte_chunks_aus(self):
+        """DSGVO: ein geloeschter 'werte'-Chunk darf nicht in tenant_customer_values einfliessen."""
+        from services.soft_delete_filter import SQL_NICHT_GELOESCHT
+
+        received_sql = []
+
+        async def _capturing_db_execute(sql, params, *, write=False):
+            received_sql.append(sql)
+            if "information_schema.tables" in sql:
+                return [{"table_name": "tenant_customer_values"}]
+            return []
+
+        llm, _ = _make_llm(werte=[])
+        _patch_canonical_imports(bt)
+
+        asyncio.run(
+            _backfill_tenant("tenant-A", db_execute=_capturing_db_execute, llm_complete_json=llm)
+        )
+        werte_query = [s for s in received_sql if "classification = 'werte'" in s]
+        assert werte_query, "Werte-Query wurde nicht ausgefuehrt"
+        assert SQL_NICHT_GELOESCHT in werte_query[0]
 
 
 # ---------------------------------------------------------------------------

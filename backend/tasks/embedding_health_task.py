@@ -66,13 +66,15 @@ def _pruefe_vektorlose_chunks(session) -> list[dict]:
     """
     from sqlalchemy import text
 
+    from services.soft_delete_filter import SQL_NICHT_GELOESCHT
+
     rows = session.execute(
         text(
             "SELECT tenant_id::text AS tenant_id, "
             "       count(*) AS gesamt, "
             "       count(*) FILTER (WHERE embedding IS NULL) AS ohne_vektor "
             "FROM memory_chunks "
-            "WHERE deleted_at IS NULL "
+            f"WHERE {SQL_NICHT_GELOESCHT} "
             "  AND content_text IS NOT NULL "
             "  AND btrim(content_text) <> '' "
             "GROUP BY tenant_id"
