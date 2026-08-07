@@ -92,3 +92,53 @@ class TestMemoryRecentUndPickerFiltern:
         asyncio.run(memory_picker(days_min=7, days_max=60, limit=5, tenant=tenant, db=db))
 
         assert SQL_NICHT_GELOESCHT in db.sql
+
+
+class _FakeStatsRow:
+    def __init__(self, total, embedded, soft_deleted):
+        self.total = total
+        self.embedded = embedded
+        self.soft_deleted = soft_deleted
+
+
+class _FakeStatsDb:
+    def __init__(self):
+        self.queries = []
+
+    async def execute(self, sql, params=None):
+        self.queries.append(str(sql))
+        if len(self.queries) == 1:
+            return SimpleNamespace(
+                fetchone=lambda: _FakeStatsRow(total=5, embedded=3, soft_deleted=1)
+            )
+        return SimpleNamespace(all=lambda: [])
+
+
+class TestMemoryStatsRedesign:
+    def test_liefert_soft_deleted_feld(self):
+        from api.memory import memory_stats
+
+        result = asyncio.run(memory_stats(tenant=SimpleNamespace(id="t1"), db=_FakeStatsDb()))
+
+        assert result["total"] == 5
+        assert result["embedded"] == 3
+        assert result["soft_deleted"] == 1
+        assert result["embedding_coverage"] == round(3 / 5, 3)
+
+    def test_stats_query_bleibt_bewusst_ungefiltert(self):
+        """Wie viz-data: total/embedded zaehlen ueber den vollen Bestand."""
+        from api.memory import memory_stats
+
+        db = _FakeStatsDb()
+        asyncio.run(memory_stats(tenant=SimpleNamespace(id="t1"), db=db))
+
+        assert SQL_NICHT_GELOESCHT not in db.queries[0]
+
+    def test_by_source_und_by_classification_filtern(self):
+        from api.memory import memory_stats
+
+        db = _FakeStatsDb()
+        asyncio.run(memory_stats(tenant=SimpleNamespace(id="t1"), db=db))
+
+        assert SQL_NICHT_GELOESCHT in db.queries[1]  # by_source
+        assert SQL_NICHT_GELOESCHT in db.queries[2]  # by_classification

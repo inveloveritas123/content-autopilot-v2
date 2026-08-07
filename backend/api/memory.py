@@ -179,27 +179,35 @@ async def memory_stats(
     tenant: Tenant = Depends(get_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Counts pro source_type + classification + Embedding-Coverage."""
-    total = (
+    """Counts pro source_type + classification + Embedding-Coverage.
+
+    total/embedded/soft_deleted zaehlen bewusst ueber den vollen Bestand (wie
+    api/memory_viz.py::get_viz_data) — eine Loeschung soll sich als Zahl bestaetigen,
+    nicht kommentarlos verschwinden. by_source/by_classification zeigen nur, was
+    tatsaechlich noch abrufbar ist.
+    """
+    stats_row = (
         await db.execute(
-            text("SELECT COUNT(*) AS c FROM memory_chunks WHERE tenant_id = :tid"),
+            text("""
+                SELECT
+                  COUNT(*) AS total,
+                  COUNT(*) FILTER (WHERE embedding IS NOT NULL) AS embedded,
+                  COUNT(*) FILTER (WHERE deleted_at IS NOT NULL) AS soft_deleted
+                FROM memory_chunks WHERE tenant_id = :tid
+            """),
             {"tid": tenant.id},
         )
-    ).scalar() or 0
-    embedded = (
-        await db.execute(
-            text(
-                "SELECT COUNT(*) AS c FROM memory_chunks "
-                "WHERE tenant_id = :tid AND embedding IS NOT NULL"
-            ),
-            {"tid": tenant.id},
-        )
-    ).scalar() or 0
+    ).fetchone()
+    total = int(stats_row.total or 0)
+    embedded = int(stats_row.embedded or 0)
+    soft_deleted = int(stats_row.soft_deleted or 0)
+
     by_source = (
         await db.execute(
             text(
                 "SELECT source_type, COUNT(*) AS c FROM memory_chunks "
-                "WHERE tenant_id = :tid GROUP BY source_type ORDER BY c DESC"
+                f"WHERE tenant_id = :tid AND {SQL_NICHT_GELOESCHT} "
+                "GROUP BY source_type ORDER BY c DESC"
             ),
             {"tid": tenant.id},
         )
@@ -208,15 +216,16 @@ async def memory_stats(
         await db.execute(
             text(
                 "SELECT COALESCE(classification, 'unklassifiziert') AS c, COUNT(*) AS n "
-                "FROM memory_chunks WHERE tenant_id = :tid "
+                f"FROM memory_chunks WHERE tenant_id = :tid AND {SQL_NICHT_GELOESCHT} "
                 "GROUP BY classification ORDER BY n DESC"
             ),
             {"tid": tenant.id},
         )
     ).all()
     return {
-        "total": int(total),
-        "embedded": int(embedded),
+        "total": total,
+        "embedded": embedded,
+        "soft_deleted": soft_deleted,
         "embedding_coverage": round(embedded / total, 3) if total else 0,
         "by_source": [{"source_type": r.source_type, "count": int(r.c)} for r in by_source],
         "by_classification": [{"classification": r.c, "count": int(r.n)} for r in by_class],
