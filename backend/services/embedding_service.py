@@ -43,8 +43,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from services.anweisungs_marker import SQL_OHNE_ANWEISUNGEN
-from services.soft_delete_filter import SQL_NICHT_GELOESCHT
 from services.llm import llm_service
+from services.soft_delete_filter import SQL_NICHT_GELOESCHT
 
 logger = logging.getLogger(__name__)
 
