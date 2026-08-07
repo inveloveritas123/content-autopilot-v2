@@ -29,3 +29,46 @@ class TestMemoryChunkOrmHatDeletedAt:
 
         col = MemoryChunk.__table__.columns["deleted_at"]
         assert col.nullable is True
+
+
+class _FakeDb:
+    """Faengt das generierte SQL ab, statt es auszufuehren."""
+
+    def __init__(self, rows=None):
+        self.sql = None
+        self.params = None
+        self._rows = rows or []
+
+    async def execute(self, sql, params=None):
+        self.sql = str(sql)
+        self.params = params
+        return SimpleNamespace(fetchall=lambda: self._rows, all=lambda: self._rows)
+
+
+async def _fake_embed(_text):
+    return [0.1] * 1536
+
+
+class TestSearchSimilarFiltertUnbedingt:
+    def test_ohne_include_instructions(self):
+        from services.embedding_service import search_similar
+
+        db = _FakeDb()
+        with patch("services.embedding_service.embed_text", _fake_embed):
+            asyncio.run(search_similar(db, tenant_id="t1", query_text="irgendwas"))
+
+        assert SQL_NICHT_GELOESCHT in db.sql
+
+    def test_auch_mit_include_instructions_true(self):
+        """Anders als SQL_OHNE_ANWEISUNGEN hat dieser Filter keine Rohbestands-Ausnahme."""
+        from services.embedding_service import search_similar
+
+        db = _FakeDb()
+        with patch("services.embedding_service.embed_text", _fake_embed):
+            asyncio.run(
+                search_similar(
+                    db, tenant_id="t1", query_text="irgendwas", include_instructions=True
+                )
+            )
+
+        assert SQL_NICHT_GELOESCHT in db.sql
