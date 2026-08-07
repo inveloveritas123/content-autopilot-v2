@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
 from models.tenant import Tenant
+from services.anweisungs_marker import SQL_OHNE_ANWEISUNGEN
 from services.embedding_service import (
     ALLOWED_CLASSIFICATIONS,
     ALLOWED_SOURCE_TYPES,
@@ -63,6 +64,9 @@ async def memory_search(
         min_similarity=min_similarity,
         classification=classification,
         source_types=types_list,
+        # Diese Route ist eine ANSICHT auf den Rohbestand, kein Erzeuger. Wer nachsehen
+        # will, ob die Markierung sitzt, muss das Markierte auch sehen koennen.
+        include_instructions=True,
     )
     return {"query": q, "count": len(results), "results": results}
 
@@ -126,6 +130,7 @@ async def memory_picker(
                 "FROM memory_chunks "
                 "WHERE tenant_id = :tid "
                 "  AND created_at BETWEEN :cmin AND :cmax "
+                f"  AND {SQL_OHNE_ANWEISUNGEN} "
                 "ORDER BY "
                 "  CASE classification WHEN 'stories' THEN 0 WHEN 'werte' THEN 1 ELSE 2 END, "
                 "  random() "

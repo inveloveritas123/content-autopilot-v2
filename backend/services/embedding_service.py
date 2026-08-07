@@ -42,6 +42,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
+from services.anweisungs_marker import SQL_OHNE_ANWEISUNGEN
 from services.llm import llm_service
 
 logger = logging.getLogger(__name__)
@@ -392,8 +393,15 @@ async def search_similar(
     min_similarity: float = 0.0,
     classification: str | None = None,
     source_types: Sequence[str] | None = None,
+    include_instructions: bool = False,
 ) -> list[dict]:
-    """Semantische Suche im Tenant-Gedächtnis via cosine-Distance."""
+    """Semantische Suche im Tenant-Gedächtnis via cosine-Distance.
+
+    `include_instructions=False` (Default) blendet Chunks aus, die eine Anweisung tragen
+    („Ich will einen neuen Post machen") — sie sind Steuerung, kein Inhalt, und haben in
+    einem RAG-Kontext nichts verloren. Nur Ansichten, die den Rohbestand zeigen sollen,
+    setzen den Wert auf True.
+    """
     query_emb = await embed_text(query_text)
     if query_emb is None:
         return []
@@ -410,6 +418,8 @@ async def search_similar(
     if source_types:
         params["src_list"] = list(source_types)
         where_extra.append("source_type = ANY(:src_list)")
+    if not include_instructions:
+        where_extra.append(SQL_OHNE_ANWEISUNGEN)
 
     where_sql = " AND ".join(where_extra)
     sql = text(
