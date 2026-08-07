@@ -210,3 +210,105 @@ class TestMemoryBackfillFiltertBeidePaesse:
 
         assert len(fake_db.queries) == 2
         assert all(SQL_NICHT_GELOESCHT in q for q in fake_db.queries)
+
+
+class _FakeSimpleDb:
+    def __init__(self):
+        self.sql = None
+
+    async def execute(self, sql, params=None):
+        self.sql = str(sql)
+        return SimpleNamespace(fetchall=lambda: [])
+
+
+class TestBestandsstellenNutzenDieKonstante:
+    def test_drift_monitor_aktive_tenants(self):
+        from tasks.drift_monitor_task import _get_active_tenant_ids
+
+        db = _FakeSimpleDb()
+        asyncio.run(_get_active_tenant_ids(db))
+        assert SQL_NICHT_GELOESCHT in db.sql
+
+    def test_reembed_alle_tenants(self):
+        from tasks.reembed_task import _get_all_tenant_ids
+
+        db = _FakeSimpleDb()
+        asyncio.run(_get_all_tenant_ids(db))
+        assert SQL_NICHT_GELOESCHT in db.sql
+
+
+class _FakeVizResult:
+    def fetchall(self):
+        return []
+
+    def fetchone(self):
+        return SimpleNamespace(
+            total=0, with_embedding=0, soft_deleted=0, classes=0, earliest=None, latest=None
+        )
+
+
+class _FakeVizDb:
+    def __init__(self):
+        self.queries = []
+
+    async def execute(self, sql, params=None):
+        self.queries.append(str(sql))
+        return _FakeVizResult()
+
+
+class TestMemoryVizNutztDieKonstante:
+    def test_hauptquery_by_class_by_source(self):
+        from api.memory_viz import get_viz_data
+
+        db = _FakeVizDb()
+        asyncio.run(
+            get_viz_data(
+                days=180,
+                classification=None,
+                source_type=None,
+                edge_threshold=0.75,
+                max_edges=150,
+                max_nodes=200,
+                tenant=SimpleNamespace(id="t1"),
+                db=db,
+            )
+        )
+        assert SQL_NICHT_GELOESCHT in db.queries[0]  # Hauptquery
+        assert SQL_NICHT_GELOESCHT not in db.queries[1]  # Stats bewusst ungefiltert
+        assert SQL_NICHT_GELOESCHT in db.queries[2]  # by_class
+        assert SQL_NICHT_GELOESCHT in db.queries[3]  # by_source
+
+    def test_get_chunk_full_text(self):
+        from api.memory_viz import FullTextConfirm, get_chunk_full_text
+
+        class _FullTextDb:
+            def __init__(self):
+                self.queries = []
+
+            async def execute(self, sql, params=None):
+                self.queries.append(str(sql))
+                if "SELECT id, content_text" in str(sql):
+                    return SimpleNamespace(
+                        fetchone=lambda: SimpleNamespace(
+                            id="c1",
+                            content_text="hallo",
+                            classification=None,
+                            source_type="manual_note",
+                            created_at=None,
+                        )
+                    )
+                return SimpleNamespace(fetchone=lambda: None)
+
+            async def commit(self):
+                pass
+
+        db = _FullTextDb()
+        asyncio.run(
+            get_chunk_full_text(
+                "c1",
+                FullTextConfirm(confirm=True, reason="Testzugriff"),
+                tenant=SimpleNamespace(id="t1"),
+                db=db,
+            )
+        )
+        assert SQL_NICHT_GELOESCHT in db.queries[0]

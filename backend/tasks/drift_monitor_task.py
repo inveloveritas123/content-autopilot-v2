@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from config import settings
+from services.soft_delete_filter import SQL_NICHT_GELOESCHT
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -137,7 +138,7 @@ async def _get_active_tenant_ids(db: AsyncSession) -> list[str]:
         await db.execute(
             text(
                 "SELECT DISTINCT tenant_id FROM memory_chunks "
-                "WHERE deleted_at IS NULL AND embedding IS NOT NULL"
+                f"WHERE {SQL_NICHT_GELOESCHT} AND embedding IS NOT NULL"
             )
         )
     ).fetchall()
@@ -158,7 +159,7 @@ async def _measure_tenant(
             text(
                 "SELECT id, embedding FROM memory_chunks "
                 "WHERE tenant_id = CAST(:tid AS uuid) "
-                "  AND deleted_at IS NULL "
+                f"  AND {SQL_NICHT_GELOESCHT} "
                 "  AND embedding IS NOT NULL "
                 "ORDER BY random() LIMIT :n"
             ),
@@ -182,7 +183,7 @@ async def _measure_tenant(
                 text(
                     "SELECT id FROM memory_chunks "
                     "WHERE tenant_id = CAST(:tid AS uuid) "
-                    "  AND deleted_at IS NULL "
+                    f"  AND {SQL_NICHT_GELOESCHT} "
                     "  AND embedding IS NOT NULL "
                     "ORDER BY embedding <=> CAST(:qemb AS vector) "
                     "LIMIT :k"
