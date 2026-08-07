@@ -63,6 +63,9 @@ async def memory_search(
         min_similarity=min_similarity,
         classification=classification,
         source_types=types_list,
+        # Diese Route ist eine ANSICHT auf den Rohbestand, kein Erzeuger. Wer nachsehen
+        # will, ob die Markierung sitzt, muss das Markierte auch sehen koennen.
+        include_instructions=True,
     )
     return {"query": q, "count": len(results), "results": results}
 
