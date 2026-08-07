@@ -318,21 +318,28 @@ class TestMemoryVizNutztDieKonstante:
 
 
 _FROM_JOIN_RE = re.compile(r"\b(FROM|JOIN)\s+memory_chunks\b")
+_KONSTANTE_VERWENDUNG_RE = re.compile(r"\bSQL_NICHT_GELOESCHT\b")
 
 # Verifiziert per grep am 07.08.2026 gegen den fertigen Zustand dieser Runde (Tasks 1-8).
 # Neue oder verschwundene Stelle -> Test wird rot -> bewusst nachziehen, nicht ignorieren.
+# (FROM/JOIN-Stellen, SQL_NICHT_GELOESCHT-Verwendungen ohne die eine Importzeile)
+# tasks/reembed_task.py: 6 FROM/JOIN-Stellen, 6 Konstante-Verwendungen -- KEINE 1:1-Paarung.
+# Zeile ~111 ist ein ID-Lookup, ungefiltert per Konstruktion (IDs stammen aus einer bereits
+# gefilterten Liste); Zeile ~226 ist ein UPDATE, keine FROM/JOIN-Stelle. Die Summen treffen
+# sich zufaellig -- beide Zahlen schuetzen trotzdem unabhaengig gegen eine geloeschte
+# Filterzeile in irgendeiner der bereits gefilterten Queries dieser Datei.
 _READER_FILES = {
-    "api/memory.py": 5,
-    "api/memory_viz.py": 7,
-    "services/embedding_service.py": 1,
-    "tasks/p06_profile_extractor_task.py": 1,
-    "tasks/values_backfill_task.py": 1,
-    "tasks/memory_backfill_task.py": 2,
-    "tasks/embedding_health_task.py": 1,
-    "tasks/drift_monitor_task.py": 3,
-    "tasks/reembed_task.py": 6,
+    "api/memory.py": (5, 4),
+    "api/memory_viz.py": (7, 4),
+    "services/embedding_service.py": (1, 1),
+    "tasks/p06_profile_extractor_task.py": (1, 1),
+    "tasks/values_backfill_task.py": (1, 1),
+    "tasks/memory_backfill_task.py": (2, 2),
+    "tasks/embedding_health_task.py": (1, 1),
+    "tasks/drift_monitor_task.py": (3, 3),
+    "tasks/reembed_task.py": (6, 6),
     # Hard-Delete-Cron: adressiert per deletion_request_id, kein Lesefilter noetig.
-    "tasks/deletion_purge_task.py": 1,
+    "tasks/deletion_purge_task.py": (1, 0),
 }
 
 
@@ -395,13 +402,32 @@ def _quelltext_ohne_kommentare_und_docstrings(pfad: Path) -> str:
 
 class TestInventarBekannteFundstellen:
     def test_from_join_anzahl_pro_datei_unveraendert(self):
-        for rel_path, expected in _READER_FILES.items():
+        for rel_path, (expected_from_join, _expected_konstante) in _READER_FILES.items():
             src = _quelltext_ohne_kommentare_und_docstrings(_backend_dir() / rel_path)
             found = len(_FROM_JOIN_RE.findall(src))
-            assert found == expected, (
+            assert found == expected_from_join, (
                 f"{rel_path}: {found} FROM/JOIN-memory_chunks-Stellen gefunden, "
-                f"{expected} erwartet. Neue oder entfernte Stelle -- Zahl hier bewusst "
-                f"nachziehen, nachdem der Filter geprueft wurde."
+                f"{expected_from_join} erwartet. Neue oder entfernte Stelle -- Zahl hier "
+                f"bewusst nachziehen, nachdem der Filter geprueft wurde."
+            )
+
+    def test_konstante_verwendung_pro_datei_unveraendert(self):
+        """Faengt eine geloeschte Filterzeile in einer bereits gefixten Query ab.
+
+        Die FROM/JOIN-Zaehlung allein sieht das nicht: die Query-Stelle bleibt bestehen,
+        nur der `AND {SQL_NICHT_GELOESCHT}`-Zusatz verschwindet. Zaehlt deshalb zusaetzlich,
+        wie oft die Konstante selbst im Code vorkommt (die eine Importzeile abgezogen).
+        """
+        for rel_path, (_expected_from_join, expected_konstante) in _READER_FILES.items():
+            src = _quelltext_ohne_kommentare_und_docstrings(_backend_dir() / rel_path)
+            gefunden = len(_KONSTANTE_VERWENDUNG_RE.findall(src))
+            if "import SQL_NICHT_GELOESCHT" in src:
+                gefunden -= 1
+            assert gefunden == expected_konstante, (
+                f"{rel_path}: {gefunden} SQL_NICHT_GELOESCHT-Verwendungen gefunden "
+                f"(Importzeile nicht mitgezaehlt), {expected_konstante} erwartet. "
+                f"Vermutlich wurde eine Filterzeile aus einer bereits gefixten Query "
+                f"entfernt -- pruefen, nicht die Zahl blind nachziehen."
             )
 
     def test_keine_weiteren_dateien_lesen_memory_chunks(self):
