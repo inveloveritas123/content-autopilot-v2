@@ -7,10 +7,8 @@ generierte SQL ab, messen nicht gegen eine echte Datenbank.
 from __future__ import annotations
 
 import asyncio
-import re
-from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 from services.soft_delete_filter import SQL_NICHT_GELOESCHT
 
@@ -70,5 +68,25 @@ class TestSearchSimilarFiltertUnbedingt:
                     db, tenant_id="t1", query_text="irgendwas", include_instructions=True
                 )
             )
+
+        assert SQL_NICHT_GELOESCHT in db.sql
+
+
+class TestMemoryRecentUndPickerFiltern:
+    def test_recent_stellt_das_praedikat_in_seine_abfrage(self):
+        from api.memory import memory_recent
+
+        db = _FakeDb()
+        tenant = SimpleNamespace(id="t1")
+        asyncio.run(memory_recent(limit=20, tenant=tenant, db=db))
+
+        assert SQL_NICHT_GELOESCHT in db.sql
+
+    def test_picker_stellt_das_praedikat_in_seine_abfrage(self):
+        from api.memory import memory_picker
+
+        db = _FakeDb()
+        tenant = SimpleNamespace(id="t1")
+        asyncio.run(memory_picker(days_min=7, days_max=60, limit=5, tenant=tenant, db=db))
 
         assert SQL_NICHT_GELOESCHT in db.sql

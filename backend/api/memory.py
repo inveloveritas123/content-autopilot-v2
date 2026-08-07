@@ -27,6 +27,7 @@ from services.embedding_service import (
     search_similar,
     store_chunk,
 )
+from services.soft_delete_filter import SQL_NICHT_GELOESCHT
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -86,6 +87,7 @@ async def memory_recent(
                 "       (embedding IS NOT NULL) AS has_embedding "
                 "FROM memory_chunks "
                 "WHERE tenant_id = :tid "
+                f"  AND {SQL_NICHT_GELOESCHT} "
                 "ORDER BY created_at DESC LIMIT :lim"
             ),
             {"tid": tenant.id, "lim": limit},
@@ -131,6 +133,7 @@ async def memory_picker(
                 "WHERE tenant_id = :tid "
                 "  AND created_at BETWEEN :cmin AND :cmax "
                 f"  AND {SQL_OHNE_ANWEISUNGEN} "
+                f"  AND {SQL_NICHT_GELOESCHT} "
                 "ORDER BY "
                 "  CASE classification WHEN 'stories' THEN 0 WHEN 'werte' THEN 1 ELSE 2 END, "
                 "  random() "
