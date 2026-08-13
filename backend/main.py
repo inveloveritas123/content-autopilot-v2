@@ -14,6 +14,7 @@ sentry_config.init_sentry()
 
 from config import settings
 from models import Tenant, async_session_factory
+from services.rls import set_rls_bypass
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,13 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Migration failed (may already be applied): {e}")
 
     # Create default tenant if not exists (check both primary and secondary key)
+    # RLS-Bypass noetig: FORCE ROW LEVEL SECURITY (Migration 058) blockiert auch den
+    # Tabellen-Owner ohne gesetzten app.tenant_id-Kontext — auf einer leeren DB gibt es
+    # beim allerersten Bootstrap noch keinen Tenant, dessen Kontext gesetzt werden koennte.
+    # (Selbe Änderung wie fix/rls-bootstrap-und-requesty-modell, hier manuell nachgezogen
+    # weil dieser Branch von feature/stufe2-produkt statt von main abzweigt.)
     async with async_session_factory() as session:
+        await set_rls_bypass(session, True)
         result = await session.execute(
             select(Tenant).where(
                 (Tenant.api_key == settings.default_tenant_key)
@@ -55,6 +62,9 @@ async def lifespan(app: FastAPI):
         # Auto-setup default project if none exists
         from models.project import Project
 
+        # SET LOCAL gilt nur bis zum naechsten commit() — nach dem Tenant-Commit
+        # oben erneut setzen, sonst blockiert FORCE ROW LEVEL SECURITY den Insert.
+        await set_rls_bypass(session, True)
         existing_projects = await session.execute(
             select(Project).where(Project.tenant_id == tenant.id)
         )
@@ -72,6 +82,7 @@ async def lifespan(app: FastAPI):
             # Assign existing sources to default project
             from models.source import Source
 
+            await set_rls_bypass(session, True)
             await session.execute(
                 Source.__table__.update()
                 .where(Source.tenant_id == tenant.id, Source.project_id is None)
@@ -82,7 +93,9 @@ async def lifespan(app: FastAPI):
         # Auto-setup Requesty.ai provider if REQUESTY_API_KEY is set and no providers exist
         if settings.requesty_api_key and tenant:
             from models.llm_provider import LLMProvider
+            from services.llm_mapping import REQUESTY_MODELS
 
+            await set_rls_bypass(session, True)
             existing = await session.execute(
                 select(LLMProvider).where(LLMProvider.tenant_id == tenant.id)
             )
@@ -95,7 +108,10 @@ async def lifespan(app: FastAPI):
                     provider_type="requesty",
                     api_key_encrypted=_encrypt_key(settings.requesty_api_key),
                     base_url="https://router.eu.requesty.ai/v1",
-                    model_name="vertex/gemini-2.5-flash-lite@europe-central2",
+                    # Referenziert dieselbe Quelle wie das Modell-Routing (REQUESTY_MODELS in
+                    # llm_mapping.py) statt einen zweiten, unabhaengig driftenden String zu
+                    # pflegen.
+                    model_name=REQUESTY_MODELS["claude-sonnet"],
                     task_assignment="all",
                     is_default=True,
                     is_active=True,
