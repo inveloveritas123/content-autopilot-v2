@@ -19,6 +19,8 @@ import {
   Brain,
   ShieldAlert,
   Sparkles,
+  Menu,
+  X,
 } from 'lucide-react'
 import TenantSwitcher from './TenantSwitcher'
 
@@ -55,7 +57,7 @@ const brandVoiceNavItems = [
 
 // Rendert eine einzelne Nav-Gruppe gefiltert nach Modus.
 // isMvp=true → nur Einträge mit mvp===true; isMvp=false → alle Einträge.
-function NavGroup({ items, isMvp }) {
+function NavGroup({ items, isMvp, onNavigate }) {
   const visible = isMvp ? items.filter((i) => i.mvp === true) : items
   return visible.map((item) => {
     const Icon = item.icon
@@ -64,6 +66,7 @@ function NavGroup({ items, isMvp }) {
         key={item.to}
         to={item.to}
         end={item.to === '/'}
+        onClick={onNavigate}
         className={({ isActive }) =>
           clsx(
             'flex items-center gap-3 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-colors',
@@ -141,61 +144,111 @@ export default function Layout({ children }) {
   // Während Laden: fail-open = alle Einträge zeigen (kein Flackern/Verstecken)
   const isMvp = !modeLoading && mode === 'mvp'
 
+  // Mobile: Sidebar ist per Default eingeklappt (Off-Canvas), Desktop (lg+) immer sichtbar.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+
+  const sidebarContent = (
+    <>
+      {/* Brand Header */}
+      <div className="px-4 py-4 border-b border-surface-border">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-8 h-8 rounded-lg bg-primary-700 flex items-center justify-center shrink-0">
+            <span className="text-white font-bold text-sm">ZB</span>
+          </div>
+          <div>
+            <h1 className="text-base font-bold text-ink">Content Autopilot</h1>
+            <p className="text-[11px] text-ink-muted leading-tight">
+              Mach's doch gleich richtig.
+            </p>
+          </div>
+        </div>
+        {/* MVP ⇄ Features Switch (#90) — prominent, 1-Klick, jede Seite */}
+        <div className="mb-2">
+          <UiModeSwitch />
+        </div>
+        <TenantSwitcher />
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 px-3 py-4 overflow-y-auto flex flex-col">
+        <div className="space-y-0.5">
+          <NavGroup items={navItems} isMvp={isMvp} onNavigate={() => setMobileNavOpen(false)} />
+        </div>
+
+        {/* Brand Voice section — nur anzeigen wenn mindestens ein Eintrag sichtbar */}
+        {(!isMvp || brandVoiceNavItems.some((i) => i.mvp)) && (
+          <div className="mt-4 pt-3 border-t border-surface-border space-y-0.5">
+            <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+              Brand Voice
+            </p>
+            <NavGroup
+              items={brandVoiceNavItems}
+              isMvp={isMvp}
+              onNavigate={() => setMobileNavOpen(false)}
+            />
+          </div>
+        )}
+
+        <div className="flex-1" />
+        {/* Admin/Tooling-Screens sind unter /admin verfügbar (Admin-Tool #98) */}
+      </nav>
+
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-surface-border">
+        <div className="flex items-center gap-2 text-xs text-ink-muted">
+          <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+          System aktiv
+        </div>
+      </div>
+    </>
+  )
+
   return (
     <div className="flex h-screen bg-surface-bg">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-surface-border flex flex-col shrink-0">
-        {/* Brand Header */}
-        <div className="px-4 py-4 border-b border-surface-border">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-lg bg-primary-700 flex items-center justify-center shrink-0">
-              <span className="text-white font-bold text-sm">ZB</span>
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-ink">Content Autopilot</h1>
-              <p className="text-[11px] text-ink-muted leading-tight">
-                Mach's doch gleich richtig.
-              </p>
-            </div>
-          </div>
-          {/* MVP ⇄ Features Switch (#90) — prominent, 1-Klick, jede Seite */}
-          <div className="mb-2">
-            <UiModeSwitch />
-          </div>
-          <TenantSwitcher />
-        </div>
+      {/* Mobile Top-Bar mit Hamburger — nur < lg sichtbar */}
+      <div className="lg:hidden fixed top-0 inset-x-0 h-14 bg-white border-b border-surface-border flex items-center gap-3 px-4 z-30">
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(true)}
+          aria-label="Menü öffnen"
+          className="p-2 -ml-2 rounded-lg text-ink hover:bg-gray-50"
+        >
+          <Menu className="w-5 h-5" strokeWidth={1.75} />
+        </button>
+        <span className="text-sm font-bold text-ink">Content Autopilot</span>
+      </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 overflow-y-auto flex flex-col">
-          <div className="space-y-0.5">
-            <NavGroup items={navItems} isMvp={isMvp} />
-          </div>
+      {/* Mobile Overlay hinter der aufgeklappten Sidebar */}
+      {mobileNavOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/40 z-40"
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
-          {/* Brand Voice section — nur anzeigen wenn mindestens ein Eintrag sichtbar */}
-          {(!isMvp || brandVoiceNavItems.some((i) => i.mvp)) && (
-            <div className="mt-4 pt-3 border-t border-surface-border space-y-0.5">
-              <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
-                Brand Voice
-              </p>
-              <NavGroup items={brandVoiceNavItems} isMvp={isMvp} />
-            </div>
-          )}
-
-          <div className="flex-1" />
-          {/* Admin/Tooling-Screens sind unter /admin verfügbar (Admin-Tool #98) */}
-        </nav>
-
-        {/* Footer */}
-        <div className="px-4 py-3 border-t border-surface-border">
-          <div className="flex items-center gap-2 text-xs text-ink-muted">
-            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-            System aktiv
-          </div>
-        </div>
+      {/* Sidebar: Desktop dauerhaft sichtbar, Mobile Off-Canvas per Slide-in */}
+      <aside
+        className={clsx(
+          'w-64 bg-white border-r border-surface-border flex flex-col shrink-0',
+          'fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-out',
+          'lg:static lg:translate-x-0',
+          mobileNavOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(false)}
+          aria-label="Menü schließen"
+          className="lg:hidden absolute top-4 right-3 p-2 rounded-lg text-ink-muted hover:bg-gray-50"
+        >
+          <X className="w-5 h-5" strokeWidth={1.75} />
+        </button>
+        {sidebarContent}
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto flex flex-col">
+      <main className="flex-1 overflow-auto flex flex-col pt-14 lg:pt-0">
         <div className="flex-1 p-6 max-w-7xl mx-auto w-full">{children}</div>
         <footer className="px-6 py-3 border-t border-surface-border">
           <div className="max-w-7xl mx-auto flex items-center justify-center gap-2 text-[11px] text-ink-muted">
