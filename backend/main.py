@@ -239,6 +239,10 @@ from api.admin_auth import router as admin_auth_router
 
 app.include_router(admin_auth_router, prefix="/api", tags=["AdminAuth"])
 
+from api.admin_users import router as admin_users_router
+
+app.include_router(admin_users_router, prefix="/api", tags=["AdminAccounts"])
+
 from api.reservoir import router as reservoir_router
 
 app.include_router(reservoir_router, prefix="/api", tags=["Reservoir"])

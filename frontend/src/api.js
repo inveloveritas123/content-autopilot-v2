@@ -706,6 +706,62 @@ export const adminSetApiKey = (id, key) =>
 export const adminCreateUser = (name) =>
   adminRequest('/admin/users', { method: 'POST', body: { name } })
 
+// ── Admin: Login-Accounts (E-Mail+Passwort-Nutzer, getrennt von Tenant-API-Keys) ──
+export const adminListAgencies = () => adminRequest('/admin/accounts/agencies')
+export const adminCreateAgency = (name, slug) =>
+  adminRequest('/admin/accounts/agencies', { method: 'POST', body: { name, slug } })
+export const adminListAccounts = () => adminRequest('/admin/accounts/users')
+export const adminCreateAccount = (data) =>
+  adminRequest('/admin/accounts/users', { method: 'POST', body: data })
+export const adminUpdateAccount = (id, data) =>
+  adminRequest(`/admin/accounts/users/${id}`, { method: 'PATCH', body: data })
+export const adminDeleteAccount = (id) =>
+  adminRequest(`/admin/accounts/users/${id}`, { method: 'DELETE' })
+
+// ── Kunden-Auth (E-Mail+Passwort, W3 + Owner-Entscheid 2026-08-13) ──────────
+// Selbes Cookie-/CSRF-Muster wie Admin-Session, eigener Cookie cap_session.
+
+async function customerAuthRequest(path, options = {}) {
+  const { method = 'GET', body } = options
+  const url = `${API_BASE}${path}`
+  const headers = {}
+  if (body) headers['Content-Type'] = 'application/json'
+
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    const csrfToken = await getAdminCsrfToken()
+    headers['X-CSRF-Token'] = csrfToken
+  }
+
+  const resp = await fetch(url, {
+    method,
+    headers,
+    credentials: 'include', // HttpOnly-Cookie cap_session mitsenden
+    body: body ? JSON.stringify(body) : undefined,
+  })
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: resp.statusText }))
+    let msg = err.detail
+    if (typeof msg !== 'string') {
+      msg = (err.detail && (err.detail.message || err.detail.error)) || JSON.stringify(err.detail)
+    }
+    const e = new Error(msg || 'Auth API Error')
+    e.status = resp.status
+    e.detail = err.detail
+    throw e
+  }
+  // 204/leere Antworten (z. B. logout) haben keinen JSON-Body
+  const text = await resp.text()
+  return text ? JSON.parse(text) : {}
+}
+
+export const userLogin = (email, password) =>
+  customerAuthRequest('/auth/login', { method: 'POST', body: { email, password } })
+export const userLogout = () => customerAuthRequest('/auth/logout', { method: 'POST' })
+// /auth/me liefert 401 statt {authenticated:false} — Aufrufer fängt das über
+// den Error-Pfad ab (customerAuthRequest wirft bei !resp.ok).
+export const userMe = () => customerAuthRequest('/auth/me')
+
 // Modell-Modus-Switch (Issue #72)
 export const getModelMode = () => request('/tenants/me/model-mode')
 export const setModelMode = (model_mode) =>

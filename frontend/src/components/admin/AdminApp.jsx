@@ -6,6 +6,7 @@ import AdminLogin from './AdminLogin'
 import AdminLayout from './AdminLayout'
 import AdminOverview from './AdminOverview'
 import UserManagement from './UserManagement'
+import AccountManagement from './AccountManagement'
 
 // Bestehende Komponenten werden wiederverwendet — kein Neu-Schreiben
 import LLMAnalytics from '../LLMAnalytics'
@@ -61,6 +62,7 @@ export default function AdminApp() {
         <Route path="drift-quality" element={<DriftReview />} />
         <Route path="drift-quality/review-queue" element={<ReviewQueue />} />
         <Route path="users" element={<UserManagement />} />
+        <Route path="accounts" element={<AccountManagement />} />
         <Route path="modelle" element={<AdminModels />} />
         <Route path="prompt-studio" element={<PromptStudio />} />
         {/* Fallback innerhalb /admin */}

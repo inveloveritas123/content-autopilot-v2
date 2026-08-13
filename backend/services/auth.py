@@ -33,6 +33,45 @@ MAGIC_LINK_TTL_SECONDS = 15 * 60  # 15 Minuten
 SESSION_TTL_SECONDS = 7 * 24 * 3600  # 7 Tage
 USER_COOKIE_NAME = "cap_session"
 
+# scrypt-Parameter (stdlib, kein argon2-Package nötig — dieselbe dependency-freie
+# Linie wie der Rest dieses Moduls). N=2**14 ist der empfohlene interaktive Login-Wert
+# aus RFC 7914 §2 (~16 MiB Speicher, <100ms auf üblicher Server-Hardware).
+_SCRYPT_N = 2**14
+_SCRYPT_R = 8
+_SCRYPT_P = 1
+_SCRYPT_DKLEN = 64
+_SCRYPT_SALT_BYTES = 16
+
+
+# ---------------------------------------------------------------------------
+# Passwort-Hashing (scrypt, stdlib)
+# ---------------------------------------------------------------------------
+
+
+def hash_password(raw: str) -> str:
+    """Hasht ein Klartext-Passwort. Format: scrypt$<salt_hex>$<hash_hex>."""
+    salt = secrets.token_bytes(_SCRYPT_SALT_BYTES)
+    derived = hashlib.scrypt(
+        raw.encode(), salt=salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P, dklen=_SCRYPT_DKLEN
+    )
+    return f"scrypt${salt.hex()}${derived.hex()}"
+
+
+def verify_password(raw: str, stored_hash: str) -> bool:
+    """Prüft ein Klartext-Passwort gegen den gespeicherten Hash. Constant-time-Vergleich."""
+    try:
+        scheme, salt_hex, hash_hex = stored_hash.split("$", 2)
+        if scheme != "scrypt":
+            return False
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(hash_hex)
+    except (ValueError, AttributeError):
+        return False
+    derived = hashlib.scrypt(
+        raw.encode(), salt=salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P, dklen=_SCRYPT_DKLEN
+    )
+    return hmac.compare_digest(derived, expected)
+
 
 # ---------------------------------------------------------------------------
 # Magic-Link-Token

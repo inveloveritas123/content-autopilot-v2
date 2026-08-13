@@ -5,6 +5,7 @@ import {
   BarChart3,
   GitBranchPlus,
   Users,
+  UserCog,
   Cpu,
   FileCode,
   LogOut,
@@ -16,6 +17,7 @@ const adminNavItems = [
   { to: '/admin/llm-analytics', label: 'LLM Analytics', icon: BarChart3 },
   { to: '/admin/drift-quality', label: 'Drift / Quality-Review', icon: GitBranchPlus },
   { to: '/admin/users', label: 'Nutzer & API-Keys', icon: Users },
+  { to: '/admin/accounts', label: 'Login-Accounts', icon: UserCog },
   { to: '/admin/modelle', label: 'Modelle', icon: Cpu },
   { to: '/admin/prompt-studio', label: 'Prompt-Studio', icon: FileCode },
 ]

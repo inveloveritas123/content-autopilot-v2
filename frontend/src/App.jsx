@@ -1,7 +1,11 @@
+import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
 import { ToastProvider } from './components/ui/Toast'
 import { UiModeProvider } from './hooks/useUiMode'
+import { userMe, setApiKey } from './api'
 import Layout from './components/Layout'
+import Login from './components/Login'
 import Dashboard from './components/Dashboard'
 import SourceList from './components/SourceList'
 import Pipeline from './components/Pipeline'
@@ -26,7 +30,82 @@ import AdminApp from './components/admin/AdminApp'
 
 // Admin-SPA wird AUSSERHALB des Kunden-Layouts gerendert.
 // Dazu teilen wir die App in zwei Äste: /admin/* und alles andere.
+//
+// Auth-Guard (2026-08-13): CustomerApp prüft die Session, BEVOR irgendeine
+// Dashboard-Route/Navigation gerendert wird. Ehrliche Zustände, kein "leeres
+// Dashboard mit Nullwerten" als impliziter Fallback-Zustand:
+//   checking       → Lade-Anzeige, KEIN Layout/Routes im DOM
+//   !authenticated → Login-Seite, KEIN Layout/Routes im DOM
+//   authenticated, aber kein zugewiesener Tenant → Fehlermeldung, KEIN Dashboard
+//   authenticated + Tenant gesetzt → Layout + Routes
 function CustomerApp() {
+  const [authenticated, setAuthenticated] = useState(null)
+  const [checking, setChecking] = useState(true)
+  const [noTenant, setNoTenant] = useState(false)
+
+  function applyTenant(me) {
+    // Erster zugewiesener Tenant wird automatisch aktiv — Owner-Entscheid
+    // 2026-08-13: kein Tenant-Auswahl-UI im ersten Wurf, das kommt später.
+    const first = me.tenants && me.tenants[0]
+    if (!first) {
+      setNoTenant(true)
+      return
+    }
+    setApiKey(first.api_key)
+    setNoTenant(false)
+  }
+
+  useEffect(() => {
+    userMe()
+      .then((me) => {
+        applyTenant(me)
+        setAuthenticated(true)
+      })
+      .catch(() => setAuthenticated(false))
+      .finally(() => setChecking(false))
+  }, [])
+
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      </div>
+    )
+  }
+
+  if (!authenticated) {
+    return (
+      <Login
+        onAuthenticated={() => {
+          // Nach frischem Login erneut /auth/me holen (Login-Response trägt
+          // noch keine Tenant-Liste) statt eine zweite Quelle zu pflegen.
+          setChecking(true)
+          userMe()
+            .then((me) => {
+              applyTenant(me)
+              setAuthenticated(true)
+            })
+            .catch(() => setAuthenticated(false))
+            .finally(() => setChecking(false))
+        }}
+      />
+    )
+  }
+
+  if (noTenant) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-sm text-center">
+          <p className="text-ink font-semibold mb-1">Kein Zugang eingerichtet</p>
+          <p className="text-gray-500 text-sm">
+            Dein Account ist noch keinem Unternehmen zugeordnet. Bitte wende dich an dein
+            Zukunftsbund-Team.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <Layout>
       <Routes>

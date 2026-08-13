@@ -1,11 +1,20 @@
-"""Auth-API: passwortloser Magic-Link-Login + Session (W3, 2026-07-21).
+"""Auth-API: E-Mail+Passwort-Login + Session (W3, 2026-07-21; Passwort statt
+Magic-Link auf Owner-Entscheid 2026-08-13: "Magic Link ist relativ nervig,
+jeder nimmt doch Passwort-Manager oder?").
 
 Flow:
-  POST /api/auth/magic-link   {email}         → sendet Login-Link (immer 200,
-                                                 verrät nicht ob E-Mail existiert)
-  GET  /api/auth/verify?token=…               → löst Token ein, setzt Session-Cookie
-  POST /api/auth/logout                       → Cookie löschen
-  GET  /api/auth/me                            → aktueller User (Session-Dependency)
+  POST /api/auth/login         {email, password} → prüft Login, setzt Session-Cookie
+  POST /api/auth/logout                          → Cookie löschen
+  GET  /api/auth/me                               → aktueller User (Session-Dependency)
+
+Magic-Link-Endpunkte (magic-link/verify) bleiben bestehen — nicht die primäre
+UI, aber ein funktionierender Fallback-Weg (z. B. für "Passwort vergessen"-Flows
+später), kein Grund sie zu entfernen.
+
+Enumeration-Schutz (beide Flows): Bei falscher E-Mail UND bei falschem Passwort
+exakt dieselbe Fehlermeldung + Statuscode. Nicht-existente E-Mail führt trotzdem
+einen (Dummy-)Passwort-Vergleich aus, damit die Antwortzeit nicht verrät, ob die
+Adresse existiert (Timing-Seitenkanal).
 """
 
 from __future__ import annotations
@@ -27,6 +36,24 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 # Simple E-Mail-Prüfung ohne email-validator-Dependency (hält W3 dependency-frei).
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+# Dummy-Hash für den Constant-Time-Vergleich bei nicht existierender E-Mail —
+# fest generiert (kein echtes Passwort dahinter), damit verify_password() JEDES
+# Mal die gleiche scrypt-Rechenzeit verbraucht, egal ob der User existiert.
+_DUMMY_PASSWORD_HASH = auth_svc.hash_password(auth_svc.generate_magic_token()[0])
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+    @field_validator("email")
+    @classmethod
+    def _valid_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not _EMAIL_RE.match(v):
+            raise ValueError("Ungültige E-Mail-Adresse")
+        return v
 
 
 class MagicLinkRequest(BaseModel):
@@ -51,6 +78,31 @@ def _set_session_cookie(response: Response, token: str) -> None:
         samesite="lax",
         secure=settings.cookie_secure,
     )
+
+
+@router.post("/login")
+async def login(data: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
+    """Prüft E-Mail+Passwort, setzt bei Erfolg die Session.
+
+    Generische Fehlermeldung + identischer Statuscode für "E-Mail unbekannt" und
+    "Passwort falsch" — kein User-Enumeration-Leak. Der Passwort-Vergleich läuft
+    auch bei unbekannter E-Mail gegen einen Dummy-Hash, damit die Antwortzeit
+    keinen Seitenkanal öffnet.
+    """
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+
+    stored_hash = user.password_hash if (user and user.password_hash) else _DUMMY_PASSWORD_HASH
+    password_ok = auth_svc.verify_password(data.password, stored_hash)
+
+    if not user or not user.is_active or not user.password_hash or not password_ok:
+        raise HTTPException(status_code=401, detail="E-Mail oder Passwort falsch")
+
+    user.last_login_at = datetime.now(UTC)
+    await db.commit()
+
+    _set_session_cookie(response, auth_svc.make_session(str(user.id)))
+    return {"status": "ok", "user": {"id": str(user.id), "email": user.email}}
 
 
 @router.post("/magic-link")
@@ -112,12 +164,48 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
     return user
 
 
+async def _accessible_tenants(db: AsyncSession, user: User) -> list[dict]:
+    """Tenants, die `user` sehen darf — dieselbe Regel wie
+    services/auth.py::user_may_access_tenant, aber als Liste statt Einzel-Check
+    (für die Tenant-Auswahl direkt nach dem Login).
+
+    role='owner'   → alle Tenants der eigenen Agentur.
+    sonst          → nur explizit über user_tenant zugewiesene Tenants.
+    """
+    from sqlalchemy import text
+
+    if user.role == "owner":
+        rows = (
+            await db.execute(
+                text(
+                    "SELECT t.id, t.name, t.api_key FROM tenants t "
+                    "WHERE t.agentur_id = (SELECT slug FROM agencies WHERE id = :aid) "
+                    "ORDER BY t.name"
+                ),
+                {"aid": user.agency_id},
+            )
+        ).all()
+    else:
+        rows = (
+            await db.execute(
+                text(
+                    "SELECT t.id, t.name, t.api_key FROM tenants t "
+                    "JOIN user_tenant ut ON ut.tenant_id = t.id "
+                    "WHERE ut.user_id = :uid ORDER BY t.name"
+                ),
+                {"uid": user.id},
+            )
+        ).all()
+    return [{"id": str(r.id), "name": r.name, "api_key": r.api_key} for r in rows]
+
+
 @router.get("/me")
-async def me(user: User = Depends(get_current_user)):
+async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     return {
         "id": str(user.id),
         "email": user.email,
         "display_name": user.display_name,
         "role": user.role,
         "agency_id": str(user.agency_id),
+        "tenants": await _accessible_tenants(db, user),
     }
