@@ -129,10 +129,22 @@ function CustomerApp() {
         <Route path="/publish" element={<PublishQueue />} />
         <Route path="/dialogue" element={<Dialogue />} />
         {/* Ins Admin-Tool (#98) ausgelagerte Screens → Redirect auf /admin (kein Kunden-Zugang, Admin-Session nötig) */}
-        <Route path="/brand-voice/drift-review" element={<Navigate to="/admin/drift-quality" replace />} />
-        <Route path="/brand-voice/review-queue" element={<Navigate to="/admin/drift-quality/review-queue" replace />} />
-        <Route path="/settings/analytics" element={<Navigate to="/admin/llm-analytics" replace />} />
-        <Route path="/settings/prompt-studio" element={<Navigate to="/admin/prompt-studio" replace />} />
+        <Route
+          path="/brand-voice/drift-review"
+          element={<Navigate to="/admin/drift-quality" replace />}
+        />
+        <Route
+          path="/brand-voice/review-queue"
+          element={<Navigate to="/admin/drift-quality/review-queue" replace />}
+        />
+        <Route
+          path="/settings/analytics"
+          element={<Navigate to="/admin/llm-analytics" replace />}
+        />
+        <Route
+          path="/settings/prompt-studio"
+          element={<Navigate to="/admin/prompt-studio" replace />}
+        />
         <Route path="/admin/models/backtest" element={<Navigate to="/admin/modelle" replace />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/settings/export-import" element={<ExportImport />} />

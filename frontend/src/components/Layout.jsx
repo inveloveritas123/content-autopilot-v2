@@ -53,7 +53,6 @@ const brandVoiceNavItems = [
 
 // adminNavItems vollständig entfernt (#90/#98): Modelle + Prompt-Studio → Admin-Tool
 
-
 // Rendert eine einzelne Nav-Gruppe gefiltert nach Modus.
 // isMvp=true → nur Einträge mit mvp===true; isMvp=false → alle Einträge.
 function NavGroup({ items, isMvp, onNavigate }) {
@@ -156,9 +155,7 @@ export default function Layout({ children }) {
           </div>
           <div>
             <h1 className="text-base font-bold text-ink">Content Autopilot</h1>
-            <p className="text-[11px] text-ink-muted leading-tight">
-              Mach's doch gleich richtig.
-            </p>
+            <p className="text-[11px] text-ink-muted leading-tight">Mach's doch gleich richtig.</p>
           </div>
         </div>
         {/* MVP ⇄ Features Switch (#90) — prominent, 1-Klick, jede Seite */}

@@ -222,8 +222,7 @@ export const resumeAutomation = () => request('/tenants/me/resume', { method: 'P
 // GET → { mode: "mvp" | "features" }
 // PUT → { mode } → { mode }
 export const getUiMode = () => request('/tenants/me/ui-mode')
-export const setUiMode = (mode) =>
-  request('/tenants/me/ui-mode', { method: 'PUT', body: { mode } })
+export const setUiMode = (mode) => request('/tenants/me/ui-mode', { method: 'PUT', body: { mode } })
 
 export async function downloadTenantDataExport(format = 'zip') {
   const resp = await fetch(
@@ -634,8 +633,7 @@ export function getThrottleStatus(adminToken, tenantId) {
 export const getTelegramBot = () => request('/tenants/me/telegram-bot')
 export const setTelegramBot = (token) =>
   request('/tenants/me/telegram-bot', { method: 'POST', body: { token } })
-export const revokeTelegramBot = () =>
-  request('/tenants/me/telegram-bot', { method: 'DELETE' })
+export const revokeTelegramBot = () => request('/tenants/me/telegram-bot', { method: 'DELETE' })
 export const getTelegramUsers = () => request('/tenants/me/telegram-users')
 export const blockTelegramUser = (userId) =>
   request(`/tenants/me/telegram-users/${userId}/block`, { method: 'POST' })

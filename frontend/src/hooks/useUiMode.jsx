@@ -48,9 +48,7 @@ export function UiModeProvider({ children }) {
   }
 
   return (
-    <UiModeContext.Provider value={{ mode, loading, setMode }}>
-      {children}
-    </UiModeContext.Provider>
+    <UiModeContext.Provider value={{ mode, loading, setMode }}>{children}</UiModeContext.Provider>
   )
 }
 

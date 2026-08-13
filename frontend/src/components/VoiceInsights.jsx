@@ -67,17 +67,17 @@ class InsightsErrorBoundary extends Component {
 const EDITABLE_PATHS_CANONICAL = {
   // Kanonische Keys aus backend/api/brand_voice.py EDITABLE_ROOT_KEYS + p03/p04 schema
   voice_profile: [
-    'grundton',           // Objekt: { charakterisierung, spektrum, linkedin_kalibrierung }
-    'satzarchitektur',    // Objekt: { laenge, typische_satzanfaenge, verbindungen, beispiele }
-    'wortschatz',         // Objekt: { signalwoerter, fuellwoerter, verbotene_woerter, ... }
-    'erzaehlmuster',      // Objekt: { story_einstieg, argumentation, perspektive }
-    'emotionaler_ausdruck',   // Objekt: { spektrum, humor_typ }
+    'grundton', // Objekt: { charakterisierung, spektrum, linkedin_kalibrierung }
+    'satzarchitektur', // Objekt: { laenge, typische_satzanfaenge, verbindungen, beispiele }
+    'wortschatz', // Objekt: { signalwoerter, fuellwoerter, verbotene_woerter, ... }
+    'erzaehlmuster', // Objekt: { story_einstieg, argumentation, perspektive }
+    'emotionaler_ausdruck', // Objekt: { spektrum, humor_typ }
     'persoenlichkeits_stance', // Objekt: { archetyp, stance_in_aktion }
-    'emotionaler_subtext',    // Objekt: { subtext }
-    'ueberzeugungsstil',       // Objekt: { primaer }
+    'emotionaler_subtext', // Objekt: { subtext }
+    'ueberzeugungsstil', // Objekt: { primaer }
     'zielgruppen_sprachfilter', // Objekt: { leser_profil, sprachbarrieren }
-    'vermeidungsprofil',       // Objekt: { nie_sagen, nie_tun, floskeln_filter }
-    'referenz_saetze',         // Objekt: { original, adaptiert }
+    'vermeidungsprofil', // Objekt: { nie_sagen, nie_tun, floskeln_filter }
+    'referenz_saetze', // Objekt: { original, adaptiert }
   ],
   customer_context: [
     // Kanonische Keys (EDITABLE_ROOT_KEYS backend): kernbotschaft, zielgruppe, expertise, werte
@@ -88,14 +88,14 @@ const EDITABLE_PATHS_CANONICAL = {
   ],
   audience_avatar: [
     // Kanonische Keys aus p04.schema.json
-    'identitaet',              // Objekt: { rolle_und_alltag, selbstbild }
-    'innenwelt',               // Objekt: { innerer_monolog, unausgesprochene_angst }
-    'wunschbild',              // Objekt: { wunschzustand, wunschidentitaet }
-    'content_trigger',         // Objekt: { scroll_stopper, resonanz_saetze, abstoss_trigger }
-    'sprache_der_zielgruppe',  // Objekt: { redewendungen, ansprache }
-    'alltagsszenen',           // Objekt: { szenen, wiederkehrende_muster }
-    'blockaden',               // Objekt: { glaubenssaetze, denkfehler }
-    'ausloesemoment',          // Objekt: { trigger_events, emotional_tipping_point }
+    'identitaet', // Objekt: { rolle_und_alltag, selbstbild }
+    'innenwelt', // Objekt: { innerer_monolog, unausgesprochene_angst }
+    'wunschbild', // Objekt: { wunschzustand, wunschidentitaet }
+    'content_trigger', // Objekt: { scroll_stopper, resonanz_saetze, abstoss_trigger }
+    'sprache_der_zielgruppe', // Objekt: { redewendungen, ansprache }
+    'alltagsszenen', // Objekt: { szenen, wiederkehrende_muster }
+    'blockaden', // Objekt: { glaubenssaetze, denkfehler }
+    'ausloesemoment', // Objekt: { trigger_events, emotional_tipping_point }
   ],
 }
 

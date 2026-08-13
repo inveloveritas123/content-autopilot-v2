@@ -1,13 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import {
-  UserCog,
-  RefreshCw,
-  AlertCircle,
-  Loader2,
-  UserPlus,
-  Check,
-  Building2,
-} from 'lucide-react'
+import { UserCog, RefreshCw, AlertCircle, Loader2, UserPlus, Check, Building2 } from 'lucide-react'
 import {
   adminListAccounts,
   adminListAgencies,
@@ -85,7 +77,11 @@ function CreateAgencyDialog({ onClose }) {
             disabled={loading || !name.trim() || !slug.trim()}
             className="w-full flex items-center justify-center gap-2 py-2 px-4 text-sm font-medium rounded-lg bg-primary-700 text-white hover:bg-primary-800 disabled:opacity-50 transition-colors"
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Building2 className="w-4 h-4" />}
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Building2 className="w-4 h-4" />
+            )}
             Agentur anlegen
           </button>
         </div>
@@ -175,7 +171,9 @@ function AccountDialog({ editUser, agencies, tenants, onClose }) {
           )}
 
           <div>
-            <label className="block text-xs font-medium text-ink mb-1.5">Anzeigename (optional)</label>
+            <label className="block text-xs font-medium text-ink mb-1.5">
+              Anzeigename (optional)
+            </label>
             <input
               type="text"
               value={displayName}
@@ -480,10 +478,14 @@ export default function AccountManagement() {
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-300">{u.role}</td>
                   <td className="px-4 py-3 text-xs text-slate-400">
-                    {u.role === 'owner' ? 'alle (Agentur-weit)' : u.tenants.map((t) => t.name).join(', ') || '—'}
+                    {u.role === 'owner'
+                      ? 'alle (Agentur-weit)'
+                      : u.tenants.map((t) => t.name).join(', ') || '—'}
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-400">
-                    {u.last_login_at ? new Date(u.last_login_at).toLocaleString('de-DE') : 'noch nie'}
+                    {u.last_login_at
+                      ? new Date(u.last_login_at).toLocaleString('de-DE')
+                      : 'noch nie'}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 flex-wrap">
