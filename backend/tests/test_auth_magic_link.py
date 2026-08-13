@@ -1,4 +1,8 @@
-"""Unit-Tests für den passwortlosen Magic-Link-Auth-Flow (W3, services/auth.py).
+"""Unit-Tests für den Magic-Link- UND den Passwort-Auth-Flow (W3, services/auth.py).
+
+Passwort-Login wurde 2026-08-13 ergänzt (Owner-Entscheid: E-Mail+Passwort statt
+Magic-Link als primärer Login). Magic-Link-Endpunkte/-Tests bleiben bestehen
+(Fallback-Weg), Datei nicht umbenannt um Diff-Rauschen zu vermeiden.
 
 Strategie: services/auth.py hat außer `config.settings` keine schweren
 Abhängigkeiten (stdlib hashlib/hmac/secrets/smtplib) — die Suite importiert es
@@ -203,3 +207,70 @@ class TestSessionRoundtrip:
             token = auth_svc.make_session("user-123")
             uid = auth_svc.verify_session(token)
         assert uid == "user-123"
+
+
+# ---------------------------------------------------------------------------
+# hash_password / verify_password (Passwort-Login, 2026-08-13)
+# ---------------------------------------------------------------------------
+
+
+class TestPasswordHashing:
+    def test_hash_has_scrypt_prefix_and_three_parts(self):
+        h = auth_svc.hash_password("MeinPasswort123")
+        parts = h.split("$")
+        assert len(parts) == 3
+        assert parts[0] == "scrypt"
+
+    def test_correct_password_verifies(self):
+        h = auth_svc.hash_password("MeinPasswort123")
+        assert auth_svc.verify_password("MeinPasswort123", h) is True
+
+    def test_wrong_password_does_not_verify(self):
+        h = auth_svc.hash_password("MeinPasswort123")
+        assert auth_svc.verify_password("FalschesPasswort", h) is False
+
+    def test_empty_password_does_not_verify_against_real_hash(self):
+        h = auth_svc.hash_password("MeinPasswort123")
+        assert auth_svc.verify_password("", h) is False
+
+    def test_two_hashes_of_same_password_differ(self):
+        """Zufälliges Salt pro Aufruf — kein Rainbow-Table-Vergleich möglich."""
+        h1 = auth_svc.hash_password("gleichesPasswort")
+        h2 = auth_svc.hash_password("gleichesPasswort")
+        assert h1 != h2
+        assert auth_svc.verify_password("gleichesPasswort", h1) is True
+        assert auth_svc.verify_password("gleichesPasswort", h2) is True
+
+    def test_malformed_hash_returns_false_without_crash(self):
+        assert auth_svc.verify_password("irgendwas", "nicht-scrypt-format") is False
+        assert auth_svc.verify_password("irgendwas", "") is False
+        assert auth_svc.verify_password("irgendwas", "scrypt$nur-zwei-teile") is False
+
+    def test_wrong_scheme_prefix_returns_false(self):
+        h = auth_svc.hash_password("MeinPasswort123")
+        _scheme, salt, digest = h.split("$")
+        fake = f"bcrypt${salt}${digest}"
+        assert auth_svc.verify_password("MeinPasswort123", fake) is False
+
+
+class TestPasswordHashingSabotageGuard:
+    """Sabotage-Gegenprobe (Owner-Auflage 2026-08-13): ein Test MUSS rot werden,
+    wenn die Prüfung durch eine kaputte Implementierung ersetzt wird — sonst ist
+    der Guard nur eine Behauptung. Diese Klasse hängt hier keinen Produktivcode
+    aus (das Repo hat keine Mutation-Testing-Infrastruktur), sondern verifiziert
+    die Eigenschaft direkt: eine Fake-Implementierung, die IMMER True zurückgibt
+    (der naheliegendste kaputte Zustand — "Login akzeptiert alles"), muss von
+    mindestens einem harten Assert oben erkannt werden. Wird diese Testklasse
+    selbst durch Auskommentieren der oberen Asserts sabotiert, fällt sie nicht
+    auf — sie beweist die Eigenschaft der ECHTEN Funktion, nicht ihre eigene
+    Anwesenheit.
+    """
+
+    def test_verify_password_is_not_a_stub_that_always_returns_true(self):
+        h = auth_svc.hash_password("korrekt")
+        # Böswillige/kaputte Implementierung würde hier auch True liefern —
+        # dieser Test unterscheidet "prüft echt" von "akzeptiert alles".
+        assert auth_svc.verify_password("komplett-falsch", h) is False, (
+            "verify_password() akzeptiert ein falsches Passwort — "
+            "der Login-Guard wäre wirkungslos."
+        )
