@@ -40,6 +40,12 @@ services:
       ADMIN_USER: ${ADMIN_USER:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-}
+      # Secure-Flag für Session-/CSRF-Cookies — fehlte hier komplett, .env-Wert wurde
+      # nie an den Container durchgereicht (Docker Compose liest .env NICHT automatisch
+      # in den Container, nur was hier explizit gemappt ist). Gefunden 2026-08-13 beim
+      # Login-Guard-Deploy: COOKIE_SECURE=true in .env, Backend-Log zeigte trotzdem die
+      # production-Warnung.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       SENTRY_DSN: ${SENTRY_DSN:-}
       APP_ENV: ${APP_ENV:-production}
       BRAND_VOICE_NC_BASE_PATH: ${BRAND_VOICE_NC_BASE_PATH:-/content-autopilot/v2/Kunde/}
