@@ -375,11 +375,13 @@ class TestInvarianteTestmodus:
 
     @pytest.mark.parametrize("purpose", sorted(CREATIVE_PURPOSES))
     def test_testmodus_ist_gemini_flash_lite(self, purpose):
-        """INVARIANTE A (explizit): testmodus-litellm_model == vertex/gemini-2.5-flash-lite@europe-central2."""
+        """INVARIANTE A (explizit): testmodus-litellm_model == REQUESTY_MODELS["claude-sonnet"]
+        (Gemini-Flash-Lite — konkreter Modell-String lebt allein in llm_mapping.py, siehe
+        REQUESTY_MODELS-Docstring dort für die aktuelle Version)."""
         key = _resolve_model_logic("claude-sonnet", purpose, None, mode="testmodus")
         litellm_model, task = _resolve_litellm_model(key, None)
         assert (
-            litellm_model == "vertex/gemini-2.5-flash-lite@europe-central2"
+            litellm_model == REQUESTY_MODELS["claude-sonnet"]
         ), f"purpose='{purpose}': erwartet Gemini-Flash-Lite, bekam {litellm_model!r}"
         assert task == "creative"
 
@@ -393,12 +395,13 @@ class TestInvarianteTestmodus:
         assert key in REQUESTY_MODELS, f"KEY {key!r} fehlt in REQUESTY_MODELS"
 
     def test_testmodus_key_in_requesty_models(self):
-        """KEY-INVARIANTE: CREATIVE_MODEL_BY_MODE['testmodus'] zeigt auf den Gemini-String via REQUESTY_MODELS."""
+        """KEY-INVARIANTE: CREATIVE_MODEL_BY_MODE['testmodus'] zeigt via REQUESTY_MODELS auf
+        denselben Gemini-String wie der KEY 'claude-sonnet' direkt — keine zweite Quelle."""
         key = CREATIVE_MODEL_BY_MODE["testmodus"]
-        assert REQUESTY_MODELS[key] == "vertex/gemini-2.5-flash-lite@europe-central2", (
+        assert REQUESTY_MODELS[key] == REQUESTY_MODELS["claude-sonnet"], (
             "INVARIANTE VERLETZT!\n"
             f"REQUESTY_MODELS[{key!r}] = {REQUESTY_MODELS.get(key)!r}\n"
-            "Erwartet: 'vertex/gemini-2.5-flash-lite@europe-central2'"
+            f"REQUESTY_MODELS['claude-sonnet'] = {REQUESTY_MODELS.get('claude-sonnet')!r}"
         )
 
     def test_non_creative_purposes_unaffected(self):
@@ -542,7 +545,7 @@ class TestResolveLitellmModel:
 
     def test_claude_sonnet_ohne_provider_gibt_gemini(self):
         litellm_model, task = _resolve_litellm_model("claude-sonnet", None)
-        assert litellm_model == "vertex/gemini-2.5-flash-lite@europe-central2"
+        assert litellm_model == REQUESTY_MODELS["claude-sonnet"]
         assert task == "creative"
 
     def test_claude_sonnet_mit_provider_gibt_gemini(self):
@@ -554,7 +557,7 @@ class TestResolveLitellmModel:
             "provider_id": 1,
         }
         litellm_model, task = _resolve_litellm_model("claude-sonnet", provider)
-        assert litellm_model == "vertex/gemini-2.5-flash-lite@europe-central2"
+        assert litellm_model == REQUESTY_MODELS["claude-sonnet"]
         assert task == "creative"
 
     # ── produktiv: "claude-sonnet-eu" → Bedrock, task creative ───────────────
@@ -580,7 +583,7 @@ class TestResolveLitellmModel:
 
     def test_gemini_flash_ohne_provider(self):
         litellm_model, task = _resolve_litellm_model("gemini-flash", None)
-        assert litellm_model == "vertex/gemini-2.5-flash-lite@europe-central2"
+        assert litellm_model == REQUESTY_MODELS["gemini-flash"]
         assert task == "analysis"
 
     def test_gemini_flash_mit_provider(self):
@@ -591,7 +594,7 @@ class TestResolveLitellmModel:
             "provider_id": 1,
         }
         litellm_model, task = _resolve_litellm_model("gemini-flash", provider)
-        assert litellm_model == "vertex/gemini-2.5-flash-lite@europe-central2"
+        assert litellm_model == REQUESTY_MODELS["gemini-flash"]
         assert task == "analysis"
 
     # ── task-Identität: testmodus vs. alt (ohne Feature) ─────────────────────
