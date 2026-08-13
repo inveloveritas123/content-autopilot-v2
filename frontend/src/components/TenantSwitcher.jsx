@@ -9,12 +9,12 @@ try {
 }
 
 export default function TenantSwitcher() {
-  if (!TEST_TENANTS.length) return null
-
   const currentKey = localStorage.getItem('apiKey') || ''
   const [selected, setSelected] = useState(
     TEST_TENANTS.find((t) => t.key === currentKey)?.name || ''
   )
+
+  if (!TEST_TENANTS.length) return null
 
   function handleChange(e) {
     const tenant = TEST_TENANTS.find((t) => t.name === e.target.value)
