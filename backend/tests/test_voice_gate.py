@@ -52,9 +52,7 @@ def test_compute_metrics_bundle_has_expected_keys():
 
 
 def test_anti_ki_blocklist_hits_generic_opener():
-    hits = check_anti_ki_phrases(
-        "In der heutigen schnelllebigen Welt müssen wir alle umdenken."
-    )
+    hits = check_anti_ki_phrases("In der heutigen schnelllebigen Welt müssen wir alle umdenken.")
     assert any("schnelllebigen Welt" in h for h in hits)
 
 

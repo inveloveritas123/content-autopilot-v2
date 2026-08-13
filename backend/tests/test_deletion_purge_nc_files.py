@@ -40,27 +40,21 @@ class TestTenantNcPaths:
                 "nc_content_path": "/z/Content",
             }
         )
-        with patch(
-            "tasks.deletion_purge_task.sync_session_factory", return_value=mock_db
-        ):
+        with patch("tasks.deletion_purge_task.sync_session_factory", return_value=mock_db):
             paths = _tenant_nc_paths("tenant-1")
 
         assert paths == ["/z/Transkripte", "/z/Analysen", "/z/Content"]
 
     def test_missing_settings_returns_empty(self):
         mock_db = _mock_db_with_settings(None)
-        with patch(
-            "tasks.deletion_purge_task.sync_session_factory", return_value=mock_db
-        ):
+        with patch("tasks.deletion_purge_task.sync_session_factory", return_value=mock_db):
             paths = _tenant_nc_paths("tenant-unknown")
 
         assert paths == []
 
     def test_partial_settings_only_returns_set_keys(self):
         mock_db = _mock_db_with_settings({"nc_transcript_path": "/z/Transkripte"})
-        with patch(
-            "tasks.deletion_purge_task.sync_session_factory", return_value=mock_db
-        ):
+        with patch("tasks.deletion_purge_task.sync_session_factory", return_value=mock_db):
             paths = _tenant_nc_paths("tenant-2")
 
         assert paths == ["/z/Transkripte"]

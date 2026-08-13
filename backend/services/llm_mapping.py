@@ -14,9 +14,9 @@ from __future__ import annotations
 # Startmodell 2026-08-13 (Robert, wörtlich): "Nimm erstmal gemini 3.5 flash lite" — via
 # /v1/models gegen router.eu.requesty.ai verifiziert (geolocation=eu).
 REQUESTY_MODELS: dict[str, str] = {
-    "gemini-flash": "vertex/gemini-3.5-flash-lite@eu",   # Analysis: cheap, EU-hosted
-    "claude-sonnet": "vertex/gemini-3.5-flash-lite@eu",   # Creative: remapped to Gemini (mistral-medium disabled 2026-05-03 — caused $20 budget overrun in one day)
-    "claude-sonnet-eu": "bedrock/claude-sonnet-4-6@eu-central-1",      # Creative/produktiv: Bedrock Frankfurt (S6, EU-souverän, Anthropic-Quality) — Issue #72
+    "gemini-flash": "vertex/gemini-3.5-flash-lite@eu",  # Analysis: cheap, EU-hosted
+    "claude-sonnet": "vertex/gemini-3.5-flash-lite@eu",  # Creative: remapped to Gemini (mistral-medium disabled 2026-05-03 — caused $20 budget overrun in one day)
+    "claude-sonnet-eu": "bedrock/claude-sonnet-4-6@eu-central-1",  # Creative/produktiv: Bedrock Frankfurt (S6, EU-souverän, Anthropic-Quality) — Issue #72
     "gpt-4o-mini": "openai/gpt-4.1-mini",
 }
 

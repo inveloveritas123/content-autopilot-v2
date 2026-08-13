@@ -123,9 +123,7 @@ async def _delete_nc_files_async(tenant_id: str, request_id: str) -> list[str]:
             files = await nextcloud_client.list_files_recursive(base_path, extension="")
         except Exception as exc:
             msg = f"NC list_folder fehlgeschlagen für path={base_path}: {exc}"
-            logger.error(
-                "NC-File-Löschung tenant=%s request=%s: %s", tenant_id, request_id, msg
-            )
+            logger.error("NC-File-Löschung tenant=%s request=%s: %s", tenant_id, request_id, msg)
             errors.append(msg)
             continue
 
@@ -169,9 +167,7 @@ def _delete_nc_files(tenant_id: str, request_id: str) -> list[str]:
         return asyncio.run(_delete_nc_files_async(tenant_id, request_id))
     except Exception as exc:
         msg = f"NC-Löschung unerwartet fehlgeschlagen: {exc}"
-        logger.error(
-            "NC-File-Löschung für tenant=%s request=%s: %s", tenant_id, request_id, msg
-        )
+        logger.error("NC-File-Löschung für tenant=%s request=%s: %s", tenant_id, request_id, msg)
         return [msg]
 
 

@@ -54,7 +54,9 @@ def _evaluate() -> int:
     from services.voice_gate import check_voice_consistency
 
     profiles = _load_profiles(_FIXTURES_DIR)
-    print(f"G-VOICE-GOLDEN v{GATE_VERSION} — Voice-Golden-Set-Gate (regelbasiert, kein Live-Proxy noetig)")
+    print(
+        f"G-VOICE-GOLDEN v{GATE_VERSION} — Voice-Golden-Set-Gate (regelbasiert, kein Live-Proxy noetig)"
+    )
 
     if not profiles:
         print(f"  keine Golden-Profile gefunden unter {_FIXTURES_DIR} — nichts zu pruefen (OK).")
@@ -94,14 +96,14 @@ def _evaluate() -> int:
                     f"bekam passed=True (Score {result['score']}) — kein Verstoss erkannt"
                 )
 
-        print(
-            f"  [{key}] good={good_ok}/{len(good_posts)} bad_erkannt={bad_ok}/{len(bad_posts)}"
-        )
+        print(f"  [{key}] good={good_ok}/{len(good_posts)} bad_erkannt={bad_ok}/{len(bad_posts)}")
 
     total_cases = total_good + total_bad
     correct = total_cases - len(misclassified)
-    print(f"G-VOICE-GOLDEN: {correct}/{total_cases} Golden-Cases korrekt klassifiziert "
-          f"({len(profiles)} Profil(e), {total_good} good_posts, {total_bad} bad_posts).")
+    print(
+        f"G-VOICE-GOLDEN: {correct}/{total_cases} Golden-Cases korrekt klassifiziert "
+        f"({len(profiles)} Profil(e), {total_good} good_posts, {total_bad} bad_posts)."
+    )
 
     if not misclassified:
         print("G-VOICE-GOLDEN: OK.")

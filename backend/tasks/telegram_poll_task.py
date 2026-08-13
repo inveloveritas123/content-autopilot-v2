@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import text
 
@@ -65,7 +65,7 @@ def poll_all_active_bots() -> dict:
 
     # Lazy-Import — dispatch_inbound_update zieht viele FastAPI-Module rein;
     # erst hier importieren damit tasks.telegram_poll_task dep-leicht bleibt.
-    from api.telegram import dispatch_inbound_update  # noqa: PLC0415
+    from api.telegram import dispatch_inbound_update
 
     bots_polled = 0
     updates_processed = 0
@@ -112,9 +112,7 @@ def poll_all_active_bots() -> dict:
 
         except TelegramUnauthorized:
             # Token ungültig / widerrufen — Bot deaktivieren
-            logger.warning(
-                "poll_all_active_bots: tenant=%s HTTP 401 — marking error", tenant_id
-            )
+            logger.warning("poll_all_active_bots: tenant=%s HTTP 401 — marking error", tenant_id)
             _mark_bot_error(tenant_id, "token_rejected_401")
 
         except TelegramHTTPError as exc:
@@ -188,9 +186,7 @@ def _load_active_bots() -> list[dict]:
         return []
 
 
-def _persist_offset(
-    tenant_id: str, offset: int | None, *, last_active: bool
-) -> None:
+def _persist_offset(tenant_id: str, offset: int | None, *, last_active: bool) -> None:
     """Persistiert telegram_poll_offset (und ggf. telegram_last_active_at).
 
     Fail-open: Fehler werden nur geloggt.
@@ -207,7 +203,7 @@ def _persist_offset(
                     ),
                     {
                         "offset": offset,
-                        "now": datetime.now(timezone.utc),
+                        "now": datetime.now(UTC),
                         "tid": tenant_id,
                     },
                 )

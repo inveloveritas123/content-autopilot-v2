@@ -190,16 +190,12 @@ def pytest_collectstart(collector):
     Baseline-Zustand zurücksetzen (siehe Modul-Doku oben)."""
     global _BASELINE_FROZEN, _BASELINE_KEYS
     if not _BASELINE_FROZEN:
-        _MODULE_BASELINE.update(
-            {n: m for n, m in sys.modules.items() if _is_internal_module(n)}
-        )
+        _MODULE_BASELINE.update({n: m for n, m in sys.modules.items() if _is_internal_module(n)})
         _BASELINE_KEYS = frozenset(_MODULE_BASELINE)
         _BASELINE_FROZEN = True
         return
     # 1. Nach der Baseline hinzugekommene interne Module (Stubs) entfernen.
-    for name in [
-        n for n in sys.modules if _is_internal_module(n) and n not in _BASELINE_KEYS
-    ]:
+    for name in [n for n in sys.modules if _is_internal_module(n) and n not in _BASELINE_KEYS]:
         del sys.modules[name]
     # 2. Ersetzte/entfernte interne Module auf den Baseline-Stand zurückbringen.
     for name, baseline in _MODULE_BASELINE.items():

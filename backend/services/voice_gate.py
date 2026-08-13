@@ -340,7 +340,9 @@ def _check_forbidden_phrases(text: str, phrases: list[str]) -> list[str]:
     for phrase in phrases:
         found = _find_phrase(text, phrase)
         if found is not None:
-            violations.append(f"Verbotene Phrase getroffen: „{found}“ (nie_sagen/verbotene_woerter)")
+            violations.append(
+                f"Verbotene Phrase getroffen: „{found}“ (nie_sagen/verbotene_woerter)"
+            )
     return violations
 
 
@@ -484,9 +486,7 @@ def check_voice_consistency(post_text: str, voice_profile: dict) -> dict:
         for marker, limit in filler_limits.items():
             got = freqs.get(marker, 0.0)
             if got > limit:
-                violations.append(
-                    f"Füllwort '{marker}' zu dicht: {got:.1f}/1k > {limit:.1f}/1k"
-                )
+                violations.append(f"Füllwort '{marker}' zu dicht: {got:.1f}/1k > {limit:.1f}/1k")
 
     # 4) Explizit verbotene Phrasen (vermeidungsprofil.nie_sagen /
     #    wortschatz.verbotene_woerter) — harte Verletzung, kein Korridor.

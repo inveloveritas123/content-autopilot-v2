@@ -165,6 +165,7 @@ def _restore_polluted_modules():
         else:
             sys.modules[key] = original  # echtes Modul wiederherstellen
 
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 

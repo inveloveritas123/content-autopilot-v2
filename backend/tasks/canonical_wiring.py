@@ -42,9 +42,7 @@ def fetch_tenant_meta(tenant_id: str) -> tuple[str | None, str | None]:
             # (ältere Schema-Stand) fällt die Query auf settings-JSONB zurück.
             try:
                 row = session.execute(
-                    text(
-                        "SELECT name, agentur_id, settings FROM tenants WHERE id = :id"
-                    ),
+                    text("SELECT name, agentur_id, settings FROM tenants WHERE id = :id"),
                     {"id": tenant_id},
                 ).fetchone()
                 if row:

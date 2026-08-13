@@ -32,7 +32,7 @@ BRANCHEN = ["_generic", "handwerk", "recht", "finanzen"]
 # ---------------------------------------------------------------------------
 # F1-Ziele (NIEMALS aufweichen — Scorer verbessern wenn zu niedrig)
 # ---------------------------------------------------------------------------
-GESAMT_MIN_F1 = 0.90   # Gemessener Wert 2026-06-13: 1.0 — Assertion auf sicheren Wert gesetzt
+GESAMT_MIN_F1 = 0.90  # Gemessener Wert 2026-06-13: 1.0 — Assertion auf sicheren Wert gesetzt
 BRANCHE_MIN_F1 = 0.80  # Je-Branche Minimum
 
 # ---------------------------------------------------------------------------
@@ -137,9 +137,9 @@ class TestSignaturStabilitaet:
     def test_returns_required_keys(self):
         result = quality_gate_check("Hallo Welt.", "_generic")
         required_keys = {"passed", "score", "violations", "threshold", "branche"}
-        assert required_keys <= set(result.keys()), (
-            f"Fehlende Keys: {required_keys - set(result.keys())}"
-        )
+        assert required_keys <= set(
+            result.keys()
+        ), f"Fehlende Keys: {required_keys - set(result.keys())}"
 
     def test_passed_is_bool(self):
         result = quality_gate_check("Hallo Welt.", "_generic")
@@ -222,9 +222,9 @@ class TestGesamtF1:
         ]
         for text, branche in spam_posts:
             result = quality_gate_check(text, branche)
-            assert result["passed"] is False, (
-                f"Spam-Post wurde faelschlich akzeptiert [{branche}]: {text!r}"
-            )
+            assert (
+                result["passed"] is False
+            ), f"Spam-Post wurde faelschlich akzeptiert [{branche}]: {text!r}"
 
     def test_all_corpus_good_posts_pass(self):
         """Alle als 'good' gelabelten Posts muessen passed=True liefern."""

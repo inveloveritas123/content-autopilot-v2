@@ -94,7 +94,9 @@ class TestHashMagicToken:
 class TestSendMagicLinkEmail:
     def test_no_smtp_host_returns_false_without_crash(self):
         with patch("services.auth.settings", _fake_settings(smtp_host=None)):
-            result = auth_svc.send_magic_link_email("user@example.com", "https://x/verify?token=abc")
+            result = auth_svc.send_magic_link_email(
+                "user@example.com", "https://x/verify?token=abc"
+            )
         assert result is False
 
     def test_smtp_send_success_returns_true(self):
@@ -152,9 +154,7 @@ class TestSessionRoundtrip:
             padded = b64 + ("=" * ((4 - len(b64) % 4) % 4))
             payload = json.loads(base64.urlsafe_b64decode(padded))
             payload["uid"] = "attacker"
-            new_b64 = (
-                base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
-            )
+            new_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
             tampered = f"{new_b64}.{sig}"
             result = auth_svc.verify_session(tampered)
         assert result is None

@@ -71,7 +71,9 @@ def test_golden_set_is_non_empty_and_has_minimum_size():
     Verlust waere sonst moeglich, ohne dass ein Test das bemerkt)."""
     assert len(GOLDEN_PROFILES) >= 2, "mindestens 2 Golden-Profile erwartet"
     total_posts = len(_GOOD_CASES) + len(_BAD_CASES)
-    assert total_posts >= 6, f"Golden-Set zu klein ({total_posts} Posts) fuer ein aussagekraeftiges Gate"
+    assert (
+        total_posts >= 6
+    ), f"Golden-Set zu klein ({total_posts} Posts) fuer ein aussagekraeftiges Gate"
 
 
 def test_golden_profiles_have_required_fields():
@@ -99,9 +101,9 @@ def test_good_post_passes_voice_consistency(profile_key, voice_profile, post_id,
         f"[{profile_key}/{post_id}] sollte passed=True liefern, "
         f"Verstoesse: {result['violations']}"
     )
-    assert result["violations"] == [], (
-        f"[{profile_key}/{post_id}] hat unerwartete Verstoesse: {result['violations']}"
-    )
+    assert (
+        result["violations"] == []
+    ), f"[{profile_key}/{post_id}] hat unerwartete Verstoesse: {result['violations']}"
     assert result["score"] >= 0.9, f"[{profile_key}/{post_id}] Score zu niedrig: {result['score']}"
 
 
@@ -114,4 +116,6 @@ def test_bad_post_fails_voice_consistency(profile_key, voice_profile, post_id, t
         f"[{profile_key}/{post_id}] sollte passed=False liefern (Verstoss erwartet), "
         f"aber der Post wurde durchgewunken (Score {result['score']})"
     )
-    assert result["violations"], f"[{profile_key}/{post_id}] passed=False aber keine violations gemeldet"
+    assert result[
+        "violations"
+    ], f"[{profile_key}/{post_id}] passed=False aber keine violations gemeldet"

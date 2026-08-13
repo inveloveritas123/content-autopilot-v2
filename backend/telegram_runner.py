@@ -44,9 +44,7 @@ def _get_interval() -> float:
     try:
         return float(os.environ.get("TELEGRAM_POLL_INTERVAL_SECONDS", "2.0"))
     except ValueError:
-        logger.warning(
-            "TELEGRAM_POLL_INTERVAL_SECONDS ungültig — nutze Default 2.0s"
-        )
+        logger.warning("TELEGRAM_POLL_INTERVAL_SECONDS ungültig — nutze Default 2.0s")
         return 2.0
 
 
@@ -55,6 +53,6 @@ if __name__ == "__main__":
     logger.info("Telegram-Runner startet (interval=%.1fs)", interval)
 
     # Import nach PYTHONPATH-Setup, damit services/tasks gefunden werden
-    from services.telegram_poller import run_forever  # noqa: E402
+    from services.telegram_poller import run_forever
 
     run_forever(interval_seconds=interval)

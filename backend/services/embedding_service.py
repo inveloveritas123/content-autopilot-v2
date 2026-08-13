@@ -435,7 +435,10 @@ async def _lexical_search(
     reines Vektor-Retrieval zurück ("Hybrid schlägt Purismus", aber niemals
     blockierend).
     """
-    where_extra = ["content_tsv @@ websearch_to_tsquery('german', :q)", "tenant_id = CAST(:tid AS uuid)"]
+    where_extra = [
+        "content_tsv @@ websearch_to_tsquery('german', :q)",
+        "tenant_id = CAST(:tid AS uuid)",
+    ]
     params: dict = {"tid": tenant_id, "q": query_text, "limit": limit}
     if classification and classification in ALLOWED_CLASSIFICATIONS:
         where_extra.append("classification = :class")
