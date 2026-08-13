@@ -655,8 +655,12 @@ async def wizard_get(
     if not row:
         raise HTTPException(status_code=404, detail="Wizard-Session nicht gefunden")
 
-    # Tenant-Isolation
-    if row.tenant_id != str(tenant_id):
+    # Tenant-Isolation. row.tenant_id kommt als UUID-Objekt (asyncpg), tenant_id als
+    # UUID-Objekt aus der Dependency — vorher wurde gegen str(tenant_id) verglichen,
+    # was UUID != str IMMER True liefert (unterschiedliche Typen), unabhaengig vom
+    # Inhalt. Dadurch war JEDER Zugriff auf eine Wizard-Session — auch die eigene,
+    # direkt nach dem Anlegen — mit 403 blockiert. Fix: beide Seiten auf str normieren.
+    if str(row.tenant_id) != str(tenant_id):
         raise HTTPException(status_code=403, detail="Zugriff verweigert")
 
     return {
@@ -707,7 +711,7 @@ async def wizard_answer(
 
     if not row:
         raise HTTPException(status_code=404, detail="Wizard-Session nicht gefunden")
-    if row.tenant_id != str(tenant_id):
+    if str(row.tenant_id) != str(tenant_id):
         raise HTTPException(status_code=403, detail="Zugriff verweigert")
     if row.status in ("finalized", "abandoned"):
         raise HTTPException(status_code=409, detail=f"Session ist bereits '{row.status}'")
@@ -791,7 +795,7 @@ async def wizard_synthesize_phase(
 
     if not row:
         raise HTTPException(status_code=404, detail="Wizard-Session nicht gefunden")
-    if row.tenant_id != str(tenant_id):
+    if str(row.tenant_id) != str(tenant_id):
         raise HTTPException(status_code=403, detail="Zugriff verweigert")
     if row.status in ("finalized", "abandoned"):
         raise HTTPException(status_code=409, detail=f"Session ist bereits '{row.status}'")
@@ -910,7 +914,7 @@ async def wizard_finalize(
 
     if not row:
         raise HTTPException(status_code=404, detail="Wizard-Session nicht gefunden")
-    if row.tenant_id != str(tenant_id):
+    if str(row.tenant_id) != str(tenant_id):
         raise HTTPException(status_code=403, detail="Zugriff verweigert")
     if row.status == "finalized":
         raise HTTPException(status_code=409, detail="Session ist bereits finalized")
