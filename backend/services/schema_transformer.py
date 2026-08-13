@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 schema_transformer.py — Transformer-Schicht zwischen v2-DB-Payload und kanonischem Schema.
 
@@ -25,6 +23,8 @@ Autoren-Übergabe:
 
 Stand: 2026-06-12
 """
+
+from __future__ import annotations
 
 import hashlib
 import json

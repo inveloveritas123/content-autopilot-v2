@@ -1475,7 +1475,7 @@ def _onboarding_get_active_session(tenant_id: str) -> dict | None:
                 row = result.first()
                 if not row:
                     return None
-                msgs = row[1] if isinstance(row[1], (dict, list)) else json.loads(row[1] or "[]")
+                msgs = row[1] if isinstance(row[1], dict | list) else json.loads(row[1] or "[]")
                 return {
                     "id": str(row[0]),
                     "messages": msgs,

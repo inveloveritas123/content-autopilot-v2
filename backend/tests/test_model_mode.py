@@ -665,12 +665,12 @@ class TestGetTenantModelMode:
         for expected_mode in VALID_MODEL_MODES:
 
             class _MockCM:
-                def __enter__(self_):
+                def __enter__(self_, _mode=expected_mode):
                     class _MockSession:
                         def execute(self__, _sql, _params):
                             class _Row:
                                 def fetchone(self___):
-                                    return ({"model_mode": expected_mode},)
+                                    return ({"model_mode": _mode},)
 
                             return _Row()
 
