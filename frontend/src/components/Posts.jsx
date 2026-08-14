@@ -1769,12 +1769,12 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
   if (!post)
     return (
       <div className="bg-white rounded-xl border border-surface-border shadow-sm p-8 text-center">
-        <p className="text-sm text-red-500 mb-3">
+        <p className="text-sm text-status-fehler-text mb-3">
           {message?.text || 'Post konnte nicht geladen werden.'}
         </p>
         <button
           onClick={onClose}
-          className="px-4 py-2 text-sm text-ink-muted border border-gray-200 rounded-lg hover:bg-gray-50"
+          className="px-4 py-2 text-sm text-ink-muted border border-surface-border rounded-lg hover:bg-surface-bg"
         >
           ← Zurück zur Liste
         </button>
@@ -1793,7 +1793,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
               <button
                 onClick={() => prevId && onNavigate(prevId)}
                 disabled={!prevId}
-                className="p-1.5 rounded-lg border border-gray-200 text-ink-muted hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="p-1.5 rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 title="Vorheriger Post (Alt+←)"
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
@@ -1806,7 +1806,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
               <button
                 onClick={() => nextId && onNavigate(nextId)}
                 disabled={!nextId}
-                className="p-1.5 rounded-lg border border-gray-200 text-ink-muted hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="p-1.5 rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 title="Nächster Post (Alt+→)"
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
@@ -1816,7 +1816,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
             </div>
           )}
           <span
-            className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[post.status] || 'bg-gray-100'}`}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[post.status] || 'bg-surface-bg'}`}
           >
             {post.status === 'draft'
               ? 'Entwurf'
@@ -1827,7 +1827,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                   : post.status}
           </span>
           <span
-            className={`text-xs font-medium tabular-nums ${charCount > 2500 ? 'text-red-600' : charCount > 1300 ? 'text-amber-600' : 'text-ink-muted'}`}
+            className={`text-xs font-medium tabular-nums ${charCount > 2500 ? 'text-status-fehler-text' : charCount > 1300 ? 'text-status-aktiv-text' : 'text-ink-muted'}`}
           >
             {charCount} Z{charCount <= LI_FOLD ? ' ✓' : ''}
           </span>
@@ -1849,13 +1849,13 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
             <>
               <button
                 onClick={() => setEditMode(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-ink-light hover:text-ink border border-gray-200 rounded-lg hover:bg-gray-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-ink-light hover:text-ink border border-surface-border rounded-lg hover:bg-surface-bg"
               >
                 <Edit3 className="w-3.5 h-3.5" /> Bearbeiten
               </button>
               <button
                 onClick={handleApprove}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-status-fertig-text rounded-lg hover:opacity-90"
               >
                 <Check className="w-3.5 h-3.5" /> Freigeben
               </button>
@@ -1872,7 +1872,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
           {/* Quality Rating */}
           {post.source_item_id && (
             <div
-              className="flex items-center gap-1 border border-gray-200 rounded-lg px-1.5 py-1"
+              className="flex items-center gap-1 border border-surface-border rounded-lg px-1.5 py-1"
               title="Qualität bewerten"
             >
               <button
@@ -1884,7 +1884,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                       await rateItemQuality(post.source_item_id, 'post_generation', 5)
                     } catch {}
                 }}
-                className={`p-1 rounded transition-colors ${detailRating === 'up' ? 'text-emerald-600' : 'text-gray-400 hover:text-emerald-500'}`}
+                className={`p-1 rounded transition-colors ${detailRating === 'up' ? 'text-status-fertig-text' : 'text-ink-muted hover:text-status-fertig-text'}`}
               >
                 <ThumbsUp className="w-3.5 h-3.5" />
               </button>
@@ -1897,7 +1897,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                       await rateItemQuality(post.source_item_id, 'post_generation', 1)
                     } catch {}
                 }}
-                className={`p-1 rounded transition-colors ${detailRating === 'down' ? 'text-red-500' : 'text-gray-400 hover:text-red-400'}`}
+                className={`p-1 rounded transition-colors ${detailRating === 'down' ? 'text-status-fehler-text' : 'text-ink-muted hover:text-status-fehler-text'}`}
               >
                 <ThumbsDown className="w-3.5 h-3.5" />
               </button>
@@ -1915,17 +1915,26 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                   setMessage({ type: 'error', text: e.message })
                 }
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-status-aktiv-text bg-status-aktiv-bg border border-status-aktiv-border rounded-lg hover:opacity-90"
             >
               ♻️ Wiederherstellen
             </button>
           )}
           <button
             onClick={() => setShowPreview(!showPreview)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${showPreview ? 'text-blue-700 bg-blue-50 border-blue-200' : 'text-ink-light hover:text-ink border-gray-200 hover:bg-gray-50'}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${showPreview ? 'text-status-neu-text bg-status-neu-bg border-status-neu-border' : 'text-ink-light hover:text-ink border-surface-border hover:bg-surface-bg'}`}
           >
             <Eye className="w-3.5 h-3.5" /> LinkedIn-Vorschau
           </button>
+          {/* bewusst behalten: die folgenden 5 Feature-Toggle-Buttons (Templates/Rewrite/
+              A-B-Test/Repurpose/Vorhersage) brauchen gleichzeitig sichtbare, voneinander
+              unterscheidbare Identitätsfarben (kein Status). primary/accent sind an
+              anderer Stelle bereits fest belegt (primary=Freigeben/Performance,
+              accent=Wiederherstellen-Bereich); die zugehörigen Panel-Bodies (RewritePanel,
+              ABVariantsPanel, MultiFormatPanel, PerformancePredictorPanel, oben in dieser
+              Datei) nutzen exakt dieselben rohen Paletten-Farben als ihre Identität und
+              blieben dort bewusst unmigriert (Analogie zu PILLAR_CONFIG, Zeile ~108) —
+              Buttons und ihre Panels müssen farblich zusammenpassen. */}
           <button
             onClick={() => {
               setShowTemplates(!showTemplates)
@@ -2000,7 +2009,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
               setShowTemplates(false)
               setShowPreview(false)
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${showChecklist ? 'text-teal-700 bg-teal-50 border-teal-300' : 'text-teal-600 bg-teal-50 border-teal-200 hover:bg-teal-100'}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${showChecklist ? 'text-primary-700 bg-primary-50 border-primary-300' : 'text-primary-600 bg-primary-50 border-primary-200 hover:bg-primary-100'}`}
           >
             ✅ Checklist
           </button>
@@ -2045,10 +2054,10 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
           </button>
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-ink-light hover:text-ink border border-gray-200 rounded-lg hover:bg-gray-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-ink-light hover:text-ink border border-surface-border rounded-lg hover:bg-surface-bg"
           >
             {copied ? (
-              <Check className="w-3.5 h-3.5 text-emerald-500" />
+              <Check className="w-3.5 h-3.5 text-status-fertig-text" />
             ) : (
               <Copy className="w-3.5 h-3.5" />
             )}
@@ -2057,7 +2066,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
           {(post.status === 'approved' || post.status === 'draft') && (
             <button
               onClick={handleCopyAndPublish}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-status-fertig-text bg-status-fertig-bg border border-status-fertig-border rounded-lg hover:opacity-90 transition-colors"
               title="Text kopieren + Post als auf LinkedIn veröffentlicht markieren"
             >
               <Send className="w-3.5 h-3.5" />
@@ -2065,14 +2074,14 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
             </button>
           )}
           {post.status === 'published' && (
-            <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-status-fertig-text bg-status-fertig-bg border border-status-fertig-border rounded-lg">
               <Check className="w-3.5 h-3.5" />
               Veröffentlicht
             </span>
           )}
           <button
             onClick={onClose}
-            className="p-1.5 text-ink-muted hover:text-ink rounded-lg hover:bg-gray-100"
+            className="p-1.5 text-ink-muted hover:text-ink rounded-lg hover:bg-surface-bg"
           >
             <X className="w-4 h-4" />
           </button>
@@ -2081,7 +2090,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
 
       {message && (
         <div
-          className={`mx-5 mt-4 p-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}
+          className={`mx-5 mt-4 p-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-status-fehler-bg text-status-fehler-text' : 'bg-status-fertig-bg text-status-fertig-text'}`}
         >
           {message.text}
         </div>
@@ -2122,7 +2131,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
             <FormatToolbar textareaRef={textareaRef} value={editText} onChange={setEditText} />
             <textarea
               ref={textareaRef}
-              className="w-full text-sm border border-gray-300 rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none leading-relaxed"
+              className="w-full text-sm border border-surface-border rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none leading-relaxed"
               rows={12}
               value={editText}
               onChange={(e) => setEditText(e.target.value)}
@@ -2135,7 +2144,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                     setEditMode(false)
                     setEditText(post.content_text)
                   }}
-                  className="px-4 py-2 text-sm text-ink-light hover:text-ink border border-gray-200 rounded-lg"
+                  className="px-4 py-2 text-sm text-ink-light hover:text-ink border border-surface-border rounded-lg"
                 >
                   Abbrechen
                 </button>
@@ -2267,7 +2276,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                 value={templateSearch}
                 onChange={(e) => setTemplateSearch(e.target.value)}
                 placeholder="Suchen..."
-                className="ml-auto px-2.5 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-rose-400 w-36"
+                className="ml-auto px-2.5 py-1 text-xs border border-surface-border rounded-lg focus:outline-none focus:ring-1 focus:ring-rose-400 w-36"
               />
             </div>
             <div className="grid grid-cols-2 gap-2.5">
@@ -2286,7 +2295,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                       setEditMode(true)
                       setShowTemplates(false)
                     }}
-                    className="text-left p-3 rounded-xl border border-gray-200 bg-white hover:border-rose-300 hover:bg-rose-50 transition-all group"
+                    className="text-left p-3 rounded-xl border border-surface-border bg-white hover:border-rose-300 hover:bg-rose-50 transition-all group"
                   >
                     <div className="flex items-start gap-2 mb-1.5">
                       <span className="text-xl">{tpl.emoji}</span>
@@ -2313,7 +2322,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
             </p>
           </div>
         ) : (
-          <div className="whitespace-pre-line text-sm text-ink leading-relaxed bg-gray-50 rounded-lg p-5 border border-gray-100">
+          <div className="whitespace-pre-line text-sm text-ink leading-relaxed bg-surface-bg rounded-lg p-5 border border-surface-border">
             {post.content_text}
           </div>
         )}
@@ -2333,7 +2342,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
           return (
             <div className="px-5 pb-4">
               <div
-                className={`rounded-xl p-3 border ${qs.score >= 8 ? 'border-emerald-200 bg-emerald-50' : qs.score >= 6 ? 'border-primary-200 bg-primary-50' : qs.score >= 4 ? 'border-amber-200 bg-amber-50' : 'border-red-200 bg-red-50'}`}
+                className={`rounded-xl p-3 border ${qs.score >= 8 ? 'border-status-fertig-border bg-status-fertig-bg' : qs.score >= 6 ? 'border-primary-200 bg-primary-50' : qs.score >= 4 ? 'border-status-aktiv-border bg-status-aktiv-bg' : 'border-status-fehler-border bg-status-fehler-bg'}`}
               >
                 <div className="flex items-center gap-3">
                   <span className={`text-2xl font-bold tabular-nums ${qs.color}`}>
@@ -2351,7 +2360,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                     </div>
                     <div className="h-1.5 bg-white/60 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${qs.score >= 8 ? 'bg-emerald-500' : qs.score >= 6 ? 'bg-primary-500' : qs.score >= 4 ? 'bg-amber-400' : 'bg-red-400'}`}
+                        className={`h-full rounded-full ${qs.score >= 8 ? 'bg-status-fertig-text' : qs.score >= 6 ? 'bg-primary-500' : qs.score >= 4 ? 'bg-status-aktiv-text' : 'bg-status-fehler-text'}`}
                         style={{ width: `${qs.score * 10}%` }}
                       />
                     </div>
@@ -2368,7 +2377,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                   </ul>
                 )}
                 {qs.tips.length === 0 && (
-                  <p className="text-[11px] text-emerald-700 mt-1">
+                  <p className="text-[11px] text-status-fertig-text mt-1">
                     ✓ Dieser Post erfüllt alle LinkedIn-Qualitätskriterien
                   </p>
                 )}
@@ -2388,12 +2397,12 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
         !showChecklist && (
           <div className="px-5 pb-4">
             {hashtags ? (
-              <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+              <div className="p-3 bg-status-neu-bg rounded-lg border border-status-neu-border">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-blue-800"># Hashtag-Vorschläge</span>
+                  <span className="text-xs font-medium text-status-neu-text"># Hashtag-Vorschläge</span>
                   <button
                     onClick={() => setHashtags(null)}
-                    className="text-xs text-blue-400 hover:text-blue-600"
+                    className="text-xs text-status-neu-text/70 hover:text-status-neu-text"
                   >
                     ×
                   </button>
@@ -2406,13 +2415,13 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                         navigator.clipboard.writeText(tag)
                       }}
                       title="Klicken zum Kopieren"
-                      className="px-2.5 py-1 bg-white border border-blue-200 text-blue-700 rounded-full text-xs hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors"
+                      className="px-2.5 py-1 bg-white border border-status-neu-border text-status-neu-text rounded-full text-xs hover:bg-status-neu-text hover:text-white hover:border-status-neu-text transition-colors"
                     >
                       {tag}
                     </button>
                   ))}
                 </div>
-                <p className="text-[10px] text-blue-400 mt-2">Klicken zum Kopieren</p>
+                <p className="text-[10px] text-status-neu-text/70 mt-2">Klicken zum Kopieren</p>
               </div>
             ) : (
               <button
@@ -2425,7 +2434,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                   setHashtagLoading(false)
                 }}
                 disabled={hashtagLoading}
-                className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
+                className="flex items-center gap-1.5 text-xs text-status-neu-text hover:opacity-80 font-medium disabled:opacity-50"
               >
                 {hashtagLoading ? '⏳ Generiere...' : '# Hashtag-Vorschläge generieren'}
               </button>
@@ -2444,21 +2453,21 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
         !showChecklist && (
           <div className="px-5 pb-4">
             {showSHKHashtags ? (
-              <div className="p-3 bg-teal-50 rounded-lg border border-teal-200">
+              <div className="p-3 bg-primary-50 rounded-lg border border-primary-200">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-teal-800">
+                  <span className="text-xs font-semibold text-primary-800">
                     # SHK-Branchenhashtags
                   </span>
                   <button
                     onClick={() => setShowSHKHashtags(false)}
-                    className="text-xs text-teal-400 hover:text-teal-600"
+                    className="text-xs text-primary-400 hover:text-primary-600"
                   >
                     ×
                   </button>
                 </div>
                 {Object.entries(SHK_HASHTAGS).map(([cat, tags]) => (
                   <div key={cat} className="mb-2 last:mb-0">
-                    <span className="text-[10px] font-semibold text-teal-600 uppercase tracking-wide">
+                    <span className="text-[10px] font-semibold text-primary-600 uppercase tracking-wide">
                       {cat}
                     </span>
                     <div className="flex flex-wrap gap-1.5 mt-1">
@@ -2471,7 +2480,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                             setTimeout(() => setSHKCopied(null), 1500)
                           }}
                           title="Kopieren"
-                          className={`px-2 py-0.5 rounded-full text-xs border transition-all ${shkCopied === tag ? 'bg-teal-600 text-white border-teal-600' : 'bg-white border-teal-200 text-teal-700 hover:bg-teal-600 hover:text-white hover:border-teal-600'}`}
+                          className={`px-2 py-0.5 rounded-full text-xs border transition-all ${shkCopied === tag ? 'bg-primary-600 text-white border-primary-600' : 'bg-white border-primary-200 text-primary-700 hover:bg-primary-600 hover:text-white hover:border-primary-600'}`}
                         >
                           {shkCopied === tag ? '✓ kopiert' : tag}
                         </button>
@@ -2479,14 +2488,14 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                     </div>
                   </div>
                 ))}
-                <p className="text-[10px] text-teal-400 mt-2">
+                <p className="text-[10px] text-primary-400 mt-2">
                   Klicken → in Zwischenablage · dann in Post einfügen
                 </p>
               </div>
             ) : (
               <button
                 onClick={() => setShowSHKHashtags(true)}
-                className="flex items-center gap-1.5 text-xs text-teal-600 hover:text-teal-800 font-medium"
+                className="flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-800 font-medium"
               >
                 # SHK-Branchenhashtags (ohne KI)
               </button>
@@ -2504,7 +2513,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
         !showPredictor &&
         !showChecklist && (
           <div className="px-5 pb-4">
-            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="p-3 bg-surface-bg rounded-lg border border-surface-border">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs font-medium text-ink-muted">Content-Säule:</span>
                 {(() => {
@@ -2517,10 +2526,10 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                       {cfg.emoji} {cfg.label}
                     </span>
                   ) : (
-                    <span className="text-[11px] text-gray-400 italic">Keine Säule zugewiesen</span>
+                    <span className="text-[11px] text-ink-muted italic">Keine Säule zugewiesen</span>
                   )
                 })()}
-                {pillarSaving && <span className="text-[11px] text-gray-400 ml-1">...</span>}
+                {pillarSaving && <span className="text-[11px] text-ink-muted ml-1">...</span>}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {Object.entries(PILLAR_CONFIG).map(([key, cfg]) => (
@@ -2544,7 +2553,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                     className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all disabled:opacity-50 ${
                       post.content_metadata?.pillar === key
                         ? cfg.color + ' ring-2 ring-offset-1 ring-current'
-                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                        : 'bg-white text-ink-muted border-surface-border hover:border-ink-muted'
                     }`}
                   >
                     {cfg.emoji} {cfg.label}
@@ -2563,7 +2572,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                       } catch {}
                       setPillarSaving(false)
                     }}
-                    className="px-2 py-1 rounded-lg border border-dashed border-gray-300 text-[11px] text-gray-400 hover:text-red-500 hover:border-red-300"
+                    className="px-2 py-1 rounded-lg border border-dashed border-surface-border text-[11px] text-ink-muted hover:text-status-fehler-text hover:border-status-fehler-border"
                   >
                     × entfernen
                   </button>
@@ -2583,11 +2592,14 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
         !showPredictor &&
         !showChecklist && (
           <div className="px-5 pb-4">
-            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="p-3 bg-surface-bg rounded-lg border border-surface-border">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs font-medium text-ink-muted">Tags:</span>
-                {tagSaving && <span className="text-[11px] text-gray-400">...</span>}
+                {tagSaving && <span className="text-[11px] text-ink-muted">...</span>}
               </div>
+              {/* violet bewusst behalten: Tags sind eine eigene Kategorie neben den 5
+                  Status-Tönen und der Content-Säule (PILLAR_CONFIG) — braucht eigene
+                  Identitätsfarbe, primary/accent sind bereits anderweitig belegt. */}
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {tags.map((tag) => (
                   <span
@@ -2605,7 +2617,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                   </span>
                 ))}
                 {tags.length === 0 && (
-                  <span className="text-[11px] text-gray-400 italic">Keine Tags</span>
+                  <span className="text-[11px] text-ink-muted italic">Keine Tags</span>
                 )}
               </div>
               <form
@@ -2621,7 +2633,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                   onChange={(e) => setTagInput(e.target.value)}
                   placeholder="Tag hinzufügen (Enter)"
                   maxLength={40}
-                  className="flex-1 px-2.5 py-1 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-violet-300 bg-white"
+                  className="flex-1 px-2.5 py-1 text-xs border border-surface-border rounded-lg focus:outline-none focus:ring-1 focus:ring-violet-300 bg-white"
                 />
                 <button
                   type="submit"
@@ -2649,7 +2661,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                     <button
                       key={s}
                       onClick={() => handleAddTag(s)}
-                      className="px-1.5 py-0.5 text-[10px] text-gray-500 bg-white border border-gray-200 rounded hover:border-violet-300 hover:text-violet-600 transition-colors"
+                      className="px-1.5 py-0.5 text-[10px] text-ink-muted bg-white border border-surface-border rounded hover:border-violet-300 hover:text-violet-600 transition-colors"
                     >
                       +{s}
                     </button>
@@ -2672,7 +2684,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
             className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-5 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+            <div className="p-5 border-b border-surface-border flex items-center justify-between flex-shrink-0">
               <div>
                 <h3 className="font-semibold text-ink">📄 Karussell-Vorschau</h3>
                 <p className="text-xs text-ink-muted mt-0.5">
@@ -2684,7 +2696,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                   setCarouselPreview(null)
                   setSelectedCarouselTemplate(null)
                 }}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 text-xl"
+                className="p-2 text-ink-muted hover:text-ink rounded-lg hover:bg-surface-bg text-xl"
               >
                 ×
               </button>
@@ -2692,7 +2704,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
 
             {/* Template Selector */}
             {carouselTemplates && carouselTemplates.length > 0 && (
-              <div className="px-5 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
+              <div className="px-5 pt-4 pb-3 border-b border-surface-border flex-shrink-0">
                 <p className="text-xs font-semibold text-ink-muted mb-2 uppercase tracking-wide">
                   Vorlage wählen
                 </p>
@@ -2706,7 +2718,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                         slide_count: (prev._originalSlides || prev.slides).length,
                       }))
                     }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${!selectedCarouselTemplate ? 'bg-purple-700 text-white border-purple-700' : 'bg-white text-ink-muted border-gray-200 hover:border-purple-300'}`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${!selectedCarouselTemplate ? 'bg-purple-700 text-white border-purple-700' : 'bg-white text-ink-muted border-surface-border hover:border-purple-300'}`}
                   >
                     Aus Post-Text
                   </button>
@@ -2723,7 +2735,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                           slide_count: tSlides.length,
                         }))
                       }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${selectedCarouselTemplate === t.id ? 'bg-purple-700 text-white border-purple-700' : 'bg-white text-ink-muted border-gray-200 hover:border-purple-300'}`}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${selectedCarouselTemplate === t.id ? 'bg-purple-700 text-white border-purple-700' : 'bg-white text-ink-muted border-surface-border hover:border-purple-300'}`}
                     >
                       {t.name}
                     </button>
@@ -2743,10 +2755,10 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                   key={i}
                   className={`flex-shrink-0 w-48 h-48 rounded-xl border-2 flex flex-col items-center justify-center p-3 text-center ${
                     slide.type === 'title'
-                      ? 'bg-teal-700 border-teal-600 text-white'
+                      ? 'bg-primary-700 border-primary-600 text-white'
                       : slide.type === 'cta'
-                        ? 'bg-amber-500 border-amber-400 text-white'
-                        : 'bg-white border-gray-200 text-ink'
+                        ? 'bg-accent-500 border-accent-400 text-white'
+                        : 'bg-white border-surface-border text-ink'
                   }`}
                 >
                   <span className="text-[9px] font-bold uppercase tracking-widest mb-2 opacity-60">
@@ -2774,7 +2786,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                   setCarouselPreview(null)
                   setSelectedCarouselTemplate(null)
                 }}
-                className="px-4 py-2 text-sm text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 text-sm text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg"
               >
                 Abbrechen
               </button>
@@ -2804,7 +2816,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
       {/* Performance Modal */}
       {showPerf && (
         <div className="px-5 pb-5">
-          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <div className="p-4 bg-surface-bg rounded-lg border border-surface-border">
             <h4 className="text-sm font-medium text-ink mb-3 flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-primary-600" /> LinkedIn-Performance eintragen
             </h4>
@@ -2822,7 +2834,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                   </label>
                   <input
                     type="number"
-                    className="w-full mt-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full mt-1 px-3 py-1.5 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     value={perfData[field]}
                     onChange={(e) => setPerfData((prev) => ({ ...prev, [field]: e.target.value }))}
                   />
@@ -2832,7 +2844,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
             <div className="flex justify-end gap-2 mt-3">
               <button
                 onClick={() => setShowPerf(false)}
-                className="px-3 py-1.5 text-xs text-ink-light border border-gray-200 rounded-lg"
+                className="px-3 py-1.5 text-xs text-ink-light border border-surface-border rounded-lg"
               >
                 Abbrechen
               </button>
