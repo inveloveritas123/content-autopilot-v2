@@ -2953,17 +2953,17 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3 shrink-0">
+        <div className="px-6 py-4 border-b border-surface-border flex items-center gap-3 shrink-0">
           <div className="flex-1">
             <div className="flex items-center gap-3">
               <span className="text-sm font-bold text-ink">⚡ Focus-Triage</span>
               <span className="text-xs text-ink-muted">
                 {Math.min(idx + 1, total)} / {total} Entwürfe
               </span>
-              <span className="text-xs text-emerald-600 font-medium">✓ {toApprove}</span>
-              <span className="text-xs text-red-500 font-medium">✗ {toReject}</span>
+              <span className="text-xs text-status-fertig-text font-medium">✓ {toApprove}</span>
+              <span className="text-xs text-status-fehler-text font-medium">✗ {toReject}</span>
             </div>
-            <div className="mt-1.5 h-1.5 bg-gray-100 rounded-full overflow-hidden w-full">
+            <div className="mt-1.5 h-1.5 bg-surface-bg rounded-full overflow-hidden w-full">
               <div
                 className="h-full bg-primary-500 rounded-full transition-all"
                 style={{ width: `${(idx / total) * 100}%` }}
@@ -2972,40 +2972,40 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            className="p-1.5 rounded-lg text-ink-muted hover:text-ink-light hover:bg-surface-bg"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Keyboard hints */}
-        <div className="px-6 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-4 text-[10px] text-ink-muted shrink-0">
+        <div className="px-6 py-2 bg-surface-bg border-b border-surface-border flex items-center gap-4 text-[10px] text-ink-muted shrink-0">
           <span>
-            <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[9px]">
+            <kbd className="px-1.5 py-0.5 bg-white border border-surface-border rounded text-[9px]">
               → Enter
             </kbd>{' '}
             Freigeben
           </span>
           <span>
-            <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[9px]">
+            <kbd className="px-1.5 py-0.5 bg-white border border-surface-border rounded text-[9px]">
               ← ⌫
             </kbd>{' '}
             Verwerfen
           </span>
           <span>
-            <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[9px]">
+            <kbd className="px-1.5 py-0.5 bg-white border border-surface-border rounded text-[9px]">
               Space ↓
             </kbd>{' '}
             Überspringen
           </span>
           <span>
-            <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[9px]">
+            <kbd className="px-1.5 py-0.5 bg-white border border-surface-border rounded text-[9px]">
               ↑
             </kbd>{' '}
             Zurück
           </span>
           <span>
-            <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[9px]">
+            <kbd className="px-1.5 py-0.5 bg-white border border-surface-border rounded text-[9px]">
               Esc
             </kbd>{' '}
             Schließen
@@ -3039,7 +3039,7 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
               <button
                 onClick={handleCommit}
                 disabled={committing || toApprove + toReject === 0}
-                className="mt-6 px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50"
+                className="mt-6 px-6 py-2.5 bg-status-fertig-text text-white rounded-xl text-sm font-semibold hover:opacity-90 disabled:opacity-50"
               >
                 {committing
                   ? 'Wird gespeichert...'
@@ -3050,11 +3050,11 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
             <div className="space-y-4">
               {/* Meta row */}
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-medium">
+                <span className="px-2 py-0.5 bg-status-neu-bg text-status-neu-text rounded-full text-[10px] font-medium">
                   {current.channel || 'linkedin'}
                 </span>
                 {current.content_metadata?.angle && (
-                  <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[10px]">
+                  <span className="px-2 py-0.5 bg-surface-bg text-ink-light rounded-full text-[10px]">
                     {current.content_metadata.angle}
                   </span>
                 )}
@@ -3071,7 +3071,7 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
                   })()}
                 {qs && (
                   <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ml-auto ${qs.score >= 8 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : qs.score >= 6 ? 'bg-primary-50 text-primary-700 border-primary-200' : qs.score >= 4 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-600 border-red-200'}`}
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ml-auto ${qs.score >= 8 ? 'bg-status-fertig-bg text-status-fertig-text border-status-fertig-border' : qs.score >= 6 ? 'bg-primary-50 text-primary-700 border-primary-200' : qs.score >= 4 ? 'bg-status-aktiv-bg text-status-aktiv-text border-status-aktiv-border' : 'bg-status-fehler-bg text-status-fehler-text border-status-fehler-border'}`}
                   >
                     Score: {qs.grade} ({qs.score}/10)
                   </span>
@@ -3083,7 +3083,7 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
 
               {/* Post text */}
               <div
-                className={`text-sm text-ink leading-relaxed whitespace-pre-line bg-gray-50 rounded-xl p-4 border border-gray-100 ${expanded ? '' : 'max-h-48 overflow-hidden'}`}
+                className={`text-sm text-ink leading-relaxed whitespace-pre-line bg-surface-bg rounded-xl p-4 border border-surface-border ${expanded ? '' : 'max-h-48 overflow-hidden'}`}
               >
                 {current.content_text}
               </div>
@@ -3102,7 +3102,7 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
                   {qs.tips.map((t, i) => (
                     <span
                       key={i}
-                      className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full"
+                      className="text-[10px] px-2 py-0.5 bg-status-aktiv-bg text-status-aktiv-text border border-status-aktiv-border rounded-full"
                     >
                       {t}
                     </span>
@@ -3113,7 +3113,7 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
               {/* Decision highlight */}
               {decisions[current.id] && (
                 <div
-                  className={`text-center py-1.5 rounded-lg text-xs font-bold ${decisions[current.id] === 'approve' ? 'bg-emerald-100 text-emerald-700' : decisions[current.id] === 'reject' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}
+                  className={`text-center py-1.5 rounded-lg text-xs font-bold ${decisions[current.id] === 'approve' ? 'bg-status-fertig-bg text-status-fertig-text' : decisions[current.id] === 'reject' ? 'bg-status-fehler-bg text-status-fehler-text' : 'bg-surface-bg text-ink-light'}`}
                 >
                   {decisions[current.id] === 'approve'
                     ? '✓ Wird freigegeben'
@@ -3128,13 +3128,13 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
 
         {/* Action buttons */}
         {!isFinished && !done && current && (
-          <div className="px-6 py-4 border-t border-gray-100 flex items-center gap-3 shrink-0">
+          <div className="px-6 py-4 border-t border-surface-border flex items-center gap-3 shrink-0">
             <button
               onClick={() => {
                 decide('reject')
                 advance()
               }}
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold text-red-600 bg-red-50 border-2 border-red-200 hover:bg-red-100 transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold text-status-fehler-text bg-status-fehler-bg border-2 border-status-fehler-border hover:opacity-90 transition-colors"
             >
               <span className="text-lg">✗</span> Verwerfen
             </button>
@@ -3143,7 +3143,7 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
                 decide('skip')
                 advance()
               }}
-              className="px-5 py-3 rounded-xl text-sm font-medium text-gray-500 border border-gray-200 hover:bg-gray-50"
+              className="px-5 py-3 rounded-xl text-sm font-medium text-ink-light border border-surface-border hover:bg-surface-bg"
             >
               Überspringen
             </button>
@@ -3152,7 +3152,7 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
                 decide('approve')
                 advance()
               }}
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold text-white bg-emerald-600 border-2 border-emerald-600 hover:bg-emerald-700 transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold text-white bg-status-fertig-text border-2 border-status-fertig-text hover:opacity-90 transition-colors"
             >
               <span className="text-lg">✓</span> Freigeben
             </button>
@@ -3165,7 +3165,7 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
             <button
               onClick={handleCommit}
               disabled={committing}
-              className="w-full py-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-50"
+              className="w-full py-2 text-xs font-medium text-status-fertig-text bg-status-fertig-bg border border-status-fertig-border rounded-lg hover:opacity-90 disabled:opacity-50"
             >
               {committing
                 ? 'Speichert...'
@@ -3221,17 +3221,19 @@ function LeaderboardModal({ posts, onClose, onCommit }) {
   }
 
   const GRADE_STYLE = {
-    A: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-    B: 'bg-blue-100 text-blue-800 border-blue-300',
-    C: 'bg-amber-100 text-amber-800 border-amber-300',
+    A: 'bg-status-fertig-bg text-status-fertig-text border-status-fertig-border',
+    B: 'bg-status-neu-bg text-status-neu-text border-status-neu-border',
+    C: 'bg-status-aktiv-bg text-status-aktiv-text border-status-aktiv-border',
+    // orange bewusst behalten: eigene Notenstufe "D" zwischen aktiv(C)/fehler(F), kein
+    // eigenes Status-Token dafür vorhanden — Zwischenfarbe außerhalb des 5er-Sets.
     D: 'bg-orange-100 text-orange-800 border-orange-300',
-    F: 'bg-red-100 text-red-800 border-red-300',
+    F: 'bg-status-fehler-bg text-status-fehler-text border-status-fehler-border',
   }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0 bg-gradient-to-r from-yellow-50 to-amber-50">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-surface-border shrink-0 bg-gradient-to-r from-accent-50 to-accent-50">
         <div>
           <h2 className="text-base font-bold text-ink flex items-center gap-2">
             🏆 Draft-Leaderboard{' '}
@@ -3243,14 +3245,14 @@ function LeaderboardModal({ posts, onClose, onCommit }) {
         </div>
         <button
           onClick={onClose}
-          className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+          className="p-2 text-ink-muted hover:text-ink-light rounded-lg hover:bg-surface-bg"
         >
           <X className="w-5 h-5" />
         </button>
       </div>
 
       {/* Grade distribution bar */}
-      <div className="px-6 py-3 border-b border-gray-100 shrink-0 bg-white">
+      <div className="px-6 py-3 border-b border-surface-border shrink-0 bg-white">
         <div className="flex items-center gap-4">
           <span className="text-xs text-ink-muted font-medium shrink-0">Notenverteilung:</span>
           <div className="flex items-center gap-1.5 flex-1 flex-wrap">
@@ -3271,14 +3273,14 @@ function LeaderboardModal({ posts, onClose, onCommit }) {
               <button
                 key={n}
                 onClick={() => selectTop(Math.min(n, total))}
-                className="px-2 py-0.5 text-xs border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 font-medium"
+                className="px-2 py-0.5 text-xs border border-accent-300 text-accent-700 rounded-lg hover:bg-accent-50 font-medium"
               >
                 {n}
               </button>
             ))}
             <button
               onClick={toggleAll}
-              className="px-2 py-0.5 text-xs border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
+              className="px-2 py-0.5 text-xs border border-surface-border text-ink-light rounded-lg hover:bg-surface-bg"
             >
               {selected.size === total ? 'Alle ab' : 'Alle'}
             </button>
@@ -3287,7 +3289,7 @@ function LeaderboardModal({ posts, onClose, onCommit }) {
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+      <div className="flex-1 overflow-y-auto divide-y divide-surface-border">
         {scored.length === 0 && (
           <div className="flex items-center justify-center h-40 text-ink-muted text-sm">
             Keine Entwürfe vorhanden
@@ -3306,7 +3308,7 @@ function LeaderboardModal({ posts, onClose, onCommit }) {
                   return s
                 })
               }
-              className={`flex items-start gap-3 px-6 py-3 cursor-pointer transition-colors ${isSelected ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
+              className={`flex items-start gap-3 px-6 py-3 cursor-pointer transition-colors ${isSelected ? 'bg-accent-50' : 'hover:bg-surface-bg'}`}
             >
               {/* Rank */}
               <span className="text-xs font-bold text-ink-muted w-6 shrink-0 pt-0.5 tabular-nums">
@@ -3314,7 +3316,7 @@ function LeaderboardModal({ posts, onClose, onCommit }) {
               </span>
               {/* Checkbox */}
               <div
-                className={`w-4 h-4 rounded border-2 shrink-0 mt-0.5 flex items-center justify-center transition-colors ${isSelected ? 'bg-amber-500 border-amber-500' : 'border-gray-300'}`}
+                className={`w-4 h-4 rounded border-2 shrink-0 mt-0.5 flex items-center justify-center transition-colors ${isSelected ? 'bg-accent-500 border-accent-500' : 'border-surface-border'}`}
               >
                 {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
               </div>
@@ -3326,7 +3328,7 @@ function LeaderboardModal({ posts, onClose, onCommit }) {
               </span>
               {/* Score bar */}
               <div className="w-16 shrink-0">
-                <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1.5">
+                <div className="h-1.5 bg-surface-border rounded-full overflow-hidden mt-1.5">
                   <div
                     className={`h-full rounded-full transition-all ${
                       qs.score >= 8
@@ -3358,15 +3360,15 @@ function LeaderboardModal({ posts, onClose, onCommit }) {
       </div>
 
       {/* Footer action bar */}
-      <div className="px-6 py-4 border-t border-gray-200 bg-white shrink-0">
+      <div className="px-6 py-4 border-t border-surface-border bg-white shrink-0">
         {msg ? (
-          <div className="text-center py-2 text-sm font-semibold text-emerald-700">{msg}</div>
+          <div className="text-center py-2 text-sm font-semibold text-status-fertig-text">{msg}</div>
         ) : (
           <div className="flex items-center gap-3">
             <span className="text-sm text-ink-muted flex-1">
               {selected.size > 0 ? (
                 <>
-                  <span className="font-semibold text-amber-700">{selected.size}</span> Posts
+                  <span className="font-semibold text-accent-700">{selected.size}</span> Posts
                   ausgewählt
                 </>
               ) : (
@@ -3375,14 +3377,14 @@ function LeaderboardModal({ posts, onClose, onCommit }) {
             </span>
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50"
+              className="px-4 py-2 text-sm text-ink-light border border-surface-border rounded-xl hover:bg-surface-bg"
             >
               Schließen
             </button>
             <button
               onClick={handleApprove}
               disabled={!selected.size || approving}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-amber-500 rounded-xl hover:bg-amber-600 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-accent-500 rounded-xl hover:bg-accent-600 disabled:opacity-50 transition-colors"
             >
               {approving ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />
@@ -3743,10 +3745,10 @@ export default function Posts() {
               ].map(([key, desc]) => (
                 <div
                   key={key}
-                  className="flex items-center justify-between py-1.5 border-b border-gray-50"
+                  className="flex items-center justify-between py-1.5 border-b border-surface-border"
                 >
                   <span className="text-ink-muted">{desc}</span>
-                  <kbd className="px-2 py-0.5 bg-gray-100 border border-gray-200 rounded text-[10px] font-mono font-semibold text-ink shrink-0 ml-3">
+                  <kbd className="px-2 py-0.5 bg-surface-bg border border-surface-border rounded text-[10px] font-mono font-semibold text-ink shrink-0 ml-3">
                     {key}
                   </kbd>
                 </div>
@@ -3767,6 +3769,14 @@ export default function Posts() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {/* bewusst behalten: die folgenden Feature-Toggle-Buttons (Serie/Post erstellen/
+              Triage-Modus/Beste Zeiten/Duplikate) brauchen gleichzeitig sichtbare,
+              voneinander unterscheidbare Identitätsfarben (kein Status). primary/accent
+              sind an anderer Stelle bereits fest belegt; indigo/rose/violet stimmen mit
+              den gleichnamigen Panels weiter unten und den Buttons aus Teil 2 (Zeile
+              ~1929) überein — Analogie zu PILLAR_CONFIG, Zeile ~108. Focus-Triage/
+              Auto-Einplanen nutzen status-fertig (Freigabe-Erfolgs-Aktion), Leaderboard/
+              Hook-Bibliothek nutzen accent (= amber, 1:1 identisch). */}
           <button
             onClick={() => {
               setShowSeriesBuilder(!showSeriesBuilder)
@@ -3803,14 +3813,14 @@ export default function Posts() {
           </button>
           <button
             onClick={() => setShowFocusTriage(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-emerald-600 text-white border border-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-status-fertig-text text-white border border-status-fertig-text rounded-lg hover:opacity-90 transition-colors"
             title="Keyboard-gesteuerter Einzel-Post-Review"
           >
             ⚡ Focus-Triage
           </button>
           <button
             onClick={() => setShowLeaderboard(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-amber-500 text-white border border-amber-500 rounded-lg hover:bg-amber-600 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-accent-500 text-white border border-accent-500 rounded-lg hover:bg-accent-600 transition-colors"
             title="Alle Entwürfe nach Qualitätsscore sortieren und Top-N freigeben"
           >
             🏆 Leaderboard
@@ -3826,7 +3836,7 @@ export default function Posts() {
               setExporting(false)
             }}
             disabled={exporting}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-60 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-ink-light bg-surface-bg border border-surface-border rounded-lg hover:bg-surface-border disabled:opacity-60 transition-colors"
             title="Posts als CSV exportieren"
           >
             <Download className="w-3.5 h-3.5" />
@@ -3861,7 +3871,7 @@ export default function Posts() {
               setAutoScheduling(false)
             }}
             disabled={autoScheduling}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-60 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-status-fertig-text bg-status-fertig-bg border border-status-fertig-border rounded-lg hover:opacity-90 disabled:opacity-60 transition-colors"
             title="Alle freigegebenen Posts automatisch auf beste Posting-Zeiten einplanen"
           >
             📅 {autoScheduling ? 'Plane ein...' : 'Auto-Einplanen'}
@@ -3874,7 +3884,7 @@ export default function Posts() {
               }
               setShowBestTimes(!showBestTimes)
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${showBestTimes ? 'text-teal-700 bg-teal-50 border-teal-200' : 'text-teal-700 bg-teal-50 border-teal-200 hover:bg-teal-100'}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${showBestTimes ? 'text-primary-700 bg-primary-50 border-primary-200' : 'text-primary-700 bg-primary-50 border-primary-200 hover:bg-primary-100'}`}
           >
             ⏰ Beste Zeiten
           </button>
@@ -3886,26 +3896,26 @@ export default function Posts() {
               }
               setShowHooks(!showHooks)
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-accent-700 bg-accent-50 border border-accent-200 rounded-lg hover:bg-accent-100"
           >
             ✍️ Hook-Bibliothek
           </button>
           {dupeCount > 0 && (
             <button
               onClick={() => setShowDupeOnly(!showDupeOnly)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${showDupeOnly ? 'bg-orange-500 text-white border-orange-500' : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${showDupeOnly ? 'bg-status-aktiv-text text-white border-status-aktiv-text' : 'bg-status-aktiv-bg text-status-aktiv-text border-status-aktiv-border hover:opacity-90'}`}
             >
               <AlertTriangle className="w-3.5 h-3.5" /> {dupeCount} Duplikate
             </button>
           )}
           <button
             onClick={() => setShowShortcuts((s) => !s)}
-            className="flex items-center justify-center w-7 h-7 text-xs font-bold text-ink-muted bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors"
+            className="flex items-center justify-center w-7 h-7 text-xs font-bold text-ink-muted bg-surface-bg border border-surface-border rounded-lg hover:bg-surface-border transition-colors"
             title="Tastenkürzel anzeigen (?)"
           >
             ?
           </button>
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-surface-bg rounded-lg p-1">
             {filters.map((f) => (
               <button
                 key={f.value}
@@ -3926,18 +3936,18 @@ export default function Posts() {
       {/* Search + Angle Filter */}
       <div className="flex items-center gap-3 mb-5">
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Posts durchsuchen..."
-            className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 bg-white"
+            className="w-full pl-9 pr-3 py-1.5 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 bg-white"
           />
           {search && (
             <button
               onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink-light text-sm"
             >
               ×
             </button>
@@ -3946,7 +3956,7 @@ export default function Posts() {
         <select
           value={sourceFilter}
           onChange={(e) => setSourceFilter(e.target.value)}
-          className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-400 bg-white"
+          className="text-xs border border-surface-border rounded-lg px-2.5 py-1.5 text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-400 bg-white"
         >
           <option value="">Alle Quellen</option>
           {sourcesList.map((s) => (
@@ -3958,7 +3968,7 @@ export default function Posts() {
         <select
           value={angleFilter}
           onChange={(e) => setAngleFilter(e.target.value)}
-          className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-400 bg-white"
+          className="text-xs border border-surface-border rounded-lg px-2.5 py-1.5 text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-400 bg-white"
         >
           <option value="">Alle Angles</option>
           {angles.map((a) => (
@@ -3970,7 +3980,7 @@ export default function Posts() {
         <select
           value={pillarFilter}
           onChange={(e) => setPillarFilter(e.target.value)}
-          className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-400 bg-white"
+          className="text-xs border border-surface-border rounded-lg px-2.5 py-1.5 text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-400 bg-white"
         >
           <option value="">Alle Säulen</option>
           {Object.entries(PILLAR_CONFIG).map(([k, cfg]) => (
@@ -3983,7 +3993,7 @@ export default function Posts() {
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value)}
-          className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-400 bg-white text-ink-muted ml-auto"
+          className="px-2.5 py-1.5 text-xs border border-surface-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-400 bg-white text-ink-muted ml-auto"
         >
           <option value="newest">↓ Neueste zuerst</option>
           <option value="oldest">↑ Älteste zuerst</option>
@@ -3994,16 +4004,27 @@ export default function Posts() {
         <div className="flex items-center gap-1 flex-wrap">
           <span className="text-[11px] text-ink-muted mr-1">Kategorie:</span>
           {[
-            { value: '', label: 'Alle', color: 'bg-gray-100 text-gray-700' },
-            { value: 'news', label: 'News', color: 'bg-blue-100 text-blue-700' },
-            { value: 'persoenlich', label: 'Persönlich', color: 'bg-amber-100 text-amber-700' },
-            { value: 'trust', label: 'Trust', color: 'bg-emerald-100 text-emerald-700' },
+            { value: '', label: 'Alle', color: 'bg-surface-bg text-ink-light' },
+            { value: 'news', label: 'News', color: 'bg-status-neu-bg text-status-neu-text' },
+            {
+              value: 'persoenlich',
+              label: 'Persönlich',
+              color: 'bg-status-aktiv-bg text-status-aktiv-text',
+            },
+            {
+              value: 'trust',
+              label: 'Trust',
+              color: 'bg-status-fertig-bg text-status-fertig-text',
+            },
+            // violet bewusst behalten: 4. Kategorie neben den 3 Status-Farben oben,
+            // analog zu PILLAR_CONFIG (Zeile ~108) — primary/accent sind bereits
+            // anderweitig belegt, braucht eigene Identitätsfarbe.
             { value: 'praxis', label: 'Praxis', color: 'bg-violet-100 text-violet-700' },
           ].map((opt) => (
             <button
               key={opt.value || 'alle'}
               onClick={() => setCategoryFilter(opt.value)}
-              className={`px-2.5 py-1 text-[11px] rounded-full transition-colors ${categoryFilter === opt.value ? `${opt.color} ring-1 ring-current` : 'bg-white text-ink-muted hover:bg-gray-50 border border-gray-200'}`}
+              className={`px-2.5 py-1 text-[11px] rounded-full transition-colors ${categoryFilter === opt.value ? `${opt.color} ring-1 ring-current` : 'bg-white text-ink-muted hover:bg-surface-bg border border-surface-border'}`}
             >
               {opt.label}
             </button>
@@ -4024,7 +4045,7 @@ export default function Posts() {
               setPillarFilter('')
               setSourceFilter('')
             }}
-            className="text-xs text-gray-400 hover:text-gray-600"
+            className="text-xs text-ink-muted hover:text-ink-light"
           >
             Filter zurücksetzen
           </button>
@@ -4052,7 +4073,7 @@ export default function Posts() {
                 toast.error('Fehler: ' + e.message)
               }
             }}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-status-fehler-text bg-status-fehler-bg border border-status-fehler-border rounded-md hover:opacity-90 transition-colors"
           >
             <Trash2 className="w-3 h-3" />
             {filteredPosts.filter((p) => p.status === 'draft').length} Entwürfe ablehnen
@@ -4060,7 +4081,8 @@ export default function Posts() {
         )}
       </div>
 
-      {/* Series Builder Panel */}
+      {/* Series Builder Panel — indigo bewusst behalten: Panel-Identität passend zum
+          "Serie erstellen"-Button oben (siehe Kommentar dort) */}
       {showSeriesBuilder && (
         <div className="mb-6 p-5 bg-white border-2 border-indigo-200 rounded-2xl shadow-sm">
           <div className="flex items-center justify-between mb-4">
@@ -4077,7 +4099,7 @@ export default function Posts() {
                 setShowSeriesBuilder(false)
                 setSeriesResult(null)
               }}
-              className="text-gray-400 hover:text-gray-600 text-lg"
+              className="text-ink-muted hover:text-ink-light text-lg"
             >
               ×
             </button>
@@ -4130,7 +4152,7 @@ export default function Posts() {
                     setSeriesResult(null)
                     setSeriesTopic('')
                   }}
-                  className="px-4 py-2 text-xs font-medium text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50"
+                  className="px-4 py-2 text-xs font-medium text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg"
                 >
                   Neue Serie
                 </button>
@@ -4163,7 +4185,7 @@ export default function Posts() {
                   value={seriesTopic}
                   onChange={(e) => setSeriesTopic(e.target.value)}
                   placeholder="z.B. Wie ich meinen SHK-Betrieb mit KI digitalisiert habe — von 0 auf Autopilot"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
                   rows={2}
                 />
               </div>
@@ -4174,7 +4196,7 @@ export default function Posts() {
                 <select
                   value={seriesPillar}
                   onChange={(e) => setSeriesPillar(e.target.value)}
-                  className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white"
+                  className="w-full text-xs border border-surface-border rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white"
                 >
                   <option value="">Keine Säule</option>
                   {Object.entries(PILLAR_CONFIG).map(([k, cfg]) => (
@@ -4231,7 +4253,7 @@ export default function Posts() {
                 setShowQuickCreate(false)
                 setQcResult(null)
               }}
-              className="text-gray-400 hover:text-gray-600 text-lg"
+              className="text-ink-muted hover:text-ink-light text-lg"
             >
               ×
             </button>
@@ -4239,7 +4261,7 @@ export default function Posts() {
 
           {/* Tabs */}
           {!qcResult && (
-            <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1">
+            <div className="flex gap-1 mb-4 bg-surface-bg rounded-lg p-1">
               <button
                 onClick={() => setQcTab('topic')}
                 className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${qcTab === 'topic' ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'}`}
@@ -4263,9 +4285,9 @@ export default function Posts() {
 
           {qcResult ? (
             <div className="space-y-3">
-              <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+              <div className="p-4 bg-surface-bg rounded-xl border border-surface-border">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-status-neu-bg text-status-neu-text">
                     Entwurf
                   </span>
                   <span className="text-[11px] text-ink-muted">{qcResult.char_count} Zeichen</span>
@@ -4306,7 +4328,7 @@ export default function Posts() {
                     setQcTopic('')
                     setQcUrl('')
                   }}
-                  className="px-4 py-2 text-xs font-medium text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50"
+                  className="px-4 py-2 text-xs font-medium text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg"
                 >
                   Neuer Post
                 </button>
@@ -4323,7 +4345,7 @@ export default function Posts() {
                   value={qcUrl}
                   onChange={(e) => setQcUrl(e.target.value)}
                   placeholder="https://www.computerwoche.de/artikel/..."
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-400"
+                  className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-400"
                 />
                 <p className="text-[10px] text-ink-muted mt-1">
                   Artikel, Blog-Post, YouTube-Video — der Inhalt wird automatisch extrahiert
@@ -4337,7 +4359,7 @@ export default function Posts() {
                   <select
                     value={qcAngle}
                     onChange={(e) => setQcAngle(e.target.value)}
-                    className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-rose-400 bg-white"
+                    className="w-full text-xs border border-surface-border rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-rose-400 bg-white"
                   >
                     {Object.entries(PILLAR_CONFIG).map(([k, cfg]) => (
                       <option key={k} value={k}>
@@ -4353,7 +4375,7 @@ export default function Posts() {
                   <select
                     value={qcPillar}
                     onChange={(e) => setQcPillar(e.target.value)}
-                    className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-rose-400 bg-white"
+                    className="w-full text-xs border border-surface-border rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-rose-400 bg-white"
                   >
                     <option value="">Keine Säule</option>
                     {Object.entries(PILLAR_CONFIG).map(([k, cfg]) => (
@@ -4396,7 +4418,7 @@ export default function Posts() {
             </div>
           ) : qcTab === 'direct' && !directResult ? (
             <div className="space-y-3">
-              <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800">
+              <div className="p-2.5 bg-status-fertig-bg border border-status-fertig-border rounded-lg text-xs text-status-fertig-text">
                 <strong>Kein KI-Budget nötig</strong> — schreibe deinen Post direkt, er wird als
                 Entwurf gespeichert und kann im Qualitäts-Check bewertet und freigegeben werden.
               </div>
@@ -4404,7 +4426,7 @@ export default function Posts() {
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-[11px] font-medium text-ink-muted">Post-Text *</label>
                   <span
-                    className={`text-[10px] font-mono ${directText.length > 3000 ? 'text-red-500 font-bold' : directText.length > 2500 ? 'text-amber-600' : 'text-ink-muted'}`}
+                    className={`text-[10px] font-mono ${directText.length > 3000 ? 'text-status-fehler-text font-bold' : directText.length > 2500 ? 'text-status-aktiv-text' : 'text-ink-muted'}`}
                   >
                     {directText.length} / 3000 Zeichen
                   </span>
@@ -4421,7 +4443,7 @@ export default function Posts() {
                   placeholder={
                     'Schreibe deinen LinkedIn-Post hier…\n\nTipp: Beginne mit einem starken Hook (erste Zeile), dann 3-5 Punkte, abschließend eine Frage oder Call-to-Action.'
                   }
-                  className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-b-lg resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400 font-mono leading-relaxed"
+                  className="w-full px-3 py-2.5 text-sm border border-surface-border rounded-b-lg resize-none focus:outline-none focus:ring-2 focus:ring-status-fertig-border font-mono leading-relaxed"
                   rows={10}
                 />
               </div>
@@ -4432,7 +4454,7 @@ export default function Posts() {
                 <select
                   value={directPillar}
                   onChange={(e) => setDirectPillar(e.target.value)}
-                  className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-400 bg-white"
+                  className="w-full text-xs border border-surface-border rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-status-fertig-border bg-white"
                 >
                   <option value="">Keine Säule</option>
                   {Object.entries(PILLAR_CONFIG).map(([k, cfg]) => (
@@ -4463,7 +4485,7 @@ export default function Posts() {
                   setDirectSaving(false)
                 }}
                 disabled={directSaving || directText.trim().length < 50}
-                className="w-full py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2.5 text-sm font-semibold text-white bg-status-fertig-text rounded-xl hover:opacity-90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
               >
                 {directSaving ? (
                   <>
@@ -4474,23 +4496,23 @@ export default function Posts() {
                 )}
               </button>
               {directText.trim().length > 0 && directText.trim().length < 50 && (
-                <p className="text-[10px] text-red-500">
+                <p className="text-[10px] text-status-fehler-text">
                   Mindestens 50 Zeichen erforderlich ({directText.trim().length}/50)
                 </p>
               )}
             </div>
           ) : qcTab === 'direct' && directResult ? (
             <div className="space-y-3">
-              <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+              <div className="p-4 bg-status-fertig-bg rounded-xl border border-status-fertig-border">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-emerald-700 font-semibold text-sm">
+                  <span className="text-status-fertig-text font-semibold text-sm">
                     ✓ Post gespeichert!
                   </span>
                   <span className="text-[11px] text-ink-muted">
                     {directResult.char_count} Zeichen
                   </span>
                 </div>
-                <p className="text-xs text-emerald-800 leading-relaxed whitespace-pre-line line-clamp-4">
+                <p className="text-xs text-status-fertig-text leading-relaxed whitespace-pre-line line-clamp-4">
                   {directResult.content_text}
                 </p>
               </div>
@@ -4510,7 +4532,7 @@ export default function Posts() {
                     setDirectText('')
                     setDirectPillar('')
                   }}
-                  className="px-4 py-2 text-xs font-medium text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50"
+                  className="px-4 py-2 text-xs font-medium text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg"
                 >
                   Neuer Post
                 </button>
@@ -4526,7 +4548,7 @@ export default function Posts() {
                   value={qcTopic}
                   onChange={(e) => setQcTopic(e.target.value)}
                   placeholder="z.B. KI verändert den Handwerksmarkt — was SHK-Betriebe jetzt wissen müssen"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-rose-400"
+                  className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-rose-400"
                   rows={2}
                 />
               </div>
@@ -4538,7 +4560,7 @@ export default function Posts() {
                   <select
                     value={qcAngle}
                     onChange={(e) => setQcAngle(e.target.value)}
-                    className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-rose-400 bg-white"
+                    className="w-full text-xs border border-surface-border rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-rose-400 bg-white"
                   >
                     {Object.entries(PILLAR_CONFIG).map(([k, cfg]) => (
                       <option key={k} value={k}>
@@ -4554,7 +4576,7 @@ export default function Posts() {
                   <select
                     value={qcPillar}
                     onChange={(e) => setQcPillar(e.target.value)}
-                    className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-rose-400 bg-white"
+                    className="w-full text-xs border border-surface-border rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-rose-400 bg-white"
                   >
                     <option value="">Keine Säule</option>
                     {Object.entries(PILLAR_CONFIG).map(([k, cfg]) => (
@@ -4574,7 +4596,7 @@ export default function Posts() {
                   value={qcStyleNotes}
                   onChange={(e) => setQcStyleNotes(e.target.value)}
                   placeholder="z.B. Aus Unternehmerperspektive, eher persönlich, kein Fachjargon"
-                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-400"
+                  className="w-full px-3 py-2 text-xs border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-400"
                 />
               </div>
               <button
@@ -4611,21 +4633,25 @@ export default function Posts() {
         </div>
       )}
 
-      {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+      {error && (
+        <div className="mb-4 p-3 bg-status-fehler-bg text-status-fehler-text rounded-lg text-sm">
+          {error}
+        </div>
+      )}
 
       {autoScheduleResult && (
         <div
-          className={`mb-4 p-3 rounded-xl text-sm flex items-start gap-3 ${autoScheduleResult.ok ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}
+          className={`mb-4 p-3 rounded-xl text-sm flex items-start gap-3 ${autoScheduleResult.ok ? 'bg-status-fertig-bg border border-status-fertig-border' : 'bg-status-fehler-bg border border-status-fehler-border'}`}
         >
           <span className="text-lg shrink-0">{autoScheduleResult.ok ? '📅' : '⚠️'}</span>
           <div className="flex-1">
             <p
-              className={`font-semibold ${autoScheduleResult.ok ? 'text-emerald-800' : 'text-red-700'}`}
+              className={`font-semibold ${autoScheduleResult.ok ? 'text-status-fertig-text' : 'text-status-fehler-text'}`}
             >
               {autoScheduleResult.msg}
             </p>
             {autoScheduleResult.ok && autoScheduleResult.first && (
-              <p className="text-xs text-emerald-700 mt-0.5">
+              <p className="text-xs text-status-fertig-text mt-0.5">
                 Erster Post:{' '}
                 {new Date(autoScheduleResult.first).toLocaleString('de-DE', {
                   weekday: 'short',
@@ -4641,7 +4667,7 @@ export default function Posts() {
           </div>
           <button
             onClick={() => setAutoScheduleResult(null)}
-            className="text-xs text-gray-400 hover:text-gray-600 shrink-0"
+            className="text-xs text-ink-muted hover:text-ink-light shrink-0"
           >
             ×
           </button>
@@ -4650,13 +4676,13 @@ export default function Posts() {
 
       {/* Bulk selection bar */}
       {!selectedId && posts.filter((p) => p.status === 'draft').length > 0 && (
-        <div className="mb-4 flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+        <div className="mb-4 flex items-center gap-3 p-3 bg-status-aktiv-bg border border-status-aktiv-border rounded-xl">
           <button
             onClick={() => {
               const draftIds = posts.filter((p) => p.status === 'draft').map((p) => p.id)
               setSelected((prev) => (prev.size === draftIds.length ? new Set() : new Set(draftIds)))
             }}
-            className="flex items-center gap-2 text-xs font-medium text-amber-800 hover:text-amber-900"
+            className="flex items-center gap-2 text-xs font-medium text-status-aktiv-text hover:opacity-80"
           >
             {selected.size === posts.filter((p) => p.status === 'draft').length ? (
               <CheckSquare className="w-4 h-4" />
@@ -4667,7 +4693,7 @@ export default function Posts() {
           </button>
           {selected.size > 0 && (
             <>
-              <span className="text-xs text-amber-600">{selected.size} ausgewählt</span>
+              <span className="text-xs text-status-aktiv-text">{selected.size} ausgewählt</span>
               <button
                 onClick={async () => {
                   setBulkApproving(true)
@@ -4683,7 +4709,7 @@ export default function Posts() {
                   setBulkApproving(false)
                 }}
                 disabled={bulkApproving || bulkRejecting}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-status-fertig-text rounded-lg hover:opacity-90 disabled:opacity-50"
               >
                 <Check className="w-3.5 h-3.5" />
                 {bulkApproving ? 'Freigeben...' : `${selected.size} freigeben`}
@@ -4709,7 +4735,7 @@ export default function Posts() {
                   setBulkRejecting(false)
                 }}
                 disabled={bulkApproving || bulkRejecting}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-status-fehler-text rounded-lg hover:opacity-90 disabled:opacity-50"
               >
                 <X className="w-3.5 h-3.5" />
                 {bulkRejecting ? 'Verwerfen...' : `${selected.size} verwerfen`}
@@ -4744,7 +4770,7 @@ export default function Posts() {
                     setBulkPublishing(false)
                   }}
                   disabled={bulkPublishing || bulkApproving || bulkRejecting}
-                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-status-neu-text bg-status-neu-bg border border-status-neu-border rounded-lg hover:opacity-90 disabled:opacity-50"
                 >
                   {bulkPublishing
                     ? 'Markiere...'
@@ -4777,7 +4803,7 @@ export default function Posts() {
                   }
                   setBulkPillarAssigning(false)
                 }}
-                className="px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg bg-white text-ink-muted disabled:opacity-50 cursor-pointer"
+                className="px-2.5 py-1.5 text-xs border border-surface-border rounded-lg bg-white text-ink-muted disabled:opacity-50 cursor-pointer"
               >
                 <option value="">{bulkPillarAssigning ? 'Zuweise...' : '🏷 Säule zuweisen'}</option>
                 {Object.entries(PILLAR_CONFIG).map(([k, cfg]) => (
@@ -4810,7 +4836,7 @@ export default function Posts() {
                     setBulkPillarAssigning(false)
                   }}
                   disabled={bulkPillarAssigning}
-                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-status-aktiv-text bg-status-aktiv-bg border border-status-aktiv-border rounded-lg hover:opacity-90 disabled:opacity-50"
                 >
                   ♻️{' '}
                   {
@@ -4823,7 +4849,7 @@ export default function Posts() {
               )}
               <button
                 onClick={() => setSelected(new Set())}
-                className="text-xs text-amber-400 hover:text-amber-700"
+                className="text-xs text-status-aktiv-text hover:opacity-80"
               >
                 Abwählen
               </button>
@@ -4831,7 +4857,7 @@ export default function Posts() {
           )}
           {bulkMsg && (
             <span
-              className={`text-xs font-medium ml-auto ${bulkMsg.startsWith('🗑') ? 'text-red-600' : bulkMsg.startsWith('♻️') ? 'text-amber-700' : bulkMsg.startsWith('✅') ? 'text-emerald-700' : 'text-red-600'}`}
+              className={`text-xs font-medium ml-auto ${bulkMsg.startsWith('🗑') ? 'text-status-fehler-text' : bulkMsg.startsWith('♻️') ? 'text-status-aktiv-text' : bulkMsg.startsWith('✅') ? 'text-status-fertig-text' : 'text-status-fehler-text'}`}
             >
               {bulkMsg}
             </span>
@@ -4839,42 +4865,42 @@ export default function Posts() {
         </div>
       )}
 
-      {/* Best-Time-to-Post Panel */}
+      {/* Best-Time-to-Post Panel — teal == primary (1:1 identisch), primary-Palette */}
       {showBestTimes && bestTimesData && (
-        <div className="mb-6 bg-teal-50 rounded-xl border border-teal-200 p-5">
+        <div className="mb-6 bg-primary-50 rounded-xl border border-primary-200 p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-teal-900">
+            <h3 className="font-semibold text-primary-900">
               ⏰ Beste Posting-Zeiten (LinkedIn DACH, B2B)
             </h3>
             <button
               onClick={() => setShowBestTimes(false)}
-              className="text-teal-400 hover:text-teal-700 text-lg"
+              className="text-primary-400 hover:text-primary-700 text-lg"
             >
               ×
             </button>
           </div>
-          <p className="text-xs text-teal-700 mb-4 italic">{bestTimesData.tip}</p>
+          <p className="text-xs text-primary-700 mb-4 italic">{bestTimesData.tip}</p>
           {/* Recommendations */}
           <div className="mb-4">
-            <span className="text-xs font-semibold text-teal-700 uppercase tracking-wide">
+            <span className="text-xs font-semibold text-primary-700 uppercase tracking-wide">
               Empfehlungen nach Wochentag
             </span>
             <div className="mt-2 space-y-2">
               {bestTimesData.recommendations.map((r) => (
                 <div key={r.day} className="flex items-center gap-3 text-sm">
-                  <span className="w-24 font-medium text-teal-900">{r.day_name}</span>
+                  <span className="w-24 font-medium text-primary-900">{r.day_name}</span>
                   <div className="flex gap-1">
                     {[1, 2, 3, 4, 5].map((s) => (
                       <span
                         key={s}
-                        className={`w-3 h-3 rounded-full ${s <= r.score ? 'bg-teal-500' : 'bg-teal-100'}`}
+                        className={`w-3 h-3 rounded-full ${s <= r.score ? 'bg-primary-500' : 'bg-primary-100'}`}
                       />
                     ))}
                   </div>
-                  <span className="text-xs text-teal-700">
+                  <span className="text-xs text-primary-700">
                     {r.hours.map((h) => `${h}:00`).join(', ')} Uhr
                   </span>
-                  <span className="text-xs text-teal-500 italic">{r.note}</span>
+                  <span className="text-xs text-primary-500 italic">{r.note}</span>
                 </div>
               ))}
             </div>
@@ -4882,7 +4908,7 @@ export default function Posts() {
           {/* Next optimal slots */}
           {bestTimesData.next_slots && bestTimesData.next_slots.length > 0 && (
             <div>
-              <span className="text-xs font-semibold text-teal-700 uppercase tracking-wide">
+              <span className="text-xs font-semibold text-primary-700 uppercase tracking-wide">
                 Nächste optimale Slots
               </span>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -4900,7 +4926,7 @@ export default function Posts() {
                   return (
                     <span
                       key={i}
-                      className={`px-2.5 py-1 rounded-full text-xs border ${slot.score >= 4 ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-teal-700 border-teal-300'}`}
+                      className={`px-2.5 py-1 rounded-full text-xs border ${slot.score >= 4 ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-primary-700 border-primary-300'}`}
                     >
                       {label} {slot.score >= 5 ? '★' : slot.score >= 4 ? '◆' : ''}
                     </span>
@@ -4912,11 +4938,11 @@ export default function Posts() {
         </div>
       )}
 
-      {/* Hook-Bibliothek Panel */}
+      {/* Hook-Bibliothek Panel — amber == accent (1:1 identisch), accent-Palette */}
       {showHooks && hookData && (
-        <div className="mb-6 bg-amber-50 rounded-xl border border-amber-200 p-5">
+        <div className="mb-6 bg-accent-50 rounded-xl border border-accent-200 p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-amber-900 flex items-center gap-2">
+            <h3 className="font-semibold text-accent-900 flex items-center gap-2">
               ✍️ Hook-Bibliothek
             </h3>
             <div className="flex items-center gap-2">
@@ -4927,7 +4953,7 @@ export default function Posts() {
                   const d = await getHookLibrary(e.target.value || undefined)
                   setHookData(d)
                 }}
-                className="text-xs border border-amber-200 rounded-lg px-2 py-1 bg-white"
+                className="text-xs border border-accent-200 rounded-lg px-2 py-1 bg-white"
               >
                 <option value="">Alle Typen</option>
                 {['meinung', 'howto', 'story', 'kontroverse', 'statistik', 'trend'].map((a) => (
@@ -4938,7 +4964,7 @@ export default function Posts() {
               </select>
               <button
                 onClick={() => setShowHooks(false)}
-                className="text-amber-400 hover:text-amber-700 text-lg"
+                className="text-accent-400 hover:text-accent-700 text-lg"
               >
                 ×
               </button>
@@ -4949,19 +4975,19 @@ export default function Posts() {
               hookAngle && hookData.hooks ? { [hookAngle]: hookData.hooks } : hookData.hooks || {}
             ).map(([angle, hooks]) => (
               <div key={angle}>
-                <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+                <span className="text-xs font-semibold text-accent-700 uppercase tracking-wide">
                   {angle}
                 </span>
                 <div className="mt-1.5 space-y-1.5">
                   {hooks.map((hook, i) => (
                     <div key={i} className="flex items-start gap-2 group">
-                      <span className="text-sm text-amber-900 flex-1 leading-relaxed italic">
+                      <span className="text-sm text-accent-900 flex-1 leading-relaxed italic">
                         "{hook}"
                       </span>
                       <button
                         onClick={() => navigator.clipboard.writeText(hook)}
                         title="Kopieren"
-                        className="opacity-0 group-hover:opacity-100 text-xs text-amber-500 hover:text-amber-700 px-2 py-0.5 border border-amber-300 rounded flex-shrink-0"
+                        className="opacity-0 group-hover:opacity-100 text-xs text-accent-500 hover:text-accent-700 px-2 py-0.5 border border-accent-300 rounded flex-shrink-0"
                       >
                         Kopieren
                       </button>
@@ -4997,7 +5023,7 @@ export default function Posts() {
         <div className="text-center py-12 text-ink-muted">Lade Posts...</div>
       ) : filteredPosts.length === 0 ? (
         <div className="text-center py-12">
-          <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <FileText className="w-12 h-12 text-surface-border mx-auto mb-3" />
           {posts.length === 0 ? (
             <>
               <p className="text-sm text-ink-light">Noch keine Posts vorhanden.</p>
@@ -5024,6 +5050,7 @@ export default function Posts() {
         <>
           {triageMode ? (
             <>
+              {/* violet bewusst behalten: passend zum Triage-Modus-Button oben */}
               <div className="mb-3 flex items-center gap-3 p-3 bg-violet-50 border border-violet-200 rounded-xl">
                 <Zap className="w-4 h-4 text-violet-600 shrink-0" />
                 <span className="text-xs text-violet-800 font-medium">
@@ -5054,7 +5081,7 @@ export default function Posts() {
           ) : (
             <>
               {showDupeOnly && (
-                <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-xl text-xs text-orange-800 flex items-center gap-2">
+                <div className="mb-4 p-3 bg-status-aktiv-bg border border-status-aktiv-border rounded-xl text-xs text-status-aktiv-text flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 shrink-0" />
                   <span>
                     <strong>{dupeCount} Posts</strong> haben ähnlichen Inhalt (≥55%
@@ -5063,7 +5090,7 @@ export default function Posts() {
                   </span>
                   <button
                     onClick={() => setShowDupeOnly(false)}
-                    className="ml-auto text-orange-400 hover:text-orange-700"
+                    className="ml-auto text-status-aktiv-text hover:opacity-80"
                   >
                     ×
                   </button>
@@ -5096,17 +5123,18 @@ export default function Posts() {
         </>
       )}
 
-      {/* Triage sticky bottom bar */}
+      {/* Triage sticky bottom bar — violet bewusst behalten: passend zum
+          Triage-Modus-Button oben (siehe Kommentar dort) */}
       {triageMode && (triageApprove.size > 0 || triageReject.size > 0) && (
         <div className="fixed bottom-0 left-64 right-0 bg-white border-t-2 border-violet-200 shadow-xl px-6 py-3 z-40 flex items-center gap-4">
           <span className="text-sm font-semibold text-violet-800">
             {triageApprove.size + triageReject.size} markiert
           </span>
           {triageApprove.size > 0 && (
-            <span className="text-xs text-emerald-700">✓ {triageApprove.size} freigeben</span>
+            <span className="text-xs text-status-fertig-text">✓ {triageApprove.size} freigeben</span>
           )}
           {triageReject.size > 0 && (
-            <span className="text-xs text-red-600">✗ {triageReject.size} verwerfen</span>
+            <span className="text-xs text-status-fehler-text">✗ {triageReject.size} verwerfen</span>
           )}
           <div className="flex gap-2 ml-auto">
             <button
@@ -5114,7 +5142,7 @@ export default function Posts() {
                 setTriageApprove(new Set())
                 setTriageReject(new Set())
               }}
-              className="px-3 py-1.5 text-xs text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50"
+              className="px-3 py-1.5 text-xs text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg"
             >
               Abwählen
             </button>
