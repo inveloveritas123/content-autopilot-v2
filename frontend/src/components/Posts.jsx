@@ -76,8 +76,8 @@ class PostDetailErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="bg-white rounded-xl border border-red-200 p-8 text-center">
-          <p className="text-sm font-semibold text-red-600 mb-2">
+        <div className="bg-white rounded-xl border border-status-fehler-border p-8 text-center">
+          <p className="text-sm font-semibold text-status-fehler-text mb-2">
             Post konnte nicht angezeigt werden
           </p>
           <p className="text-xs text-ink-muted mb-4">
@@ -88,7 +88,7 @@ class PostDetailErrorBoundary extends Component {
               this.setState({ hasError: false, error: null })
               this.props.onClose?.()
             }}
-            className="px-4 py-2 text-sm text-ink-muted border border-gray-200 rounded-lg hover:bg-gray-50"
+            className="px-4 py-2 text-sm text-ink-muted border border-surface-border rounded-lg hover:bg-surface-bg"
           >
             ← Zurück zur Liste
           </button>
@@ -104,26 +104,30 @@ const PILLAR_CONFIG = {
   thought_leadership: {
     label: 'Thought Leadership',
     emoji: '💡',
+    // bewusst behalten: 5 Content-Säulen brauchen visuell unterscheidbare Kategorie-Badges
+    // (keine Status-Bedeutung) — violet/pink außerhalb des Token-Systems, da accent/primary/
+    // status-Paletten bereits an anderer Stelle mit fester Bedeutung belegt sind.
     color: 'bg-violet-100 text-violet-800 border-violet-200',
   },
   how_to: {
     label: 'How-To / Anleitung',
     emoji: '🛠',
-    color: 'bg-teal-100 text-teal-800 border-teal-200',
+    color: 'bg-primary-100 text-primary-800 border-primary-200',
   },
   personal_story: {
     label: 'Persönliche Story',
     emoji: '📖',
-    color: 'bg-amber-100 text-amber-800 border-amber-200',
+    color: 'bg-accent-100 text-accent-800 border-accent-200',
   },
   industry_news: {
     label: 'Branchennews',
     emoji: '📰',
-    color: 'bg-sky-100 text-sky-800 border-sky-200',
+    color: 'bg-status-neu-bg text-status-neu-text border-status-neu-border',
   },
   product_service: {
     label: 'Produkt / Service',
     emoji: '🎯',
+    // bewusst behalten: siehe thought_leadership oben — 5. unterscheidbare Kategoriefarbe.
     color: 'bg-pink-100 text-pink-800 border-pink-200',
   },
 }
@@ -254,8 +258,8 @@ function postScore(text) {
       score: 0,
       grade: 'F',
       tips: ['Post ist zu kurz'],
-      color: 'text-red-500',
-      bg: 'bg-red-50',
+      color: 'text-status-fehler-text',
+      bg: 'bg-status-fehler-bg',
     }
   const tips = []
   let pts = 0
@@ -305,20 +309,20 @@ function postScore(text) {
   const grade = score >= 8 ? 'A' : score >= 6 ? 'B' : score >= 4 ? 'C' : 'D'
   const color =
     score >= 8
-      ? 'text-emerald-600'
+      ? 'text-status-fertig-text'
       : score >= 6
         ? 'text-primary-600'
         : score >= 4
-          ? 'text-amber-600'
-          : 'text-red-500'
+          ? 'text-status-aktiv-text'
+          : 'text-status-fehler-text'
   const bg =
     score >= 8
-      ? 'bg-emerald-50'
+      ? 'bg-status-fertig-bg'
       : score >= 6
         ? 'bg-primary-50'
         : score >= 4
-          ? 'bg-amber-50'
-          : 'bg-red-50'
+          ? 'bg-status-aktiv-bg'
+          : 'bg-status-fehler-bg'
   return { score, grade, tips: tips.slice(0, 3), color, bg }
 }
 
@@ -366,9 +370,9 @@ function FormatToolbar({ textareaRef, value, onChange }) {
     })
   }
   const btn =
-    'px-2.5 py-1 text-xs font-medium border border-gray-200 rounded hover:bg-gray-100 text-ink-muted hover:text-ink transition-colors'
+    'px-2.5 py-1 text-xs font-medium border border-surface-border rounded hover:bg-surface-bg text-ink-muted hover:text-ink transition-colors'
   return (
-    <div className="flex items-center gap-1.5 mb-2 p-2 bg-gray-50 border border-gray-200 rounded-lg">
+    <div className="flex items-center gap-1.5 mb-2 p-2 bg-surface-bg border border-surface-border rounded-lg">
       <span className="text-[10px] text-ink-muted mr-1">LinkedIn Formatierung:</span>
       <button
         type="button"
@@ -440,8 +444,14 @@ const LI_MAX = 3000
 function CharCounter({ text }) {
   const len = text.length
   const pct = Math.min((len / LI_MAX) * 100, 100)
-  const color = len > 2500 ? 'text-red-600' : len > 1300 ? 'text-amber-600' : 'text-emerald-600'
-  const barColor = len > 2500 ? 'bg-red-500' : len > 1300 ? 'bg-amber-400' : 'bg-emerald-500'
+  const color =
+    len > 2500
+      ? 'text-status-fehler-text'
+      : len > 1300
+        ? 'text-status-aktiv-text'
+        : 'text-status-fertig-text'
+  const barColor =
+    len > 2500 ? 'bg-status-fehler-border' : len > 1300 ? 'bg-status-aktiv-border' : 'bg-status-fertig-border'
   const foldPct = Math.min((LI_FOLD / LI_MAX) * 100, 100)
   return (
     <div className="space-y-1.5">
@@ -450,11 +460,11 @@ function CharCounter({ text }) {
           <span className={`font-semibold tabular-nums ${color}`}>{len.toLocaleString('de')}</span>
           <span className="text-ink-muted">/ 3.000 Zeichen</span>
           {len <= LI_FOLD ? (
-            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[10px] font-medium">
+            <span className="px-1.5 py-0.5 bg-status-fertig-bg text-status-fertig-text rounded text-[10px] font-medium">
               ✓ Vor der Falte
             </span>
           ) : (
-            <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-medium">
+            <span className="px-1.5 py-0.5 bg-status-aktiv-bg text-status-aktiv-text rounded text-[10px] font-medium">
               ↓ Nach „…mehr" ({len - LI_FOLD} Zeichen)
             </span>
           )}
@@ -462,21 +472,21 @@ function CharCounter({ text }) {
         <span className="text-ink-muted tabular-nums">{LI_MAX - len} übrig</span>
       </div>
       {/* Progress bar with fold marker */}
-      <div className="relative h-1.5 bg-gray-100 rounded-full overflow-visible">
+      <div className="relative h-1.5 bg-surface-border rounded-full overflow-visible">
         <div
           className={`h-full rounded-full transition-all ${barColor}`}
           style={{ width: `${pct}%` }}
         />
         {/* Fold marker */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-0.5 h-3 bg-blue-400 rounded"
+          className="absolute top-1/2 -translate-y-1/2 w-0.5 h-3 bg-primary-400 rounded"
           style={{ left: `${foldPct}%` }}
           title={`LinkedIn-Falte bei ${LI_FOLD} Zeichen`}
         />
       </div>
       <div className="flex justify-between text-[10px] text-ink-muted">
         <span>0</span>
-        <span className="text-blue-500" style={{ marginLeft: `${foldPct - 5}%` }}>
+        <span className="text-primary-500" style={{ marginLeft: `${foldPct - 5}%` }}>
           Falte
         </span>
         <span>3.000</span>
@@ -499,6 +509,9 @@ function LinkedInPreview({
   const foldChar = isLong && !expanded ? text[LI_FOLD - 1] : null
 
   return (
+    // bewusst behalten: gray-*/blue-* hier = originalgetreue Nachbildung der echten
+    // LinkedIn-UI-Farben (Fremdmarke), keine App-eigene Bedeutung — Token-Ersatz würde
+    // die Vorschau-Illusion brechen.
     <div className="bg-white rounded-xl border border-gray-200 shadow-md max-w-lg mx-auto font-sans">
       {/* Header */}
       <div className="p-4 flex items-start gap-3">
@@ -573,10 +586,10 @@ function LinkedInPreview({
 }
 
 const STATUS_COLORS = {
-  draft: 'bg-amber-100 text-amber-700',
-  approved: 'bg-emerald-100 text-emerald-700',
+  draft: 'bg-status-neu-bg text-status-neu-text',
+  approved: 'bg-status-fertig-bg text-status-fertig-text',
   published: 'bg-primary-100 text-primary-700',
-  rejected: 'bg-red-100 text-red-700',
+  rejected: 'bg-status-fehler-bg text-status-fehler-text',
 }
 
 function HighlightText({ text: rawText, query }) {
@@ -588,7 +601,7 @@ function HighlightText({ text: rawText, query }) {
     <>
       {parts.map((part, i) =>
         part.toLowerCase() === q.toLowerCase() ? (
-          <mark key={i} className="bg-yellow-200 text-yellow-900 rounded-sm px-0.5 not-italic">
+          <mark key={i} className="bg-accent-200 text-accent-900 rounded-sm px-0.5 not-italic">
             {part}
           </mark>
         ) : (
@@ -620,7 +633,7 @@ function PostCard({ post, onSelect, isSelected, onToggleSelect, dupeSim, searchT
     <div
       id={`post-card-${post.id}`}
       onClick={() => onSelect(post.id)}
-      className={`bg-white rounded-xl border hover:shadow-sm transition-all cursor-pointer p-5 ${isFocused ? 'border-blue-400 ring-2 ring-blue-200' : isSelected ? 'border-emerald-400 bg-emerald-50' : dupeWarn ? 'border-orange-300 hover:border-orange-400' : 'border-surface-border hover:border-primary-300'}`}
+      className={`bg-white rounded-xl border hover:shadow-sm transition-all cursor-pointer p-5 ${isFocused ? 'border-primary-400 ring-2 ring-primary-200' : isSelected ? 'border-status-fertig-border bg-status-fertig-bg' : dupeWarn ? 'border-status-aktiv-border hover:border-accent-400' : 'border-surface-border hover:border-primary-300'}`}
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2 flex-wrap">
@@ -630,17 +643,17 @@ function PostCard({ post, onSelect, isSelected, onToggleSelect, dupeSim, searchT
                 e.stopPropagation()
                 onToggleSelect(post.id)
               }}
-              className="text-emerald-600 hover:text-emerald-700 flex-shrink-0"
+              className="text-status-fertig-text hover:opacity-80 flex-shrink-0"
             >
               {isSelected ? (
                 <CheckSquare className="w-4 h-4" />
               ) : (
-                <Square className="w-4 h-4 text-gray-300 hover:text-emerald-400" />
+                <Square className="w-4 h-4 text-ink-muted hover:text-status-fertig-border" />
               )}
             </button>
           )}
           <span
-            className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[post.status] || 'bg-gray-100 text-gray-600'}`}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[post.status] || 'bg-surface-bg text-ink-light'}`}
           >
             {post.status === 'draft'
               ? 'Entwurf'
@@ -652,7 +665,7 @@ function PostCard({ post, onSelect, isSelected, onToggleSelect, dupeSim, searchT
           </span>
           {variant && <span className="text-xs text-ink-muted">Variante {variant}</span>}
           {angle && (
-            <span className="px-2 py-0.5 rounded bg-gray-100 text-xs text-ink-light">{angle}</span>
+            <span className="px-2 py-0.5 rounded bg-surface-bg text-xs text-ink-light">{angle}</span>
           )}
           {(() => {
             const p = post.content_metadata?.pillar
@@ -665,7 +678,7 @@ function PostCard({ post, onSelect, isSelected, onToggleSelect, dupeSim, searchT
           })()}
           {dupeWarn && (
             <span
-              className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[11px] font-medium"
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-status-aktiv-bg text-status-aktiv-text text-[11px] font-medium"
               title={`Ähnlichkeit: ${Math.round(dupeSim * 100)}%`}
             >
               <AlertTriangle className="w-3 h-3" /> {Math.round(dupeSim * 100)}% ähnlich
@@ -683,7 +696,7 @@ function PostCard({ post, onSelect, isSelected, onToggleSelect, dupeSim, searchT
       <p className="text-sm text-ink leading-relaxed line-clamp-4 whitespace-pre-line">
         <HighlightText text={post.content_text || ''} query={searchTerm} />
       </p>
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+      <div className="flex items-center justify-between mt-3 pt-3 border-t border-surface-border">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-[11px] text-ink-muted shrink-0">
             {post.created_at
@@ -696,7 +709,7 @@ function PostCard({ post, onSelect, isSelected, onToggleSelect, dupeSim, searchT
           </span>
           {post.source_name && (
             <span
-              className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 max-w-[100px] truncate"
+              className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-bg text-ink-light max-w-[100px] truncate"
               title={post.source_name}
             >
               {post.source_name}
@@ -717,7 +730,7 @@ function PostCard({ post, onSelect, isSelected, onToggleSelect, dupeSim, searchT
               if (ageDays >= 30)
                 return (
                   <span
-                    className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-600"
+                    className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-status-fehler-bg text-status-fehler-text"
                     title={`${ageDays} Tage alt`}
                   >
                     🔴 {ageDays >= 90 ? '90d+' : `${ageDays}d`}
@@ -726,7 +739,7 @@ function PostCard({ post, onSelect, isSelected, onToggleSelect, dupeSim, searchT
               if (ageDays >= 14)
                 return (
                   <span
-                    className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-600"
+                    className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-accent-100 text-accent-700"
                     title={`${ageDays} Tage alt`}
                   >
                     🟠 {ageDays}d
@@ -735,7 +748,7 @@ function PostCard({ post, onSelect, isSelected, onToggleSelect, dupeSim, searchT
               if (ageDays >= 7)
                 return (
                   <span
-                    className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-600"
+                    className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-status-aktiv-bg text-status-aktiv-text"
                     title={`${ageDays} Tage alt`}
                   >
                     🟡 {ageDays}d
@@ -749,7 +762,7 @@ function PostCard({ post, onSelect, isSelected, onToggleSelect, dupeSim, searchT
           {(post.content_metadata?.tags || []).map((tag) => (
             <span
               key={tag}
-              className="px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-violet-100 text-violet-700 border border-violet-200"
+              className="px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-accent-100 text-accent-700 border border-accent-200"
             >
               #{tag}
             </span>
@@ -758,13 +771,13 @@ function PostCard({ post, onSelect, isSelected, onToggleSelect, dupeSim, searchT
             <div className="flex items-center gap-1" title="Qualität bewerten">
               <button
                 onClick={(e) => handleRate(e, 'up')}
-                className={`p-1 rounded transition-colors ${userRating === 'up' ? 'text-emerald-600 bg-emerald-50' : 'text-gray-300 hover:text-emerald-500'}`}
+                className={`p-1 rounded transition-colors ${userRating === 'up' ? 'text-status-fertig-text bg-status-fertig-bg' : 'text-ink-muted hover:text-status-fertig-border'}`}
               >
                 <ThumbsUp className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={(e) => handleRate(e, 'down')}
-                className={`p-1 rounded transition-colors ${userRating === 'down' ? 'text-red-500 bg-red-50' : 'text-gray-300 hover:text-red-400'}`}
+                className={`p-1 rounded transition-colors ${userRating === 'down' ? 'text-status-fehler-text bg-status-fehler-bg' : 'text-ink-muted hover:text-status-fehler-border'}`}
               >
                 <ThumbsDown className="w-3.5 h-3.5" />
               </button>
@@ -788,15 +801,15 @@ function TriageCard({ post, approveSet, rejectSet, onApprove, onReject }) {
     <div
       className={`rounded-xl border p-3 transition-all ${
         isApproved
-          ? 'border-emerald-400 bg-emerald-50'
+          ? 'border-status-fertig-border bg-status-fertig-bg'
           : isRejected
-            ? 'border-red-300 bg-red-50'
-            : 'border-surface-border bg-white hover:border-gray-300'
+            ? 'border-status-fehler-border bg-status-fehler-bg'
+            : 'border-surface-border bg-white hover:border-primary-300'
       }`}
     >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-2">
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700 shrink-0">
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-status-neu-bg text-status-neu-text shrink-0">
             {channel}
           </span>
           {angle && <span className="text-[10px] text-ink-muted truncate">{angle}</span>}
@@ -806,8 +819,8 @@ function TriageCard({ post, approveSet, rejectSet, onApprove, onReject }) {
             onClick={() => onApprove(post.id)}
             className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold transition-colors ${
               isApproved
-                ? 'bg-emerald-500 text-white'
-                : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-200'
+                ? 'bg-status-fertig-border text-white'
+                : 'bg-status-fertig-bg text-status-fertig-text hover:bg-status-fertig-border'
             }`}
             title="Freigeben"
           >
@@ -816,7 +829,9 @@ function TriageCard({ post, approveSet, rejectSet, onApprove, onReject }) {
           <button
             onClick={() => onReject(post.id)}
             className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold transition-colors ${
-              isRejected ? 'bg-red-500 text-white' : 'bg-red-50 text-red-500 hover:bg-red-200'
+              isRejected
+                ? 'bg-status-fehler-border text-white'
+                : 'bg-status-fehler-bg text-status-fehler-text hover:bg-status-fehler-border'
             }`}
             title="Verwerfen"
           >
@@ -852,7 +867,7 @@ function RewritePanel({ postId, postText, loading, result, onRewrite, onApply })
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-1">
-        <Sparkles className="w-4 h-4 text-indigo-500" />
+        <Sparkles className="w-4 h-4 text-accent-500" />
         <span className="text-sm font-semibold text-ink">KI-Post-Rewriter</span>
         <span className="text-[11px] text-ink-muted ml-1">Wähle einen Verbesserungs-Modus:</span>
       </div>
@@ -864,10 +879,10 @@ function RewritePanel({ postId, postText, loading, result, onRewrite, onApply })
             key={m.id}
             onClick={() => onRewrite(m.id)}
             disabled={loading}
-            className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-gray-200 bg-white hover:border-indigo-300 hover:bg-indigo-50 transition-all text-center disabled:opacity-50 disabled:cursor-not-allowed group"
+            className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-surface-border bg-white hover:border-accent-300 hover:bg-accent-50 transition-all text-center disabled:opacity-50 disabled:cursor-not-allowed group"
           >
             <span className="text-2xl">{m.emoji}</span>
-            <span className="text-[11px] font-semibold text-ink group-hover:text-indigo-800 leading-tight">
+            <span className="text-[11px] font-semibold text-ink group-hover:text-accent-800 leading-tight">
               {m.label}
             </span>
             <span className="text-[10px] text-ink-muted leading-tight">{m.desc}</span>
@@ -876,36 +891,36 @@ function RewritePanel({ postId, postText, loading, result, onRewrite, onApply })
       </div>
 
       {loading && (
-        <div className="flex items-center gap-2 p-4 bg-indigo-50 rounded-xl border border-indigo-200">
-          <RefreshCw className="w-4 h-4 text-indigo-500 animate-spin" />
-          <span className="text-sm text-indigo-700">KI überarbeitet den Post...</span>
+        <div className="flex items-center gap-2 p-4 bg-accent-50 rounded-xl border border-accent-200">
+          <RefreshCw className="w-4 h-4 text-accent-500 animate-spin" />
+          <span className="text-sm text-accent-700">KI überarbeitet den Post...</span>
         </div>
       )}
 
       {result && (
         <div className="space-y-3">
           {/* Stats comparison */}
-          <div className="flex items-center gap-4 p-3 bg-indigo-50 rounded-lg border border-indigo-100 text-xs">
+          <div className="flex items-center gap-4 p-3 bg-accent-50 rounded-lg border border-accent-100 text-xs">
             <span className="text-ink-muted">
               Original: <strong className="text-ink">{result.original_chars} Z</strong>
             </span>
-            <span className="text-indigo-400">→</span>
+            <span className="text-accent-400">→</span>
             <span className="text-ink-muted">
               Rewrite:{' '}
               <strong
                 className={
                   result.rewritten_chars <= 900
-                    ? 'text-emerald-700'
+                    ? 'text-status-fertig-text'
                     : result.rewritten_chars <= 1500
                       ? 'text-primary-700'
-                      : 'text-amber-700'
+                      : 'text-status-aktiv-text'
                 }
               >
                 {result.rewritten_chars} Z
               </strong>
             </span>
             <span
-              className={`ml-auto font-medium ${result.rewritten_chars < result.original_chars ? 'text-emerald-600' : 'text-amber-600'}`}
+              className={`ml-auto font-medium ${result.rewritten_chars < result.original_chars ? 'text-status-fertig-text' : 'text-status-aktiv-text'}`}
             >
               {result.rewritten_chars < result.original_chars
                 ? `−${result.original_chars - result.rewritten_chars}`
@@ -917,7 +932,7 @@ function RewritePanel({ postId, postText, loading, result, onRewrite, onApply })
           {/* Rewritten text */}
           <div className="relative">
             <div
-              className={`bg-white border border-indigo-200 rounded-xl p-4 text-sm text-ink leading-relaxed whitespace-pre-line ${expanded ? '' : 'max-h-48 overflow-hidden'}`}
+              className={`bg-white border border-accent-200 rounded-xl p-4 text-sm text-ink leading-relaxed whitespace-pre-line ${expanded ? '' : 'max-h-48 overflow-hidden'}`}
             >
               {result.rewritten_text}
             </div>
@@ -926,7 +941,7 @@ function RewritePanel({ postId, postText, loading, result, onRewrite, onApply })
             )}
             <button
               onClick={() => setExpanded(!expanded)}
-              className="absolute bottom-2 right-3 flex items-center gap-1 text-[11px] text-indigo-600 hover:text-indigo-800 font-medium"
+              className="absolute bottom-2 right-3 flex items-center gap-1 text-[11px] text-accent-600 hover:text-accent-800 font-medium"
             >
               {expanded ? (
                 <>
@@ -944,20 +959,20 @@ function RewritePanel({ postId, postText, loading, result, onRewrite, onApply })
           <div className="flex items-center gap-2">
             <button
               onClick={() => onApply(result.rewritten_text)}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-accent-600 rounded-lg hover:bg-accent-700 transition-colors"
             >
               <Check className="w-3.5 h-3.5" /> Übernehmen & speichern
             </button>
             <button
               onClick={() => navigator.clipboard.writeText(result.rewritten_text)}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-50"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-accent-700 border border-accent-200 rounded-lg hover:bg-accent-50"
             >
               <Copy className="w-3.5 h-3.5" /> Kopieren
             </button>
             <button
               onClick={() => onRewrite(result.mode)}
               disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg disabled:opacity-50"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Nochmal
             </button>
@@ -979,9 +994,9 @@ function ABVariantsPanel({ loading, variants, onGenerate, onApply }) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 p-6 bg-violet-50 rounded-xl border border-violet-200">
-        <RefreshCw className="w-4 h-4 text-violet-500 animate-spin" />
-        <span className="text-sm text-violet-700">
+      <div className="flex items-center gap-2 p-6 bg-accent-50 rounded-xl border border-accent-200">
+        <RefreshCw className="w-4 h-4 text-accent-500 animate-spin" />
+        <span className="text-sm text-accent-700">
           KI generiert 2 Varianten (Listen- vs. Story-Format)...
         </span>
       </div>
@@ -999,7 +1014,7 @@ function ABVariantsPanel({ loading, variants, onGenerate, onApply }) {
         </p>
         <button
           onClick={onGenerate}
-          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-violet-600 rounded-xl hover:bg-violet-700 transition-colors"
+          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-accent-600 rounded-xl hover:bg-accent-700 transition-colors"
         >
           <Sparkles className="w-4 h-4" /> 2 Varianten generieren
         </button>
@@ -1013,7 +1028,7 @@ function ABVariantsPanel({ loading, variants, onGenerate, onApply }) {
       v: variants.variant_a,
       label: 'Variante A',
       badge: '📋 Listen-Format',
-      badgeColor: 'bg-blue-100 text-blue-800',
+      badgeColor: 'bg-status-neu-bg text-status-neu-text',
       expanded: expandA,
       setExpanded: setExpandA,
     },
@@ -1022,7 +1037,7 @@ function ABVariantsPanel({ loading, variants, onGenerate, onApply }) {
       v: variants.variant_b,
       label: 'Variante B',
       badge: '📖 Story-Format',
-      badgeColor: 'bg-amber-100 text-amber-800',
+      badgeColor: 'bg-accent-100 text-accent-800',
       expanded: expandB,
       setExpanded: setExpandB,
     },
@@ -1039,7 +1054,7 @@ function ABVariantsPanel({ loading, variants, onGenerate, onApply }) {
         </div>
         <button
           onClick={onGenerate}
-          className="flex items-center gap-1.5 text-[11px] text-violet-600 border border-violet-200 rounded-lg px-2.5 py-1 hover:bg-violet-50"
+          className="flex items-center gap-1.5 text-[11px] text-accent-600 border border-accent-200 rounded-lg px-2.5 py-1 hover:bg-accent-50"
         >
           <RefreshCw className="w-3 h-3" /> Neu generieren
         </button>
@@ -1050,11 +1065,11 @@ function ABVariantsPanel({ loading, variants, onGenerate, onApply }) {
           <div
             key={key}
             onClick={() => setPicked(key)}
-            className={`relative rounded-xl border-2 cursor-pointer transition-all ${picked === key ? 'border-violet-500 bg-violet-50 shadow-sm' : 'border-gray-200 bg-white hover:border-violet-300 hover:bg-violet-50/40'}`}
+            className={`relative rounded-xl border-2 cursor-pointer transition-all ${picked === key ? 'border-accent-500 bg-accent-50 shadow-sm' : 'border-surface-border bg-white hover:border-accent-300 hover:bg-accent-50/40'}`}
           >
             {picked === key && (
               <div className="absolute -top-2.5 left-3">
-                <span className="px-2 py-0.5 bg-violet-600 text-white text-[10px] font-bold rounded-full">
+                <span className="px-2 py-0.5 bg-accent-600 text-white text-[10px] font-bold rounded-full">
                   ✓ Gewählt
                 </span>
               </div>
@@ -1077,7 +1092,7 @@ function ABVariantsPanel({ loading, variants, onGenerate, onApply }) {
                     e.stopPropagation()
                     setExpanded(true)
                   }}
-                  className="mt-1 text-[10px] text-violet-600 hover:underline"
+                  className="mt-1 text-[10px] text-accent-600 hover:underline"
                 >
                   Mehr anzeigen ({v.chars} Z) ↓
                 </button>
@@ -1088,7 +1103,7 @@ function ABVariantsPanel({ loading, variants, onGenerate, onApply }) {
                     e.stopPropagation()
                     setExpanded(false)
                   }}
-                  className="mt-1 text-[10px] text-violet-600 hover:underline"
+                  className="mt-1 text-[10px] text-accent-600 hover:underline"
                 >
                   Einklappen ↑
                 </button>
@@ -1104,7 +1119,7 @@ function ABVariantsPanel({ loading, variants, onGenerate, onApply }) {
             onClick={() =>
               onApply(picked === 'a' ? variants.variant_a.text : variants.variant_b.text)
             }
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-violet-600 rounded-lg hover:bg-violet-700"
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-accent-600 rounded-lg hover:bg-accent-700"
           >
             <Check className="w-3.5 h-3.5" /> Variante {picked.toUpperCase()} übernehmen
           </button>
@@ -1114,7 +1129,7 @@ function ABVariantsPanel({ loading, variants, onGenerate, onApply }) {
                 picked === 'a' ? variants.variant_a.text : variants.variant_b.text
               )
             }
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-50"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-accent-700 border border-accent-200 rounded-lg hover:bg-accent-50"
           >
             <Copy className="w-3.5 h-3.5" /> Kopieren
           </button>
@@ -1204,10 +1219,10 @@ function ChecklistPanel({ post, onApprove, approving }) {
   return (
     <div className="space-y-4">
       {/* Progress header */}
-      <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-teal-50 to-emerald-50 rounded-xl border border-teal-200">
+      <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-primary-50 to-status-fertig-bg rounded-xl border border-primary-200">
         <div className="text-center">
           <div
-            className={`text-3xl font-black tabular-nums ${pct >= 80 ? 'text-emerald-600' : pct >= 60 ? 'text-amber-600' : 'text-red-500'}`}
+            className={`text-3xl font-black tabular-nums ${pct >= 80 ? 'text-status-fertig-text' : pct >= 60 ? 'text-status-aktiv-text' : 'text-status-fehler-text'}`}
           >
             {pct}
             <span className="text-lg">%</span>
@@ -1215,13 +1230,13 @@ function ChecklistPanel({ post, onApprove, approving }) {
           <div className="text-[10px] text-ink-muted">Bereit</div>
         </div>
         <div className="flex-1">
-          <div className="h-2.5 bg-white/60 rounded-full overflow-hidden border border-teal-100 mb-1.5">
+          <div className="h-2.5 bg-white/60 rounded-full overflow-hidden border border-primary-100 mb-1.5">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${pct >= 80 ? 'bg-emerald-500' : pct >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
+              className={`h-full rounded-full transition-all duration-500 ${pct >= 80 ? 'bg-status-fertig-border' : pct >= 60 ? 'bg-status-aktiv-border' : 'bg-status-fehler-border'}`}
               style={{ width: `${pct}%` }}
             />
           </div>
-          <p className="text-xs text-teal-700">
+          <p className="text-xs text-primary-700">
             <span className="font-semibold">
               {passedCount}/{total}
             </span>{' '}
@@ -1232,7 +1247,7 @@ function ChecklistPanel({ post, onApprove, approving }) {
           <button
             onClick={onApprove}
             disabled={approving}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-status-fertig-border hover:opacity-90 rounded-xl disabled:opacity-50 transition-colors"
           >
             <Check className="w-4 h-4" /> {approving ? '...' : 'Jetzt freigeben'}
           </button>
@@ -1246,15 +1261,15 @@ function ChecklistPanel({ post, onApprove, approving }) {
           {autoResults.map((r) => (
             <div
               key={r.id}
-              className={`flex items-start gap-2.5 p-2.5 rounded-lg border ${r.passed ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}
+              className={`flex items-start gap-2.5 p-2.5 rounded-lg border ${r.passed ? 'bg-status-fertig-bg border-status-fertig-border' : 'bg-status-fehler-bg border-status-fehler-border'}`}
             >
               <span
-                className={`text-base shrink-0 leading-none mt-0.5 ${r.passed ? 'text-emerald-500' : 'text-red-400'}`}
+                className={`text-base shrink-0 leading-none mt-0.5 ${r.passed ? 'text-status-fertig-text' : 'text-status-fehler-text'}`}
               >
                 {r.passed ? '✓' : '✗'}
               </span>
               <span
-                className={`text-xs leading-relaxed ${r.passed ? 'text-emerald-800' : 'text-red-700'}`}
+                className={`text-xs leading-relaxed ${r.passed ? 'text-status-fertig-text' : 'text-status-fehler-text'}`}
               >
                 {r.label}
               </span>
@@ -1271,15 +1286,15 @@ function ChecklistPanel({ post, onApprove, approving }) {
             <div
               key={r.id}
               onClick={() => toggleManual(r.id)}
-              className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${r.passed ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}
+              className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${r.passed ? 'bg-status-fertig-bg border-status-fertig-border hover:opacity-90' : 'bg-surface-bg border-surface-border hover:bg-surface-border/40'}`}
             >
               <div
-                className={`w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${r.passed ? 'bg-emerald-500 border-emerald-500' : 'border-gray-400'}`}
+                className={`w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${r.passed ? 'bg-status-fertig-border border-status-fertig-border' : 'border-ink-muted'}`}
               >
                 {r.passed && <Check className="w-2.5 h-2.5 text-white" />}
               </div>
               <span
-                className={`text-xs ${r.passed ? 'text-emerald-800 line-through decoration-emerald-400' : 'text-ink'}`}
+                className={`text-xs ${r.passed ? 'text-status-fertig-text line-through decoration-status-fertig-border' : 'text-ink'}`}
               >
                 {r.label}
               </span>
@@ -1311,9 +1326,9 @@ function MultiFormatPanel({ loading, result, onGenerate }) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-3 p-6 bg-orange-50 rounded-xl border border-orange-200">
-        <RefreshCw className="w-4 h-4 text-orange-500 animate-spin" />
-        <span className="text-sm text-orange-700">
+      <div className="flex items-center gap-3 p-6 bg-accent-50 rounded-xl border border-accent-200">
+        <RefreshCw className="w-4 h-4 text-accent-500 animate-spin" />
+        <span className="text-sm text-accent-700">
           Konvertiere in 3 Formate (Twitter, Newsletter, Blog)...
         </span>
       </div>
@@ -1331,7 +1346,7 @@ function MultiFormatPanel({ loading, result, onGenerate }) {
         </p>
         <button
           onClick={onGenerate}
-          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-orange-500 rounded-xl hover:bg-orange-600 transition-colors"
+          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-accent-500 rounded-xl hover:bg-accent-600 transition-colors"
         >
           <Sparkles className="w-4 h-4" /> In 3 Formate konvertieren
         </button>
@@ -1351,7 +1366,7 @@ function MultiFormatPanel({ loading, result, onGenerate }) {
   return (
     <div className="space-y-3">
       {/* Tabs */}
-      <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
+      <div className="flex items-center gap-1 p-1 bg-surface-bg rounded-xl">
         {FORMAT_TABS.map((f) => (
           <button
             key={f.id}
@@ -1363,7 +1378,7 @@ function MultiFormatPanel({ loading, result, onGenerate }) {
         ))}
         <button
           onClick={onGenerate}
-          className="px-2.5 py-1.5 text-[10px] text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 ml-1 whitespace-nowrap"
+          className="px-2.5 py-1.5 text-[10px] text-accent-600 border border-accent-200 rounded-lg hover:bg-accent-50 ml-1 whitespace-nowrap"
         >
           <RefreshCw className="w-3 h-3 inline mr-1" />
           Neu
@@ -1397,22 +1412,22 @@ function MultiFormatPanel({ loading, result, onGenerate }) {
       {tab === 'twitter' && result.twitter_thread?.tweets?.length > 0 ? (
         <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
           {result.twitter_thread.tweets.map((tweet, i) => (
-            <div key={i} className="bg-gray-50 rounded-xl border border-gray-200 p-3">
+            <div key={i} className="bg-surface-bg rounded-xl border border-surface-border p-3">
               <div className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-sky-100 text-sky-700 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
                   {i + 1}
                 </span>
                 <p className="text-xs text-ink leading-relaxed flex-1">{tweet}</p>
               </div>
               <div className="flex items-center justify-between mt-1.5 pl-7">
                 <span
-                  className={`text-[9px] ${tweet.length > 280 ? 'text-red-500 font-bold' : 'text-ink-muted'}`}
+                  className={`text-[9px] ${tweet.length > 280 ? 'text-status-fehler-text font-bold' : 'text-ink-muted'}`}
                 >
                   {tweet.length}/280
                 </span>
                 <button
                   onClick={() => copyText(tweet, `tweet-${i}`)}
-                  className="text-[9px] text-sky-600 hover:text-sky-800"
+                  className="text-[9px] text-primary-600 hover:text-primary-800"
                 >
                   {copied === `tweet-${i}` ? '✓ Kopiert' : 'Kopieren'}
                 </button>
@@ -1421,7 +1436,7 @@ function MultiFormatPanel({ loading, result, onGenerate }) {
           ))}
         </div>
       ) : (
-        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 max-h-80 overflow-y-auto">
+        <div className="bg-surface-bg rounded-xl border border-surface-border p-4 max-h-80 overflow-y-auto">
           <p className="text-xs text-ink leading-relaxed whitespace-pre-line">{text}</p>
         </div>
       )}
@@ -1429,7 +1444,7 @@ function MultiFormatPanel({ loading, result, onGenerate }) {
       {/* Copy all button */}
       <button
         onClick={() => copyText(text, 'all')}
-        className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-medium border transition-all ${copied === 'all' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-ink-muted border-gray-200 hover:bg-gray-50 hover:text-ink'}`}
+        className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-medium border transition-all ${copied === 'all' ? 'bg-status-fertig-bg text-status-fertig-text border-status-fertig-border' : 'bg-white text-ink-muted border-surface-border hover:bg-surface-bg hover:text-ink'}`}
       >
         <Copy className="w-3.5 h-3.5" />
         {copied === 'all'
@@ -1444,9 +1459,9 @@ function MultiFormatPanel({ loading, result, onGenerate }) {
 function PerformancePredictorPanel({ loading, result, onGenerate }) {
   if (loading) {
     return (
-      <div className="flex items-center gap-3 p-6 bg-purple-50 rounded-xl border border-purple-200">
-        <RefreshCw className="w-4 h-4 text-purple-500 animate-spin" />
-        <span className="text-sm text-purple-700">
+      <div className="flex items-center gap-3 p-6 bg-accent-50 rounded-xl border border-accent-200">
+        <RefreshCw className="w-4 h-4 text-accent-500 animate-spin" />
+        <span className="text-sm text-accent-700">
           Analysiere Post und sage Engagement vorher...
         </span>
       </div>
@@ -1464,7 +1479,7 @@ function PerformancePredictorPanel({ loading, result, onGenerate }) {
         </p>
         <button
           onClick={onGenerate}
-          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-purple-600 rounded-xl hover:bg-purple-700 transition-colors"
+          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-accent-600 rounded-xl hover:bg-accent-700 transition-colors"
         >
           <Sparkles className="w-4 h-4" /> Performance vorhersagen
         </button>
@@ -1473,16 +1488,19 @@ function PerformancePredictorPanel({ loading, result, onGenerate }) {
   }
 
   const gradeColor =
-    { A: 'text-emerald-700', B: 'text-blue-700', C: 'text-amber-700', D: 'text-red-700' }[
-      result.grade
-    ] || 'text-gray-700'
+    {
+      A: 'text-status-fertig-text',
+      B: 'text-status-neu-text',
+      C: 'text-status-aktiv-text',
+      D: 'text-status-fehler-text',
+    }[result.grade] || 'text-ink-light'
   const gradeBg =
     {
-      A: 'bg-emerald-50 border-emerald-200',
-      B: 'bg-blue-50 border-blue-200',
-      C: 'bg-amber-50 border-amber-200',
-      D: 'bg-red-50 border-red-200',
-    }[result.grade] || 'bg-gray-50 border-gray-200'
+      A: 'bg-status-fertig-bg border-status-fertig-border',
+      B: 'bg-status-neu-bg border-status-neu-border',
+      C: 'bg-status-aktiv-bg border-status-aktiv-border',
+      D: 'bg-status-fehler-bg border-status-fehler-border',
+    }[result.grade] || 'bg-surface-bg border-surface-border'
 
   return (
     <div className="space-y-4">
@@ -1497,7 +1515,7 @@ function PerformancePredictorPanel({ loading, result, onGenerate }) {
             <div className="flex items-center gap-2 mb-1.5">
               <div className="flex-1 h-2 bg-white/60 rounded-full overflow-hidden border">
                 <div
-                  className={`h-full rounded-full ${result.engagement_score >= 70 ? 'bg-emerald-500' : result.engagement_score >= 50 ? 'bg-blue-500' : result.engagement_score >= 30 ? 'bg-amber-500' : 'bg-red-500'}`}
+                  className={`h-full rounded-full ${result.engagement_score >= 70 ? 'bg-status-fertig-border' : result.engagement_score >= 50 ? 'bg-status-neu-border' : result.engagement_score >= 30 ? 'bg-status-aktiv-border' : 'bg-status-fehler-border'}`}
                   style={{ width: `${result.engagement_score}%` }}
                 />
               </div>
@@ -1519,7 +1537,7 @@ function PerformancePredictorPanel({ loading, result, onGenerate }) {
         ].map((m) => (
           <div
             key={m.label}
-            className="text-center p-3 bg-gray-50 rounded-xl border border-gray-200"
+            className="text-center p-3 bg-surface-bg rounded-xl border border-surface-border"
           >
             <div className="text-xl mb-1">{m.icon}</div>
             <div className="text-xs font-semibold text-ink">{m.value}</div>
@@ -1530,18 +1548,18 @@ function PerformancePredictorPanel({ loading, result, onGenerate }) {
 
       {/* Strengths & Weaknesses */}
       <div className="grid grid-cols-2 gap-2">
-        <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200">
-          <p className="text-[11px] font-semibold text-emerald-800 mb-1.5">✅ Stärken</p>
+        <div className="p-3 bg-status-fertig-bg rounded-xl border border-status-fertig-border">
+          <p className="text-[11px] font-semibold text-status-fertig-text mb-1.5">✅ Stärken</p>
           {(result.strengths || []).map((s, i) => (
-            <p key={i} className="text-[11px] text-emerald-700 mb-0.5">
+            <p key={i} className="text-[11px] text-status-fertig-text mb-0.5">
               · {s}
             </p>
           ))}
         </div>
-        <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
-          <p className="text-[11px] font-semibold text-amber-800 mb-1.5">⚠️ Schwächen</p>
+        <div className="p-3 bg-status-aktiv-bg rounded-xl border border-status-aktiv-border">
+          <p className="text-[11px] font-semibold text-status-aktiv-text mb-1.5">⚠️ Schwächen</p>
           {(result.weaknesses || []).map((w, i) => (
-            <p key={i} className="text-[11px] text-amber-700 mb-0.5">
+            <p key={i} className="text-[11px] text-status-aktiv-text mb-0.5">
               · {w}
             </p>
           ))}
@@ -1549,12 +1567,12 @@ function PerformancePredictorPanel({ loading, result, onGenerate }) {
       </div>
 
       {/* Tips */}
-      <div className="p-3 bg-purple-50 rounded-xl border border-purple-200">
-        <p className="text-[11px] font-semibold text-purple-800 mb-1.5">💡 Verbesserungstipps</p>
+      <div className="p-3 bg-accent-50 rounded-xl border border-accent-200">
+        <p className="text-[11px] font-semibold text-accent-800 mb-1.5">💡 Verbesserungstipps</p>
         {(result.tips || []).map((t, i) => (
           <div key={i} className="flex gap-2 mb-1">
-            <span className="text-[11px] text-purple-600 font-bold shrink-0">{i + 1}.</span>
-            <p className="text-[11px] text-purple-700">{t}</p>
+            <span className="text-[11px] text-accent-600 font-bold shrink-0">{i + 1}.</span>
+            <p className="text-[11px] text-accent-700">{t}</p>
           </div>
         ))}
       </div>
@@ -1568,7 +1586,7 @@ function PerformancePredictorPanel({ loading, result, onGenerate }) {
         </span>
         <button
           onClick={onGenerate}
-          className="text-[10px] text-purple-600 hover:text-purple-800 border border-purple-200 rounded-lg px-2 py-0.5"
+          className="text-[10px] text-accent-600 hover:text-accent-800 border border-accent-200 rounded-lg px-2 py-0.5"
         >
           ↻ Neu
         </button>
