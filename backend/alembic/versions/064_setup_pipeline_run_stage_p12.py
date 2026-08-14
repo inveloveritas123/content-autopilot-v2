@@ -1,7 +1,7 @@
 """widen setup_pipeline_run stage CHECK to cover p12/p12b/admin actions
 
-Revision ID: 057
-Revises: 056
+Revision ID: 064
+Revises: 063
 Create Date: 2026-07-27
 
 Der Constraint (Migration 018) kannte nur die Onboarding-Stages
@@ -11,12 +11,18 @@ eingeführt, ohne die Migration zu erweitern — jeder INSERT mit diesen Stages
 scheiterte am CHECK-Constraint (IntegrityError), bevor der jeweilige Task
 überhaupt einen LLM-Call absetzen konnte (#62 — Schritt-0-E2E-Test deckte das
 live auf).
+
+Ursprünglich Revision 057 in origin/main (Create Date 2026-07-27). Bei der
+Highlander-Integration 2026-08-14 auf 064 umnummeriert, da 057 bereits durch
+057_tenant_agentur_id.py (feature/stufe2-produkt-Strang) belegt war — beide
+Migrationen betreffen unabhängige Tabellen, keine inhaltliche Kollision,
+reine Nummern-Linearisierung ans Kettenende.
 """
 
 from alembic import op
 
-revision = "057"
-down_revision = "056"
+revision = "064"
+down_revision = "063"
 branch_labels = None
 depends_on = None
 
