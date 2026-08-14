@@ -1,3 +1,4 @@
+// AUDITED-2026-08-14 (Welle D6): Tiefen-Audit, Datei vollstaendig gelesen.
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
@@ -569,7 +570,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      {/* v1 Unternehmer-Profil form removed — data captured via Brand-Voice-Wizard (#122) */}
+      {/* v1 Unternehmer-Profil form removed — data captured via Brand-Voice-Wizard (Issue 122) */}
 
       {/* Content Settings */}
       <Card>

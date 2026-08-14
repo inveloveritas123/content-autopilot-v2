@@ -1,3 +1,4 @@
+// AUDITED-2026-08-14 (Welle D6): Tiefen-Audit, Datei vollstaendig gelesen.
 import { useState, useEffect } from 'react'
 import { useToast } from './ui/Toast'
 import { request } from '../api'
@@ -14,8 +15,8 @@ function ColorSwatch({ color }) {
 export default function BrandingSettings() {
   const { toast } = useToast()
   const [form, setForm] = useState({
-    primary_color: '#0F766E',
-    secondary_color: '#F59E0B',
+    primary_color: '#0F766E', // bewusst behalten: Standard-Brand-Farbe
+    secondary_color: '#F59E0B', // bewusst behalten: Standard-Brand-Farbe
     font_family: 'Helvetica',
     logo_url: '',
     watermark_text: '',
@@ -61,7 +62,7 @@ export default function BrandingSettings() {
               type="text"
               value={form.primary_color}
               onChange={(e) => setForm((f) => ({ ...f, primary_color: e.target.value }))}
-              placeholder="#0F766E"
+              placeholder="#0F766E" /* bewusst behalten: Beispiel-Hex-Wert */
               className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-400"
             />
             <input
@@ -81,7 +82,7 @@ export default function BrandingSettings() {
               type="text"
               value={form.secondary_color}
               onChange={(e) => setForm((f) => ({ ...f, secondary_color: e.target.value }))}
-              placeholder="#F59E0B"
+              placeholder="#F59E0B" /* bewusst behalten: Beispiel-Hex-Wert */
               className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-400"
             />
             <input

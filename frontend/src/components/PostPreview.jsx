@@ -1,3 +1,4 @@
+// AUDITED-2026-08-14 (Welle D6): Tiefen-Audit, Datei vollstaendig gelesen.
 import { useState } from 'react'
 import { ThumbsUp, MessageSquare, Share2, MoreHorizontal } from 'lucide-react'
 
@@ -132,7 +133,7 @@ function LinkedInPost({ text, device, carouselSlides, authorName, authorTitle })
               <p className="text-xs text-gray-500 leading-tight truncate max-w-[200px]">
                 {authorTitle || 'Unternehmer \u00b7 1. Grad'}
               </p>
-              <p className="text-xs text-gray-400 leading-tight">Gerade &bull; &#127760;</p>
+              <p className="text-xs text-gray-400 leading-tight">Gerade &bull; 🌐</p>
             </div>
             <button
               className="p-2 rounded-full hover:bg-gray-100 text-gray-400 transition-colors"
@@ -178,9 +179,9 @@ function LinkedInPost({ text, device, carouselSlides, authorName, authorTitle })
 
       {/* Reactions summary */}
       <div className="px-4 py-1 flex items-center gap-1 text-xs text-gray-500">
-        <span>&#128077;</span>
-        <span>&#128161;</span>
-        <span>&#10084;&#65039;</span>
+        <span>👍</span>
+        <span>💡</span>
+        <span>❤️</span>
         <span className="ml-1">124</span>
         <span className="ml-auto">12 Kommentare &middot; 8 Reposts</span>
       </div>

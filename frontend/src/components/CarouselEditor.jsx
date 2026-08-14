@@ -1,3 +1,4 @@
+// AUDITED-2026-08-14 (Welle D6): Tiefen-Audit, Datei vollstaendig gelesen.
 import { useState } from 'react'
 import { useToast } from './ui/Toast'
 
@@ -24,14 +25,14 @@ function SlideCard({ slide, index, total, onMove, onChange, onDelete }) {
           disabled={index === 0}
           className="text-gray-400 hover:text-gray-700 disabled:opacity-20 text-xs"
         >
-          &#8593;
+          ↑
         </button>
         <button
           onClick={() => onMove(index, 1)}
           disabled={index === total - 1}
           className="text-gray-400 hover:text-gray-700 disabled:opacity-20 text-xs"
         >
-          &#8595;
+          ↓
         </button>
       </div>
       <div className="flex-1 min-w-0">

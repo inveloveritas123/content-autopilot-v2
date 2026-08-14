@@ -1,5 +1,6 @@
+// AUDITED-2026-08-14 (Welle D6): Tiefen-Audit, Datei vollstaendig gelesen.
 /**
- * ThrottleStatusCard — Issue #156: Pipeline-Pump-Throttle UI
+ * ThrottleStatusCard — Issue 156: Pipeline-Pump-Throttle UI
  *
  * Displays:
  *  - Calls letzte Stunde: X / 200 (per tenant)

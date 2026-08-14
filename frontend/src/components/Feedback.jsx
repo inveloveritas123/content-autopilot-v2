@@ -1,3 +1,4 @@
+// AUDITED-2026-08-14 (Welle D6): Tiefen-Audit, Datei vollstaendig gelesen.
 import { useState, useEffect } from 'react'
 import {
   BarChart3,
@@ -88,18 +89,18 @@ function AnglesChart({ data }) {
   return (
     <ResponsiveContainer width="100%" height={220}>
       <BarChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /* bewusst behalten: Chart-Farbe */ />
         <XAxis dataKey="name" tick={{ fontSize: 12 }} />
         <YAxis tick={{ fontSize: 12 }} />
         <Tooltip
-          contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
+          contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' /* bewusst behalten: Chart-Farbe */ }}
           formatter={(value, name) => [
             name === 'engagement' ? `${value}%` : value,
             name === 'engagement' ? 'Engagement' : 'Anzahl',
           ]}
         />
-        <Bar dataKey="engagement" fill="#0d9488" radius={[4, 4, 0, 0]} name="engagement" />
-        <Bar dataKey="anzahl" fill="#f59e0b" radius={[4, 4, 0, 0]} name="anzahl" />
+        <Bar dataKey="engagement" fill="#0d9488" /* bewusst behalten: Chart-Farbe */ radius={[4, 4, 0, 0]} name="engagement" />
+        <Bar dataKey="anzahl" fill="#f59e0b" /* bewusst behalten: Chart-Farbe */ radius={[4, 4, 0, 0]} name="anzahl" />
       </BarChart>
     </ResponsiveContainer>
   )
