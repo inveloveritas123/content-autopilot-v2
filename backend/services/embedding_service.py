@@ -477,6 +477,7 @@ async def _lexical_search(
     where_extra = [
         "content_tsv @@ websearch_to_tsquery('german', :q)",
         "tenant_id = CAST(:tid AS uuid)",
+        SQL_NICHT_GELOESCHT,
     ]
     params: dict = {"tid": tenant_id, "q": query_text, "limit": limit}
     if classification and classification in ALLOWED_CLASSIFICATIONS:

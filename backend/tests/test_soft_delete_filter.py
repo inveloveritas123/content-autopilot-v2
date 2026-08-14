@@ -211,8 +211,15 @@ class TestMemoryBackfillFiltertBeidePaesse:
         ):
             asyncio.run(_backfill_async(limit=10))
 
-        assert len(fake_db.queries) == 2
-        assert all(SQL_NICHT_GELOESCHT in q for q in fake_db.queries)
+        # Seit dem origin/main-Delta (RLS-Tenant-Isolation, Migration 058) setzt
+        # bypass_rls_session() zusätzlich eine `SELECT set_config(...)`-Query, um
+        # den auditierbaren Cross-Tenant-Bypass zu aktivieren -- eine dritte,
+        # zusätzliche Query, kein entfernter Filter. Die beiden fachlichen SELECTs
+        # bleiben unverändert bei 2 und tragen weiterhin SQL_NICHT_GELOESCHT.
+        fach_queries = [q for q in fake_db.queries if not q.startswith("SELECT set_config")]
+        assert len(fake_db.queries) == 3
+        assert len(fach_queries) == 2
+        assert all(SQL_NICHT_GELOESCHT in q for q in fach_queries)
 
 
 class _FakeSimpleDb:
@@ -331,7 +338,12 @@ _KONSTANTE_VERWENDUNG_RE = re.compile(r"\bSQL_NICHT_GELOESCHT\b")
 _READER_FILES = {
     "api/memory.py": (5, 4),
     "api/memory_viz.py": (7, 4),
-    "services/embedding_service.py": (1, 1),
+    # 2/2 statt 1/1 seit Highlander-Integration 2026-08-14: _lexical_search()
+    # (Hybrid-Retrieval-Zweig, Zeile ~460) fehlte SQL_NICHT_GELOESCHT komplett
+    # -- gelöschte memory_chunks kamen über die Volltextsuche zurück (DSGVO-
+    # Recht-auf-Vergessen-Lücke). Gefixt, nicht blind nachgezogen: siehe
+    # services/embedding_service.py::_lexical_search.
+    "services/embedding_service.py": (2, 2),
     "tasks/p06_profile_extractor_task.py": (1, 1),
     "tasks/values_backfill_task.py": (1, 1),
     "tasks/memory_backfill_task.py": (2, 2),
