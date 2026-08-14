@@ -44,15 +44,17 @@ function quickScore(text) {
 }
 
 function StatCard({ icon: Icon, label, value, sub, color = 'teal' }) {
+  // purple bewusst behalten: 4. KPI-Kachel-Farbe (Kanäle) neben den 3 migrierten
+  // (teal/emerald/amber -> primary/status-fertig/accent), kein 1:1-Primitive-Äquivalent.
   const bg = {
     teal: 'bg-primary-50',
-    emerald: 'bg-emerald-50',
+    emerald: 'bg-status-fertig-bg',
     amber: 'bg-accent-50',
     purple: 'bg-purple-50',
   }[color]
   const text = {
     teal: 'text-primary-700',
-    emerald: 'text-emerald-700',
+    emerald: 'text-status-fertig-text',
     amber: 'text-accent-700',
     purple: 'text-purple-700',
   }[color]
@@ -77,7 +79,7 @@ function HBar({ label, count, max, color = 'bg-primary-500', badge }) {
   return (
     <div className="flex items-center gap-3">
       <span className="w-24 text-xs text-ink-muted text-right shrink-0 truncate">{label}</span>
-      <div className="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden">
+      <div className="flex-1 h-5 bg-surface-bg rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all ${color}`}
           style={{ width: `${pct}%` }}
@@ -125,14 +127,16 @@ const DAY_NAMES_LONG = [
 const HEAT_HOURS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 
 function heatColor(v, max) {
-  if (!v || !max) return 'bg-gray-100'
+  if (!v || !max) return 'bg-surface-bg'
   const t = v / max
+  // Zwischentöne bewusst behalten: 5-stufige Heatmap-Intensitätsskala, status-fertig-
+  // Token deckt nur die dunkelste Stufe exakt ab.
   if (t >= 0.9) return 'bg-emerald-600'
-  if (t >= 0.7) return 'bg-emerald-500'
+  if (t >= 0.7) return 'bg-status-fertig-border'
   if (t >= 0.5) return 'bg-emerald-400'
   if (t >= 0.3) return 'bg-emerald-300'
-  if (t > 0) return 'bg-emerald-200'
-  return 'bg-gray-100'
+  if (t > 0) return 'bg-status-fertig-bg'
+  return 'bg-surface-bg'
 }
 
 function PostingHeatmap({ data }) {
@@ -182,11 +186,12 @@ function PostingHeatmap({ data }) {
           {/* Legend */}
           <div className="flex items-center gap-2 mt-2 ml-8">
             <span className="text-[9px] text-ink-muted">Wenig</span>
+            {/* Zwischentöne bewusst behalten: siehe heatColor() oben */}
             {[
-              'bg-emerald-200',
+              'bg-status-fertig-bg',
               'bg-emerald-300',
               'bg-emerald-400',
-              'bg-emerald-500',
+              'bg-status-fertig-border',
               'bg-emerald-600',
             ].map((c) => (
               <div key={c} className={`w-4 h-3 rounded-sm ${c}`} />
@@ -203,22 +208,27 @@ function PostingHeatmap({ data }) {
             Top Empfehlungen
           </p>
           {recommendations.slice(0, 3).map((r) => (
-            <div key={r.day} className="flex items-center gap-3 bg-emerald-50 rounded-lg px-3 py-2">
-              <span className="w-20 text-xs font-semibold text-emerald-800 shrink-0">
+            <div
+              key={r.day}
+              className="flex items-center gap-3 bg-status-fertig-bg rounded-lg px-3 py-2"
+            >
+              <span className="w-20 text-xs font-semibold text-status-fertig-text shrink-0">
                 {r.day_name}
               </span>
               <div className="flex gap-1 flex-wrap">
                 {(r.hours || []).map((h) => (
                   <span
                     key={h}
-                    className="px-1.5 py-0.5 bg-emerald-200 text-emerald-800 rounded text-[10px] font-mono"
+                    className="px-1.5 py-0.5 bg-status-fertig-border/40 text-status-fertig-text rounded text-[10px] font-mono"
                   >
                     {h}:00
                   </span>
                 ))}
               </div>
               {r.note && (
-                <span className="text-[10px] text-emerald-700 ml-auto shrink-0">{r.note}</span>
+                <span className="text-[10px] text-status-fertig-text ml-auto shrink-0">
+                  {r.note}
+                </span>
               )}
             </div>
           ))}
@@ -268,7 +278,7 @@ function ModelRecommendationsPanel({ models }) {
   return (
     <div className="bg-white rounded-xl border border-surface-border shadow-sm p-5">
       <div className="flex items-center gap-2 mb-4">
-        <TrendingUp className="w-4 h-4 text-emerald-600" />
+        <TrendingUp className="w-4 h-4 text-status-fertig-text" />
         <h2 className="text-base font-semibold text-ink">Modell-Empfehlungen</h2>
         <span className="text-xs text-ink-muted ml-1">
           Basierend auf gesammelten Qualitätsdaten
@@ -278,18 +288,18 @@ function ModelRecommendationsPanel({ models }) {
         {recommendations.map(({ step, best, shortModel, cost, conf }) => (
           <div
             key={step}
-            className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0"
+            className="flex items-center gap-3 py-2 border-b border-surface-border last:border-0"
           >
             <div className="w-28 text-xs text-ink-muted shrink-0">{STEP_LABELS[step] || step}</div>
             <div className="flex-1 flex items-center gap-2 min-w-0">
-              <span className="font-mono text-xs text-blue-700 truncate">{shortModel}</span>
+              <span className="font-mono text-xs text-status-neu-text truncate">{shortModel}</span>
               <span
                 className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                   best.avg_quality >= 80
-                    ? 'bg-emerald-100 text-emerald-700'
+                    ? 'bg-status-fertig-bg text-status-fertig-text'
                     : best.avg_quality >= 60
-                      ? 'bg-amber-100 text-amber-700'
-                      : 'bg-red-100 text-red-700'
+                      ? 'bg-status-aktiv-bg text-status-aktiv-text'
+                      : 'bg-status-fehler-bg text-status-fehler-text'
                 }`}
               >
                 {best.avg_quality.toFixed(0)}/100
@@ -304,7 +314,7 @@ function ModelRecommendationsPanel({ models }) {
       </div>
 
       {/* Cost optimization tip */}
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+      <div className="bg-status-aktiv-bg border border-status-aktiv-border rounded-lg p-3 text-xs text-status-aktiv-text">
         <span className="font-semibold">💡 Kosten-Tipp:</span> Gemini Flash (0.075$/1M) liefert{' '}
         {recommendations
           .find((r) => r.shortModel.includes('gemini'))
@@ -438,10 +448,13 @@ export default function Analytics() {
       })
 
     // Pillar distribution
+    // violet/sky/pink bewusst behalten: 5 unterscheidbare Content-Säulen-Badges ohne
+    // Status-Bedeutung (analog Posts.jsx Content-Säulen); teal/amber sind primitive-
+    // identisch zu primary-*/accent-* und deshalb migriert.
     const PILLAR_CFG = {
       thought_leadership: { label: 'Thought Leadership', emoji: '💡', bar: 'bg-violet-400' },
-      how_to: { label: 'How-To / Anleitung', emoji: '🛠', bar: 'bg-teal-400' },
-      personal_story: { label: 'Persönliche Story', emoji: '📖', bar: 'bg-amber-400' },
+      how_to: { label: 'How-To / Anleitung', emoji: '🛠', bar: 'bg-primary-400' },
+      personal_story: { label: 'Persönliche Story', emoji: '📖', bar: 'bg-accent-400' },
       industry_news: { label: 'Branchennews', emoji: '📰', bar: 'bg-sky-400' },
       product_service: { label: 'Produkt / Service', emoji: '🎯', bar: 'bg-pink-400' },
     }
@@ -513,7 +526,12 @@ export default function Analytics() {
   }, [posts])
 
   if (loading) return <div className="text-center py-12 text-ink-muted">Lade Analytics...</div>
-  if (error) return <div className="p-4 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
+  if (error)
+    return (
+      <div className="p-4 bg-status-fehler-bg text-status-fehler-text rounded-lg text-sm">
+        {error}
+      </div>
+    )
   if (!stats) return <div className="text-center py-12 text-ink-muted">Keine Daten vorhanden.</div>
 
   const {
@@ -545,22 +563,48 @@ export default function Analytics() {
   const maxChannel = Math.max(...Object.values(byChannel), 1)
   const maxAngle = Math.max(...Object.values(byAngle), 1)
 
+  // purple bewusst behalten: 6. unterscheidbare Kanal-Kategoriefarbe neben den 5
+  // migrierten, kein 1:1-Primitive-Äquivalent im Tier-1-System.
   const channelColors = [
     'bg-primary-500',
-    'bg-teal-500',
-    'bg-blue-400',
+    'bg-primary-500',
+    'bg-status-neu-border',
     'bg-purple-400',
-    'bg-amber-400',
-    'bg-emerald-400',
+    'bg-accent-400',
+    'bg-status-fertig-border',
   ]
   const weekColors = 'bg-primary-400'
 
+  // bar-Feld ergänzt: die Badge-Farbe (color) ist die helle bg-*-Variante, das
+  // Balkendiagramm darunter braucht den kräftigeren Ton — vorher per String-Replace
+  // aus 'color' abgeleitet (Annahme: Klassenname endet auf "-100"), das funktioniert
+  // mit Tier-2-Token-Namen nicht mehr, deshalb jetzt explizit gepflegt.
   const statusLabels = {
-    draft: { label: 'Entwurf', color: 'bg-amber-100 text-amber-700' },
-    approved: { label: 'Freigegeben', color: 'bg-emerald-100 text-emerald-700' },
-    published: { label: 'Veröffentlicht', color: 'bg-primary-100 text-primary-700' },
-    rejected: { label: 'Verworfen', color: 'bg-red-100 text-red-600' },
-    scheduled: { label: 'Geplant', color: 'bg-blue-100 text-blue-700' },
+    draft: {
+      label: 'Entwurf',
+      color: 'bg-status-aktiv-bg text-status-aktiv-text',
+      bar: 'bg-status-aktiv-border',
+    },
+    approved: {
+      label: 'Freigegeben',
+      color: 'bg-status-fertig-bg text-status-fertig-text',
+      bar: 'bg-status-fertig-border',
+    },
+    published: {
+      label: 'Veröffentlicht',
+      color: 'bg-primary-100 text-primary-700',
+      bar: 'bg-primary-400',
+    },
+    rejected: {
+      label: 'Verworfen',
+      color: 'bg-status-fehler-bg text-status-fehler-text',
+      bar: 'bg-status-fehler-border',
+    },
+    scheduled: {
+      label: 'Geplant',
+      color: 'bg-status-neu-bg text-status-neu-text',
+      bar: 'bg-status-neu-border',
+    },
   }
 
   return (
@@ -652,7 +696,8 @@ export default function Analytics() {
                 const pct = totalPosts > 0 ? Math.round((count / totalPosts) * 100) : 0
                 const info = statusLabels[status] || {
                   label: status,
-                  color: 'bg-gray-100 text-gray-600',
+                  color: 'bg-surface-bg text-ink-light',
+                  bar: 'bg-ink-muted',
                 }
                 return (
                   <div key={status} className="flex items-center gap-3">
@@ -661,9 +706,9 @@ export default function Analytics() {
                     >
                       {info.label}
                     </span>
-                    <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="flex-1 h-4 bg-surface-bg rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${info.color.split(' ')[0].replace('bg-', 'bg-').replace('-100', '-400')}`}
+                        className={`h-full rounded-full ${info.bar}`}
                         style={{ width: `${Math.max(pct, 3)}%` }}
                       />
                     </div>
@@ -734,6 +779,7 @@ export default function Analytics() {
       {/* Content Pillar Distribution */}
       <div className="bg-white rounded-xl border border-surface-border p-5 mb-5">
         <h2 className="text-sm font-semibold text-ink mb-1 flex items-center gap-2">
+          {/* violet bewusst behalten: Panel-Icon, passend zu den violet-Content-Säulen oben */}
           <BarChart3 className="w-4 h-4 text-violet-600" /> Content-Säulen Verteilung
         </h2>
         <p className="text-[11px] text-ink-muted mb-4">
@@ -750,7 +796,7 @@ export default function Analytics() {
                 <div key={key} className="flex items-center gap-3">
                   <span className="w-6 text-base shrink-0 text-center">{cfg.emoji}</span>
                   <span className="w-36 text-xs text-ink-muted shrink-0 truncate">{cfg.label}</span>
-                  <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="flex-1 h-4 bg-surface-bg rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full ${cfg.bar}`}
                       style={{ width: `${Math.max(count > 0 ? 4 : 0, pct)}%` }}
@@ -769,11 +815,11 @@ export default function Analytics() {
             {Object.entries(PILLAR_CFG).map(([key, cfg]) => (
               <div
                 key={key}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-xs text-ink-muted"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-bg border border-surface-border text-xs text-ink-muted"
               >
                 <span>{cfg.emoji}</span>
                 <span>{cfg.label}</span>
-                <span className="text-gray-300">—</span>
+                <span className="text-ink-muted">—</span>
                 <span className="font-semibold">0</span>
               </div>
             ))}
@@ -793,7 +839,7 @@ export default function Analytics() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-gray-100">
+                <tr className="border-b border-surface-border">
                   <th className="text-left py-2 pr-4 text-ink-muted font-medium">Quelle</th>
                   <th className="text-right py-2 px-2 text-ink-muted font-medium">Items</th>
                   <th className="text-right py-2 px-2 text-ink-muted font-medium">Ideen</th>
@@ -816,14 +862,14 @@ export default function Analytics() {
                   const approvalPct = s.approval_rate
                   const barColor =
                     approvalPct >= 50
-                      ? 'bg-emerald-500'
+                      ? 'bg-status-fertig-border'
                       : approvalPct >= 20
-                        ? 'bg-amber-400'
-                        : 'bg-red-400'
+                        ? 'bg-status-aktiv-border'
+                        : 'bg-status-fehler-border'
                   return (
                     <tr
                       key={s.source_id}
-                      className={`border-b border-gray-50 ${i % 2 === 0 ? '' : 'bg-gray-50/50'} hover:bg-primary-50/30`}
+                      className={`border-b border-surface-border ${i % 2 === 0 ? '' : 'bg-surface-bg/50'} hover:bg-primary-50/30`}
                     >
                       <td className="py-2 pr-4">
                         <div className="flex items-center gap-1.5 max-w-[220px]">
@@ -842,7 +888,7 @@ export default function Analytics() {
                       <td className="text-right py-2 px-2 text-ink-muted tabular-nums">
                         {s.posts.toLocaleString('de')}
                       </td>
-                      <td className="text-right py-2 px-2 text-emerald-700 font-medium tabular-nums">
+                      <td className="text-right py-2 px-2 text-status-fertig-text font-medium tabular-nums">
                         {s.approved.toLocaleString('de')}
                       </td>
                       <td className="text-right py-2 px-2 text-primary-700 font-semibold tabular-nums">
@@ -850,14 +896,14 @@ export default function Analytics() {
                       </td>
                       <td className="py-2 pl-2">
                         <div className="flex items-center gap-2 justify-end">
-                          <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="w-16 h-2 bg-surface-bg rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full ${barColor}`}
                               style={{ width: `${Math.max(approvalPct, s.approved > 0 ? 4 : 0)}%` }}
                             />
                           </div>
                           <span
-                            className={`tabular-nums font-medium ${approvalPct >= 50 ? 'text-emerald-700' : approvalPct >= 20 ? 'text-amber-700' : 'text-red-600'}`}
+                            className={`tabular-nums font-medium ${approvalPct >= 50 ? 'text-status-fertig-text' : approvalPct >= 20 ? 'text-status-aktiv-text' : 'text-status-fehler-text'}`}
                           >
                             {approvalPct}%
                           </span>
@@ -881,7 +927,7 @@ export default function Analytics() {
       {Object.values(ageBuckets).some((v) => v > 0) && (
         <div className="bg-white rounded-xl border border-surface-border p-5 mb-6">
           <h2 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-amber-500" /> Entwurfs-Alter — Backlog-Übersicht
+            <Clock className="w-4 h-4 text-accent-500" /> Entwurfs-Alter — Backlog-Übersicht
           </h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Age distribution bars */}
@@ -893,28 +939,37 @@ export default function Analytics() {
                 {
                   key: 'fresh',
                   label: '< 7 Tage',
-                  color: 'bg-emerald-500',
-                  textColor: 'text-emerald-700',
+                  color: 'bg-status-fertig-bg',
+                  textColor: 'text-status-fertig-text',
                 },
                 {
                   key: 'week',
                   label: '7–14 Tage',
-                  color: 'bg-amber-400',
-                  textColor: 'text-amber-700',
+                  color: 'bg-status-aktiv-bg',
+                  textColor: 'text-status-aktiv-text',
                 },
                 {
                   key: 'twoweeks',
                   label: '14–30 Tage',
+                  // orange bewusst behalten: 5. Alters-Stufe zwischen aktiv(week)/fehler(month,old),
+                  // kein eigener Status-Token für diese Zwischenstufe (analog Posts.jsx Notenstufe D).
                   color: 'bg-orange-400',
                   textColor: 'text-orange-700',
                 },
                 {
                   key: 'month',
                   label: '1–3 Monate',
-                  color: 'bg-red-400',
-                  textColor: 'text-red-600',
+                  color: 'bg-status-fehler-border',
+                  textColor: 'text-status-fehler-text',
                 },
-                { key: 'old', label: '> 3 Monate', color: 'bg-red-700', textColor: 'text-red-700' },
+                {
+                  key: 'old',
+                  label: '> 3 Monate',
+                  color: 'bg-red-700',
+                  // rot bewusst behalten: dunklerer roter Ton für die älteste Alters-Stufe,
+                  // kein eigener (noch dunklerer) status-fehler-Ton vorhanden.
+                  textColor: 'text-red-700',
+                },
               ].map(({ key, label, color, textColor }) => {
                 const count = ageBuckets[key] || 0
                 const total = Object.values(ageBuckets).reduce((a, v) => a + v, 0)
@@ -924,7 +979,7 @@ export default function Analytics() {
                     <span className="text-[10px] text-ink-muted w-20 shrink-0 text-right">
                       {label}
                     </span>
-                    <div className="flex-1 h-5 bg-gray-100 rounded-md overflow-hidden">
+                    <div className="flex-1 h-5 bg-surface-bg rounded-md overflow-hidden">
                       <div
                         className={`h-full ${color} rounded-md flex items-center pl-2`}
                         style={{ width: `${Math.max(pct, count > 0 ? 3 : 0)}%` }}
@@ -943,7 +998,7 @@ export default function Analytics() {
                 )
               })}
               {ageBuckets.old > 0 && (
-                <p className="text-[11px] text-red-600 mt-2">
+                <p className="text-[11px] text-status-fehler-text mt-2">
                   ⚠️ {ageBuckets.old + ageBuckets.month} Entwürfe älter als 1 Monat — Review
                   empfohlen
                 </p>
@@ -959,10 +1014,11 @@ export default function Analytics() {
                 {top5Oldest.map((p, i) => {
                   const ageColor =
                     p.ageDays >= 90
-                      ? 'text-red-700 bg-red-50 border-red-200'
+                      ? 'text-status-fehler-text bg-status-fehler-bg border-status-fehler-border'
                       : p.ageDays >= 30
-                        ? 'text-orange-700 bg-orange-50 border-orange-200'
-                        : 'text-amber-700 bg-amber-50 border-amber-200'
+                        ? // orange bewusst behalten: Zwischenstufe, siehe Altersverteilung oben
+                          'text-orange-700 bg-orange-50 border-orange-200'
+                        : 'text-status-aktiv-text bg-status-aktiv-bg border-status-aktiv-border'
                   return (
                     <div
                       key={p.id}
@@ -987,10 +1043,10 @@ export default function Analytics() {
         <div className="bg-white rounded-xl border border-surface-border p-5 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
-              <Award className="w-4 h-4 text-amber-500" /> Content-Qualitätsbericht — Entwürfe
+              <Award className="w-4 h-4 text-accent-500" /> Content-Qualitätsbericht — Entwürfe
             </h2>
             {readyToApprove > 0 && (
-              <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+              <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-status-fertig-bg text-status-fertig-text border border-status-fertig-border">
                 ✅ {readyToApprove} bereit zur Freigabe (Note A/B)
               </span>
             )}
@@ -1005,32 +1061,34 @@ export default function Analytics() {
                   {
                     grade: 'A',
                     label: 'Hervorragend (9-10)',
-                    color: 'bg-emerald-500',
-                    textColor: 'text-emerald-700',
+                    color: 'bg-status-fertig-border',
+                    textColor: 'text-status-fertig-text',
                   },
                   {
                     grade: 'B',
                     label: 'Gut (7-8)',
-                    color: 'bg-blue-500',
-                    textColor: 'text-blue-700',
+                    color: 'bg-status-neu-border',
+                    textColor: 'text-status-neu-text',
                   },
                   {
                     grade: 'C',
                     label: 'Okay (5-6)',
-                    color: 'bg-amber-400',
-                    textColor: 'text-amber-700',
+                    color: 'bg-status-aktiv-bg',
+                    textColor: 'text-status-aktiv-text',
                   },
                   {
                     grade: 'D',
                     label: 'Schwach (3-4)',
+                    // orange bewusst behalten: eigene Notenstufe "D" zwischen aktiv(C)/fehler(F),
+                    // kein Status-Token für diese Zwischenstufe (analog Posts.jsx).
                     color: 'bg-orange-400',
                     textColor: 'text-orange-700',
                   },
                   {
                     grade: 'F',
                     label: 'Ungenügend (0-2)',
-                    color: 'bg-red-400',
-                    textColor: 'text-red-600',
+                    color: 'bg-status-fehler-border',
+                    textColor: 'text-status-fehler-text',
                   },
                 ].map(({ grade, label, color, textColor }) => {
                   const count = gradeDist[grade] || 0
@@ -1041,7 +1099,7 @@ export default function Analytics() {
                       <span className={`w-5 text-xs font-black shrink-0 ${textColor}`}>
                         {grade}
                       </span>
-                      <div className="flex-1 h-5 bg-gray-100 rounded-md overflow-hidden">
+                      <div className="flex-1 h-5 bg-surface-bg rounded-md overflow-hidden">
                         <div
                           className={`h-full ${color} rounded-md transition-all flex items-center pl-2`}
                           style={{ width: `${Math.max(pct, count > 0 ? 4 : 0)}%` }}
@@ -1069,20 +1127,21 @@ export default function Analytics() {
                   const pct = Math.round((count / maxHist) * 100)
                   const barColor =
                     range === '9-10'
-                      ? 'bg-emerald-500'
+                      ? 'bg-status-fertig-border'
                       : range === '7-8'
-                        ? 'bg-blue-400'
+                        ? 'bg-status-neu-border'
                         : range === '5-6'
-                          ? 'bg-amber-300'
+                          ? 'bg-status-aktiv-border'
                           : range === '3-4'
-                            ? 'bg-orange-300'
+                            ? // orange bewusst behalten: siehe Notenverteilung oben (Stufe D)
+                              'bg-orange-300'
                             : 'bg-red-300'
                   return (
                     <div key={range} className="flex items-center gap-2">
                       <span className="text-[10px] text-ink-muted w-10 text-right shrink-0">
                         {range}
                       </span>
-                      <div className="flex-1 h-5 bg-gray-100 rounded-md overflow-hidden">
+                      <div className="flex-1 h-5 bg-surface-bg rounded-md overflow-hidden">
                         <div
                           className={`h-full ${barColor} rounded-md`}
                           style={{ width: `${Math.max(pct, count > 0 ? 3 : 0)}%` }}
@@ -1115,16 +1174,17 @@ export default function Analytics() {
                 )}
                 {topPosts.map((p, i) => {
                   const gradeColor = {
-                    A: 'bg-emerald-100 text-emerald-800',
-                    B: 'bg-blue-100 text-blue-800',
-                    C: 'bg-amber-100 text-amber-800',
+                    A: 'bg-status-fertig-bg text-status-fertig-text',
+                    B: 'bg-status-neu-bg text-status-neu-text',
+                    C: 'bg-status-aktiv-bg text-status-aktiv-text',
+                    // orange bewusst behalten: Notenstufe D, siehe oben
                     D: 'bg-orange-100 text-orange-800',
-                    F: 'bg-red-100 text-red-700',
+                    F: 'bg-status-fehler-bg text-status-fehler-text',
                   }[p.grade]
                   return (
                     <div
                       key={p.id}
-                      className="flex items-start gap-2 p-2 rounded-lg border border-gray-100 hover:border-gray-200 bg-gray-50"
+                      className="flex items-start gap-2 p-2 rounded-lg border border-surface-border hover:border-ink-muted bg-surface-bg"
                     >
                       <span className="text-[10px] font-black text-ink-muted shrink-0 mt-0.5">
                         #{i + 1}
@@ -1157,8 +1217,8 @@ export default function Analytics() {
               {[7, 14, 30].map((d) => (
                 <button
                   key={d}
-                  onClick={() => setCostDays(d)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded border transition-colors ${costDays === d ? 'bg-primary-700 text-white border-primary-700' : 'bg-white text-ink-muted border-gray-200 hover:border-primary-300'}`}
+  onClick={() => setCostDays(d)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded border transition-colors ${costDays === d ? 'bg-primary-700 text-white border-primary-700' : 'bg-white text-ink-muted border-surface-border hover:border-primary-300'}`}
                 >
                   {d}d
                 </button>
@@ -1185,25 +1245,27 @@ export default function Analytics() {
                         label: `Gesamt (${costDays}d)`,
                         value: `${(totalCents / 100).toFixed(2)} €`,
                         sub: `${totalCalls} Aufrufe`,
+                        // purple bewusst behalten: 4. KPI-Kachel-Farbe neben den 3 migrierten,
+                        // kein 1:1-Primitive-Äquivalent im Tier-1-System.
                         color: 'bg-purple-50 text-purple-700',
                       },
                       {
                         label: 'Ø pro Tag',
                         value: `${(avgPerDay / 100).toFixed(3)} €`,
                         sub: `${Math.round(totalCalls / history.length)} Aufrufe/Tag`,
-                        color: 'bg-blue-50 text-blue-700',
+                        color: 'bg-status-neu-bg text-status-neu-text',
                       },
                       {
                         label: 'Input Tokens',
                         value: (totalTokensIn / 1000).toFixed(0) + 'K',
                         sub: 'Prompt-Tokens gesamt',
-                        color: 'bg-amber-50 text-amber-700',
+                        color: 'bg-accent-50 text-accent-700',
                       },
                       {
                         label: 'Output Tokens',
                         value: (totalTokensOut / 1000).toFixed(0) + 'K',
                         sub: 'Antwort-Tokens gesamt',
-                        color: 'bg-emerald-50 text-emerald-700',
+                        color: 'bg-status-fertig-bg text-status-fertig-text',
                       },
                     ].map((s) => (
                       <div key={s.label} className={`rounded-lg p-3 ${s.color.split(' ')[0]}`}>
@@ -1231,7 +1293,7 @@ export default function Analytics() {
                               style={{ height: `${h}px` }}
                             />
                             <span className="text-[9px] text-ink-muted">{day.date.slice(5)}</span>
-                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
+                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-ink text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
                               {day.date}: {day.total_cents.toFixed(1)}¢ / {day.calls} Calls
                             </div>
                           </div>
@@ -1255,12 +1317,12 @@ export default function Analytics() {
                   const pct = limit > 0 ? Math.min(100, Math.round((spent / limit) * 100)) : null
                   const barColor =
                     pct == null
-                      ? 'bg-gray-300'
+                      ? 'bg-surface-border'
                       : pct >= 90
-                        ? 'bg-red-500'
+                        ? 'bg-status-fehler-border'
                         : pct >= 70
-                          ? 'bg-amber-400'
-                          : 'bg-emerald-500'
+                          ? 'bg-status-aktiv-border'
+                          : 'bg-status-fertig-border'
                   return (
                     <div key={p.id} className="space-y-1">
                       <div className="flex items-center justify-between">
@@ -1274,7 +1336,7 @@ export default function Analytics() {
                           {spent.toFixed(1)}¢ {limit > 0 ? `/ ${limit}¢` : ''}
                           {pct != null && (
                             <span
-                              className={`ml-1 font-semibold ${pct >= 90 ? 'text-red-600' : pct >= 70 ? 'text-amber-600' : 'text-emerald-600'}`}
+                              className={`ml-1 font-semibold ${pct >= 90 ? 'text-status-fehler-text' : pct >= 70 ? 'text-status-aktiv-text' : 'text-status-fertig-text'}`}
                             >
                               {pct}%
                             </span>
@@ -1282,7 +1344,7 @@ export default function Analytics() {
                         </span>
                       </div>
                       {limit > 0 && (
-                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-1.5 bg-surface-bg rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${barColor}`}
                             style={{ width: `${pct}%` }}
@@ -1305,6 +1367,7 @@ export default function Analytics() {
       {qualitySummary && (
         <div className="bg-white rounded-xl border border-surface-border shadow-sm p-5">
           <div className="flex items-center gap-2 mb-4">
+            {/* purple bewusst behalten: Panel-Icon-Farbe, kein 1:1-Primitive-Äquivalent */}
             <Award className="w-4 h-4 text-purple-600" />
             <h2 className="text-base font-semibold text-ink">Pipeline-Qualität</h2>
             <span className="ml-auto text-xs text-ink-muted">
@@ -1313,6 +1376,7 @@ export default function Analytics() {
           </div>
 
           {/* Overall score */}
+          {/* purple bewusst behalten: passend zum Panel-Icon oben */}
           <div className="flex items-center gap-3 mb-4 p-3 bg-purple-50 rounded-lg">
             <div className="text-3xl font-bold text-purple-700">
               {qualitySummary.avg_overall_score}
@@ -1325,10 +1389,10 @@ export default function Analytics() {
               <div
                 className={`text-lg font-bold ${
                   qualitySummary.avg_overall_score >= 80
-                    ? 'text-emerald-600'
+                    ? 'text-status-fertig-text'
                     : qualitySummary.avg_overall_score >= 60
-                      ? 'text-amber-600'
-                      : 'text-red-500'
+                      ? 'text-status-aktiv-text'
+                      : 'text-status-fehler-text'
                 }`}
               >
                 {qualitySummary.avg_overall_score >= 80
@@ -1357,12 +1421,14 @@ export default function Analytics() {
                 const score = step.avg_overall
                 const barColor =
                   score >= 80
-                    ? 'bg-emerald-500'
+                    ? 'bg-status-fertig-border'
                     : score >= 60
-                      ? 'bg-amber-500'
+                      ? 'bg-status-aktiv-border'
                       : score >= 40
-                        ? 'bg-orange-500'
-                        : 'bg-red-400'
+                        ? // orange bewusst behalten: 4. Score-Stufe zwischen aktiv/fehler, siehe
+                          // Notenverteilung oben (Stufe D/C)
+                          'bg-orange-500'
+                        : 'bg-status-fehler-border'
                 return (
                   <div key={step.step}>
                     <div className="flex items-center justify-between mb-0.5">
@@ -1372,7 +1438,7 @@ export default function Analytics() {
                       <span className="text-xs font-medium text-ink">{score}/100</span>
                       <span className="text-[10px] text-ink-muted ml-1">({step.count})</span>
                     </div>
-                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-surface-bg rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full ${barColor}`}
                         style={{ width: `${score}%` }}
@@ -1394,7 +1460,7 @@ export default function Analytics() {
       {/* Model Comparison Panel */}
       <div className="bg-white rounded-xl border border-surface-border shadow-sm p-5">
         <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <Cpu className="w-4 h-4 text-blue-600" />
+          <Cpu className="w-4 h-4 text-status-neu-text" />
           <h2 className="text-base font-semibold text-ink">Modell-Vergleich</h2>
           <span className="text-xs text-ink-muted ml-1">Qualität · Kosten · Latenz</span>
           <div className="ml-auto flex gap-1 flex-wrap">
@@ -1410,7 +1476,7 @@ export default function Analytics() {
                 <button
                   key={s}
                   onClick={() => setModelStep(s)}
-                  className={`px-2 py-0.5 text-xs rounded border transition-colors ${modelStep === s ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-ink-muted border-gray-200 hover:border-blue-300'}`}
+                  className={`px-2 py-0.5 text-xs rounded border transition-colors ${modelStep === s ? 'bg-status-neu-text text-white border-status-neu-text' : 'bg-white text-ink-muted border-surface-border hover:border-status-neu-border'}`}
                 >
                   {labels[s]}
                 </button>
@@ -1428,7 +1494,7 @@ export default function Analytics() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-gray-100">
+                <tr className="border-b border-surface-border">
                   <th className="text-left py-2 pr-3 text-ink-muted font-medium">Modell</th>
                   <th className="text-left py-2 pr-3 text-ink-muted font-medium">Schritt</th>
                   <th className="text-right py-2 pr-3 text-ink-muted font-medium">Qualität</th>
@@ -1450,10 +1516,10 @@ export default function Analytics() {
                   const shortModel = row.model ? row.model.split('/').pop() : '?'
                   const qualColor =
                     row.avg_quality >= 80
-                      ? 'text-emerald-700 font-semibold'
+                      ? 'text-status-fertig-text font-semibold'
                       : row.avg_quality >= 60
-                        ? 'text-amber-700'
-                        : 'text-red-600'
+                        ? 'text-status-aktiv-text'
+                        : 'text-status-fehler-text'
                   const confIcon = { high: '🟢', medium: '🟡', low: '🔴' }[row.confidence] || ''
                   const efficiencyLabel = row.quality_per_cent
                     ? `${row.quality_per_cent.toFixed(1)} Q/ct`
@@ -1461,10 +1527,10 @@ export default function Analytics() {
                   return (
                     <tr
                       key={i}
-                      className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                      className="border-b border-surface-border hover:bg-surface-bg transition-colors"
                     >
                       <td
-                        className="py-2 pr-3 font-mono text-blue-700 truncate max-w-[180px]"
+                        className="py-2 pr-3 font-mono text-status-neu-text truncate max-w-[180px]"
                         title={row.model}
                       >
                         {shortModel}
@@ -1479,6 +1545,7 @@ export default function Analytics() {
                       <td className="py-2 pr-3 text-right text-ink-muted">
                         {row.avg_latency_ms ? `${(row.avg_latency_ms / 1000).toFixed(1)}s` : '—'}
                       </td>
+                      {/* purple bewusst behalten: Effizienz-Spalte, kein 1:1-Primitive-Äquivalent */}
                       <td className="py-2 pr-3 text-right text-purple-700">{efficiencyLabel}</td>
                       <td className="py-2 text-right text-ink-muted">
                         {confIcon} {row.count}
@@ -1500,6 +1567,7 @@ export default function Analytics() {
       {qualityRecent && qualityRecent.length > 0 && (
         <div className="bg-white rounded-xl border border-surface-border p-5">
           <div className="flex items-center gap-2 mb-4">
+            {/* indigo bewusst behalten: Panel-Icon-Farbe, kein 1:1-Primitive-Äquivalent */}
             <Award className="w-4 h-4 text-indigo-600" />
             <h2 className="text-sm font-semibold text-ink">Letzte Pipeline-Qualitätsmessungen</h2>
             <span className="ml-auto text-[11px] text-ink-muted">
@@ -1509,7 +1577,7 @@ export default function Analytics() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-gray-100">
+                <tr className="border-b border-surface-border">
                   <th className="text-left py-1.5 pr-3 text-ink-muted font-medium">Schritt</th>
                   <th className="text-left py-1.5 pr-3 text-ink-muted font-medium">Modell</th>
                   <th className="text-right py-1.5 pr-3 text-ink-muted font-medium">Gesamt</th>
@@ -1529,10 +1597,10 @@ export default function Analytics() {
                   const score = row.overall_score || 0
                   const scoreColor =
                     score >= 80
-                      ? 'text-emerald-700 font-semibold'
+                      ? 'text-status-fertig-text font-semibold'
                       : score >= 60
-                        ? 'text-amber-700'
-                        : 'text-red-600'
+                        ? 'text-status-aktiv-text'
+                        : 'text-status-fehler-text'
                   const shortModel = (row.model || '?').split('/').pop()
                   const timeAgo = row.created_at
                     ? (() => {
@@ -1545,13 +1613,13 @@ export default function Analytics() {
                   return (
                     <tr
                       key={i}
-                      className={`border-b border-gray-50 ${i % 2 === 0 ? '' : 'bg-gray-50/50'}`}
+                      className={`border-b border-surface-border ${i % 2 === 0 ? '' : 'bg-surface-bg/50'}`}
                     >
                       <td className="py-1.5 pr-3 text-ink-muted">
                         {stepLabels[row.step] || row.step}
                       </td>
                       <td
-                        className="py-1.5 pr-3 font-mono text-blue-600 text-[10px] truncate max-w-[120px]"
+                        className="py-1.5 pr-3 font-mono text-status-neu-text text-[10px] truncate max-w-[120px]"
                         title={row.model}
                       >
                         {shortModel}
@@ -1583,16 +1651,16 @@ export default function Analytics() {
         <div className="bg-white rounded-xl border border-surface-border p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
-              <span className="w-4 h-4 text-emerald-600 font-bold text-base">▦</span>
+              <span className="w-4 h-4 text-status-fertig-text font-bold text-base">▦</span>
               Content-Produktion (letzte 90 Tage)
             </h2>
             <div className="flex items-center gap-4 text-[11px] text-ink-muted">
               <span>
-                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-300 mr-1 align-middle" />
+                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-status-neu-border mr-1 align-middle" />
                 Transkribiert: {heatmap.total_transcribed}
               </span>
               <span>
-                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-400 mr-1 align-middle" />
+                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-status-fertig-border mr-1 align-middle" />
                 Posts: {heatmap.total_content}
               </span>
             </div>
@@ -1602,14 +1670,14 @@ export default function Analytics() {
               const intensity = heatmap.peak > 0 ? day.total / heatmap.peak : 0
               const bg =
                 day.total === 0
-                  ? 'bg-gray-100'
+                  ? 'bg-surface-bg'
                   : intensity >= 0.7
                     ? 'bg-emerald-500'
                     : intensity >= 0.4
                       ? 'bg-emerald-400'
                       : intensity >= 0.2
                         ? 'bg-emerald-300'
-                        : 'bg-emerald-200'
+                        : 'bg-status-fertig-bg'
               const isMonday = new Date(day.date).getDay() === 1
               return (
                 <div
@@ -1622,9 +1690,11 @@ export default function Analytics() {
           </div>
           <div className="flex items-center gap-1 mt-2 justify-end">
             <span className="text-[10px] text-ink-muted mr-1">Wenig</span>
+            {/* emerald-Zwischentöne bewusst behalten: 5-stufige Heatmap-Intensitätsskala,
+                status-fertig-Token deckt nur 2 der 5 Stufen exakt ab. */}
             {[
-              'bg-gray-100',
-              'bg-emerald-200',
+              'bg-surface-bg',
+              'bg-status-fertig-bg',
               'bg-emerald-300',
               'bg-emerald-400',
               'bg-emerald-500',
@@ -1648,7 +1718,9 @@ export default function Analytics() {
                 {ideasStats.total.toLocaleString('de')} Ideen
               </span>
               {ideasStats.with_posts > 0 && (
-                <span className="text-emerald-700">{ideasStats.with_posts} Posts generiert</span>
+                <span className="text-status-fertig-text">
+                  {ideasStats.with_posts} Posts generiert
+                </span>
               )}
             </div>
           </div>
@@ -1659,21 +1731,25 @@ export default function Analytics() {
               const cfg = {
                 new: {
                   label: 'Neu / Wartend',
-                  color: 'bg-amber-100 text-amber-800 border-amber-200',
+                  color: 'bg-status-aktiv-bg text-status-aktiv-text border-status-aktiv-border',
                 },
                 answered: {
                   label: 'Beantwortet',
-                  color: 'bg-blue-100 text-blue-800 border-blue-200',
+                  color: 'bg-status-neu-bg text-status-neu-text border-status-neu-border',
                 },
                 post_generated: {
                   label: 'Post erstellt',
-                  color: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+                  color:
+                    'bg-status-fertig-bg text-status-fertig-text border-status-fertig-border',
                 },
                 skipped: {
                   label: 'Übersprungen',
-                  color: 'bg-gray-100 text-gray-600 border-gray-200',
+                  color: 'bg-surface-bg text-ink-light border-surface-border',
                 },
-              }[status] || { label: status, color: 'bg-gray-100 text-gray-600 border-gray-200' }
+              }[status] || {
+                label: status,
+                color: 'bg-surface-bg text-ink-light border-surface-border',
+              }
               return (
                 <span
                   key={status}
@@ -1684,7 +1760,7 @@ export default function Analytics() {
               )
             })}
             {ideasStats.by_status.new > 0 && (
-              <span className="px-2.5 py-1 rounded-full text-xs text-amber-700 bg-amber-50 border border-amber-200">
+              <span className="px-2.5 py-1 rounded-full text-xs text-status-aktiv-text bg-status-aktiv-bg border border-status-aktiv-border">
                 ⏳ {ideasStats.by_status.new.toLocaleString('de')} warten auf LLM-Budget
               </span>
             )}
@@ -1699,24 +1775,28 @@ export default function Analytics() {
               <div className="space-y-1.5">
                 {(() => {
                   const maxAngle = Math.max(...ideasStats.by_angle.map((a) => a.count), 1)
+                  // violet/sky/red/pink bewusst behalten: 7 unterscheidbare Angle-Kategorien
+                  // ohne Status-Bedeutung (analog Posts.jsx Content-Säulen-Badges); teal/amber/
+                  // emerald sind primitive-identisch zu primary-*/accent-*/status-fertig-* und
+                  // deshalb migriert.
                   const ANGLE_LABELS = {
-                    howto: { label: 'How-To / Anleitung', color: 'bg-teal-400' },
+                    howto: { label: 'How-To / Anleitung', color: 'bg-primary-400' },
                     meinung: { label: 'Meinung / Perspektive', color: 'bg-violet-400' },
                     trend: { label: 'Trend / Entwicklung', color: 'bg-sky-400' },
                     kontroverse: { label: 'Kontroverse', color: 'bg-red-400' },
-                    statistik: { label: 'Statistik / Daten', color: 'bg-amber-400' },
+                    statistik: { label: 'Statistik / Daten', color: 'bg-accent-400' },
                     story: { label: 'Story / Erfahrung', color: 'bg-pink-400' },
-                    checkliste: { label: 'Checkliste', color: 'bg-emerald-400' },
+                    checkliste: { label: 'Checkliste', color: 'bg-status-fertig-border' },
                   }
                   return ideasStats.by_angle.slice(0, 8).map(({ angle, count }) => {
-                    const cfg = ANGLE_LABELS[angle] || { label: angle, color: 'bg-gray-400' }
+                    const cfg = ANGLE_LABELS[angle] || { label: angle, color: 'bg-ink-muted' }
                     const pct = Math.max(4, (count / maxAngle) * 100)
                     return (
                       <div key={angle} className="flex items-center gap-3">
                         <span className="w-36 text-xs text-ink-muted shrink-0 truncate">
                           {cfg.label}
                         </span>
-                        <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="flex-1 h-4 bg-surface-bg rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full ${cfg.color} transition-all`}
                             style={{ width: `${pct}%` }}
@@ -1734,7 +1814,7 @@ export default function Analytics() {
           )}
 
           {ideasStats.total > 0 && (
-            <p className="text-[11px] text-ink-muted mt-3 pt-3 border-t border-gray-100">
+            <p className="text-[11px] text-ink-muted mt-3 pt-3 border-t border-surface-border">
               Durchschnittlich ~
               {Math.round(ideasStats.total / Math.max(ideasStats.by_angle.length, 1))} Ideen pro
               Angle · Potenzial: {ideasStats.total.toLocaleString('de')} Posts ausstehend

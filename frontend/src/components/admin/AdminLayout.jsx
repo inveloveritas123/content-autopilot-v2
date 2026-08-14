@@ -36,13 +36,19 @@ export default function AdminLayout({ onLogout }) {
   }
 
   return (
+    // bewusst behalten: bg-slate-950/900/800 + border-slate-700 = dunkle
+    // Admin-Sidebar-Oberfläche — kein Dark-Surface-Token vorhanden, Tier-2-Palette
+    // ist bewusst Light-only (Dark-Mode am 2026-08-14 entfernt, siehe
+    // tailwind.config.js). amber-* ist primitive-identisch zu accent-* (Brand-Akzent)
+    // und deshalb migriert; text-red-400 (Logout-Hover) -> status-fehler-text
+    // (Destruktiv-Bedeutung passt zur Fehler-Semantik).
     <div className="flex h-screen bg-slate-950">
       {/* Admin Sidebar */}
       <aside className="w-64 bg-slate-900 border-r border-slate-700/60 flex flex-col shrink-0">
         {/* Brand Header */}
         <div className="px-4 py-4 border-b border-slate-700/60">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-accent-500 flex items-center justify-center shrink-0">
               <Shield className="w-4 h-4 text-white" strokeWidth={2} />
             </div>
             <div>
@@ -63,7 +69,7 @@ export default function AdminLayout({ onLogout }) {
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive
-                      ? 'bg-amber-500/15 text-amber-400 border-l-2 border-amber-400'
+                      ? 'bg-accent-500/15 text-accent-400 border-l-2 border-accent-400'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                   }`
                 }
@@ -79,7 +85,7 @@ export default function AdminLayout({ onLogout }) {
         <div className="px-3 py-3 border-t border-slate-700/60">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-red-400 transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-status-fehler-text transition-colors"
           >
             <LogOut className="w-[18px] h-[18px]" strokeWidth={1.75} />
             Abmelden

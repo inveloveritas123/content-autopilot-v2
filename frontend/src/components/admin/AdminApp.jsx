@@ -43,8 +43,12 @@ export default function AdminApp() {
   // Session-Check läuft noch
   if (checking) {
     return (
+      // bewusst behalten: bg-slate-900 = dunkler Admin-Shell-Hintergrund (siehe
+      // AdminLogin/AdminLayout) — kein Dark-Surface-Token vorhanden (Tier-2-Palette
+      // ist bewusst Light-only, Dark-Mode am 2026-08-14 entfernt, siehe
+      // tailwind.config.js). text-slate-400 ist hex-identisch zu ink-muted, daher migriert.
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+        <Loader2 className="w-6 h-6 animate-spin text-ink-muted" />
       </div>
     )
   }

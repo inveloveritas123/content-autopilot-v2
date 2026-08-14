@@ -41,7 +41,7 @@ function CreateAgencyDialog({ onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-surface-border flex items-center gap-3">
-          <Building2 className="w-5 h-5 text-teal-600 shrink-0" />
+          <Building2 className="w-5 h-5 text-primary-600 shrink-0" />
           <h2 className="text-sm font-semibold text-ink">Neue Agentur anlegen</h2>
         </div>
         <div className="p-5 space-y-4">
@@ -53,7 +53,7 @@ function CreateAgencyDialog({ onClose }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="z. B. Zukunftsbund"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
           <div>
@@ -63,11 +63,11 @@ function CreateAgencyDialog({ onClose }) {
               value={slug}
               onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
               placeholder="z-b-zukunftsbund"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+            <div className="flex items-start gap-2 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               {error}
             </div>
@@ -88,7 +88,7 @@ function CreateAgencyDialog({ onClose }) {
         <div className="px-5 pb-4 flex justify-end">
           <button
             onClick={() => onClose(false)}
-            className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg transition-colors"
           >
             Abbrechen
           </button>
@@ -149,7 +149,7 @@ function AccountDialog({ editUser, agencies, tenants, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
         <div className="px-5 py-4 border-b border-surface-border flex items-center gap-3">
-          <UserCog className="w-5 h-5 text-teal-600 shrink-0" />
+          <UserCog className="w-5 h-5 text-primary-600 shrink-0" />
           <h2 className="text-sm font-semibold text-ink">
             {isEdit ? `Account bearbeiten — ${editUser.email}` : 'Neuen Login-Account anlegen'}
           </h2>
@@ -165,7 +165,7 @@ function AccountDialog({ editUser, agencies, tenants, onClose }) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="kunde@firma.de"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
           )}
@@ -179,7 +179,7 @@ function AccountDialog({ editUser, agencies, tenants, onClose }) {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Vor- und Nachname"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
 
@@ -189,7 +189,7 @@ function AccountDialog({ editUser, agencies, tenants, onClose }) {
               <select
                 value={agencyId}
                 onChange={(e) => setAgencyId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 {agencies.length === 0 && <option value="">Keine Agentur vorhanden</option>}
                 {agencies.map((a) => (
@@ -206,7 +206,7 @@ function AccountDialog({ editUser, agencies, tenants, onClose }) {
             <select
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               {ROLES.map((r) => (
                 <option key={r.value} value={r.value}>
@@ -226,7 +226,7 @@ function AccountDialog({ editUser, agencies, tenants, onClose }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="mindestens 8 Zeichen"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
 
@@ -235,20 +235,20 @@ function AccountDialog({ editUser, agencies, tenants, onClose }) {
               <label className="block text-xs font-medium text-ink mb-1.5">
                 Zugewiesene Tenants
               </label>
-              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
+              <div className="border border-surface-border rounded-lg divide-y divide-surface-border max-h-40 overflow-y-auto">
                 {tenants.length === 0 && (
                   <p className="text-xs text-ink-muted p-3">Keine Tenants vorhanden.</p>
                 )}
                 {tenants.map((t) => (
                   <label
                     key={t.id}
-                    className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50"
+                    className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-surface-bg"
                   >
                     <input
                       type="checkbox"
                       checked={tenantIds.includes(t.id)}
                       onChange={() => toggleTenant(t.id)}
-                      className="rounded border-gray-300 text-primary-700 focus:ring-primary-500"
+                      className="rounded border-surface-border text-primary-700 focus:ring-primary-500"
                     />
                     {t.name}
                   </label>
@@ -262,7 +262,7 @@ function AccountDialog({ editUser, agencies, tenants, onClose }) {
           )}
 
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+            <div className="flex items-start gap-2 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               {error}
             </div>
@@ -272,7 +272,7 @@ function AccountDialog({ editUser, agencies, tenants, onClose }) {
         <div className="px-5 py-4 border-t border-surface-border flex justify-end gap-2">
           <button
             onClick={() => onClose(false)}
-            className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg transition-colors"
           >
             Abbrechen
           </button>
@@ -361,12 +361,15 @@ export default function AccountManagement() {
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-gray-50"
+                className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg"
               >
                 Abbrechen
               </button>
               <button
                 onClick={() => handleDelete(deleteTarget)}
+                // rot bewusst behalten: kräftiger Destruktiv-Button-Ton, status-fehler-*-
+                // Tokens sind für Badges/Borders auf hellem Grund gedacht, nicht kräftig
+                // genug als Volltonfläche für einen Löschen-Button.
                 className="px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700"
               >
                 Löschen
@@ -376,10 +379,15 @@ export default function AccountManagement() {
         </div>
       )}
 
+      {/* bewusst behalten: bg-slate-800, bg-slate-700, text-slate-400, text-slate-300,
+          text-slate-500 = dunkle Admin-Seitenkörper-Oberfläche (Tabelle, Buttons) —
+          kein Dark-Surface-Token vorhanden, Tier-2-Palette ist bewusst Light-only
+          (Dark-Mode am 2026-08-14 entfernt, siehe tailwind.config.js). amber und teal
+          sind primitive-identisch zu accent und primary und deshalb migriert. */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <UserCog className="w-5 h-5 text-amber-400" strokeWidth={1.75} />
+            <UserCog className="w-5 h-5 text-accent-400" strokeWidth={1.75} />
             Login-Accounts
           </h1>
           <p className="text-sm text-slate-400 mt-0.5">
@@ -397,7 +405,7 @@ export default function AccountManagement() {
           <button
             onClick={() => setEditTarget(null)}
             disabled={agencies.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-teal-700 text-white hover:bg-teal-600 disabled:opacity-40 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary-700 text-white hover:bg-primary-600 disabled:opacity-40 transition-colors"
           >
             <UserPlus className="w-3.5 h-3.5" />
             Neuer Account

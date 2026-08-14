@@ -47,7 +47,7 @@ function CopyButton({ text }) {
   return (
     <button
       onClick={handleCopy}
-      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-amber-600 hover:bg-amber-500 text-white transition-colors"
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-accent-600 hover:bg-accent-500 text-white transition-colors"
     >
       {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
       {copied ? 'Kopiert!' : 'Kopieren'}
@@ -90,13 +90,13 @@ function NewKeyDialog({ userId, userName, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="px-5 py-4 bg-amber-50 border-b border-amber-200 flex items-center gap-3">
-          <Key className="w-5 h-5 text-amber-600 shrink-0" />
+        <div className="px-5 py-4 bg-accent-50 border-b border-accent-200 flex items-center gap-3">
+          <Key className="w-5 h-5 text-accent-600 shrink-0" />
           <div>
-            <h2 className="text-sm font-semibold text-amber-900">
+            <h2 className="text-sm font-semibold text-accent-900">
               Neuer API-Key — einmalig sichtbar
             </h2>
-            <p className="text-xs text-amber-700 mt-0.5">Nutzer: {userName}</p>
+            <p className="text-xs text-accent-700 mt-0.5">Nutzer: {userName}</p>
           </div>
         </div>
 
@@ -109,7 +109,7 @@ function NewKeyDialog({ userId, userName, onClose }) {
           )}
 
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+            <div className="flex items-start gap-2 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               {error}
             </div>
@@ -118,13 +118,13 @@ function NewKeyDialog({ userId, userName, onClose }) {
           {key && !loading && (
             <>
               {/* Warnung */}
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
+              <div className="p-3 bg-status-aktiv-bg border border-status-aktiv-border rounded-lg text-xs text-status-aktiv-text">
                 <strong>Jetzt kopieren!</strong> Dieser Key wird nicht erneut angezeigt und ist ab
                 sofort aktiv.
               </div>
 
               {/* Key-Anzeige + Copy */}
-              <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="flex items-center gap-2 p-3 bg-surface-bg border border-surface-border rounded-lg">
                 <code className="flex-1 text-xs font-mono text-ink break-all select-all">
                   {key}
                 </code>
@@ -134,7 +134,7 @@ function NewKeyDialog({ userId, userName, onClose }) {
               {/* Als aktiven Kontext verwenden */}
               <button
                 onClick={handleUseAsContext}
-                className="w-full flex items-center justify-center gap-2 py-2 px-4 text-sm font-medium rounded-lg border border-teal-200 text-teal-700 hover:bg-teal-50 transition-colors"
+                className="w-full flex items-center justify-center gap-2 py-2 px-4 text-sm font-medium rounded-lg border border-primary-200 text-primary-700 hover:bg-primary-50 transition-colors"
               >
                 <LogIn className="w-4 h-4" />
                 Als aktiven Kontext verwenden (setzt diesen Tenant-Key)
@@ -146,7 +146,7 @@ function NewKeyDialog({ userId, userName, onClose }) {
         <div className="px-5 pb-4 flex justify-end">
           <button
             onClick={() => onClose(false)}
-            className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg transition-colors"
           >
             Schließen
           </button>
@@ -200,12 +200,12 @@ function SetKeyDialog({ userId, userName, onClose }) {
                     if (e.key === 'Enter') handleSet()
                   }}
                   placeholder="cap_live_…"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
 
               {error && (
-                <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                <div className="flex items-start gap-2 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   {error}
                 </div>
@@ -225,7 +225,7 @@ function SetKeyDialog({ userId, userName, onClose }) {
               </button>
             </>
           ) : (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-800">
+            <div className="p-3 bg-status-fertig-bg border border-status-fertig-border rounded-lg text-sm text-status-fertig-text">
               <Check className="inline w-4 h-4 mr-1" />
               Key gesetzt. Maskiert: <code className="font-mono">{masked}</code>
             </div>
@@ -235,7 +235,7 @@ function SetKeyDialog({ userId, userName, onClose }) {
         <div className="px-5 pb-4 flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg transition-colors"
           >
             Schließen
           </button>
@@ -282,7 +282,7 @@ function CreateUserDialog({ onClose }) {
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="px-5 py-4 border-b border-surface-border flex items-center gap-3">
-          <UserPlus className="w-5 h-5 text-teal-600 shrink-0" />
+          <UserPlus className="w-5 h-5 text-primary-600 shrink-0" />
           <h2 className="text-sm font-semibold text-ink">Neuen Benutzer anlegen</h2>
         </div>
 
@@ -292,7 +292,7 @@ function CreateUserDialog({ onClose }) {
             <>
               <div>
                 <label className="block text-xs font-medium text-ink mb-1.5">
-                  Name des Tenants <span className="text-red-500">*</span>
+                  Name des Tenants <span className="text-status-fehler-text">*</span>
                 </label>
                 <input
                   type="text"
@@ -305,7 +305,7 @@ function CreateUserDialog({ onClose }) {
                   }}
                   placeholder="z.B. Acme GmbH"
                   maxLength={255}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
                 <p className="mt-1 text-xs text-ink-muted">
                   Slug und API-Key werden automatisch generiert.
@@ -313,7 +313,7 @@ function CreateUserDialog({ onClose }) {
               </div>
 
               {error && (
-                <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                <div className="flex items-start gap-2 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   {error}
                 </div>
@@ -337,20 +337,20 @@ function CreateUserDialog({ onClose }) {
           {/* Phase 2: API-Key einmalig anzeigen */}
           {newKey && newUser && (
             <>
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-800">
+              <div className="p-3 bg-status-fertig-bg border border-status-fertig-border rounded-lg text-sm text-status-fertig-text">
                 <Check className="inline w-4 h-4 mr-1" />
                 <strong>{newUser.name}</strong> wurde angelegt (Slug:{' '}
                 <code className="font-mono">{newUser.slug}</code>).
               </div>
 
               {/* Warnung */}
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
+              <div className="p-3 bg-status-aktiv-bg border border-status-aktiv-border rounded-lg text-xs text-status-aktiv-text">
                 <strong>Jetzt kopieren!</strong> Dieser API-Key wird nicht erneut angezeigt und ist
                 ab sofort aktiv.
               </div>
 
               {/* Key-Anzeige + Copy */}
-              <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="flex items-center gap-2 p-3 bg-surface-bg border border-surface-border rounded-lg">
                 <code className="flex-1 text-xs font-mono text-ink break-all select-all">
                   {newKey}
                 </code>
@@ -372,7 +372,7 @@ function CreateUserDialog({ onClose }) {
           <div className="px-5 pb-4 flex justify-end">
             <button
               onClick={() => onClose(false)}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg transition-colors"
             >
               Abbrechen
             </button>
@@ -456,11 +456,16 @@ export default function UserManagement() {
         />
       )}
 
+      {/* bewusst behalten: bg-slate-800, bg-slate-700, text-slate-400, text-slate-300,
+          text-slate-500 = dunkle Admin-Seitenkörper-Oberfläche (Tabelle, Buttons) —
+          kein Dark-Surface-Token vorhanden, Tier-2-Palette ist bewusst Light-only
+          (Dark-Mode am 2026-08-14 entfernt, siehe tailwind.config.js). amber und teal
+          sind primitive-identisch zu accent und primary und deshalb migriert. */}
       {/* Page header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <Users className="w-5 h-5 text-amber-400" strokeWidth={1.75} />
+            <Users className="w-5 h-5 text-accent-400" strokeWidth={1.75} />
             Nutzer &amp; API-Keys
           </h1>
           <p className="text-sm text-slate-400 mt-0.5">
@@ -470,7 +475,7 @@ export default function UserManagement() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setCreateUserOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-teal-700 text-white hover:bg-teal-600 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary-700 text-white hover:bg-primary-600 transition-colors"
           >
             <UserPlus className="w-3.5 h-3.5" />
             Neuer Benutzer
@@ -552,7 +557,7 @@ export default function UserManagement() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <button
                         onClick={() => setRegenerateTarget({ id: u.id, name: u.name })}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-amber-600/50 text-amber-400 hover:bg-amber-900/30 transition-colors"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-accent-600/50 text-accent-400 hover:bg-accent-900/30 transition-colors"
                       >
                         <Key className="w-3.5 h-3.5" />
                         Key neu generieren
