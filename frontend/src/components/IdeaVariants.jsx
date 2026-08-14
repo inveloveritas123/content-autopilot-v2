@@ -9,17 +9,24 @@ import { useState, useEffect } from 'react'
 import { Sparkles, RefreshCw, Check, Loader2 } from 'lucide-react'
 import { listIdeaVariants, regenerateIdeaVariants, chooseIdeaVariant } from '../api'
 
+// Kategorie-Badges ohne echte Status-Bedeutung (hook/story/these sind Aufhänger-Typen,
+// kein Lebenszyklus-Status) — nutzen die Status-Tokens trotzdem als nächstliegende
+// Farbfamilien (rose/amber/emerald), analog zur bestehenden Konvention in DataDeletion.jsx.
 const TYPE_META = {
-  hook: { label: 'Hook', desc: 'provokant', color: 'bg-rose-100 text-rose-700 border-rose-200' },
+  hook: {
+    label: 'Hook',
+    desc: 'provokant',
+    color: 'bg-status-fehler-bg text-status-fehler-text border-status-fehler-border',
+  },
   story: {
     label: 'Story',
     desc: 'persönlich',
-    color: 'bg-amber-100 text-amber-700 border-amber-200',
+    color: 'bg-status-aktiv-bg text-status-aktiv-text border-status-aktiv-border',
   },
   these: {
     label: 'These',
     desc: 'sachlich',
-    color: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    color: 'bg-status-fertig-bg text-status-fertig-text border-status-fertig-border',
   },
 }
 
@@ -80,7 +87,7 @@ export default function IdeaVariants({ ideaId }) {
         <h4 className="text-xs font-semibold text-ink flex items-center gap-1.5">
           <Sparkles className="w-3.5 h-3.5" /> 3 Aufhänger
           {hasVariants && variants.find((v) => v.is_chosen) && (
-            <span className="ml-1 text-[10px] text-emerald-700 px-1.5 py-0.5 bg-emerald-50 rounded-full">
+            <span className="ml-1 text-[10px] text-status-fertig-text px-1.5 py-0.5 bg-status-fertig-bg rounded-full">
               ✓ ausgewählt
             </span>
           )}
@@ -99,7 +106,7 @@ export default function IdeaVariants({ ideaId }) {
         </button>
       </div>
 
-      {error && <p className="text-[11px] text-red-700">{error}</p>}
+      {error && <p className="text-[11px] text-status-fehler-text">{error}</p>}
 
       {loading ? (
         <p className="text-xs text-ink-muted">Lade Varianten…</p>
@@ -113,7 +120,7 @@ export default function IdeaVariants({ ideaId }) {
             const meta = TYPE_META[v.variant_type] || {
               label: v.variant_type,
               desc: '',
-              color: 'bg-gray-100 text-gray-700 border-gray-200',
+              color: 'bg-surface-bg text-ink-light border-surface-border',
             }
             const ringClass = v.is_chosen ? 'ring-2 ring-primary-500' : 'hover:border-primary-300'
             return (

@@ -4,12 +4,12 @@
 import { describe, test, expect } from 'vitest'
 
 const CATEGORY_LABELS = {
-  rules_constraints: { de: 'Regulierung', color: 'bg-rose-100 text-rose-700' },
-  demand_behavior: { de: 'Marktnachfrage', color: 'bg-amber-100 text-amber-700' },
-  tools_methods: { de: 'Tools & Methoden', color: 'bg-emerald-100 text-emerald-700' },
-  competition_market: { de: 'Wettbewerb', color: 'bg-violet-100 text-violet-700' },
-  costs_resources: { de: 'Kosten & Ressourcen', color: 'bg-blue-100 text-blue-700' },
-  emerging_topics: { de: 'Trend-Themen', color: 'bg-teal-100 text-teal-700' },
+  rules_constraints: { de: 'Regulierung', color: 'bg-status-fehler-bg text-status-fehler-text' },
+  demand_behavior: { de: 'Marktnachfrage', color: 'bg-status-aktiv-bg text-status-aktiv-text' },
+  tools_methods: { de: 'Tools & Methoden', color: 'bg-status-fertig-bg text-status-fertig-text' },
+  competition_market: { de: 'Wettbewerb', color: 'bg-accent-100 text-accent-700' },
+  costs_resources: { de: 'Kosten & Ressourcen', color: 'bg-status-neu-bg text-status-neu-text' },
+  emerging_topics: { de: 'Trend-Themen', color: 'bg-primary-100 text-primary-700' },
 }
 
 const IMPACT_ICONS = { positive: '🟢', neutral: '🟡', negative: '🔴' }

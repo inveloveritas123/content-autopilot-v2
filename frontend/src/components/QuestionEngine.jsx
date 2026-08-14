@@ -54,7 +54,7 @@ function PhaseSynthesisModal({ open, onClose, proposals, onAccept, onReject, pha
                   variant="ghost"
                   size="sm"
                   onClick={() => onReject(idx)}
-                  className="text-gray-500"
+                  className="text-ink-light"
                 >
                   ✗ Ablehnen
                 </Button>
@@ -64,7 +64,7 @@ function PhaseSynthesisModal({ open, onClose, proposals, onAccept, onReject, pha
         ) : (
           <p className="text-sm text-ink-muted">Keine Vorschläge vorhanden.</p>
         )}
-        <div className="pt-2 border-t border-gray-100">
+        <div className="pt-2 border-t border-surface-border">
           <Button variant="primary" size="md" onClick={onClose} className="w-full">
             Weiter zur nächsten Phase
           </Button>
@@ -84,7 +84,7 @@ function ChatBubble({ text, role }) {
       <div
         className={clsx(
           'max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed',
-          isUser ? 'bg-primary-600 text-white rounded-br-sm' : 'bg-gray-100 text-ink rounded-bl-sm'
+          isUser ? 'bg-primary-600 text-white rounded-br-sm' : 'bg-surface-bg text-ink rounded-bl-sm'
         )}
       >
         {text}
@@ -125,7 +125,7 @@ function HintChips({ hints, onSelect }) {
 function ProgressBar({ current, total }) {
   const pct = total > 0 ? Math.round((current / total) * 100) : 0
   return (
-    <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+    <div className="w-full h-1 bg-surface-bg rounded-full overflow-hidden">
       <div
         className="h-full bg-primary-600 rounded-full transition-all duration-300"
         style={{ width: `${pct}%` }}
@@ -140,8 +140,8 @@ function ProgressBar({ current, total }) {
 function SessionCompleteView({ source }) {
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mb-4">
-        <CheckCircle className="w-7 h-7 text-emerald-600" />
+      <div className="w-14 h-14 rounded-2xl bg-status-fertig-bg flex items-center justify-center mb-4">
+        <CheckCircle className="w-7 h-7 text-status-fertig-text" />
       </div>
       <h3 className="text-base font-semibold text-ink mb-1">Alle Fragen beantwortet!</h3>
       <p className="text-sm text-ink-muted">
@@ -344,8 +344,8 @@ export function QuestionEngine({
                 className={clsx(
                   'w-full text-sm border rounded-lg p-3 resize-y transition-colors',
                   'focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
-                  'bg-gray-50 placeholder-gray-400 text-ink',
-                  error ? 'border-red-300' : 'border-gray-200'
+                  'bg-surface-bg placeholder-gray-400 text-ink',
+                  error ? 'border-status-fehler-border' : 'border-surface-border'
                 )}
               />
               {/* Nachhaken — statische Hilfe-Fragen aus MD */}
@@ -370,7 +370,7 @@ export function QuestionEngine({
               <HintChips hints={hints} onSelect={handleHintSelect} />
             </div>
 
-            {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg p-3">{error}</p>}
+            {error && <p className="text-xs text-status-fehler-text bg-status-fehler-bg rounded-lg p-3">{error}</p>}
 
             {/* Actions */}
             <div className="flex items-center justify-between gap-3">
@@ -529,7 +529,7 @@ function ChatAppearance({
       </div>
 
       {/* Input-Bereich */}
-      <div className="border-t border-surface-border px-4 py-3 bg-gray-50">
+      <div className="border-t border-surface-border px-4 py-3 bg-surface-bg">
         {/* Inline-Hints über dem Input */}
         <HintChips
           hints={hints}
@@ -551,7 +551,7 @@ function ChatAppearance({
               'flex-1 text-sm border rounded-xl p-3 resize-none transition-colors',
               'focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
               'bg-white placeholder-gray-400 text-ink',
-              error ? 'border-red-300' : 'border-gray-200'
+              error ? 'border-status-fehler-border' : 'border-surface-border'
             )}
           />
           <button
@@ -569,7 +569,7 @@ function ChatAppearance({
           </button>
         </div>
 
-        {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+        {error && <p className="text-xs text-status-fehler-text mt-2">{error}</p>}
 
         {/* Skip + Save-Buttons */}
         <div className="flex items-center justify-between mt-2">

@@ -20,9 +20,9 @@ const SOURCE_ICONS = {
 }
 
 const CLASS_COLORS = {
-  werte: 'bg-emerald-100 text-emerald-700',
-  stories: 'bg-amber-100 text-amber-700',
-  konflikte: 'bg-rose-100 text-rose-700',
+  werte: 'bg-status-fertig-bg text-status-fertig-text',
+  stories: 'bg-status-aktiv-bg text-status-aktiv-text',
+  konflikte: 'bg-status-fehler-bg text-status-fehler-text',
 }
 
 function timeAgo(iso) {
@@ -39,7 +39,7 @@ function timeAgo(iso) {
 function ChunkCard({ chunk, onSelect }) {
   const Icon = SOURCE_ICONS[chunk.source_type] || FileText
   const cls = chunk.classification
-  const colorClass = (cls && CLASS_COLORS[cls]) || 'bg-gray-100 text-gray-600'
+  const colorClass = (cls && CLASS_COLORS[cls]) || 'bg-surface-bg text-ink-light'
   return (
     <div
       className="bg-white rounded-xl border border-surface-border p-3 hover:border-primary-300 transition-colors cursor-pointer"
@@ -169,7 +169,7 @@ export default function Memory() {
               {(stats.by_classification || []).map((c) => (
                 <span
                   key={c.classification}
-                  className={`text-[11px] px-2 py-0.5 rounded-full ${CLASS_COLORS[c.classification] || 'bg-gray-100 text-gray-600'}`}
+                  className={`text-[11px] px-2 py-0.5 rounded-full ${CLASS_COLORS[c.classification] || 'bg-surface-bg text-ink-light'}`}
                 >
                   {c.classification}: {c.count}
                 </span>
@@ -197,7 +197,7 @@ export default function Memory() {
       </form>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+        <div className="bg-status-fehler-bg border border-status-fehler-border rounded-lg p-3 text-sm text-status-fehler-text">
           {error}
         </div>
       )}
@@ -240,9 +240,9 @@ export default function Memory() {
               {picker.map((item) => (
                 <div
                   key={item.id}
-                  className="bg-amber-50/50 border border-amber-200 rounded-xl p-3"
+                  className="bg-status-aktiv-bg/50 border border-status-aktiv-border rounded-xl p-3"
                 >
-                  <p className="text-sm font-medium text-amber-900 mb-1">{item.suggestion}</p>
+                  <p className="text-sm font-medium text-status-aktiv-text mb-1">{item.suggestion}</p>
                   <p className="text-xs text-ink whitespace-pre-wrap break-words line-clamp-3">
                     {item.preview}
                   </p>

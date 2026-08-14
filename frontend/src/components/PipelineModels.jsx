@@ -73,8 +73,8 @@ export default function PipelineModels() {
           ← Einstellungen
         </Link>
       </div>
-      <h1 className="text-2xl font-semibold text-gray-900">Modell-Hoheit · Pipeline-Phasen</h1>
-      <p className="mt-2 text-sm text-gray-600">
+      <h1 className="text-2xl font-semibold text-ink">Modell-Hoheit · Pipeline-Phasen</h1>
+      <p className="mt-2 text-sm text-ink-light">
         Pro Phase ist das <strong>offizielle</strong> Modell im Code verankert (Tier-Default,
         ADR-0008). Für Experimente kannst du einen <strong>globalen Test-Override</strong> mit einer
         beliebigen Requesty-Modell-ID setzen — der Default bleibt erhalten und ist jederzeit
@@ -82,12 +82,12 @@ export default function PipelineModels() {
       </p>
 
       {error && (
-        <div className="mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+        <div className="mt-4 rounded-lg bg-status-fehler-bg border border-status-fehler-border px-4 py-3 text-sm text-status-fehler-text">
           {error}
         </div>
       )}
       {notice && (
-        <div className="mt-4 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700">
+        <div className="mt-4 rounded-lg bg-status-fertig-bg border border-status-fertig-border px-4 py-3 text-sm text-status-fertig-text">
           {notice}
         </div>
       )}
@@ -101,12 +101,12 @@ export default function PipelineModels() {
       </datalist>
 
       {loading ? (
-        <div className="mt-6 text-sm text-gray-500">Lädt…</div>
+        <div className="mt-6 text-sm text-ink-light">Lädt…</div>
       ) : (
         <div className="mt-6 overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="text-left text-gray-500 border-b">
+              <tr className="text-left text-ink-light border-b">
                 <th className="py-2 pr-4">Phase</th>
                 <th className="py-2 pr-4">Offiziell (Default)</th>
                 <th className="py-2 pr-4">Effektiv</th>
@@ -119,10 +119,10 @@ export default function PipelineModels() {
                 const overridden = p.source !== 'default'
                 return (
                   <tr key={p.phase} className="border-b last:border-0 align-top">
-                    <td className="py-3 pr-4 font-medium text-gray-900">{p.phase}</td>
-                    <td className="py-3 pr-4 text-gray-600">
+                    <td className="py-3 pr-4 font-medium text-ink">{p.phase}</td>
+                    <td className="py-3 pr-4 text-ink-light">
                       <span className="inline-flex items-center gap-1">
-                        <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-xs font-mono">
+                        <span className="px-1.5 py-0.5 rounded bg-surface-bg text-ink-light text-xs font-mono">
                           {p.default_tier}
                         </span>
                         <span className="font-mono text-xs">{p.default_model}</span>
@@ -131,15 +131,15 @@ export default function PipelineModels() {
                     <td className="py-3 pr-4">
                       {overridden ? (
                         <span className="inline-flex items-center gap-1">
-                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-xs font-medium">
+                          <span className="px-1.5 py-0.5 rounded bg-status-aktiv-bg text-status-aktiv-text text-xs font-medium">
                             TEST
                           </span>
-                          <span className="font-mono text-xs text-amber-900">
+                          <span className="font-mono text-xs text-status-aktiv-text">
                             {p.effective_model}
                           </span>
                         </span>
                       ) : (
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">
+                        <span className="px-1.5 py-0.5 rounded bg-status-fertig-bg text-status-fertig-text text-xs font-medium">
                           offiziell
                         </span>
                       )}
@@ -150,7 +150,7 @@ export default function PipelineModels() {
                         value={drafts[p.phase] ?? ''}
                         onChange={(e) => setDrafts({ ...drafts, [p.phase]: e.target.value })}
                         placeholder={p.default_model}
-                        className="w-72 px-2 py-1 border border-gray-300 rounded font-mono text-xs focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        className="w-72 px-2 py-1 border border-surface-border rounded font-mono text-xs focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       />
                     </td>
                     <td className="py-3 whitespace-nowrap">
@@ -165,7 +165,7 @@ export default function PipelineModels() {
                         <button
                           onClick={() => save(p.phase, null)}
                           disabled={savingPhase === p.phase}
-                          className="ml-2 px-3 py-1 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 text-xs font-medium rounded"
+                          className="ml-2 px-3 py-1 bg-surface-bg hover:bg-surface-border disabled:opacity-50 text-ink-light text-xs font-medium rounded"
                         >
                           Reset
                         </button>
@@ -176,7 +176,7 @@ export default function PipelineModels() {
               })}
             </tbody>
           </table>
-          <p className="mt-4 text-xs text-gray-400">
+          <p className="mt-4 text-xs text-ink-muted">
             Übersteuerung gilt global und sofort (hot-reload, kein Neustart). Quelle der Defaults:
             <code className="mx-1">services/pipeline_llm.py</code> (MODEL_PER_PROMPT / TIER_MODELS).
           </p>

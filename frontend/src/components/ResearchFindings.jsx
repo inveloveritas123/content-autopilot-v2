@@ -6,13 +6,18 @@ import { useState, useEffect } from 'react'
 import { Sparkles, ExternalLink, X, Plus } from 'lucide-react'
 import { listResearchFindings, dismissResearchFinding, markFindingAsIdea } from '../api'
 
+// 6 Kategorien, 5 Status-Tokens — keine 1:1-Bedeutung, Zuordnung nach Farbcharakter
+// (rose/amber/emerald→fehler/aktiv/fertig wie im übrigen Codebase üblich).
+// competition_market (violet) hat keine Status-Entsprechung → accent (dekorativ).
+// costs_resources (blue) → status-neu (deckt sich mit dessen Blauton).
+// emerging_topics (teal) → primary (liegt in der primären Markenfarbfamilie).
 const CATEGORY_LABELS = {
-  rules_constraints: { de: 'Regulierung', color: 'bg-rose-100 text-rose-700' },
-  demand_behavior: { de: 'Marktnachfrage', color: 'bg-amber-100 text-amber-700' },
-  tools_methods: { de: 'Tools & Methoden', color: 'bg-emerald-100 text-emerald-700' },
-  competition_market: { de: 'Wettbewerb', color: 'bg-violet-100 text-violet-700' },
-  costs_resources: { de: 'Kosten & Ressourcen', color: 'bg-blue-100 text-blue-700' },
-  emerging_topics: { de: 'Trend-Themen', color: 'bg-teal-100 text-teal-700' },
+  rules_constraints: { de: 'Regulierung', color: 'bg-status-fehler-bg text-status-fehler-text' },
+  demand_behavior: { de: 'Marktnachfrage', color: 'bg-status-aktiv-bg text-status-aktiv-text' },
+  tools_methods: { de: 'Tools & Methoden', color: 'bg-status-fertig-bg text-status-fertig-text' },
+  competition_market: { de: 'Wettbewerb', color: 'bg-accent-100 text-accent-700' },
+  costs_resources: { de: 'Kosten & Ressourcen', color: 'bg-status-neu-bg text-status-neu-text' },
+  emerging_topics: { de: 'Trend-Themen', color: 'bg-primary-100 text-primary-700' },
 }
 
 const IMPACT_ICONS = {
@@ -63,7 +68,7 @@ export default function ResearchFindings({ limit = 8 }) {
   }
 
   if (loading) return <p className="text-xs text-ink-muted">Lade Research-Vorschläge…</p>
-  if (error) return <p className="text-xs text-red-700">{error}</p>
+  if (error) return <p className="text-xs text-status-fehler-text">{error}</p>
   if (findings.length === 0) {
     return (
       <p className="text-xs text-ink-muted">
@@ -77,7 +82,7 @@ export default function ResearchFindings({ limit = 8 }) {
       {findings.map((f) => {
         const cat = CATEGORY_LABELS[f.category] || {
           de: f.category,
-          color: 'bg-gray-100 text-gray-700',
+          color: 'bg-surface-bg text-ink-light',
         }
         return (
           <div
@@ -121,7 +126,7 @@ export default function ResearchFindings({ limit = 8 }) {
               </div>
               <button
                 onClick={() => handleDismiss(f.id)}
-                className="p-1 rounded text-ink-muted hover:bg-gray-100"
+                className="p-1 rounded text-ink-muted hover:bg-surface-bg"
                 title="Verwerfen"
               >
                 <X className="w-3.5 h-3.5" />

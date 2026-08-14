@@ -61,7 +61,7 @@ export default function TimeFilter({ value = {}, onChange, count = null, label =
             className={`whitespace-nowrap px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
               activePeriod === f.value && !isCustomActive
                 ? 'bg-primary-700 text-white border-primary-700'
-                : 'bg-white text-ink-muted border-gray-200 hover:border-primary-300 hover:text-primary-700'
+                : 'bg-white text-ink-muted border-surface-border hover:border-primary-300 hover:text-primary-700'
             }`}
           >
             {f.label}
@@ -72,7 +72,7 @@ export default function TimeFilter({ value = {}, onChange, count = null, label =
           className={`whitespace-nowrap px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
             isCustomActive || showCustom
               ? 'bg-primary-700 text-white border-primary-700'
-              : 'bg-white text-ink-muted border-gray-200 hover:border-primary-300 hover:text-primary-700'
+              : 'bg-white text-ink-muted border-surface-border hover:border-primary-300 hover:text-primary-700'
           }`}
         >
           {isCustomActive
@@ -97,14 +97,14 @@ export default function TimeFilter({ value = {}, onChange, count = null, label =
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-400"
+            className="text-xs border border-surface-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-400"
           />
           <span className="text-xs text-ink-muted">Bis</span>
           <input
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-400"
+            className="text-xs border border-surface-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-400"
           />
           <button
             onClick={applyCustom}

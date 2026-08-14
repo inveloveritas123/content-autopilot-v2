@@ -4,16 +4,20 @@
 import { describe, test, expect } from 'vitest'
 
 const TYPE_META = {
-  hook: { label: 'Hook', desc: 'provokant', color: 'bg-rose-100 text-rose-700 border-rose-200' },
+  hook: {
+    label: 'Hook',
+    desc: 'provokant',
+    color: 'bg-status-fehler-bg text-status-fehler-text border-status-fehler-border',
+  },
   story: {
     label: 'Story',
     desc: 'persönlich',
-    color: 'bg-amber-100 text-amber-700 border-amber-200',
+    color: 'bg-status-aktiv-bg text-status-aktiv-text border-status-aktiv-border',
   },
   these: {
     label: 'These',
     desc: 'sachlich',
-    color: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    color: 'bg-status-fertig-bg text-status-fertig-text border-status-fertig-border',
   },
 }
 
@@ -30,10 +34,10 @@ describe('IdeaVariants TYPE_META', () => {
       expect(m.color).toBeTruthy()
     })
   })
-  test('Farben semantisch (rose=hook, amber=story, emerald=these)', () => {
-    expect(TYPE_META.hook.color).toContain('rose')
-    expect(TYPE_META.story.color).toContain('amber')
-    expect(TYPE_META.these.color).toContain('emerald')
+  test('Farben semantisch (fehler=hook, aktiv=story, fertig=these)', () => {
+    expect(TYPE_META.hook.color).toContain('status-fehler')
+    expect(TYPE_META.story.color).toContain('status-aktiv')
+    expect(TYPE_META.these.color).toContain('status-fertig')
   })
 })
 

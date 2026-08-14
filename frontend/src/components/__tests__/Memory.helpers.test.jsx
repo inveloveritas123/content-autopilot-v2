@@ -26,9 +26,9 @@ const SOURCE_ICONS_MAP = {
 }
 
 const CLASS_COLORS_MAP = {
-  werte: 'bg-emerald-100 text-emerald-700',
-  stories: 'bg-amber-100 text-amber-700',
-  konflikte: 'bg-rose-100 text-rose-700',
+  werte: 'bg-status-fertig-bg text-status-fertig-text',
+  stories: 'bg-status-aktiv-bg text-status-aktiv-text',
+  konflikte: 'bg-status-fehler-bg text-status-fehler-text',
 }
 
 describe('timeAgo', () => {
@@ -84,9 +84,9 @@ describe('Source-Type-Mapping', () => {
 
 describe('Classification-Color-Mapping', () => {
   test('alle 3 Klassifikationen haben Farbe', () => {
-    expect(CLASS_COLORS_MAP.werte).toContain('emerald')
-    expect(CLASS_COLORS_MAP.stories).toContain('amber')
-    expect(CLASS_COLORS_MAP.konflikte).toContain('rose')
+    expect(CLASS_COLORS_MAP.werte).toContain('status-fertig')
+    expect(CLASS_COLORS_MAP.stories).toContain('status-aktiv')
+    expect(CLASS_COLORS_MAP.konflikte).toContain('status-fehler')
   })
 })
 

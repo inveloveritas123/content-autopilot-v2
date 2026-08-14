@@ -71,7 +71,7 @@ function NavGroup({ items, isMvp, onNavigate }) {
             'flex items-center gap-3 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-colors',
             isActive
               ? 'bg-primary-50 text-primary-700 border-l-2 border-primary-700'
-              : 'text-ink-light hover:bg-gray-50 hover:text-ink'
+              : 'text-ink-light hover:bg-surface-bg hover:text-ink'
           )
         }
       >
@@ -123,8 +123,8 @@ function UiModeSwitch() {
               isActive
                 ? 'bg-primary-700 text-white'
                 : loading
-                  ? 'bg-gray-50 text-gray-300'
-                  : 'bg-white text-ink-muted hover:bg-gray-50 hover:text-ink'
+                  ? 'bg-surface-bg text-ink-muted'
+                  : 'bg-surface-card text-ink-muted hover:bg-surface-bg hover:text-ink'
             )}
           >
             {label}
@@ -198,7 +198,7 @@ export default function Layout({ children }) {
                   'flex items-center gap-3 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-colors',
                   isActive
                     ? 'bg-primary-50 text-primary-700 border-l-2 border-primary-700'
-                    : 'text-ink-light hover:bg-gray-50 hover:text-ink'
+                    : 'text-ink-light hover:bg-surface-bg hover:text-ink'
                 )
               }
             >
@@ -215,7 +215,7 @@ export default function Layout({ children }) {
       {/* Footer */}
       <div className="px-4 py-3 border-t border-surface-border">
         <div className="flex items-center gap-2 text-xs text-ink-muted">
-          <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+          <div className="w-2 h-2 rounded-full bg-status-fertig-text"></div>
           System aktiv
         </div>
       </div>
@@ -230,7 +230,7 @@ export default function Layout({ children }) {
           type="button"
           onClick={() => setMobileNavOpen(true)}
           aria-label="Menü öffnen"
-          className="p-2 -ml-2 rounded-lg text-ink hover:bg-gray-50"
+          className="p-2 -ml-2 rounded-lg text-ink hover:bg-surface-bg"
         >
           <Menu className="w-5 h-5" strokeWidth={1.75} />
         </button>
@@ -259,7 +259,7 @@ export default function Layout({ children }) {
           type="button"
           onClick={() => setMobileNavOpen(false)}
           aria-label="Menü schließen"
-          className="lg:hidden absolute top-4 right-3 p-2 rounded-lg text-ink-muted hover:bg-gray-50"
+          className="lg:hidden absolute top-4 right-3 p-2 rounded-lg text-ink-muted hover:bg-surface-bg"
         >
           <X className="w-5 h-5" strokeWidth={1.75} />
         </button>

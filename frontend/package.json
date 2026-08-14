@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint . --max-warnings 1763",
+    "lint": "eslint . --max-warnings 1526",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

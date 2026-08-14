@@ -50,11 +50,11 @@ export default function ContentCalendar() {
     setCurrentDate(new Date(year, month + dir, 1))
   }
 
-  if (loading) return <div className="text-gray-500">Lade Kalender...</div>
+  if (loading) return <div className="text-ink-light">Lade Kalender...</div>
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Content-Kalender</h2>
+      <h2 className="text-2xl font-bold text-ink">Content-Kalender</h2>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -71,7 +71,7 @@ export default function ContentCalendar() {
         <CardContent>
           <div className="grid grid-cols-7 gap-1">
             {DAYS.map((d) => (
-              <div key={d} className="text-center text-xs font-semibold text-gray-500 py-2">
+              <div key={d} className="text-center text-xs font-semibold text-ink-light py-2">
                 {d}
               </div>
             ))}
@@ -85,14 +85,14 @@ export default function ContentCalendar() {
               return (
                 <div
                   key={i}
-                  className={`min-h-[80px] p-1 border border-gray-100 dark:border-gray-800 rounded ${
-                    day ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-950'
+                  className={`min-h-[80px] p-1 border border-surface-border rounded ${
+                    day ? 'bg-surface-card' : 'bg-surface-bg'
                   } ${isToday ? 'ring-2 ring-primary-500' : ''}`}
                 >
                   {day && (
                     <>
                       <span
-                        className={`text-xs font-medium ${isToday ? 'text-primary-600' : 'text-gray-500'}`}
+                        className={`text-xs font-medium ${isToday ? 'text-primary-600' : 'text-ink-light'}`}
                       >
                         {day}
                       </span>

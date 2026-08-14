@@ -215,7 +215,7 @@ export default function IndustryAndHooks() {
       {/* Hooks */}
       <div className="bg-white rounded-xl border border-surface-border p-5">
         <h3 className="text-sm font-semibold text-ink mb-3 flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-amber-500" />
+          <Sparkles className="w-4 h-4 text-accent-500" />
           Hook-Bibliothek
           <span className="ml-auto text-[10px] text-ink-muted font-normal">
             (Phase 7.4 — {hooks.length} Hooks)
@@ -255,7 +255,7 @@ export default function IndustryAndHooks() {
           </Button>
         </form>
 
-        {error && <p className="text-xs text-red-700 mb-2">{error}</p>}
+        {error && <p className="text-xs text-status-fehler-text mb-2">{error}</p>}
 
         <div className="space-y-1.5 max-h-96 overflow-y-auto">
           {hooks.length === 0 ? (
@@ -266,7 +266,7 @@ export default function IndustryAndHooks() {
             hooks.map((h) => (
               <div
                 key={h.id}
-                className="flex items-start justify-between gap-2 p-2 bg-gray-50 rounded-lg group"
+                className="flex items-start justify-between gap-2 p-2 bg-surface-bg rounded-lg group"
               >
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-ink leading-snug">{h.hook_text}</p>
@@ -276,7 +276,7 @@ export default function IndustryAndHooks() {
                 </div>
                 <button
                   onClick={() => handleDeleteHook(h.id)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-red-500 hover:bg-red-50"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-status-fehler-text hover:bg-status-fehler-bg"
                   title="Löschen"
                 >
                   <Trash2 className="w-3 h-3" />
