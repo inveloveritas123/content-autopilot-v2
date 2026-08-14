@@ -71,6 +71,23 @@ export default [
           message:
             'Kein Roh-Hex-Farbwert im Component-Code — Tier-2-Token aus tailwind.config.js nutzen (status-*, primary-*, accent-*, surface-*, ink-*). Siehe docs/SSOT-FRONTEND-REDESIGN-2026-08-14.md.',
         },
+        // Erweiterung (2026-08-14, D6 Tailwind-Klassen-Migration): rohe
+        // Tailwind-Paletten-Klassen (bg-gray-100, text-blue-600, border-red-300)
+        // statt der Tier-2-Tokens (surface-*/ink-*/primary-*/accent-*/status-*).
+        // Prüft auf Literale in className-Attributen/-Ausdrücken, deren Wert
+        // eine der bekannten Tailwind-Farbfamilien mit -Nummer enthält.
+        {
+          selector:
+            "JSXAttribute[name.name='className'] Literal[value=/\\b(bg|text|border)-(gray|slate|zinc|blue|red|green|yellow|orange|purple|pink|indigo|emerald|amber|rose|teal|cyan|violet|fuchsia|lime|sky)-[0-9]+\\b/]",
+          message:
+            'Rohe Tailwind-Paletten-Klasse statt Tier-2-Token (surface-*, ink-*, primary-*, accent-*, status-*) — className mit Farbklasse aus dem Palette-Namespace prüfen. Siehe docs/SSOT-FRONTEND-REDESIGN-2026-08-14.md.',
+        },
+        {
+          selector:
+            "JSXAttribute[name.name='className'] TemplateElement[value.raw=/\\b(bg|text|border)-(gray|slate|zinc|blue|red|green|yellow|orange|purple|pink|indigo|emerald|amber|rose|teal|cyan|violet|fuchsia|lime|sky)-[0-9]+\\b/]",
+          message:
+            'Rohe Tailwind-Paletten-Klasse statt Tier-2-Token (surface-*, ink-*, primary-*, accent-*, status-*) — className-Template-String mit Farbklasse aus dem Palette-Namespace prüfen. Siehe docs/SSOT-FRONTEND-REDESIGN-2026-08-14.md.',
+        },
       ],
     },
   },
