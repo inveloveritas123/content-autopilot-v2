@@ -17,18 +17,21 @@ export function Dialog({ open, onClose, title, children, className }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* bg-black/50: reiner Overlay-Scrim ohne semantische Bedeutung, kein Token nötig */}
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
       <div
         className={clsx(
-          'relative bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto',
+          // rounded-card: Dialog ist ein Card-artiger Container (großflächige
+          // Modal-Fläche), kein interaktives Steuerelement.
+          'relative bg-surface-card rounded-card shadow-xl border border-surface-border w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto',
           className
         )}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-surface-border">
+          <h2 className="text-lg font-semibold text-ink">{title}</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl"
+            className="text-ink-muted hover:text-ink-light text-xl"
           >
             &times;
           </button>

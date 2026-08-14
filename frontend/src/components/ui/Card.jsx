@@ -4,7 +4,7 @@ export function Card({ className, children, ...props }) {
   return (
     <div
       className={clsx(
-        'bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm',
+        'bg-surface-card rounded-card border border-surface-border shadow-sm',
         className
       )}
       {...props}
@@ -16,7 +16,7 @@ export function Card({ className, children, ...props }) {
 
 export function CardHeader({ className, children }) {
   return (
-    <div className={clsx('px-6 py-4 border-b border-gray-100 dark:border-gray-800', className)}>
+    <div className={clsx('px-6 py-4 border-b border-surface-border', className)}>
       {children}
     </div>
   )
@@ -24,7 +24,7 @@ export function CardHeader({ className, children }) {
 
 export function CardTitle({ className, children }) {
   return (
-    <h3 className={clsx('text-lg font-semibold text-gray-900 dark:text-gray-100', className)}>
+    <h3 className={clsx('text-lg font-semibold text-ink', className)}>
       {children}
     </h3>
   )

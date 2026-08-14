@@ -15,26 +15,30 @@ const ToastContext = createContext(null)
 
 // ─── Hilfsfunktionen ─────────────────────────────────────────────────────────
 
+// Toast hatte 4 Bedeutungen (success/error/warning/info) — passt direkt in
+// 4 der 5 Status-Tokens (SSOT-Zuordnung: info≈neu, success≈fertig,
+// warning≈aktiv, error≈fehler; "archiviert" bleibt ungenutzt, da Toast keinen
+// neutralen/inaktiven Zustand kennt).
 const VARIANT_STYLES = {
   success: {
-    container: 'bg-emerald-50 border-emerald-300 text-emerald-900',
+    container: 'bg-status-fertig-bg border-status-fertig-border text-status-fertig-text',
     icon: CheckCircle2,
-    iconClass: 'text-emerald-600',
+    iconClass: 'text-status-fertig-text',
   },
   error: {
-    container: 'bg-red-50 border-red-300 text-red-900',
+    container: 'bg-status-fehler-bg border-status-fehler-border text-status-fehler-text',
     icon: AlertCircle,
-    iconClass: 'text-red-600',
+    iconClass: 'text-status-fehler-text',
   },
   warning: {
-    container: 'bg-amber-50 border-amber-300 text-amber-900',
+    container: 'bg-status-aktiv-bg border-status-aktiv-border text-status-aktiv-text',
     icon: AlertTriangle,
-    iconClass: 'text-amber-600',
+    iconClass: 'text-status-aktiv-text',
   },
   info: {
-    container: 'bg-blue-50 border-blue-300 text-blue-900',
+    container: 'bg-status-neu-bg border-status-neu-border text-status-neu-text',
     icon: Info,
-    iconClass: 'text-blue-600',
+    iconClass: 'text-status-neu-text',
   },
 }
 
@@ -60,7 +64,9 @@ function ToastItem({ id, message, variant = 'info', onDismiss }) {
     <div
       role="alert"
       aria-live="assertive"
-      className={`flex items-start gap-3 w-full max-w-sm px-4 py-3 rounded-xl border shadow-lg text-sm transition-all animate-toast-in ${cfg.container}`}
+      // rounded-card: Toast ist eine eigenständige Card-Fläche (kein
+      // interaktives Steuerelement wie Button/Input), analog zu Dialog.
+      className={`flex items-start gap-3 w-full max-w-sm px-4 py-3 rounded-card border shadow-lg text-sm transition-all animate-toast-in ${cfg.container}`}
     >
       <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${cfg.iconClass}`} aria-hidden="true" />
       <span className="flex-1 leading-snug">{message}</span>

@@ -1,34 +1,63 @@
 import { clsx } from 'clsx'
 
+// Status-Vokabular auf die 5 projektweiten Bedeutungen reduziert (SSOT D2):
+// neu/aktiv/fertig/fehler/archiviert. `color`-Prop bleibt als direkter
+// Status-Token-Name nutzbar (z.B. color="status-fertig"), `colors` unten
+// bildet zusätzlich Kurzformen ab, die im Repo noch als Prop-Wert vorkommen
+// könnten (blue/green/... wurden 1:1 auf ihre Status-Bedeutung gemappt).
 const colors = {
-  gray: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-  blue: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-  green: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-  yellow: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
-  red: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
-  orange: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
-  purple: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
+  neu: 'bg-status-neu-bg text-status-neu-text',
+  aktiv: 'bg-status-aktiv-bg text-status-aktiv-text',
+  fertig: 'bg-status-fertig-bg text-status-fertig-text',
+  fehler: 'bg-status-fehler-bg text-status-fehler-text',
+  archiviert: 'bg-status-archiviert-bg text-status-archiviert-text',
 }
 
+// Rückwärtskompatible Aliase: einige Feature-Komponenten (außerhalb des
+// Migrations-Scopes dieser Welle, z.B. PromptStudio.jsx, ContentCalendar.jsx)
+// übergeben noch alte Rohfarbnamen als `color`-Prop. Bis diese in Welle D6
+// migriert sind, auf die nächstliegende Status-Bedeutung abbilden statt
+// stillschweigend zu brechen.
+const legacyColorAliases = {
+  gray: 'archiviert',
+  blue: 'neu',
+  green: 'fertig',
+  yellow: 'aktiv',
+  red: 'fehler',
+  orange: 'aktiv',
+  purple: 'aktiv',
+}
+
+// Zuordnung Roh-Status -> die 5 Bedeutungen (neu/aktiv/fertig/fehler/archiviert):
+// new/transcribed/reviewed (Info, wartet) -> neu
+// transcribing/analyzing/generating (läuft gerade) -> aktiv
+// analyzed/scheduled (Zwischenschritt, aber grundsätzlich positiv) -> aktiv
+// content_ready/approved (fertig, freigegeben) -> fertig
+// needs_voicescriptor/transcription_failed (Fehler) -> fehler
+// published/draft (abgeschlossen/inaktiv, keine Aktion nötig) -> archiviert
 const statusColors = {
-  new: 'blue',
-  transcribing: 'yellow',
-  transcribed: 'blue',
-  analyzing: 'yellow',
-  analyzed: 'purple',
-  generating: 'yellow',
-  content_ready: 'green',
-  approved: 'green',
-  published: 'gray',
-  needs_voicescriptor: 'red',
-  transcription_failed: 'red',
-  draft: 'gray',
-  reviewed: 'blue',
-  scheduled: 'purple',
+  new: 'neu',
+  transcribing: 'aktiv',
+  transcribed: 'neu',
+  analyzing: 'aktiv',
+  analyzed: 'aktiv',
+  generating: 'aktiv',
+  content_ready: 'fertig',
+  approved: 'fertig',
+  published: 'archiviert',
+  needs_voicescriptor: 'fehler',
+  transcription_failed: 'fehler',
+  draft: 'archiviert',
+  reviewed: 'neu',
+  scheduled: 'aktiv',
 }
 
 export function Badge({ color, status, className, children }) {
-  const resolvedColor = color || statusColors[status] || 'orange'
+  const resolvedColor =
+    (colors[color] && color) ||
+    legacyColorAliases[color] ||
+    statusColors[status] ||
+    'archiviert'
   return (
     <span
       className={clsx(
