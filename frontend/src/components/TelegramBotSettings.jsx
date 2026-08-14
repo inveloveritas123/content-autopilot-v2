@@ -1,3 +1,4 @@
+// AUDITED-2026-08-14 (D6): Tiefen-Audit, Datei vollstaendig gelesen.
 /**
  * TelegramBotSettings — Panel „Telegram-Bot (pro Projekt)"
  *
@@ -61,13 +62,13 @@ function OnlineIndicator({ online, lastActiveAt }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-sm">
       <Circle
-        className={`w-2.5 h-2.5 fill-current ${online ? 'text-emerald-500' : 'text-gray-400'}`}
+        className={`w-2.5 h-2.5 fill-current ${online ? 'text-status-fertig-text' : 'text-ink-light'}`}
         aria-hidden="true"
       />
       {online ? (
-        <span className="text-emerald-700 dark:text-emerald-400 font-medium">online</span>
+        <span className="text-status-fertig-text dark:text-status-fertig-text font-medium">online</span>
       ) : (
-        <span className="text-gray-500 dark:text-gray-400">
+        <span className="text-ink-light dark:text-ink-light">
           offline{relTime ? ` · zuletzt aktiv ${relTime}` : ''}
         </span>
       )}
@@ -137,7 +138,7 @@ export default function TelegramBotSettings() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-gray-400 dark:text-gray-500 animate-pulse">Lade Status…</p>
+          <p className="text-sm text-ink-light dark:text-ink-light animate-pulse">Lade Status…</p>
         </CardContent>
       </Card>
     )
@@ -154,7 +155,7 @@ export default function TelegramBotSettings() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-red-600 dark:text-red-400">Fehler beim Laden: {error}</p>
+          <p className="text-sm text-status-fehler-text dark:text-status-fehler-text">Fehler beim Laden: {error}</p>
           <Button size="sm" variant="secondary" className="mt-3" onClick={refetch}>
             Erneut versuchen
           </Button>
@@ -178,10 +179,10 @@ export default function TelegramBotSettings() {
               <span
                 className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                   data.status === 'active'
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                    ? 'bg-status-fertig-bg text-status-fertig-text dark:bg-status-fertig-bg/30 dark:text-status-fertig-text'
                     : data.status === 'error'
-                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                      : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                      ? 'bg-status-fehler-bg text-status-fehler-text dark:bg-status-fehler-bg/30 dark:text-status-fehler-text'
+                      : 'bg-surface-bg text-ink-light dark:bg-surface-card dark:text-ink-light'
                 }`}
               >
                 {data.status === 'active'
@@ -200,15 +201,15 @@ export default function TelegramBotSettings() {
           {!configured ? (
             /* ── Not configured: connect form ──────────────────────────────── */
             <>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-ink-light dark:text-ink-light">
                 Verbinde einen eigenen Telegram-Bot mit diesem Projekt. Der Bot-Token bleibt
                 verschlüsselt gespeichert und wird nie wieder angezeigt.
               </p>
 
               {/* Help text */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-xs text-blue-800 dark:text-blue-200 space-y-1">
+              <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-3 text-xs text-primary-800 dark:text-primary-200 space-y-1">
                 <p className="font-medium">Token von @BotFather holen:</p>
-                <ol className="list-decimal list-inside space-y-0.5 text-blue-700 dark:text-blue-300">
+                <ol className="list-decimal list-inside space-y-0.5 text-primary-700 dark:text-primary-300">
                   <li>
                     Öffne Telegram und schreibe <code className="font-mono">@BotFather</code>
                   </li>
@@ -225,7 +226,7 @@ export default function TelegramBotSettings() {
 
               <form onSubmit={handleConnect} className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-ink dark:text-ink-muted mb-1">
                     Bot-Token
                   </label>
                   <div className="flex items-center gap-2">
@@ -235,12 +236,12 @@ export default function TelegramBotSettings() {
                       onChange={(e) => setTokenInput(e.target.value)}
                       placeholder="123456789:ABCDefGhIjKlmNoPQRsTUVwxyz"
                       autoComplete="off"
-                      className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm font-mono"
+                      className="flex-1 px-3 py-2 rounded-lg border border-surface-border dark:border-surface-border bg-white dark:bg-surface-card text-ink dark:text-ink-muted placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm font-mono"
                     />
                     <button
                       type="button"
                       onClick={() => setShowToken((s) => !s)}
-                      className="p-2 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      className="p-2 rounded-md text-ink-light hover:bg-surface-bg dark:hover:bg-surface-card transition-colors"
                       title={showToken ? 'Verbergen' : 'Anzeigen'}
                       aria-label={showToken ? 'Token verbergen' : 'Token anzeigen'}
                     >
@@ -254,7 +255,7 @@ export default function TelegramBotSettings() {
                 </div>
 
                 {connectError && (
-                  <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+                  <p className="text-sm text-status-fehler-text dark:text-status-fehler-text" role="alert">
                     {connectError}
                   </p>
                 )}
@@ -271,12 +272,12 @@ export default function TelegramBotSettings() {
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
                   {data?.bot_username && (
-                    <p className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                    <p className="text-base font-semibold text-ink dark:text-ink-muted">
                       @{data.bot_username}
                     </p>
                   )}
                   {data?.bot_id && (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">
+                    <p className="text-xs text-ink-light dark:text-ink-light font-mono">
                       Bot-ID: {data.bot_id}
                     </p>
                   )}
@@ -286,11 +287,11 @@ export default function TelegramBotSettings() {
 
               {/* Error row */}
               {data?.status === 'error' && data?.last_error && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                  <p className="text-xs font-medium text-red-700 dark:text-red-300 mb-0.5">
+                <div className="bg-status-fehler-bg dark:bg-status-fehler-bg/20 border border-status-fehler-border dark:border-status-fehler-border rounded-lg p-3">
+                  <p className="text-xs font-medium text-status-fehler-text dark:text-status-fehler-text mb-0.5">
                     Bot-Fehler
                   </p>
-                  <p className="text-xs text-red-600 dark:text-red-400 font-mono break-all">
+                  <p className="text-xs text-status-fehler-text dark:text-status-fehler-text font-mono break-all">
                     {data.last_error}
                   </p>
                 </div>
@@ -298,7 +299,7 @@ export default function TelegramBotSettings() {
 
               {/* Validation timestamp */}
               {data?.validated_at && (
-                <p className="text-xs text-gray-400 dark:text-gray-500">
+                <p className="text-xs text-ink-light dark:text-ink-light">
                   Token validiert:{' '}
                   {relativeTime(data.validated_at) ??
                     new Date(data.validated_at).toLocaleString('de-DE')}
@@ -306,7 +307,7 @@ export default function TelegramBotSettings() {
               )}
 
               {/* Revoke button */}
-              <div className="pt-1 border-t border-gray-100 dark:border-gray-800">
+              <div className="pt-1 border-t border-surface-border dark:border-surface-border">
                 <Button variant="danger" size="sm" onClick={() => setShowRevokeDialog(true)}>
                   Token widerrufen
                 </Button>
@@ -324,12 +325,12 @@ export default function TelegramBotSettings() {
         className="max-w-md"
       >
         <div className="space-y-4">
-          <p className="text-sm text-gray-700 dark:text-gray-300">
+          <p className="text-sm text-ink dark:text-ink-muted">
             Der Token wird hier entfernt und der Bot gestoppt. Diese Aktion kann nicht rückgängig
             gemacht werden.
           </p>
 
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-800 dark:text-amber-200">
+          <div className="bg-accent-50 dark:bg-accent-900/20 border border-accent-200 dark:border-accent-800 rounded-lg p-3 text-xs text-accent-800 dark:text-accent-200">
             <p className="font-medium mb-1">Sicherheitshinweis</p>
             <p>
               Für vollständige Invalidierung den Token zusätzlich in <strong>@BotFather</strong>{' '}
@@ -439,9 +440,9 @@ function TelegramUsersPanel({ tenantConfigured }) {
 
   const statusBadge = (status) => {
     const map = {
-      active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
-      blocked: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-      pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+      active: 'bg-status-fertig-bg text-status-fertig-text dark:bg-status-fertig-bg/30 dark:text-status-fertig-text',
+      blocked: 'bg-status-fehler-bg text-status-fehler-text dark:bg-status-fehler-bg/30 dark:text-status-fehler-text',
+      pending: 'bg-accent-100 text-accent-700 dark:bg-accent-900/30 dark:text-accent-300',
     }
     const label = { active: 'Aktiv', blocked: 'Blockiert', pending: 'Ausstehend' }
     return (
@@ -473,12 +474,12 @@ function TelegramUsersPanel({ tenantConfigured }) {
           {showManualAdd && (
             <form
               onSubmit={handleManualAdd}
-              className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 space-y-3"
+              className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-3 space-y-3"
             >
-              <p className="text-xs text-blue-800 dark:text-blue-200 font-medium">
+              <p className="text-xs text-primary-800 dark:text-primary-200 font-medium">
                 Telegram-User-ID hinzufügen (ohne /start-Flow)
               </p>
-              <p className="text-xs text-blue-700 dark:text-blue-300">
+              <p className="text-xs text-primary-700 dark:text-primary-300">
                 Die User-ID findest du z.B. über <code className="font-mono">@userinfobot</code> in
                 Telegram. Chat-ID ist identisch mit User-ID bei Direktnachrichten.
               </p>
@@ -489,14 +490,14 @@ function TelegramUsersPanel({ tenantConfigured }) {
                   onChange={(e) => setManualUserId(e.target.value)}
                   placeholder="Telegram User-ID"
                   required
-                  className="flex-1 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-mono"
+                  className="flex-1 px-3 py-1.5 rounded-lg border border-surface-border dark:border-surface-border bg-white dark:bg-surface-card text-sm font-mono"
                 />
                 <input
                   type="number"
                   value={manualChatId}
                   onChange={(e) => setManualChatId(e.target.value)}
                   placeholder="Chat-ID (optional)"
-                  className="w-36 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-mono"
+                  className="w-36 px-3 py-1.5 rounded-lg border border-surface-border dark:border-surface-border bg-white dark:bg-surface-card text-sm font-mono"
                 />
                 <Button type="submit" size="sm" disabled={addingManual || !manualUserId.trim()}>
                   {addingManual ? 'Füge hinzu…' : 'Hinzufügen'}
@@ -506,16 +507,16 @@ function TelegramUsersPanel({ tenantConfigured }) {
           )}
 
           {/* Rate limit info */}
-          <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2">
+          <div className="text-xs text-ink-light dark:text-ink-light bg-surface-bg dark:bg-surface-card/50 rounded-lg px-3 py-2">
             Rate-Limit: max. 20 Nachrichten pro 10 Minuten pro Nutzer
           </div>
 
-          {loading && <p className="text-sm text-gray-400 animate-pulse">Lade Nutzer…</p>}
+          {loading && <p className="text-sm text-ink-light animate-pulse">Lade Nutzer…</p>}
 
-          {error && <p className="text-sm text-red-600 dark:text-red-400">Fehler: {error}</p>}
+          {error && <p className="text-sm text-status-fehler-text dark:text-status-fehler-text">Fehler: {error}</p>}
 
           {!loading && !error && users.length === 0 && (
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <p className="text-sm text-ink-light dark:text-ink-light">
               Noch keine verbundenen Nutzer. Nutze <code className="font-mono text-xs">/start</code>{' '}
               im Telegram-Bot oder füge eine User-ID manuell hinzu.
             </p>
@@ -533,17 +534,17 @@ function TelegramUsersPanel({ tenantConfigured }) {
                 return (
                   <div
                     key={user.telegram_user_id}
-                    className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900"
+                    className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border border-surface-border dark:border-surface-border bg-white dark:bg-surface-card"
                   >
                     {/* Identity */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                        <span className="text-sm font-medium text-ink dark:text-ink-muted truncate">
                           {displayName}
                         </span>
                         {statusBadge(user.status)}
                       </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 dark:text-gray-500 flex-wrap">
+                      <div className="flex items-center gap-3 mt-1 text-xs text-ink-light dark:text-ink-light flex-wrap">
                         <span className="font-mono">ID: {user.telegram_user_id}</span>
                         {user.linked_at && <span>Verbunden {relativeTime(user.linked_at)}</span>}
                         {user.last_active && <span>Aktiv {relativeTime(user.last_active)}</span>}
@@ -551,21 +552,21 @@ function TelegramUsersPanel({ tenantConfigured }) {
                     </div>
 
                     {/* Stats */}
-                    <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 shrink-0">
+                    <div className="flex items-center gap-4 text-xs text-ink-light dark:text-ink-light shrink-0">
                       <div className="text-center">
-                        <div className="font-semibold text-gray-700 dark:text-gray-300">
+                        <div className="font-semibold text-ink dark:text-ink-muted">
                           {user.total_messages}
                         </div>
                         <div>Gesamt</div>
                       </div>
                       <div className="text-center">
-                        <div className="font-semibold text-gray-700 dark:text-gray-300">
+                        <div className="font-semibold text-ink dark:text-ink-muted">
                           {user.messages_24h}
                         </div>
                         <div>24h</div>
                       </div>
                       <div
-                        className={`text-center ${user.messages_10min > 15 ? 'text-amber-600 dark:text-amber-400' : ''}`}
+                        className={`text-center ${user.messages_10min > 15 ? 'text-accent-600 dark:text-accent-400' : ''}`}
                       >
                         <div className="font-semibold">{user.messages_10min}</div>
                         <div>10min</div>
@@ -623,7 +624,7 @@ function TelegramUsersPanel({ tenantConfigured }) {
         className="max-w-md"
       >
         <div className="space-y-4">
-          <p className="text-sm text-gray-700 dark:text-gray-300">
+          <p className="text-sm text-ink dark:text-ink-muted">
             Der Nutzer{' '}
             <strong>
               {removeDialog?.telegram_first_name ??

@@ -1,3 +1,4 @@
+// AUDITED-2026-08-14 (D6): Tiefen-Audit, Datei vollstaendig gelesen.
 import { useState, useEffect } from 'react'
 import {
   ChevronLeft,
@@ -34,35 +35,35 @@ const MONTHS_DE = [
 ]
 
 const STATUS_BADGE = {
-  scheduled: 'bg-blue-100 text-blue-700',
-  published: 'bg-emerald-100 text-emerald-700',
-  failed: 'bg-red-100 text-red-700',
+  scheduled: 'bg-status-neu-bg text-status-neu-text',
+  published: 'bg-status-fertig-bg text-status-fertig-text',
+  failed: 'bg-status-fehler-bg text-status-fehler-text',
 }
 
 const ANGLE_COLORS = {
-  meinung: 'bg-purple-100 text-purple-800',
-  howto: 'bg-teal-100 text-teal-800',
-  story: 'bg-amber-100 text-amber-800',
-  kontroverse: 'bg-red-100 text-red-800',
-  statistik: 'bg-blue-100 text-blue-800',
-  trend: 'bg-emerald-100 text-emerald-800',
+  meinung: 'bg-accent-100 text-accent-800',
+  howto: 'bg-status-fertig-bg text-status-fertig-text',
+  story: 'bg-accent-100 text-accent-800',
+  kontroverse: 'bg-status-fehler-bg text-status-fehler-text',
+  statistik: 'bg-primary-100 text-primary-800',
+  trend: 'bg-status-fertig-bg text-status-fertig-text',
 }
 
 function CalendarDay({ day, posts, isToday, isCurrentMonth, onDayClick, onPostClick }) {
   return (
     <div
       onClick={() => isCurrentMonth && onDayClick(day)}
-      className={`min-h-[80px] p-1.5 border-b border-r border-gray-100 transition-colors ${
+      className={`min-h-[80px] p-1.5 border-b border-r border-surface-border transition-colors ${
         !isCurrentMonth
-          ? 'bg-gray-50'
+          ? 'bg-surface-bg'
           : isToday
             ? 'bg-primary-50 border-primary-200'
-            : 'bg-white hover:bg-gray-50 cursor-pointer'
+            : 'bg-white hover:bg-surface-bg cursor-pointer'
       }`}
     >
       <span
         className={`text-xs font-medium block mb-1 w-6 h-6 flex items-center justify-center rounded-full ${
-          isToday ? 'bg-primary-700 text-white' : isCurrentMonth ? 'text-ink' : 'text-gray-300'
+          isToday ? 'bg-primary-700 text-white' : isCurrentMonth ? 'text-ink' : 'text-ink-muted'
         }`}
       >
         {day}
@@ -146,14 +147,14 @@ function ScheduleModal({ selectedDate, posts, onClose, onScheduled }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+        <div className="p-5 border-b border-surface-border flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-ink">Post einplanen</h3>
             <p className="text-xs text-ink-muted mt-0.5">{dateLabel}</p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 text-xl"
+            className="p-2 text-ink-light hover:text-ink-light rounded-lg hover:bg-surface-bg text-xl"
           >
             ×
           </button>
@@ -167,7 +168,7 @@ function ScheduleModal({ selectedDate, posts, onClose, onScheduled }) {
               {posts.map((p) => (
                 <div
                   key={p.id}
-                  className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-3 py-2"
+                  className="flex items-center justify-between text-xs bg-surface-bg rounded-lg px-3 py-2"
                 >
                   <span className="text-ink">
                     {new Date(p.scheduled_at).toLocaleTimeString('de-DE', {
@@ -177,7 +178,7 @@ function ScheduleModal({ selectedDate, posts, onClose, onScheduled }) {
                     Uhr
                   </span>
                   <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_BADGE[p.status] || 'bg-gray-100 text-gray-600'}`}
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${STATUS_BADGE[p.status] || 'bg-surface-bg text-ink-light'}`}
                   >
                     {p.status}
                   </span>
@@ -195,7 +196,7 @@ function ScheduleModal({ selectedDate, posts, onClose, onScheduled }) {
             <select
               value={selectedContent}
               onChange={(e) => setSelectedContent(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="">— Freigegebenen Post wählen —</option>
               {content.map((p) => (
@@ -205,7 +206,7 @@ function ScheduleModal({ selectedDate, posts, onClose, onScheduled }) {
               ))}
             </select>
             {content.length === 0 && (
-              <p className="text-xs text-amber-600 mt-1">
+              <p className="text-xs text-accent-600 mt-1">
                 Keine freigegebenen Posts. Erst Posts freigeben.
               </p>
             )}
@@ -226,13 +227,13 @@ function ScheduleModal({ selectedDate, posts, onClose, onScheduled }) {
               type="time"
               value={selectedTime}
               onChange={(e) => setSelectedTime(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="border border-surface-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
 
           {message && (
             <div
-              className={`p-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}
+              className={`p-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-status-fehler-bg text-status-fehler-text' : 'bg-status-fertig-bg text-status-fertig-text'}`}
             >
               {message.text}
             </div>
@@ -242,7 +243,7 @@ function ScheduleModal({ selectedDate, posts, onClose, onScheduled }) {
         <div className="px-5 pb-5 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50"
+            className="px-4 py-2 text-sm text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg"
           >
             Abbrechen
           </button>
@@ -354,7 +355,7 @@ export default function Calendar() {
         <div className="flex items-center gap-2 bg-white border border-surface-border rounded-xl px-4 py-2 shadow-sm">
           <button
             onClick={prevMonth}
-            className="p-1 rounded hover:bg-gray-100 text-ink-muted hover:text-ink"
+            className="p-1 rounded hover:bg-surface-bg text-ink-muted hover:text-ink"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -363,7 +364,7 @@ export default function Calendar() {
           </span>
           <button
             onClick={nextMonth}
-            className="p-1 rounded hover:bg-gray-100 text-ink-muted hover:text-ink"
+            className="p-1 rounded hover:bg-surface-bg text-ink-muted hover:text-ink"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -374,11 +375,11 @@ export default function Calendar() {
         {/* Calendar Grid */}
         <div className="lg:col-span-3 bg-white rounded-xl border border-surface-border shadow-sm overflow-hidden">
           {/* Weekday headers */}
-          <div className="grid grid-cols-7 border-b border-gray-100">
+          <div className="grid grid-cols-7 border-b border-surface-border">
             {WEEKDAYS.map((d) => (
               <div
                 key={d}
-                className="py-2 text-center text-xs font-semibold text-ink-muted border-r border-gray-100 last:border-r-0"
+                className="py-2 text-center text-xs font-semibold text-ink-muted border-r border-surface-border last:border-r-0"
               >
                 {d}
               </div>
@@ -421,7 +422,7 @@ export default function Calendar() {
                   <div
                     key={p.id}
                     onClick={() => setSelectedPost(p)}
-                    className="cursor-pointer p-2.5 rounded-lg border border-gray-100 hover:border-primary-200 hover:bg-primary-50 transition-colors"
+                    className="cursor-pointer p-2.5 rounded-lg border border-surface-border hover:border-primary-200 hover:bg-primary-50 transition-colors"
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[10px] font-semibold text-primary-700">
@@ -448,7 +449,7 @@ export default function Calendar() {
                     )}
                     {p.angle && (
                       <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded mt-1 inline-block ${ANGLE_COLORS[p.angle] || 'bg-gray-100 text-gray-600'}`}
+                        className={`text-[10px] px-1.5 py-0.5 rounded mt-1 inline-block ${ANGLE_COLORS[p.angle] || 'bg-surface-bg text-ink-light'}`}
                       >
                         {p.angle}
                       </span>
@@ -504,7 +505,7 @@ export default function Calendar() {
               <div className="flex justify-between text-sm">
                 <span className="text-ink-muted">Status</span>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[selectedPost.status] || 'bg-gray-100 text-gray-600'}`}
+                  className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[selectedPost.status] || 'bg-surface-bg text-ink-light'}`}
                 >
                   {selectedPost.status}
                 </span>
@@ -519,14 +520,14 @@ export default function Calendar() {
             <div className="flex gap-2">
               <button
                 onClick={() => setSelectedPost(null)}
-                className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
+                className="flex-1 px-3 py-2 text-sm border border-surface-border rounded-lg hover:bg-surface-bg"
               >
                 Schließen
               </button>
               {selectedPost.status === 'scheduled' && (
                 <button
                   onClick={() => handleCancel(selectedPost.id)}
-                  className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-700 border border-red-200 rounded-lg hover:bg-red-50"
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm text-status-fehler-text border border-status-fehler-border rounded-lg hover:bg-status-fehler-bg"
                 >
                   <Trash2 className="w-3.5 h-3.5" /> Löschen
                 </button>

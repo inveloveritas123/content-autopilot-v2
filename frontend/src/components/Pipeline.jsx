@@ -1,3 +1,4 @@
+// AUDITED-2026-08-14 (D6): Tiefen-Audit, Datei vollstaendig gelesen.
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useToast } from './ui/Toast'
 import TimeFilter from './TimeFilter'
@@ -265,7 +266,7 @@ export default function Pipeline() {
     toast.info('View-Update gestartet (laeuft im Hintergrund)')
   }
 
-  if (loading) return <div className="text-gray-500">Lade Pipeline...</div>
+  if (loading) return <div className="text-ink-light">Lade Pipeline...</div>
 
   // Filter
   let filtered = [...(items || [])]
@@ -315,13 +316,13 @@ export default function Pipeline() {
   return (
     <div className="space-y-6">
       {pipelineStatus?.llm_budget_exceeded && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm flex items-start gap-3">
-          <span className="text-red-600 shrink-0 mt-0.5">🔴</span>
+        <div className="p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-sm flex items-start gap-3">
+          <span className="text-status-fehler-text shrink-0 mt-0.5">🔴</span>
           <div className="flex-1">
-            <span className="font-semibold text-red-800">
+            <span className="font-semibold text-status-fehler-text">
               KI-Pipeline pausiert: Requesty.ai Portal-Budget erschöpft.
             </span>
-            <span className="text-red-700 ml-1">
+            <span className="text-status-fehler-text ml-1">
               Analyse und Content-Generierung sind gestoppt. Bitte bei{' '}
               <a
                 href="https://requesty.ai"
@@ -342,7 +343,7 @@ export default function Pipeline() {
               const minCost = (waiting * 0.0005).toFixed(2)
               const maxCost = (waiting * 0.003).toFixed(2)
               return (
-                <div className="mt-1.5 text-red-700">
+                <div className="mt-1.5 text-status-fehler-text">
                   <span className="font-medium">{waiting.toLocaleString('de-DE')} Artikel</span>{' '}
                   warten auf Verarbeitung — geschaetzte Kosten:{' '}
                   <span className="font-medium">
@@ -355,7 +356,7 @@ export default function Pipeline() {
           </div>
           <div className="flex flex-col gap-1.5 shrink-0">
             <button
-              className="px-3 py-1 bg-red-700 hover:bg-red-800 text-white text-xs font-semibold rounded-lg transition-colors"
+              className="px-3 py-1 bg-status-fehler-bg hover:bg-status-fehler-bg text-white text-xs font-semibold rounded-lg transition-colors"
               onClick={async () => {
                 try {
                   await resetBudgetFlag()
@@ -371,7 +372,7 @@ export default function Pipeline() {
               ▶ Fortsetzen (100)
             </button>
             <button
-              className="px-3 py-1 bg-red-800 hover:bg-red-900 text-white text-xs font-semibold rounded-lg transition-colors"
+              className="px-3 py-1 bg-status-fehler-bg hover:bg-status-fehler-bg text-white text-xs font-semibold rounded-lg transition-colors"
               onClick={async () => {
                 try {
                   const breakdown = await getTranscribedBreakdown()
@@ -403,7 +404,7 @@ export default function Pipeline() {
         </div>
       )}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Pipeline</h2>
+        <h2 className="text-2xl font-bold text-ink dark:text-white">Pipeline</h2>
         <div className="flex gap-2 flex-wrap">
           <Button size="sm" variant="secondary" onClick={handleSyncTranscripts}>
             Transkripte sync
@@ -521,20 +522,20 @@ export default function Pipeline() {
           <CardContent className="py-3">
             <div className="flex items-center justify-between mb-2">
               <div className="flex gap-4 text-xs">
-                <span className="text-gray-500">
+                <span className="text-ink-light">
                   Gesamt: <strong>{progress.total}</strong>
                 </span>
-                <span className="text-blue-600">
+                <span className="text-primary-600">
                   Neu: <strong>{progress.new}</strong>
                 </span>
-                <span className="text-yellow-600">
+                <span className="text-accent-600">
                   In Arbeit: <strong>{progress.processing}</strong>
                 </span>
-                <span className="text-green-600">
+                <span className="text-status-fertig-text">
                   Fertig: <strong>{progress.done}</strong>
                 </span>
                 {progress.failed > 0 && (
-                  <span className="text-red-600">
+                  <span className="text-status-fehler-text">
                     Fehler: <strong>{progress.failed}</strong>
                   </span>
                 )}
@@ -550,44 +551,44 @@ export default function Pipeline() {
                 {showLog ? 'Log ausblenden' : 'Activity Log'}
               </Button>
             </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 flex overflow-hidden">
+            <div className="w-full bg-surface-bg dark:bg-surface-card rounded-full h-3 flex overflow-hidden">
               {progress.percent_content > 0 && (
                 <div
-                  className="bg-green-500 h-full transition-all"
+                  className="bg-status-fertig-bg h-full transition-all"
                   style={{ width: `${progress.percent_content}%` }}
                   title={`Content: ${progress.percent_content}%`}
                 />
               )}
               {progress.percent_analyzed - progress.percent_content > 0 && (
                 <div
-                  className="bg-purple-500 h-full transition-all"
+                  className="bg-accent-500 h-full transition-all"
                   style={{ width: `${progress.percent_analyzed - progress.percent_content}%` }}
                   title={`Analysiert: ${progress.percent_analyzed}%`}
                 />
               )}
               {progress.percent_transcribed - progress.percent_analyzed > 0 && (
                 <div
-                  className="bg-blue-500 h-full transition-all"
+                  className="bg-primary-500 h-full transition-all"
                   style={{ width: `${progress.percent_transcribed - progress.percent_analyzed}%` }}
                   title={`Transkribiert: ${progress.percent_transcribed}%`}
                 />
               )}
             </div>
-            <div className="flex gap-4 mt-1.5 text-[10px] text-gray-400">
+            <div className="flex gap-4 mt-1.5 text-[10px] text-ink-light">
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>{' '}
+                <span className="w-2 h-2 rounded-full bg-primary-500 inline-block"></span>{' '}
                 Transkribiert {progress.percent_transcribed}%
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-purple-500 inline-block"></span> Analysiert{' '}
+                <span className="w-2 h-2 rounded-full bg-accent-500 inline-block"></span> Analysiert{' '}
                 {progress.percent_analyzed}%
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span> Content{' '}
+                <span className="w-2 h-2 rounded-full bg-status-fertig-bg inline-block"></span> Content{' '}
                 {progress.percent_content}%
               </span>
               {pipelineStatus?.eta_hours > 0 && (
-                <span className="flex items-center gap-1 ml-auto text-gray-500">
+                <span className="flex items-center gap-1 ml-auto text-ink-light">
                   {pipelineStatus.throughput_per_hour >= 5
                     ? `⏱ ~${pipelineStatus.eta_hours}h bis fertig · ${pipelineStatus.throughput_per_hour}/h`
                     : `⏱ ~${pipelineStatus.eta_hours}h bis fertig (geschätzt)`}
@@ -600,22 +601,22 @@ export default function Pipeline() {
 
       {/* Warteschlangen-Analyse: per-source transcribed breakdown */}
       {transcribedBreakdown && transcribedBreakdown.total > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div className="rounded-xl border border-accent-200 bg-accent-50 p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <span className="text-amber-600 text-base">⏳</span>
-              <span className="font-semibold text-sm text-amber-900">
+              <span className="text-accent-600 text-base">⏳</span>
+              <span className="font-semibold text-sm text-accent-900">
                 Warteschlange: {transcribedBreakdown.total.toLocaleString('de-DE')} Items warten auf
                 Analyse
               </span>
-              <span className="text-xs text-amber-700">
+              <span className="text-xs text-accent-700">
                 (~${(transcribedBreakdown.total * 0.0005).toFixed(2)}–$
                 {(transcribedBreakdown.total * 0.003).toFixed(2)} geschätzte Kosten)
               </span>
             </div>
             <button
               onClick={loadBreakdown}
-              className="text-xs text-amber-600 hover:text-amber-800 underline"
+              className="text-xs text-accent-600 hover:text-accent-800 underline"
               disabled={breakdownLoading}
             >
               {breakdownLoading ? '...' : 'Aktualisieren'}
@@ -624,7 +625,7 @@ export default function Pipeline() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-amber-700 border-b border-amber-200">
+                <tr className="text-accent-700 border-b border-accent-200">
                   <th className="text-left pb-1.5 font-medium">Quelle</th>
                   <th className="text-right pb-1.5 font-medium pr-3">Wartend</th>
                   <th className="text-right pb-1.5 font-medium pr-3">Min. Kosten</th>
@@ -633,14 +634,14 @@ export default function Pipeline() {
               </thead>
               <tbody>
                 {transcribedBreakdown.sources.map((src) => (
-                  <tr key={src.id} className="border-b border-amber-100 last:border-0">
-                    <td className="py-1.5 text-amber-900 font-medium truncate max-w-[200px]">
+                  <tr key={src.id} className="border-b border-accent-100 last:border-0">
+                    <td className="py-1.5 text-accent-900 font-medium truncate max-w-[200px]">
                       {src.name}
                     </td>
-                    <td className="py-1.5 text-right pr-3 text-amber-800 font-mono">
+                    <td className="py-1.5 text-right pr-3 text-accent-800 font-mono">
                       {src.count.toLocaleString('de-DE')}
                     </td>
-                    <td className="py-1.5 text-right pr-3 text-amber-700">
+                    <td className="py-1.5 text-right pr-3 text-accent-700">
                       ${(src.count * 0.0005).toFixed(2)}
                     </td>
                     <td className="py-1.5 text-right">
@@ -662,7 +663,7 @@ export default function Pipeline() {
                               toast.error('Fehler: ' + e.message)
                             }
                           }}
-                          className="px-2 py-0.5 text-xs bg-teal-600 hover:bg-teal-700 text-white rounded font-medium transition-colors"
+                          className="px-2 py-0.5 text-xs bg-status-fertig-bg hover:bg-status-fertig-bg text-white rounded font-medium transition-colors"
                           title="Items dieser Quelle analysieren"
                         >
                           Analyse starten
@@ -690,7 +691,7 @@ export default function Pipeline() {
                                 toast.error('Fehler: ' + e.message)
                               }
                             }}
-                            className="px-2 py-0.5 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded font-medium transition-colors"
+                            className="px-2 py-0.5 text-xs bg-accent-500 hover:bg-accent-600 text-white rounded font-medium transition-colors"
                             title="Items dieser Quelle archivieren (aus Pipeline entfernen)"
                           >
                             Archivieren
@@ -717,19 +718,19 @@ export default function Pipeline() {
             !cookieStatus.needs_refresh &&
             cookieStatus.needs_voicescriptor_count <= 10
           const bg = isError
-            ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700'
+            ? 'bg-status-fehler-bg dark:bg-status-fehler-bg/20 border-status-fehler-border dark:border-status-fehler-border'
             : isWarning
-              ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700'
-              : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
+              ? 'bg-accent-50 dark:bg-accent-900/20 border-accent-300 dark:border-accent-700'
+              : 'bg-surface-bg dark:bg-surface-card/50 border-surface-border dark:border-surface-border'
           return (
             <div className={`border rounded-lg p-3 flex items-center justify-between ${bg}`}>
               <div>
                 <p
-                  className={`text-sm font-medium ${isError ? 'text-red-800 dark:text-red-200' : isWarning ? 'text-amber-800 dark:text-amber-200' : 'text-gray-600 dark:text-gray-400'}`}
+                  className={`text-sm font-medium ${isError ? 'text-status-fehler-text dark:text-status-fehler-text' : isWarning ? 'text-accent-800 dark:text-accent-200' : 'text-ink-light dark:text-ink-light'}`}
                 >
                   {cookieStatus.message}
                 </p>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p className="text-xs text-ink-light mt-0.5">
                   {cookieStatus.needs_voicescriptor_count > 0 &&
                     `${cookieStatus.needs_voicescriptor_count} Videos warten auf Transkription. `}
                   {cookieStatus.autopilot?.age_hours > 0 &&
@@ -767,7 +768,7 @@ export default function Pipeline() {
           <CardHeader>
             <div className="flex items-center justify-between flex-wrap gap-2">
               <CardTitle>Activity Log</CardTitle>
-              <span className="text-xs text-gray-400">{logEntries.length} Einträge</span>
+              <span className="text-xs text-ink-light">{logEntries.length} Einträge</span>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -783,7 +784,7 @@ export default function Pipeline() {
                 <button
                   key={opt.value}
                   onClick={() => setLogStatusGroup(opt.value)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${logStatusGroup === opt.value ? 'bg-primary-700 text-white border-primary-700' : 'bg-white text-gray-500 border-gray-200 hover:border-primary-300'}`}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${logStatusGroup === opt.value ? 'bg-primary-700 text-white border-primary-700' : 'bg-white text-ink-light border-surface-border hover:border-primary-300'}`}
                 >
                   {opt.label}
                 </button>
@@ -792,7 +793,7 @@ export default function Pipeline() {
               <select
                 value={logSourceId}
                 onChange={(e) => setLogSourceId(e.target.value)}
-                className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-primary-400"
+                className="px-2.5 py-1 text-xs border border-surface-border rounded-lg bg-white text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-400"
               >
                 <option value="">Alle Quellen</option>
                 {sources.map((s) => (
@@ -809,11 +810,11 @@ export default function Pipeline() {
               label="Zeitraum"
             />
             {/* Log table */}
-            <div className="max-h-[480px] overflow-y-auto rounded border border-gray-100">
+            <div className="max-h-[480px] overflow-y-auto rounded border border-surface-border">
               {logLoading && logEntries.length === 0 ? (
-                <p className="p-4 text-sm text-gray-400">Lade...</p>
+                <p className="p-4 text-sm text-ink-light">Lade...</p>
               ) : logEntries.length === 0 ? (
-                <p className="p-4 text-sm text-gray-400">
+                <p className="p-4 text-sm text-ink-light">
                   Keine Einträge in diesem Zeitraum / Filter.
                 </p>
               ) : (
@@ -822,9 +823,9 @@ export default function Pipeline() {
                     {logEntries.map((entry) => (
                       <tr
                         key={entry.id}
-                        className={`border-b border-gray-100 hover:bg-gray-50 ${entry.is_error ? 'bg-red-50' : ''}`}
+                        className={`border-b border-surface-border hover:bg-surface-bg ${entry.is_error ? 'bg-status-fehler-bg' : ''}`}
                       >
-                        <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">
+                        <td className="px-3 py-2 text-xs text-ink-light whitespace-nowrap">
                           {entry.updated_at
                             ? new Date(entry.updated_at).toLocaleString('de-DE', {
                                 day: '2-digit',
@@ -835,14 +836,14 @@ export default function Pipeline() {
                             : '-'}
                         </td>
                         <td className="px-3 py-2 max-w-[260px]">
-                          <span className="text-gray-700 line-clamp-1 text-xs">{entry.title}</span>
+                          <span className="text-ink line-clamp-1 text-xs">{entry.title}</span>
                         </td>
-                        <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">
+                        <td className="px-3 py-2 text-xs text-ink-light whitespace-nowrap">
                           {entry.source_name || entry.channel_name || ''}
                         </td>
                         <td className="px-3 py-2">
                           <span
-                            className={`text-xs font-medium ${entry.is_error ? 'text-red-600' : entry.is_processing ? 'text-amber-600' : 'text-emerald-600'}`}
+                            className={`text-xs font-medium ${entry.is_error ? 'text-status-fehler-text' : entry.is_processing ? 'text-accent-600' : 'text-status-fertig-text'}`}
                           >
                             {entry.is_error ? '❌' : entry.is_processing ? '⏳' : '✅'}{' '}
                             {entry.message}
@@ -936,7 +937,7 @@ export default function Pipeline() {
         <CardContent className="p-0">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-sm text-gray-500 dark:text-gray-400">
+              <tr className="border-b border-surface-border dark:border-surface-border text-left text-sm text-ink-light dark:text-ink-light">
                 <th className="px-3 py-3 w-8">
                   <input
                     type="checkbox"
@@ -962,7 +963,7 @@ export default function Pipeline() {
               {sortedItems.map((item) => (
                 <tr
                   key={item.id}
-                  className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                  className="border-b border-surface-border dark:border-surface-border hover:bg-surface-bg dark:hover:bg-surface-card/50"
                 >
                   <td className="px-3 py-3">
                     <input
@@ -985,34 +986,34 @@ export default function Pipeline() {
                       onClick={() => openDetail(item)}
                       className="text-left hover:text-primary-600"
                     >
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-1">
+                      <p className="text-sm font-medium text-ink dark:text-ink-muted line-clamp-1">
                         {item.title || item.external_id}
                       </p>
-                      <p className="text-xs text-gray-400">{item.external_id}</p>
+                      <p className="text-xs text-ink-light">{item.external_id}</p>
                     </button>
                   </td>
-                  <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
+                  <td className="px-3 py-3 text-xs text-ink-light whitespace-nowrap">
                     {item.channel_name || '-'}
                   </td>
                   <td className="px-3 py-3 text-xs whitespace-nowrap">
                     {(() => {
                       const src = sources.find((s) => s.id === item.source_id)
-                      if (!src) return <span className="text-gray-400">—</span>
+                      if (!src) return <span className="text-ink-light">—</span>
                       const icons = { youtube: '📺', rss: '📰', podcast: '🎙️', web: '🌐' }
                       return (
-                        <span className="flex items-center gap-1 text-gray-600">
+                        <span className="flex items-center gap-1 text-ink-light">
                           <span>{icons[src.type] || '📄'}</span>
                           <span className="max-w-[120px] truncate">{src.name}</span>
                         </span>
                       )
                     })()}
                   </td>
-                  <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
+                  <td className="px-3 py-3 text-xs text-ink-light whitespace-nowrap">
                     {item.published_at
                       ? new Date(item.published_at).toLocaleDateString('de-DE')
                       : '-'}
                   </td>
-                  <td className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
+                  <td className="px-3 py-3 text-xs text-ink-light whitespace-nowrap">
                     {item.view_count ? item.view_count.toLocaleString('de-DE') : '-'}
                   </td>
                   <td className="px-3 py-3">
@@ -1024,7 +1025,7 @@ export default function Pipeline() {
                         (item.keywords || []).slice(0, 3).map((k, i) => (
                           <span
                             key={i}
-                            className="text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded"
+                            className="text-[10px] bg-surface-bg dark:bg-surface-card text-ink-light dark:text-ink-light px-1.5 py-0.5 rounded"
                           >
                             {k}
                           </span>
@@ -1032,7 +1033,7 @@ export default function Pipeline() {
                       ) : ['new', 'transcribed', 'transcription_failed', 'content_ready'].includes(
                           item.status
                         ) ? (
-                        <span className="text-[10px] text-gray-400 italic">Analyse ausstehend</span>
+                        <span className="text-[10px] text-ink-light italic">Analyse ausstehend</span>
                       ) : null}
                     </div>
                   </td>
@@ -1097,7 +1098,7 @@ export default function Pipeline() {
               ))}
               {sortedItems.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-6 py-8 text-center text-sm text-gray-500">
+                  <td colSpan={10} className="px-6 py-8 text-center text-sm text-ink-light">
                     Keine Videos. Gehe zu Quellen und importiere Kanaele.
                   </td>
                 </tr>
@@ -1107,7 +1108,7 @@ export default function Pipeline() {
         </CardContent>
       </Card>
 
-      <p className="text-xs text-gray-400">{sortedItems.length} Videos insgesamt</p>
+      <p className="text-xs text-ink-light">{sortedItems.length} Videos insgesamt</p>
 
       {/* Detail Dialog */}
       <Dialog
@@ -1135,22 +1136,22 @@ export default function Pipeline() {
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <span className="text-gray-500">Status:</span> <Badge status={detail.status} />
+                    <span className="text-ink-light">Status:</span> <Badge status={detail.status} />
                   </div>
                   <div>
-                    <span className="text-gray-500">Quelle:</span> {detail.transcript_source || '-'}
+                    <span className="text-ink-light">Quelle:</span> {detail.transcript_source || '-'}
                   </div>
                   <div>
-                    <span className="text-gray-500">Video-ID:</span> {detail.external_id}
+                    <span className="text-ink-light">Video-ID:</span> {detail.external_id}
                   </div>
                   <div>
-                    <span className="text-gray-500">Datum:</span>{' '}
+                    <span className="text-ink-light">Datum:</span>{' '}
                     {detail.published_at
                       ? new Date(detail.published_at).toLocaleDateString('de-DE')
                       : '-'}
                   </div>
                   <div>
-                    <span className="text-gray-500">Dauer:</span>{' '}
+                    <span className="text-ink-light">Dauer:</span>{' '}
                     {detail.duration_seconds
                       ? `${Math.floor(detail.duration_seconds / 60)} Min`
                       : '-'}
@@ -1221,15 +1222,15 @@ export default function Pipeline() {
               <div className="max-h-[600px] overflow-y-auto">
                 {detail.transcript_text ? (
                   <>
-                    <div className="mb-2 text-xs text-gray-400">
+                    <div className="mb-2 text-xs text-ink-light">
                       {detail.transcript_text.length.toLocaleString()} Zeichen
                     </div>
-                    <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                    <pre className="text-sm text-ink dark:text-ink-muted whitespace-pre-wrap font-mono bg-surface-bg dark:bg-surface-card p-4 rounded-lg">
                       {detail.transcript_text}
                     </pre>
                   </>
                 ) : (
-                  <p className="text-sm text-gray-500">Kein Transkript vorhanden.</p>
+                  <p className="text-sm text-ink-light">Kein Transkript vorhanden.</p>
                 )}
               </div>
             )}
@@ -1255,7 +1256,7 @@ export default function Pipeline() {
                         {detail.analysis.hashtags.map((h, i) => (
                           <span
                             key={i}
-                            className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-full font-medium"
+                            className="text-xs bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 px-2 py-1 rounded-full font-medium"
                           >
                             {h.startsWith('#') ? h : `#${h}`}
                           </span>
@@ -1263,18 +1264,18 @@ export default function Pipeline() {
                       </div>
                     )}
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      <h4 className="text-sm font-semibold text-ink dark:text-ink-muted mb-1">
                         Summary
                       </h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-ink-light dark:text-ink-light">
                         {detail.analysis.summary}
                       </p>
                     </div>
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      <h4 className="text-sm font-semibold text-ink dark:text-ink-muted mb-1">
                         Kernaussagen
                       </h4>
-                      <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                      <ul className="list-disc list-inside text-sm text-ink-light dark:text-ink-light space-y-1">
                         {(detail.analysis.key_points || []).map((kp, i) => (
                           <li key={i}>{kp}</li>
                         ))}
@@ -1282,7 +1283,7 @@ export default function Pipeline() {
                     </div>
                     <div className="flex items-center gap-4">
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        <h4 className="text-sm font-semibold text-ink dark:text-ink-muted mb-1">
                           Trend-Score
                         </h4>
                         <p className="text-2xl font-bold text-primary-600">
@@ -1290,7 +1291,7 @@ export default function Pipeline() {
                         </p>
                       </div>
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        <h4 className="text-sm font-semibold text-ink dark:text-ink-muted mb-1">
                           Tags
                         </h4>
                         <div className="flex flex-wrap gap-1">
@@ -1304,10 +1305,10 @@ export default function Pipeline() {
                     </div>
                     {detail.analysis.content_angles && (
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        <h4 className="text-sm font-semibold text-ink dark:text-ink-muted mb-1">
                           Content-Winkel
                         </h4>
-                        <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                        <ul className="list-disc list-inside text-sm text-ink-light dark:text-ink-light space-y-1">
                           {detail.analysis.content_angles.map((a, i) => (
                             <li key={i}>{a}</li>
                           ))}
@@ -1316,14 +1317,14 @@ export default function Pipeline() {
                     )}
                     {detail.analysis.fact_check && (
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        <h4 className="text-sm font-semibold text-ink dark:text-ink-muted mb-1">
                           Faktencheck
                         </h4>
                         <div className="space-y-2">
                           {detail.analysis.fact_check.map((fc, i) => (
                             <div
                               key={i}
-                              className="bg-gray-50 dark:bg-gray-800 p-2 rounded text-sm"
+                              className="bg-surface-bg dark:bg-surface-card p-2 rounded text-sm"
                             >
                               <p className="font-medium">{fc.claim}</p>
                               <Badge
@@ -1344,7 +1345,7 @@ export default function Pipeline() {
                     )}
                   </>
                 ) : (
-                  <p className="text-sm text-gray-500">Keine Analyse vorhanden.</p>
+                  <p className="text-sm text-ink-light">Keine Analyse vorhanden.</p>
                 )}
               </div>
             )}

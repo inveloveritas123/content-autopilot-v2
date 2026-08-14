@@ -1,3 +1,4 @@
+// AUDITED-2026-08-14 (D6): Tiefen-Audit, Datei vollstaendig gelesen.
 import { useState, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from './ui/Card'
 import { Button } from './ui/Button'
@@ -103,7 +104,7 @@ export default function ExportImport() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Daten & Export</h2>
+      <h2 className="text-2xl font-bold text-ink dark:text-white">Daten & Export</h2>
 
       {/* Export */}
       <Card>
@@ -111,14 +112,14 @@ export default function ExportImport() {
           <CardTitle>Daten exportieren</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-sm text-ink-light dark:text-ink-light">
             Exportiert alle Tenant-Daten (Quellen, Items, Content, Einstellungen). Die Datei kann
             als Backup oder zur Migration genutzt werden.
           </p>
 
           {/* Format-Selector */}
           <div className="space-y-2">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Format</p>
+            <p className="text-sm font-medium text-ink dark:text-ink-muted">Format</p>
             <div className="flex flex-wrap gap-3">
               {[
                 { value: 'zip', label: 'ZIP (JSON)', desc: 'Vollständiger JSON-Export' },
@@ -132,7 +133,7 @@ export default function ExportImport() {
                     ${
                       exportFormat === opt.value
                         ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                        : 'border-surface-border dark:border-surface-border hover:border-surface-border dark:hover:border-surface-border'
                     }`}
                 >
                   <input
@@ -144,10 +145,10 @@ export default function ExportImport() {
                     className="mt-0.5 accent-primary-500"
                   />
                   <div>
-                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                    <p className="text-sm font-medium text-ink dark:text-ink-muted">
                       {opt.label}
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{opt.desc}</p>
+                    <p className="text-xs text-ink-light dark:text-ink-light">{opt.desc}</p>
                   </div>
                 </label>
               ))}
@@ -155,7 +156,7 @@ export default function ExportImport() {
           </div>
 
           {exportError && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">
+            <div className="bg-status-fehler-bg dark:bg-status-fehler-bg/20 border border-status-fehler-border dark:border-status-fehler-border rounded-lg p-3 text-sm text-status-fehler-text dark:text-status-fehler-text">
               Fehler: {exportError}
             </div>
           )}
@@ -165,7 +166,7 @@ export default function ExportImport() {
               {exporting ? 'Exportiere...' : 'Daten exportieren'}
             </Button>
             {exporting && (
-              <span className="text-sm text-gray-500 dark:text-gray-400 animate-pulse">
+              <span className="text-sm text-ink-light dark:text-ink-light animate-pulse">
                 Download wird vorbereitet...
               </span>
             )}
@@ -179,19 +180,19 @@ export default function ExportImport() {
           <CardTitle>Daten importieren</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-sm text-ink-light dark:text-ink-light">
             Importiert Tenant-Daten aus einer zuvor exportierten ZIP-Datei. Maximale Dateigröße: 100
             MB.
           </p>
 
           {importResult ? (
             <div className="space-y-3">
-              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-                <p className="font-medium text-green-800 dark:text-green-200 text-sm">
+              <div className="bg-status-fertig-bg dark:bg-status-fertig-bg/20 border border-status-fertig-border dark:border-status-fertig-border rounded-lg p-4">
+                <p className="font-medium text-status-fertig-text dark:text-status-fertig-text text-sm">
                   Import erfolgreich
                 </p>
                 {importResult.imported_counts && (
-                  <ul className="mt-2 space-y-1 text-sm text-green-700 dark:text-green-300">
+                  <ul className="mt-2 space-y-1 text-sm text-status-fertig-text dark:text-status-fertig-text">
                     {Object.entries(importResult.imported_counts).map(([key, val]) => (
                       <li key={key}>
                         {key}: {val} importiert
@@ -200,7 +201,7 @@ export default function ExportImport() {
                   </ul>
                 )}
                 {importResult.message && (
-                  <p className="mt-2 text-sm text-green-700 dark:text-green-300">
+                  <p className="mt-2 text-sm text-status-fertig-text dark:text-status-fertig-text">
                     {importResult.message}
                   </p>
                 )}
@@ -224,7 +225,7 @@ export default function ExportImport() {
                   ${
                     dragOver
                       ? 'border-primary-400 bg-primary-50 dark:bg-primary-900/20'
-                      : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 bg-gray-50 dark:bg-gray-800/50'
+                      : 'border-surface-border dark:border-surface-border hover:border-surface-border dark:hover:border-surface-border bg-surface-bg dark:bg-surface-card/50'
                   }`}
               >
                 <input
@@ -236,42 +237,42 @@ export default function ExportImport() {
                 />
                 {selectedFile ? (
                   <div className="space-y-1">
-                    <p className="font-medium text-gray-700 dark:text-gray-300 text-sm">
+                    <p className="font-medium text-ink dark:text-ink-muted text-sm">
                       {selectedFile.name}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-ink-light">
                       {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    <p className="text-ink-light dark:text-ink-light text-sm">
                       ZIP-Datei hier ablegen oder klicken
                     </p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500">max. 100 MB</p>
+                    <p className="text-xs text-ink-light dark:text-ink-light">max. 100 MB</p>
                   </div>
                 )}
               </div>
 
               {dryRunError && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">
+                <div className="bg-status-fehler-bg dark:bg-status-fehler-bg/20 border border-status-fehler-border dark:border-status-fehler-border rounded-lg p-3 text-sm text-status-fehler-text dark:text-status-fehler-text">
                   Fehler: {dryRunError}
                 </div>
               )}
 
               {importError && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">
+                <div className="bg-status-fehler-bg dark:bg-status-fehler-bg/20 border border-status-fehler-border dark:border-status-fehler-border rounded-lg p-3 text-sm text-status-fehler-text dark:text-status-fehler-text">
                   Import-Fehler: {importError}
                 </div>
               )}
 
               {dryRunResult && !dryRunResult.valid && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 space-y-2">
-                  <p className="font-medium text-red-800 dark:text-red-200 text-sm">
+                <div className="bg-status-fehler-bg dark:bg-status-fehler-bg/20 border border-status-fehler-border dark:border-status-fehler-border rounded-lg p-4 space-y-2">
+                  <p className="font-medium text-status-fehler-text dark:text-status-fehler-text text-sm">
                     ZIP-Datei ungültig
                   </p>
                   {dryRunResult.errors && (
-                    <ul className="text-sm text-red-700 dark:text-red-300 list-disc list-inside space-y-1">
+                    <ul className="text-sm text-status-fehler-text dark:text-status-fehler-text list-disc list-inside space-y-1">
                       {dryRunResult.errors.map((err, i) => (
                         <li key={i}>{err}</li>
                       ))}
@@ -281,12 +282,12 @@ export default function ExportImport() {
               )}
 
               {dryRunResult?.valid && (
-                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-2">
-                  <p className="font-medium text-blue-800 dark:text-blue-200 text-sm">
+                <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-4 space-y-2">
+                  <p className="font-medium text-primary-800 dark:text-primary-200 text-sm">
                     Vorschau (Dry-Run)
                   </p>
                   {dryRunResult.preview && (
-                    <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+                    <ul className="text-sm text-primary-700 dark:text-primary-300 space-y-1">
                       {Object.entries(dryRunResult.preview).map(([key, val]) => (
                         <li key={key}>
                           {key}: {typeof val === 'object' ? JSON.stringify(val) : val}
@@ -326,9 +327,9 @@ export default function ExportImport() {
         title="Import bestätigen"
       >
         <div className="space-y-4">
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-            <p className="font-medium text-amber-800 dark:text-amber-200 text-sm">Warnung</p>
-            <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+          <div className="bg-accent-50 dark:bg-accent-900/20 border border-accent-200 dark:border-accent-800 rounded-lg p-4">
+            <p className="font-medium text-accent-800 dark:text-accent-200 text-sm">Warnung</p>
+            <p className="text-sm text-accent-700 dark:text-accent-300 mt-1">
               Der Import merged bestehende Daten mit den importierten Daten. Bestehende Einträge
               können überschrieben werden. Diese Aktion kann nicht rückgängig gemacht werden.
             </p>
@@ -336,10 +337,10 @@ export default function ExportImport() {
 
           {dryRunResult?.preview && (
             <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <p className="text-sm font-medium text-ink dark:text-ink-muted">
                 Was wird importiert:
               </p>
-              <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+              <ul className="text-sm text-ink-light dark:text-ink-light space-y-1">
                 {Object.entries(dryRunResult.preview).map(([key, val]) => (
                   <li key={key} className="flex justify-between">
                     <span>{key}</span>

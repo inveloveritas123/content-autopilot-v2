@@ -1,3 +1,4 @@
+// AUDITED-2026-08-14 (D6): Tiefen-Audit, Datei vollstaendig gelesen.
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import {
@@ -103,11 +104,11 @@ function ColumnSelectModal({ open, onClose, onConfirm }) {
               className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-start gap-3 ${
                 isSelected
                   ? 'border-primary-600 bg-primary-50'
-                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  : 'border-surface-border hover:border-surface-border hover:bg-surface-bg'
               }`}
             >
               <Icon
-                className={`w-5 h-5 mt-0.5 shrink-0 ${isSelected ? 'text-primary-600' : 'text-gray-400'}`}
+                className={`w-5 h-5 mt-0.5 shrink-0 ${isSelected ? 'text-primary-600' : 'text-ink-light'}`}
               />
               <div>
                 <span className="text-sm font-semibold text-ink block">{opt.label}</span>
@@ -123,7 +124,7 @@ function ColumnSelectModal({ open, onClose, onConfirm }) {
       <div className="flex justify-end gap-2 mt-6">
         <button
           onClick={onClose}
-          className="px-4 py-2 text-sm text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50"
+          className="px-4 py-2 text-sm text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg"
         >
           Abbrechen
         </button>
@@ -271,11 +272,11 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
               setCurrentPath(pathInput.endsWith('/') ? pathInput : pathInput + '/')
           }}
           placeholder="Pfad eingeben..."
-          className="flex-1 text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500 font-mono"
+          className="flex-1 text-xs border border-surface-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary-500 font-mono"
         />
         <button
           onClick={() => setCurrentPath(pathInput.endsWith('/') ? pathInput : pathInput + '/')}
-          className="px-2.5 py-1.5 text-xs bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 text-ink-muted"
+          className="px-2.5 py-1.5 text-xs bg-surface-bg border border-surface-border rounded-lg hover:bg-surface-bg text-ink-muted"
         >
           ↵
         </button>
@@ -327,7 +328,7 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
                 className={`text-xs px-2.5 py-1 border rounded-lg transition-colors ${
                   isSelected
                     ? 'bg-primary-700 text-white border-primary-700'
-                    : 'bg-gray-50 text-ink border-gray-200 hover:bg-primary-50 hover:text-primary-700 hover:border-primary-200'
+                    : 'bg-surface-bg text-ink border-surface-border hover:bg-primary-50 hover:text-primary-700 hover:border-primary-200'
                 }`}
               >
                 {t.label}
@@ -338,7 +339,7 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
       </div>
 
       {error && (
-        <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+        <div className="mb-3 p-3 bg-accent-50 border border-accent-200 rounded-lg text-xs text-accent-700">
           {error}
           <div className="mt-1 text-ink-muted">
             Vorlagen: /zukunftsbund/projekte/content-autopilot/datensammlung/prompts-skills/
@@ -346,14 +347,14 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
         </div>
       )}
 
-      <div className="border border-gray-200 rounded-xl overflow-hidden min-h-[200px] max-h-64 overflow-y-auto">
+      <div className="border border-surface-border rounded-xl overflow-hidden min-h-[200px] max-h-64 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center py-12 text-ink-muted text-sm">
             <Loader2 className="w-4 h-4 animate-spin mr-2" /> Lade...
           </div>
         ) : items.length === 0 && !error ? (
           <div className="flex flex-col items-center justify-center py-10 text-ink-muted text-sm px-4 text-center">
-            <FolderOpen className="w-8 h-8 mb-2 text-gray-300" />
+            <FolderOpen className="w-8 h-8 mb-2 text-ink-muted" />
             <p className="text-xs font-medium text-ink-light mb-1">
               Verzeichnis leer oder nicht gefunden
             </p>
@@ -389,19 +390,19 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
                     setSelectedFile({ name, path: itemPath })
                   }
                 }}
-                className={`w-full text-left px-4 py-2.5 flex items-center gap-2 text-sm border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors ${
+                className={`w-full text-left px-4 py-2.5 flex items-center gap-2 text-sm border-b border-surface-border last:border-0 hover:bg-surface-bg transition-colors ${
                   isSelected ? 'bg-primary-50 text-primary-700' : 'text-ink'
                 }`}
               >
                 {isDir ? (
-                  <FolderOpen className="w-4 h-4 text-amber-500 shrink-0" />
+                  <FolderOpen className="w-4 h-4 text-accent-500 shrink-0" />
                 ) : (
-                  <div className="w-4 h-4 shrink-0 rounded border border-gray-300 flex items-center justify-center">
+                  <div className="w-4 h-4 shrink-0 rounded border border-surface-border flex items-center justify-center">
                     {isSelected && <div className="w-2 h-2 rounded-sm bg-primary-600" />}
                   </div>
                 )}
                 <span className="truncate">{name}</span>
-                {isDir && <ChevronRight className="w-3 h-3 text-gray-400 ml-auto shrink-0" />}
+                {isDir && <ChevronRight className="w-3 h-3 text-ink-light ml-auto shrink-0" />}
               </button>
             )
           })
@@ -417,7 +418,7 @@ function NCPickerModal({ open, onClose, onImport, tenantSlug }) {
       <div className="flex justify-end gap-2 mt-4">
         <button
           onClick={onClose}
-          className="px-4 py-2 text-sm text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50"
+          className="px-4 py-2 text-sm text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg"
         >
           Abbrechen
         </button>
@@ -475,10 +476,10 @@ function PipelineRunBanner({ runId, onDone }) {
     <div
       className={`mb-4 p-3 rounded-lg border flex items-center gap-3 text-sm ${
         isDone
-          ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+          ? 'bg-status-fertig-bg border-status-fertig-border text-status-fertig-text'
           : isError
-            ? 'bg-red-50 border-red-200 text-red-700'
-            : 'bg-blue-50 border-blue-200 text-blue-700'
+            ? 'bg-status-fehler-bg border-status-fehler-border text-status-fehler-text'
+            : 'bg-primary-50 border-primary-200 text-primary-700'
       }`}
     >
       {isDone ? (
@@ -506,10 +507,10 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
     return (
       <div className="bg-white rounded-xl border border-surface-border p-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gray-100 animate-pulse" />
+          <div className="w-10 h-10 rounded-lg bg-surface-bg animate-pulse" />
           <div className="flex-1 space-y-2">
-            <div className="h-4 bg-gray-100 rounded animate-pulse w-1/2" />
-            <div className="h-3 bg-gray-100 rounded animate-pulse w-1/3" />
+            <div className="h-4 bg-surface-bg rounded animate-pulse w-1/2" />
+            <div className="h-3 bg-surface-bg rounded animate-pulse w-1/3" />
           </div>
         </div>
       </div>
@@ -550,9 +551,9 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
           </span>
           <span className="text-xs font-bold text-ink">{pillarsCount}/3 Säulen abgeschlossen</span>
         </div>
-        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className="w-full h-2 bg-surface-bg rounded-full overflow-hidden">
           <div
-            className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+            className="h-full bg-status-fertig-bg rounded-full transition-all duration-500"
             style={{ width: `${pillarsPercent}%` }}
           />
         </div>
@@ -563,8 +564,8 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
               key={p.key}
               className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
                 p.value
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                  ? 'bg-status-fertig-bg text-status-fertig-text border-status-fertig-border'
+                  : 'bg-accent-50 text-accent-700 border-accent-200'
               }`}
             >
               {p.value ? <CheckCircle2 className="w-3 h-3" /> : <Loader2 className="w-3 h-3" />}
@@ -575,11 +576,11 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
         </div>
         {/* Banner wenn alle 3 fertig */}
         {allPresent && (
-          <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between gap-3">
-            <p className="text-xs font-semibold text-emerald-800">Brand Voice komplett.</p>
+          <div className="mt-3 p-3 bg-status-fertig-bg border border-status-fertig-border rounded-lg flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-status-fertig-text">Brand Voice komplett.</p>
             <Link
               to="/brand-voice/wizard"
-              className="text-xs font-medium text-emerald-700 underline hover:no-underline whitespace-nowrap"
+              className="text-xs font-medium text-status-fertig-text underline hover:no-underline whitespace-nowrap"
             >
               Wizard starten →
             </Link>
@@ -588,12 +589,12 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
       </div>
 
       {drift_available && (
-        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3 text-sm text-blue-700">
+        <div className="p-3 bg-primary-50 border border-primary-200 rounded-lg flex items-center gap-3 text-sm text-primary-700">
           <Info className="w-4 h-4 shrink-0" />
           <span className="flex-1">Voice-Update verfügbar — Drift erkannt.</span>
           <button
             onClick={onDriftReview}
-            className="text-xs font-medium text-blue-700 underline hover:no-underline"
+            className="text-xs font-medium text-primary-700 underline hover:no-underline"
           >
             Voice-Updates prüfen →
           </button>
@@ -602,22 +603,22 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
 
       <div
         className={`bg-white rounded-xl border p-5 ${
-          allPresent ? 'border-emerald-200' : nonePresent ? 'border-red-200' : 'border-amber-200'
+          allPresent ? 'border-status-fertig-border' : nonePresent ? 'border-status-fehler-border' : 'border-accent-200'
         }`}
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div
               className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-                allPresent ? 'bg-emerald-50' : nonePresent ? 'bg-red-50' : 'bg-amber-50'
+                allPresent ? 'bg-status-fertig-bg' : nonePresent ? 'bg-status-fehler-bg' : 'bg-accent-50'
               }`}
             >
               {allPresent ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                <CheckCircle2 className="w-5 h-5 text-status-fertig-text" />
               ) : nonePresent ? (
-                <XCircle className="w-5 h-5 text-red-500" />
+                <XCircle className="w-5 h-5 text-status-fehler-text" />
               ) : (
-                <AlertCircle className="w-5 h-5 text-amber-500" />
+                <AlertCircle className="w-5 h-5 text-accent-500" />
               )}
             </div>
             <div>
@@ -637,7 +638,7 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
                     ].map(({ label, v }) => (
                       <span
                         key={label}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-medium border border-emerald-100"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-status-fertig-bg text-status-fertig-text text-[11px] font-medium border border-status-fertig-border"
                       >
                         <CheckCircle2 className="w-3 h-3" />
                         {label}
@@ -657,7 +658,7 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
               )}
               {nonePresent && (
                 <>
-                  <p className="text-sm font-semibold text-red-700">
+                  <p className="text-sm font-semibold text-status-fehler-text">
                     Kein Brand Voice eingerichtet
                   </p>
                   <p className="text-xs text-ink-muted mt-0.5">
@@ -679,7 +680,7 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
             {!allPresent && !nonePresent && (
               <button
                 onClick={onSetup}
-                className="px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100"
+                className="px-3 py-1.5 text-xs font-medium text-accent-700 bg-accent-50 border border-accent-200 rounded-lg hover:bg-accent-100"
               >
                 Profil vervollständigen
               </button>
@@ -687,14 +688,14 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
             {nonePresent && (
               <button
                 onClick={onSetup}
-                className="px-4 py-2 text-xs font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600 flex items-center gap-1.5"
+                className="px-4 py-2 text-xs font-semibold text-white bg-status-fehler-bg rounded-lg hover:bg-status-fehler-bg flex items-center gap-1.5"
               >
                 Jetzt einrichten <ChevronRight className="w-3.5 h-3.5" />
               </button>
             )}
             <button
               onClick={onRefresh}
-              className="p-2 text-ink-muted hover:text-primary-600 rounded-lg hover:bg-gray-50"
+              className="p-2 text-ink-muted hover:text-primary-600 rounded-lg hover:bg-surface-bg"
               title="Aktualisieren"
             >
               <RefreshCw className="w-4 h-4" />
@@ -837,10 +838,10 @@ function UploadZone({ onUploadSuccess }) {
         className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
           dragging
             ? 'border-primary-500 bg-primary-50'
-            : 'border-gray-300 hover:border-primary-400 hover:bg-gray-50'
+            : 'border-surface-border hover:border-primary-400 hover:bg-surface-bg'
         }`}
       >
-        <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+        <Upload className="w-8 h-8 text-ink-light mx-auto mb-2" />
         <p className="text-sm text-ink-muted">
           Datei hier ablegen oder{' '}
           <span className="text-primary-700 font-medium">klicken zum Auswählen</span>
@@ -856,19 +857,19 @@ function UploadZone({ onUploadSuccess }) {
       </div>
 
       {fileError && (
-        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+        <div className="mt-3 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text">
           {fileError}
         </div>
       )}
 
       {uploadError && (
-        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+        <div className="mt-3 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text">
           {uploadError}
         </div>
       )}
 
       {uploadSuccess && (
-        <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700 flex items-center gap-2">
+        <div className="mt-3 p-3 bg-status-fertig-bg border border-status-fertig-border rounded-lg text-xs text-status-fertig-text flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           Datei erfolgreich hochgeladen.
         </div>
@@ -889,7 +890,7 @@ function UploadZone({ onUploadSuccess }) {
       {previewLines && (
         <div className="mt-4">
           <p className="text-xs font-medium text-ink-muted mb-1">Vorschau (erste 30 Zeilen):</p>
-          <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-[11px] text-ink leading-relaxed overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">
+          <pre className="bg-surface-bg border border-surface-border rounded-lg p-3 text-[11px] text-ink leading-relaxed overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">
             {previewLines}
           </pre>
         </div>
@@ -963,7 +964,7 @@ export default function BrandVoice() {
           {statusData?.voice_profile && (
             <Link
               to="/brand-voice/wizard"
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-muted bg-white border border-surface-border rounded-lg hover:bg-gray-50"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-ink-muted bg-white border border-surface-border rounded-lg hover:bg-surface-bg"
             >
               <RotateCcw className="w-4 h-4" />
               Wizard erneut
@@ -992,7 +993,7 @@ export default function BrandVoice() {
 
       {/* Status error */}
       {statusError && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
+        <div className="mb-4 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-sm text-status-fehler-text flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           Fehler beim Laden des Status: {statusError}
         </div>
@@ -1002,7 +1003,7 @@ export default function BrandVoice() {
       {reviewQueueCount > 0 && (
         <Link
           to="/brand-voice/review-queue"
-          className="flex items-center gap-3 mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 hover:bg-red-100 transition-colors"
+          className="flex items-center gap-3 mb-4 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-sm text-status-fehler-text hover:bg-status-fehler-bg transition-colors"
         >
           <ShieldAlert className="w-4 h-4 shrink-0" />
           <span className="flex-1">

@@ -1,3 +1,4 @@
+// AUDITED-2026-08-14 (D6): Tiefen-Audit, Datei vollstaendig gelesen.
 import { useState, useEffect, useCallback } from 'react'
 import {
   Fingerprint,
@@ -114,7 +115,7 @@ function DimensionSlider({ dim, value, defaultValue, onChange, onReset }) {
           {isCustom && (
             <button
               onClick={onReset}
-              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100"
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-surface-bg"
               title="Zuruecksetzen"
             >
               <RotateCcw className="w-3 h-3 text-ink-muted" />
@@ -158,7 +159,7 @@ function StatCard({ icon: Icon, label, value, sub, color = 'text-primary-600' })
     <div className="bg-white rounded-xl border border-surface-border p-4">
       <div className="flex items-center gap-3">
         <div
-          className={`w-10 h-10 rounded-lg flex items-center justify-center ${color === 'text-primary-600' ? 'bg-primary-50' : color === 'text-emerald-600' ? 'bg-emerald-50' : 'bg-amber-50'}`}
+          className={`w-10 h-10 rounded-lg flex items-center justify-center ${color === 'text-primary-600' ? 'bg-primary-50' : color === 'text-status-fertig-text' ? 'bg-status-fertig-bg' : 'bg-accent-50'}`}
         >
           <Icon className={`w-5 h-5 ${color}`} />
         </div>
@@ -291,7 +292,7 @@ function WizardModal({ onClose, onApply }) {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
         {/* Header */}
-        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+        <div className="p-6 border-b border-surface-border flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold text-ink">Stimm-Profil Schnell-Setup</h2>
             <p className="text-xs text-ink-muted mt-0.5">
@@ -300,14 +301,14 @@ function WizardModal({ onClose, onApply }) {
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+            className="p-2 text-ink-light hover:text-ink-light rounded-lg hover:bg-surface-bg"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Progress bar */}
-        <div className="h-1 bg-gray-100">
+        <div className="h-1 bg-surface-bg">
           <div
             className="h-1 bg-primary-600 transition-all"
             style={{ width: `${(step / 3) * 100}%` }}
@@ -326,7 +327,7 @@ function WizardModal({ onClose, onApply }) {
                   <button
                     key={o.key}
                     onClick={() => setStyle(o.key)}
-                    className={`p-4 rounded-xl border-2 text-left transition-all ${style === o.key ? 'border-primary-600 bg-primary-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
+                    className={`p-4 rounded-xl border-2 text-left transition-all ${style === o.key ? 'border-primary-600 bg-primary-50' : 'border-surface-border hover:border-surface-border hover:bg-surface-bg'}`}
                   >
                     <span className="text-2xl block mb-2">{o.emoji}</span>
                     <span className="text-sm font-semibold text-ink block">{o.label}</span>
@@ -348,7 +349,7 @@ function WizardModal({ onClose, onApply }) {
                   <button
                     key={o.key}
                     onClick={() => setGoal(o.key)}
-                    className={`p-4 rounded-xl border-2 text-left transition-all ${goal === o.key ? 'border-primary-600 bg-primary-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
+                    className={`p-4 rounded-xl border-2 text-left transition-all ${goal === o.key ? 'border-primary-600 bg-primary-50' : 'border-surface-border hover:border-surface-border hover:bg-surface-bg'}`}
                   >
                     <span className="text-2xl block mb-2">{o.emoji}</span>
                     <span className="text-sm font-semibold text-ink block">{o.label}</span>
@@ -381,7 +382,7 @@ function WizardModal({ onClose, onApply }) {
                   <span className="text-xs text-ink-muted">Sie-Form, formell</span>
                 </div>
               </div>
-              <div className="mt-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
+              <div className="mt-6 p-4 bg-surface-bg rounded-xl border border-surface-border">
                 <p className="text-xs font-semibold text-ink mb-2">Vorschau Ihrer Einstellungen:</p>
                 <div className="flex flex-wrap gap-2">
                   {style && (
@@ -394,7 +395,7 @@ function WizardModal({ onClose, onApply }) {
                       {goalOptions.find((o) => o.key === goal)?.label}
                     </span>
                   )}
-                  <span className="px-2 py-1 bg-gray-200 text-gray-700 rounded-full text-xs">
+                  <span className="px-2 py-1 bg-surface-bg text-ink rounded-full text-xs">
                     Formalität: {formality.toFixed(1)}
                   </span>
                 </div>
@@ -407,7 +408,7 @@ function WizardModal({ onClose, onApply }) {
         <div className="p-6 pt-0 flex items-center justify-between">
           <button
             onClick={() => (step > 1 ? setStep(step - 1) : onClose())}
-            className="px-4 py-2 text-sm text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50"
+            className="px-4 py-2 text-sm text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg"
           >
             {step === 1 ? 'Abbrechen' : 'Zurück'}
           </button>
@@ -422,7 +423,7 @@ function WizardModal({ onClose, onApply }) {
           ) : (
             <button
               onClick={handleApply}
-              className="px-5 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700"
+              className="px-5 py-2 text-sm font-medium text-white bg-status-fertig-bg rounded-lg hover:bg-status-fertig-bg"
             >
               Profil anwenden ✓
             </button>
@@ -524,7 +525,7 @@ export default function VoiceProfile() {
             <>
               <button
                 onClick={handleResetAll}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg"
               >
                 <RotateCcw className="w-3.5 h-3.5" /> Alle zuruecksetzen
               </button>
@@ -543,7 +544,7 @@ export default function VoiceProfile() {
             </>
           )}
           {saved && (
-            <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
+            <span className="flex items-center gap-1 text-xs text-status-fertig-text font-medium">
               <Check className="w-3.5 h-3.5" /> Gespeichert
             </span>
           )}
@@ -555,7 +556,7 @@ export default function VoiceProfile() {
           </button>
           <button
             onClick={loadData}
-            className="p-2 text-ink-muted hover:text-primary-600 rounded-lg hover:bg-gray-50"
+            className="p-2 text-ink-muted hover:text-primary-600 rounded-lg hover:bg-surface-bg"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -573,7 +574,7 @@ export default function VoiceProfile() {
         />
       )}
 
-      {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+      {error && <div className="mb-4 p-3 bg-status-fehler-bg text-status-fehler-text rounded-lg text-sm">{error}</div>}
 
       {stats && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -587,14 +588,14 @@ export default function VoiceProfile() {
             icon={TrendingUp}
             label="Avg. Engagement"
             value={stats.avg_engagement_rate ? `${stats.avg_engagement_rate}%` : '-'}
-            color="text-emerald-600"
+            color="text-status-fertig-text"
           />
           <StatCard
             icon={Mic}
             label="Lernfortschritt"
             value={trendLabels[stats.improvement_trend] || 'Unbekannt'}
             sub={stats.avg_edit_distance > 0 ? `Edit-Distanz: ${stats.avg_edit_distance}` : null}
-            color="text-amber-600"
+            color="text-accent-600"
           />
         </div>
       )}
@@ -627,7 +628,7 @@ export default function VoiceProfile() {
           </div>
         ) : (
           <div className="text-center py-8">
-            <AlertCircle className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            <AlertCircle className="w-10 h-10 text-ink-muted mx-auto mb-3" />
             <p className="text-sm text-ink-light">Voice-Profil noch nicht erstellt.</p>
           </div>
         )}
@@ -647,7 +648,7 @@ export default function VoiceProfile() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-ink-muted">{a.count} Posts</span>
-                  <span className="text-xs font-medium text-emerald-600">
+                  <span className="text-xs font-medium text-status-fertig-text">
                     {((a.avg_engagement ?? 0) * 100).toFixed(1)}% Engagement
                   </span>
                 </div>
@@ -803,7 +804,7 @@ function VoiceTestmatrix() {
   const payloadB = selectedVersionB ? getVersionPayload(selectedVersionB) : null
 
   return (
-    <div className="mt-6 pt-6 border-t border-gray-100">
+    <div className="mt-6 pt-6 border-t border-surface-border">
       <div className="flex items-center justify-between mb-3">
         <div>
           <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
@@ -842,7 +843,7 @@ function VoiceTestmatrix() {
       </div>
 
       {/* Load error */}
-      {loadError && !brandVoiceData && <p className="text-red-500 text-sm">{loadError}</p>}
+      {loadError && !brandVoiceData && <p className="text-status-fehler-text text-sm">{loadError}</p>}
 
       {/* Versions-Auswahl */}
       <div className="grid grid-cols-2 gap-2 mb-3">
@@ -851,7 +852,7 @@ function VoiceTestmatrix() {
           <select
             value={selectedVersionA}
             onChange={(e) => setSelectedVersionA(e.target.value)}
-            className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-ink"
+            className="w-full text-xs border border-surface-border rounded-lg px-2 py-1.5 bg-white text-ink"
           >
             {versionOptions.map((o) => (
               <option key={o.value} value={o.value}>
@@ -865,7 +866,7 @@ function VoiceTestmatrix() {
           <select
             value={selectedVersionB || ''}
             onChange={(e) => setSelectedVersionB(e.target.value || null)}
-            className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-ink"
+            className="w-full text-xs border border-surface-border rounded-lg px-2 py-1.5 bg-white text-ink"
           >
             <option value="">— Keine —</option>
             {versionOptions.map((o) => (
@@ -884,7 +885,7 @@ function VoiceTestmatrix() {
             { label: 'Version A', payload: payloadA },
             { label: 'Version B', payload: payloadB },
           ].map(({ label, payload }) => (
-            <div key={label} className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs">
+            <div key={label} className="rounded-lg border border-surface-border bg-surface-bg p-3 text-xs">
               <div className="font-semibold text-ink mb-2">{label}</div>
               {payload ? (
                 <div className="space-y-1.5">
@@ -913,7 +914,7 @@ function VoiceTestmatrix() {
       )}
 
       {error && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+        <div className="bg-accent-50 border border-accent-200 rounded-lg p-3 text-xs text-accent-700">
           {error}
         </div>
       )}
@@ -931,11 +932,11 @@ function VoiceTestmatrix() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {DEMO_POSTS.map((r, i) => (
-              <div key={i} className="rounded-lg border border-gray-200 bg-white p-3 text-xs">
+              <div key={i} className="rounded-lg border border-surface-border bg-white p-3 text-xs">
                 <div className="flex items-center justify-between mb-2">
                   <div className="font-semibold text-ink">{r.profile}</div>
                   <span
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${r.score >= 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${r.score >= 80 ? 'bg-status-fertig-bg text-status-fertig-text' : 'bg-accent-100 text-accent-700'}`}
                   >
                     {r.score}/100
                   </span>
@@ -962,7 +963,7 @@ function VoiceTestmatrix() {
             {results.results.map((r, i) => (
               <div
                 key={i}
-                className={`rounded-lg border p-3 text-xs ${r.status === 'ok' ? 'border-gray-200' : 'border-red-200 bg-red-50'}`}
+                className={`rounded-lg border p-3 text-xs ${r.status === 'ok' ? 'border-surface-border' : 'border-status-fehler-border bg-status-fehler-bg'}`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="font-semibold text-ink">
@@ -970,7 +971,7 @@ function VoiceTestmatrix() {
                   </div>
                   {r.quality_score != null && (
                     <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${r.quality_score >= 80 ? 'bg-emerald-100 text-emerald-700' : r.quality_score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${r.quality_score >= 80 ? 'bg-status-fertig-bg text-status-fertig-text' : r.quality_score >= 60 ? 'bg-accent-100 text-accent-700' : 'bg-status-fehler-bg text-status-fehler-text'}`}
                     >
                       {r.quality_score.toFixed(0)}/100
                     </span>
@@ -980,7 +981,7 @@ function VoiceTestmatrix() {
                   {r.industry} · {r.latency_ms}ms
                 </div>
                 {r.error ? (
-                  <p className="text-red-600">{r.error}</p>
+                  <p className="text-status-fehler-text">{r.error}</p>
                 ) : (
                   <pre className="whitespace-pre-wrap text-ink leading-relaxed max-h-48 overflow-y-auto text-[10px] font-sans">
                     {r.post_text}

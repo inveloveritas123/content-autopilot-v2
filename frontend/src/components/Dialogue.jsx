@@ -1,3 +1,4 @@
+// AUDITED-2026-08-14 (D6): Tiefen-Audit, Datei vollstaendig gelesen.
 import { useState, useEffect } from 'react'
 import {
   MessageSquare,
@@ -23,18 +24,18 @@ const generatePostPrompt = generateDialoguePostPrompt
 const STATUS_LABELS = {
   no_questions_yet: {
     label: 'Fragen ausstehend',
-    color: 'bg-gray-100 text-gray-600',
-    dot: 'bg-gray-400',
+    color: 'bg-surface-bg text-ink-light',
+    dot: 'bg-surface-card',
   },
   waiting_for_answers: {
     label: 'Antworten fehlen',
-    color: 'bg-amber-100 text-amber-700',
-    dot: 'bg-amber-500',
+    color: 'bg-accent-100 text-accent-700',
+    dot: 'bg-accent-500',
   },
   answers_given: {
     label: 'Bereit für Post',
-    color: 'bg-emerald-100 text-emerald-700',
-    dot: 'bg-emerald-500',
+    color: 'bg-status-fertig-bg text-status-fertig-text',
+    dot: 'bg-status-fertig-bg',
   },
 }
 
@@ -51,10 +52,10 @@ const FORMAT_OPTIONS = [
 ]
 
 const ANGLE_COLORS = {
-  story: 'text-purple-600 bg-purple-50',
-  meinung: 'text-blue-600 bg-blue-50',
-  howto: 'text-emerald-600 bg-emerald-50',
-  frage: 'text-amber-600 bg-amber-50',
+  story: 'text-accent-600 bg-accent-50',
+  meinung: 'text-primary-600 bg-primary-50',
+  howto: 'text-status-fertig-text bg-status-fertig-bg',
+  frage: 'text-accent-600 bg-accent-50',
 }
 
 function ItemCard({ item, isActive, onClick }) {
@@ -65,7 +66,7 @@ function ItemCard({ item, isActive, onClick }) {
       className={`w-full text-left p-4 rounded-xl border transition-all ${
         isActive
           ? 'border-primary-400 bg-primary-50 shadow-sm'
-          : 'border-surface-border bg-white hover:border-gray-300 hover:bg-gray-50'
+          : 'border-surface-border bg-white hover:border-surface-border hover:bg-surface-bg'
       }`}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -73,7 +74,7 @@ function ItemCard({ item, isActive, onClick }) {
           {item.title}
         </span>
         <ChevronRight
-          className={`w-4 h-4 shrink-0 mt-0.5 transition-transform ${isActive ? 'text-primary-600 rotate-90' : 'text-gray-400'}`}
+          className={`w-4 h-4 shrink-0 mt-0.5 transition-transform ${isActive ? 'text-primary-600 rotate-90' : 'text-ink-light'}`}
         />
       </div>
       <div className="flex items-center gap-2 flex-wrap">
@@ -137,11 +138,11 @@ function QuestionForm({ context, itemId, onDone }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-        <p className="text-xs text-amber-800 font-medium mb-1">
+      <div className="bg-accent-50 border border-accent-200 rounded-xl p-4">
+        <p className="text-xs text-accent-800 font-medium mb-1">
           💬 Deine persönliche Erfahrung ist der Schlüssel
         </p>
-        <p className="text-[11px] text-amber-700 leading-relaxed">
+        <p className="text-[11px] text-accent-700 leading-relaxed">
           Beantworte diese Fragen aus deiner Perspektive als{' '}
           {context.entrepreneur?.name || 'Unternehmer'}. Deine Antworten werden zu einem
           authentischen LinkedIn-Post — kein KI-Blubber, deine echten Erlebnisse.
@@ -157,7 +158,7 @@ function QuestionForm({ context, itemId, onDone }) {
             <div className="flex-1">
               <p className="text-sm font-medium text-ink">{q.question}</p>
               {q.transcript_reference && (
-                <p className="text-[11px] text-ink-muted mt-1 italic border-l-2 border-gray-200 pl-2">
+                <p className="text-[11px] text-ink-muted mt-1 italic border-l-2 border-surface-border pl-2">
                   Bezug: „{q.transcript_reference.slice(0, 120)}…"
                 </p>
               )}
@@ -171,12 +172,12 @@ function QuestionForm({ context, itemId, onDone }) {
             onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
             placeholder={q.answered ? '(bereits beantwortet)' : 'Deine Antwort...'}
             rows={3}
-            className="w-full text-sm border border-gray-200 rounded-lg p-3 resize-y focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-gray-50 placeholder-gray-400"
+            className="w-full text-sm border border-surface-border rounded-lg p-3 resize-y focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-surface-bg placeholder-gray-400"
           />
         </div>
       ))}
 
-      {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg p-3">{error}</p>}
+      {error && <p className="text-sm text-status-fehler-text bg-status-fehler-bg rounded-lg p-3">{error}</p>}
 
       <button
         onClick={handleSave}
@@ -226,12 +227,12 @@ function GeneratePostPanel({ context, itemId }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-        <p className="text-xs text-emerald-800 font-medium mb-1">
+      <div className="bg-status-fertig-bg border border-status-fertig-border rounded-xl p-4">
+        <p className="text-xs text-status-fertig-text font-medium mb-1">
           🎯 {context.answered_count} Frage{context.answered_count !== 1 ? 'n' : ''} beantwortet —
           bereit für Post-Generierung
         </p>
-        <p className="text-[11px] text-emerald-700">
+        <p className="text-[11px] text-status-fertig-text">
           Wähle ein Format und kopiere den Claude-Prompt. Claude generiert deinen Post direkt — ohne
           Requesty-Budget (kostenlos).
         </p>
@@ -248,7 +249,7 @@ function GeneratePostPanel({ context, itemId }) {
               className={`p-3 rounded-xl border-2 text-left transition-all ${
                 format === f.key
                   ? 'border-primary-500 bg-primary-50'
-                  : 'border-gray-200 hover:border-gray-300 bg-white'
+                  : 'border-surface-border hover:border-surface-border bg-white'
               }`}
             >
               <span className="text-base block mb-0.5">{f.emoji}</span>
@@ -272,28 +273,28 @@ function GeneratePostPanel({ context, itemId }) {
         {generating ? 'Generiere Prompt…' : 'Claude-Prompt generieren'}
       </button>
 
-      {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg p-3">{error}</p>}
+      {error && <p className="text-sm text-status-fehler-text bg-status-fehler-bg rounded-lg p-3">{error}</p>}
 
       {promptData && (
-        <div className="bg-gray-900 rounded-xl p-4">
+        <div className="bg-surface-card rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-gray-400 font-medium">
+            <span className="text-xs text-ink-light font-medium">
               Claude-Prompt bereit — in Claude einfügen:
             </span>
             <button
               onClick={handleCopy}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                copied ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                copied ? 'bg-status-fertig-bg text-white' : 'bg-surface-card text-ink-muted hover:bg-surface-card'
               }`}
             >
               {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
               {copied ? 'Kopiert!' : 'Kopieren'}
             </button>
           </div>
-          <pre className="text-xs text-gray-300 whitespace-pre-wrap leading-relaxed font-mono max-h-64 overflow-y-auto">
+          <pre className="text-xs text-ink-muted whitespace-pre-wrap leading-relaxed font-mono max-h-64 overflow-y-auto">
             {promptData.prompt_for_claude}
           </pre>
-          <p className="text-[10px] text-gray-500 mt-3">
+          <p className="text-[10px] text-ink-light mt-3">
             💡 Tipp: Kopiere diesen Prompt und füge ihn in ein neues Claude-Gespräch ein. Claude
             schreibt den Post direkt — kein API-Budget nötig.
           </p>
@@ -330,7 +331,7 @@ function ItemDetail({ item, onBack }) {
         <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
       </div>
     )
-  if (error) return <div className="p-4 bg-red-50 text-red-700 rounded-xl text-sm">{error}</div>
+  if (error) return <div className="p-4 bg-status-fehler-bg text-status-fehler-text rounded-xl text-sm">{error}</div>
   if (!context) return null
 
   const hasQuestions = context.smart_questions.length > 0
@@ -347,7 +348,7 @@ function ItemDetail({ item, onBack }) {
         <div className="flex items-center gap-2 text-[11px] text-ink-muted flex-wrap">
           <span>{context.source?.name}</span>
           {context.analysis.main_topic && (
-            <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+            <span className="px-2 py-0.5 bg-surface-bg text-ink-light rounded-full">
               {context.analysis.main_topic}
             </span>
           )}
@@ -365,7 +366,7 @@ function ItemDetail({ item, onBack }) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+      <div className="flex gap-1 bg-surface-bg rounded-xl p-1">
         {hasQuestions && (
           <button
             onClick={() => setTab('questions')}
@@ -419,7 +420,7 @@ function ItemDetail({ item, onBack }) {
       {effectiveTab === 'analysis' && (
         <div className="space-y-3">
           {!hasQuestions && (
-            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+            <div className="bg-surface-bg border border-surface-border rounded-xl p-4">
               <p className="text-xs font-medium text-ink mb-1">
                 ⏳ Smarte Fragen werden noch generiert
               </p>
@@ -532,22 +533,22 @@ export default function Dialogue() {
 
           {/* Stats */}
           <div className="grid grid-cols-3 gap-2 mt-3">
-            <div className="bg-gray-50 rounded-lg p-2 text-center">
+            <div className="bg-surface-bg rounded-lg p-2 text-center">
               <p className="text-base font-bold text-ink">{stats.total}</p>
               <p className="text-[10px] text-ink-muted">Items</p>
             </div>
-            <div className="bg-amber-50 rounded-lg p-2 text-center">
-              <p className="text-base font-bold text-amber-700">{stats.withQuestions}</p>
+            <div className="bg-accent-50 rounded-lg p-2 text-center">
+              <p className="text-base font-bold text-accent-700">{stats.withQuestions}</p>
               <p className="text-[10px] text-ink-muted">mit Fragen</p>
             </div>
-            <div className="bg-emerald-50 rounded-lg p-2 text-center">
-              <p className="text-base font-bold text-emerald-700">{stats.ready}</p>
+            <div className="bg-status-fertig-bg rounded-lg p-2 text-center">
+              <p className="text-base font-bold text-status-fertig-text">{stats.ready}</p>
               <p className="text-[10px] text-ink-muted">bereit</p>
             </div>
           </div>
 
           {/* Filter tabs */}
-          <div className="flex gap-1 mt-3 bg-gray-100 rounded-lg p-1">
+          <div className="flex gap-1 mt-3 bg-surface-bg rounded-lg p-1">
             {[
               ['all', 'Alle'],
               ['ready', 'Fragen'],
@@ -570,10 +571,10 @@ export default function Dialogue() {
               <Loader2 className="w-5 h-5 animate-spin text-primary-600" />
             </div>
           )}
-          {error && <p className="text-xs text-red-600 p-2">{error}</p>}
+          {error && <p className="text-xs text-status-fehler-text p-2">{error}</p>}
           {!loading && filtered.length === 0 && (
             <div className="text-center py-8">
-              <MessageSquare className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+              <MessageSquare className="w-8 h-8 text-ink-muted mx-auto mb-2" />
               <p className="text-xs text-ink-muted">Keine Items mit diesem Filter</p>
             </div>
           )}
@@ -601,7 +602,7 @@ export default function Dialogue() {
               Erfahrungen. Lass Claude daraus einen authentischen LinkedIn-Post schreiben —
               kostenlos, ohne LLM-Budget.
             </p>
-            <div className="bg-gray-50 rounded-xl p-4 text-left w-full space-y-3">
+            <div className="bg-surface-bg rounded-xl p-4 text-left w-full space-y-3">
               <p className="text-xs font-semibold text-ink">So funktioniert's:</p>
               {[
                 ['1', '💡', 'Item wählen', 'Wähle einen analysierten Content-Beitrag'],
@@ -627,11 +628,11 @@ export default function Dialogue() {
               ))}
             </div>
             {stats.withQuestions === 0 && (
-              <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4 text-left w-full">
-                <p className="text-xs font-medium text-amber-800 mb-1">
+              <div className="mt-4 bg-accent-50 border border-accent-200 rounded-xl p-4 text-left w-full">
+                <p className="text-xs font-medium text-accent-800 mb-1">
                   ⏳ Noch keine Fragen generiert
                 </p>
-                <p className="text-[11px] text-amber-700">
+                <p className="text-[11px] text-accent-700">
                   Wenn das Requesty-Budget aufgeladen wird, generiert die Pipeline automatisch
                   smarte Fragen für alle {stats.total} analysierten Items.
                 </p>
