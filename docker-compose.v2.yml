@@ -117,7 +117,7 @@ services:
       COST_CAP_USD_PER_DAY: ${COST_CAP_USD_PER_DAY:-5.0}
       COST_CAP_USD_GLOBAL_PER_DAY: ${COST_CAP_USD_GLOBAL_PER_DAY:-10.0}
       TELEGRAM_ADMIN_CHAT_ID: ${TELEGRAM_ADMIN_CHAT_ID:-}  # Setzen für 50%-Cost-Cap-Alert via Telegram
-      TELEGRAM_POLLING_ENABLED: ${TELEGRAM_POLLING_ENABLED:-false}
+      TELEGRAM_POLLING_ENABLED: ${TELEGRAM_POLLING_ENABLED:-true}
       PIPELINE_TIER_DEFAULT: ${PIPELINE_TIER_DEFAULT:-S1}
       # Kanonische Prompt/Rule/Schema-Quelle (Repo-Verzeichnis content-truth/)
       CONTENT_TRUTH_BASE_PATH: ${CONTENT_TRUTH_BASE_PATH:-/app/content-truth}
@@ -168,7 +168,7 @@ services:
       # Kanonische Prompt/Rule/Schema-Quelle (Repo-Verzeichnis content-truth/)
       CONTENT_TRUTH_BASE_PATH: ${CONTENT_TRUTH_BASE_PATH:-/app/content-truth}
       PROMPT_STORAGE_BACKEND: ${PROMPT_STORAGE_BACKEND:-localfs}
-      TELEGRAM_POLLING_ENABLED: ${TELEGRAM_POLLING_ENABLED:-false}
+      TELEGRAM_POLLING_ENABLED: ${TELEGRAM_POLLING_ENABLED:-true}
       # Beschreibbares Overlay fuer Prompt-Studio-Edits (muss Beat sehen koennen!)
       CONTENT_TRUTH_OVERLAY_PATH: ${CONTENT_TRUTH_OVERLAY_PATH:-/app/data/prompts-custom}
     volumes:

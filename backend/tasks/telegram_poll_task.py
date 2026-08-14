@@ -4,9 +4,13 @@
 
     poll_all_active_bots() -> dict
         Plain callable UND Celery-Task.
-        SELECT alle aktiven Bots aus tenant_bot_config, poll_once pro Bot,
-        dispatch_inbound_update pro Update, persistiere neuen offset.
-        Fail-open pro Bot — ein toter Bot stoppt nicht die anderen.
+        SELECT alle aktiven Bots aus tenant_bot_config, pollt alle Bots
+        PARALLEL (asyncio.gather + asyncio.to_thread, da poll_once/DB-Zugriff
+        synchrones blockierendes I/O sind) — Rundenzeit bleibt bei vielen
+        Bots ~konstant statt linear zu wachsen. dispatch_inbound_update pro
+        Update, persistiere neuen offset.
+        Fail-open pro Bot — ein toter Bot stoppt nicht die anderen (auch
+        nicht deren parallel laufende Threads).
         Rückgabe: {"bots_polled": N, "updates_processed": M}  (keine Tokens/PII).
 
 Sicherheitsregeln (E2/D3/E3):
@@ -17,6 +21,7 @@ Sicherheitsregeln (E2/D3/E3):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import UTC, datetime
@@ -67,77 +72,107 @@ def poll_all_active_bots() -> dict:
     # erst hier importieren damit tasks.telegram_poll_task dep-leicht bleibt.
     from api.telegram import dispatch_inbound_update
 
+    rows = _load_active_bots()
+
+    # Jeder Bot lief bisher sequenziell in einer for-Schleife — bei mehreren
+    # aktiven Bots wuchs die Rundenzeit linear mit der Bot-Zahl und konnte
+    # das Poll-Intervall (Default 2s) überschreiten. Jetzt: alle Bots parallel
+    # in Worker-Threads (poll_once/httpx + sync_session_factory sind blockierendes
+    # I/O, kein natives asyncio) — asyncio.gather orchestriert nur die Threads.
+    # Verhalten pro Bot (Fehlerbehandlung, Offset-Update, Logging) unverändert,
+    # nur die Ausführungsreihenfolge ändert sich von sequenziell zu parallel.
+    async def _run_all() -> list[dict]:
+        return await asyncio.gather(
+            *(
+                asyncio.to_thread(_poll_one_bot, row, dispatch_inbound_update)
+                for row in rows
+            )
+        )
+
+    results = asyncio.run(_run_all()) if rows else []
+
+    bots_polled = sum(r["bots_polled"] for r in results)
+    updates_processed = sum(r["updates_processed"] for r in results)
+
+    return {"bots_polled": bots_polled, "updates_processed": updates_processed}
+
+
+def _poll_one_bot(row: dict, dispatch_inbound_update) -> dict:
+    """Pollt genau einen Bot — Rumpf der ehemaligen for-Schleife, unverändert.
+
+    Fail-open: alle Fehlerpfade fangen hier ab und geben {"bots_polled": 0,
+    "updates_processed": 0} zurück statt zu propagieren, damit ein einzelner
+    fehlschlagender Bot die parallelen Threads der anderen Bots nicht anfasst.
+    """
+    tenant_id: str = str(row["tenant_id"])
+    encrypted_token: str = row["telegram_bot_token_encrypted"] or ""
+    offset = row["telegram_poll_offset"]  # int | None
+
     bots_polled = 0
     updates_processed = 0
 
-    rows = _load_active_bots()
-    for row in rows:
-        tenant_id: str = str(row["tenant_id"])
-        encrypted_token: str = row["telegram_bot_token_encrypted"] or ""
-        offset = row["telegram_poll_offset"]  # int | None
-
-        try:
-            token = decrypt_secret(encrypted_token, salt=_TELEGRAM_ENCRYPT_SALT)
-            if not token:
-                # Leer nach Entschlüsselung → überspringen, kein Status-Update
-                logger.warning(
-                    "poll_all_active_bots: tenant=%s token empty after decrypt — skip",
-                    tenant_id,
-                )
-                continue
-
-            updates, next_offset = poll_once(token, offset, timeout=0)
-            bots_polled += 1
-
-            if updates:
-                for update in updates:
-                    try:
-                        dispatch_inbound_update(update, tenant_id)
-                        updates_processed += 1
-                    except Exception as exc:
-                        # Fail-open pro Update — ein einzelner Dispatch-Fehler
-                        # darf nicht den Rest des Bots stoppen.
-                        logger.warning(
-                            "dispatch_inbound_update failed tenant=%s: %s",
-                            tenant_id,
-                            type(exc).__name__,
-                        )
-
-                # Persistiere neuen offset + last_active_at
-                _persist_offset(tenant_id, next_offset, last_active=True)
-            else:
-                # Keine Updates — nur offset persistieren wenn er sich geändert hat
-                if next_offset != offset:
-                    _persist_offset(tenant_id, next_offset, last_active=False)
-
-        except TelegramUnauthorized:
-            # Token ungültig / widerrufen — Bot deaktivieren
-            logger.warning("poll_all_active_bots: tenant=%s HTTP 401 — marking error", tenant_id)
-            _mark_bot_error(tenant_id, "token_rejected_401")
-
-        except TelegramHTTPError as exc:
-            # Anderer HTTP-Fehler — nur loggen, kein Status-Wechsel (kann transient sein)
+    try:
+        token = decrypt_secret(encrypted_token, salt=_TELEGRAM_ENCRYPT_SALT)
+        if not token:
+            # Leer nach Entschlüsselung → überspringen, kein Status-Update
             logger.warning(
-                "poll_all_active_bots: tenant=%s http_error=%s",
+                "poll_all_active_bots: tenant=%s token empty after decrypt — skip",
                 tenant_id,
-                type(exc).__name__,
             )
+            return {"bots_polled": 0, "updates_processed": 0}
 
-        except TelegramAPIError as exc:
-            logger.warning(
-                "poll_all_active_bots: tenant=%s api_error=%s",
-                tenant_id,
-                type(exc).__name__,
-            )
+        updates, next_offset = poll_once(token, offset, timeout=0)
+        bots_polled += 1
 
-        except Exception as exc:
-            # Catch-all: sicherstellen dass ein einzelner Bot die ganze Runde
-            # nicht abbricht. E2: nur Exception-Typ loggen.
-            logger.warning(
-                "poll_all_active_bots: tenant=%s unexpected=%s",
-                tenant_id,
-                type(exc).__name__,
-            )
+        if updates:
+            for update in updates:
+                try:
+                    dispatch_inbound_update(update, tenant_id)
+                    updates_processed += 1
+                except Exception as exc:
+                    # Fail-open pro Update — ein einzelner Dispatch-Fehler
+                    # darf nicht den Rest des Bots stoppen.
+                    logger.warning(
+                        "dispatch_inbound_update failed tenant=%s: %s",
+                        tenant_id,
+                        type(exc).__name__,
+                    )
+
+            # Persistiere neuen offset + last_active_at
+            _persist_offset(tenant_id, next_offset, last_active=True)
+        else:
+            # Keine Updates — nur offset persistieren wenn er sich geändert hat
+            if next_offset != offset:
+                _persist_offset(tenant_id, next_offset, last_active=False)
+
+    except TelegramUnauthorized:
+        # Token ungültig / widerrufen — Bot deaktivieren
+        logger.warning("poll_all_active_bots: tenant=%s HTTP 401 — marking error", tenant_id)
+        _mark_bot_error(tenant_id, "token_rejected_401")
+
+    except TelegramHTTPError as exc:
+        # Anderer HTTP-Fehler — nur loggen, kein Status-Wechsel (kann transient sein)
+        logger.warning(
+            "poll_all_active_bots: tenant=%s http_error=%s",
+            tenant_id,
+            type(exc).__name__,
+        )
+
+    except TelegramAPIError as exc:
+        logger.warning(
+            "poll_all_active_bots: tenant=%s api_error=%s",
+            tenant_id,
+            type(exc).__name__,
+        )
+
+    except Exception as exc:
+        # Catch-all: sicherstellen dass ein einzelner Bot die ganze Runde
+        # nicht abbricht. E2: nur Exception-Typ loggen.
+        logger.warning(
+            "poll_all_active_bots: tenant=%s unexpected=%s",
+            tenant_id,
+            type(exc).__name__,
+        )
 
     return {"bots_polled": bots_polled, "updates_processed": updates_processed}
 

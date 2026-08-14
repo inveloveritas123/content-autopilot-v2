@@ -11,6 +11,8 @@ Coverage:
 - poll_all_active_bots: iteriert aktive Bots
 - poll_all_active_bots: dispatcht Updates + persistiert offset
 - poll_all_active_bots: fail-open bei Fehler in Bot A — Bot B läuft weiter
+- poll_all_active_bots: mehrere Bots laufen PARALLEL (Laufzeit ~konstant statt
+  linear mit Bot-Zahl), ein langsamer/fehlschlagender Bot blockiert andere nicht
 - poll_all_active_bots: Fehler-Bot → status='error' (TelegramUnauthorized)
 - poll_all_active_bots: TELEGRAM_POLLING_ENABLED=false → skip
 - Sicherheit: Token taucht in KEINEM Log-Record auf
@@ -480,6 +482,78 @@ class TestPollAllActiveBots:
         assert result["updates_processed"] == 1
         dispatch_mock.assert_called_once_with(update_b, _TENANT_B)
         mock_persist.assert_called_once_with(_TENANT_B, 301, last_active=True)
+
+    def test_bots_polled_in_parallel_not_sequential(self):
+        """Mehrere Bots laufen parallel (asyncio.gather+to_thread), nicht mehr
+        nacheinander — Gesamtlaufzeit bleibt ~konstant statt linear mit der
+        Bot-Zahl zu wachsen. Ein langsamer/fehlschlagender Bot blockiert die
+        anderen nicht (weder inhaltlich noch zeitlich)."""
+        import time as _time
+
+        _TENANT_C = str(uuid.UUID("cccccccc-0000-0000-0000-000000000003"))
+        _TOKEN_C = "111111111:AAFakeTokenForTenantC_xxxxxxxxxxx"
+
+        _SLEEP_S = 0.2  # pro langsamem Bot — bei sequenziell wäre die Runde >= 2x so lang
+        update_b = _make_update(400)
+        update_c = _make_update(401)
+        dispatch_mock = MagicMock()
+
+        def _poll_side(token, offset, **kw):
+            if token == _TOKEN_A:
+                _time.sleep(_SLEEP_S)
+                raise TelegramHTTPError("HTTP 503 bot=...xxxxx")
+            _time.sleep(_SLEEP_S)
+            if token == _TOKEN_B:
+                return ([update_b], 401)
+            return ([update_c], 402)
+
+        with (
+            patch.object(
+                _poll_task_mod,
+                "_load_active_bots",
+                return_value=[
+                    {
+                        "tenant_id": _TENANT_A,
+                        "telegram_bot_token_encrypted": "enc_a",
+                        "telegram_poll_offset": None,
+                    },
+                    {
+                        "tenant_id": _TENANT_B,
+                        "telegram_bot_token_encrypted": "enc_b",
+                        "telegram_poll_offset": None,
+                    },
+                    {
+                        "tenant_id": _TENANT_C,
+                        "telegram_bot_token_encrypted": "enc_c",
+                        "telegram_poll_offset": None,
+                    },
+                ],
+            ),
+            patch.object(
+                _poll_task_mod, "decrypt_secret", side_effect=[_TOKEN_A, _TOKEN_B, _TOKEN_C]
+            ),
+            patch.object(_poll_task_mod, "poll_once", side_effect=_poll_side),
+            patch.object(_poll_task_mod, "_persist_offset") as mock_persist,
+            patch.object(_api_tg, "dispatch_inbound_update", dispatch_mock),
+            patch.dict("os.environ", {"TELEGRAM_POLLING_ENABLED": "true"}),
+        ):
+            start = _time.monotonic()
+            result = poll_all_active_bots()
+            elapsed = _time.monotonic() - start
+
+        # Parallel: Runde dauert ~1x _SLEEP_S, NICHT 3x (sequenziell wäre >= 0.6s).
+        assert elapsed < _SLEEP_S * 2, (
+            f"Runde dauerte {elapsed:.3f}s — sieht nach sequenziellem statt "
+            f"parallelem Poll aus (erwartet < {_SLEEP_S * 2:.3f}s)"
+        )
+
+        # Bot A ist fehlgeschlagen, B und C liefen trotzdem durch (fail-open,
+        # unabhängig von A — weder inhaltlich noch zeitlich blockiert).
+        assert result["bots_polled"] == 2
+        assert result["updates_processed"] == 2
+        dispatch_mock.assert_any_call(update_b, _TENANT_B)
+        dispatch_mock.assert_any_call(update_c, _TENANT_C)
+        assert mock_persist.call_count == 2
 
     def test_unauthorized_marks_bot_error(self):
         """HTTP 401 → _mark_bot_error wird aufgerufen."""
