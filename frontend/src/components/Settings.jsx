@@ -309,7 +309,7 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Einstellungen</h2>
+      <h2 className="text-2xl font-bold text-ink">Einstellungen</h2>
 
       {/* Oberflächen-Modus (Issue #90) */}
       <Card>
@@ -317,14 +317,14 @@ export default function Settings() {
           <CardTitle>Oberflächen-Modus</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-ink-light">
             <strong>MVP</strong> zeigt nur die Kern-Flows (Dashboard, Pipeline, Quellen, Ideen,
             Posts, Posten, Brand Voice, Gedächtnis, Einstellungen). <strong>Features</strong>{' '}
             schaltet den vollen Funktionsumfang frei (Dialogue, Kalender, Analytics, Admin-Tools
             usw.).
           </p>
           {/* Segmented Control: MVP | Features */}
-          <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+          <div className="inline-flex rounded-lg border border-surface-border overflow-hidden">
             {[
               { value: 'mvp', label: 'MVP', desc: 'Schlank' },
               { value: 'features', label: 'Features', desc: 'Voll-Stand' },
@@ -337,7 +337,7 @@ export default function Settings() {
                   'px-5 py-2.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50',
                   uiMode === value
                     ? 'bg-primary-700 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-50',
+                    : 'bg-white text-ink-light hover:bg-surface-bg',
                 ].join(' ')}
               >
                 {label}
@@ -345,7 +345,7 @@ export default function Settings() {
               </button>
             ))}
           </div>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-ink-muted">
             Modus wird pro Tenant gespeichert. Die Navigation passt sich sofort an — kein Reload
             nötig.
           </p>
@@ -366,7 +366,7 @@ export default function Settings() {
             </p>
           </div>
           {profileComplete && (
-            <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-1 rounded">
+            <span className="text-xs font-semibold text-status-fertig-text bg-status-fertig-bg px-2 py-1 rounded">
               ✓ Wizard abgeschlossen
             </span>
           )}
@@ -401,7 +401,7 @@ export default function Settings() {
             API-Key speichern
           </Button>
           {data && (
-            <p className="text-sm text-green-600">
+            <p className="text-sm text-status-fertig-text">
               Verbunden als: <strong>{data.name}</strong>
             </p>
           )}
@@ -427,12 +427,12 @@ export default function Settings() {
           {ytKeySet && ytApiKey === '••••••••' ? (
             <div className="flex items-center gap-3">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-sm font-medium text-ink-light mb-1">
                   YouTube Data API Key (optional)
                 </label>
-                <div className="flex items-center gap-2 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-gray-50 dark:bg-gray-800">
-                  <span className="text-sm font-mono text-gray-500 flex-1">••••••••</span>
-                  <span className="text-xs text-emerald-600 font-medium">Gespeichert</span>
+                <div className="flex items-center gap-2 border border-surface-border rounded-lg px-3 py-2 bg-surface-bg">
+                  <span className="text-sm font-mono text-ink-light flex-1">••••••••</span>
+                  <span className="text-xs text-status-fertig-text font-medium">Gespeichert</span>
                 </div>
               </div>
               <button
@@ -448,7 +448,7 @@ export default function Settings() {
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-ink-light mb-1">
                 YouTube Data API Key (optional)
               </label>
               <div className="flex items-center gap-2">
@@ -457,12 +457,12 @@ export default function Settings() {
                   value={ytApiKey}
                   onChange={(e) => setYtApiKey(e.target.value)}
                   placeholder="AIza..."
-                  className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="flex-1 border border-surface-border rounded-lg px-3 py-2 bg-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
                 <button
                   type="button"
                   onClick={() => setShowYtKey((s) => !s)}
-                  className="p-2 rounded-md text-ink-muted hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="p-2 rounded-md text-ink-muted hover:bg-surface-bg"
                   title={showYtKey ? 'Verbergen' : 'Anzeigen'}
                 >
                   {showYtKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -470,11 +470,11 @@ export default function Settings() {
               </div>
             </div>
           )}
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
-            <p className="text-sm text-yellow-800 dark:text-yellow-200 font-medium">
+          <div className="bg-status-aktiv-bg border border-status-aktiv-border rounded-lg p-3">
+            <p className="text-sm text-status-aktiv-text font-medium">
               Hinweis: Volle Funktionalitaet
             </p>
-            <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+            <p className="text-xs text-status-aktiv-text mt-1">
               Ohne YT API Key werden Views per Scraping ermittelt (langsamer, max 100
               Videos/Durchlauf). Mit API Key: Praezise Views, Beschreibungen,
               Veroeffentlichungsdaten und schnellerer Import. Key erstellen unter: Google Cloud
@@ -495,7 +495,7 @@ export default function Settings() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-ink-light">
             Lege fest wo Transkripte, Analysen und Content in Nextcloud gespeichert werden. Mehrere
             Lese-Ordner moeglich.
           </p>
@@ -542,13 +542,13 @@ export default function Settings() {
 
           {/* Read paths */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-ink-light mb-2">
               Lese-Ordner (Transkripte/Analysen suchen in)
             </label>
             <div className="space-y-2">
               {ncReadPaths.map((p, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600 dark:text-gray-400 flex-1 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded">
+                  <span className="text-sm text-ink-light flex-1 bg-surface-bg px-3 py-1.5 rounded">
                     {p}
                   </span>
                   <Button
@@ -601,14 +601,14 @@ export default function Settings() {
           <CardTitle>Budget & Kosten</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-xs text-ink-light">
             Tages-Limit fuer KI-Ausgaben. Bei Ueberschreitung pausiert die Pipeline automatisch
             (Circuit Breaker). Aktuell: Gemini Flash ~0,075$/1M Token, Mistral Medium ~0,40$/1M
             Token.
           </p>
           <div className="flex items-end gap-3">
             <div className="w-40">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-ink-light mb-1">
                 Tageslimit (EUR)
               </label>
               <input
@@ -619,11 +619,11 @@ export default function Settings() {
                 value={dailyBudgetEur}
                 onChange={(e) => setDailyBudgetEur(e.target.value)}
                 placeholder="z.B. 5.00"
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full border border-surface-border rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
             {dailyBudgetEur && (
-              <span className="text-xs text-gray-500 pb-1.5">
+              <span className="text-xs text-ink-light pb-1.5">
                 ≈ {Math.round((parseFloat(dailyBudgetEur) / 0.075) * 1000)}k Analyse-Tokens/Tag
               </span>
             )}
@@ -637,21 +637,25 @@ export default function Settings() {
             const limitEur = dailyBudgetEur ? parseFloat(dailyBudgetEur) : 0
             const pct = limitEur > 0 ? Math.min(100, (spentEur / limitEur) * 100) : 0
             const barColor =
-              pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'
+              pct >= 90
+                ? 'bg-status-fehler-border'
+                : pct >= 70
+                  ? 'bg-status-aktiv-border'
+                  : 'bg-status-fertig-border'
             if (!todayEntry && !limitEur) return null
             return (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-500">Verbrauch heute</span>
+                  <span className="text-ink-light">Verbrauch heute</span>
                   <span
-                    className={`font-semibold ${pct >= 90 ? 'text-red-600' : pct >= 70 ? 'text-amber-600' : 'text-emerald-600'}`}
+                    className={`font-semibold ${pct >= 90 ? 'text-status-fehler-text' : pct >= 70 ? 'text-status-aktiv-text' : 'text-status-fertig-text'}`}
                   >
                     ${spentEur.toFixed(3)}{' '}
                     {limitEur > 0 ? `/ $${limitEur.toFixed(2)}` : '(kein Limit gesetzt)'}
                   </span>
                 </div>
                 {limitEur > 0 && (
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-2 bg-surface-bg rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all ${barColor}`}
                       style={{ width: `${Math.max(pct, pct > 0 ? 3 : 0)}%` }}
@@ -659,7 +663,7 @@ export default function Settings() {
                   </div>
                 )}
                 {todayEntry && (
-                  <p className="text-[11px] text-gray-400">
+                  <p className="text-[11px] text-ink-muted">
                     {todayEntry.calls} LLM-Aufrufe ·{' '}
                     {((todayEntry.input_tokens + todayEntry.output_tokens) / 1000).toFixed(0)}k
                     Token
@@ -668,11 +672,11 @@ export default function Settings() {
               </div>
             )
           })()}
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-            <p className="text-xs text-green-800 dark:text-green-200 font-medium">
+          <div className="bg-status-fertig-bg border border-status-fertig-border rounded-lg p-3">
+            <p className="text-xs text-status-fertig-text font-medium">
               Aktuelles Routing (seit Cycle 86)
             </p>
-            <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+            <p className="text-xs text-status-fertig-text mt-1">
               Analyse/Tagging/Summary → <code>google/gemini-2.0-flash</code> (0,075$/1M, ~40x
               guenstiger als Sonnet)
               <br />
@@ -691,29 +695,23 @@ export default function Settings() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>KI-Modelle pro Aufgabe</CardTitle>
-              <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-1 rounded font-medium">
+              <span className="text-xs bg-status-fertig-bg text-status-fertig-text px-2 py-1 rounded font-medium">
                 Ziel: ~25-35$/Monat
               </span>
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{routingData.note}</p>
+            <p className="text-xs text-ink-light mb-3">{routingData.note}</p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700">
-                    <th className="text-left py-2 pr-4 font-medium text-gray-600 dark:text-gray-400">
-                      Aufgabe
-                    </th>
-                    <th className="text-left py-2 pr-4 font-medium text-gray-600 dark:text-gray-400">
-                      Modell
-                    </th>
-                    <th className="text-right py-2 pr-4 font-medium text-gray-600 dark:text-gray-400">
+                  <tr className="border-b border-surface-border">
+                    <th className="text-left py-2 pr-4 font-medium text-ink-light">Aufgabe</th>
+                    <th className="text-left py-2 pr-4 font-medium text-ink-light">Modell</th>
+                    <th className="text-right py-2 pr-4 font-medium text-ink-light">
                       $/1M Token
                     </th>
-                    <th className="text-right py-2 font-medium text-gray-600 dark:text-gray-400">
-                      max_tokens
-                    </th>
+                    <th className="text-right py-2 font-medium text-ink-light">max_tokens</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -738,9 +736,9 @@ export default function Settings() {
                     return (
                       <tr
                         key={r.purpose}
-                        className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                        className="border-b border-surface-border hover:bg-surface-bg"
                       >
-                        <td className="py-1.5 pr-4 text-gray-700 dark:text-gray-300">{r.label}</td>
+                        <td className="py-1.5 pr-4 text-ink-light">{r.label}</td>
                         <td className="py-1.5 pr-4">
                           <select
                             value={currentKey}
@@ -750,7 +748,7 @@ export default function Settings() {
                                 [r.purpose]: e.target.value,
                               }))
                             }
-                            className="text-[10px] font-mono border border-gray-200 dark:border-gray-600 rounded px-1.5 py-0.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 cursor-pointer"
+                            className="text-[10px] font-mono border border-surface-border rounded px-1.5 py-0.5 bg-white text-ink-light cursor-pointer"
                           >
                             {modelOptions.map((o) => (
                               <option key={o.key} value={o.key}>
@@ -761,14 +759,12 @@ export default function Settings() {
                         </td>
                         <td className="py-1.5 pr-4 text-right">
                           <span
-                            className={`font-medium ${selected.cost <= 0.1 ? 'text-green-600' : selected.cost <= 0.5 ? 'text-yellow-600' : 'text-red-600'}`}
+                            className={`font-medium ${selected.cost <= 0.1 ? 'text-status-fertig-text' : selected.cost <= 0.5 ? 'text-status-aktiv-text' : 'text-status-fehler-text'}`}
                           >
                             ${selected.cost.toFixed(3)}
                           </span>
                         </td>
-                        <td className="py-1.5 text-right text-gray-500 dark:text-gray-400">
-                          {r.max_tokens}
-                        </td>
+                        <td className="py-1.5 text-right text-ink-light">{r.max_tokens}</td>
                       </tr>
                     )
                   })}
@@ -788,7 +784,7 @@ export default function Settings() {
           <CardTitle>Daten & Export</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-sm text-ink-light">
             Exportiere alle Tenant-Daten als ZIP-Archiv oder importiere ein vorhandenes Backup.
           </p>
           <Link to="/settings/export-import">
@@ -803,7 +799,7 @@ export default function Settings() {
           <CardTitle>Modell-Hoheit · Pipeline-Phasen</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-sm text-ink-light">
             Offizielles Default-Modell pro Phase (P01–P12c) ansehen und bei Bedarf einen globalen
             Test-Override (beliebige Requesty-Modell-ID, z.B. Gemini Flash) setzen.
           </p>
@@ -819,7 +815,7 @@ export default function Settings() {
           <CardTitle>KI-Qualitaetsmodus</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-sm text-ink-light">
             Steuert welches Modell fuer kreative Aufgaben (Ideation, Fragen, Posts) verwendet wird.
             Analysepfade (Transkription, Tagging, Scoring) sind in jedem Modus unveraendert.
           </p>
@@ -830,24 +826,25 @@ export default function Settings() {
                 label: 'Testmodus',
                 desc: 'Standard: Gemini Flash Lite (guenstig, ~$0.075/1M)',
                 badge: 'Standard',
-                badgeClass: 'bg-blue-100 text-blue-700',
-                border: 'border-blue-400',
+                // new→status-neu (info-artig, "aktueller Default")
+                badgeClass: 'bg-status-neu-bg text-status-neu-text',
+                border: 'border-status-neu-border',
               },
               {
                 key: 'produktiv',
                 label: 'Produktivmodus',
                 desc: 'Anthropic Claude Sonnet via Bedrock EU (Qualitaet, hoehere Kosten ~$3/1M)',
                 badge: 'Hoehere Kosten',
-                badgeClass: 'bg-amber-100 text-amber-700',
-                border: 'border-amber-400',
+                badgeClass: 'bg-status-aktiv-bg text-status-aktiv-text',
+                border: 'border-status-aktiv-border',
               },
               {
                 key: 'benutzerdefiniert',
                 label: 'Benutzerdefiniert',
                 desc: 'Platzhalter fuer kuenftige per-Aufgabe-Konfiguration (verhalt wie Testmodus)',
                 badge: 'Demnachst',
-                badgeClass: 'bg-gray-100 text-gray-600',
-                border: 'border-gray-300',
+                badgeClass: 'bg-surface-bg text-ink-light',
+                border: 'border-surface-border',
               },
             ].map((opt) => (
               <button
@@ -856,21 +853,19 @@ export default function Settings() {
                 onClick={() => handleSaveModelMode(opt.key)}
                 className={`text-left p-4 rounded-xl border-2 transition-all focus:outline-none focus:ring-2 focus:ring-primary-400 ${
                   modelMode === opt.key
-                    ? `${opt.border} bg-white dark:bg-gray-900 shadow-md`
-                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600'
+                    ? `${opt.border} bg-white shadow-md`
+                    : 'border-surface-border bg-surface-bg hover:border-surface-border'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-semibold text-sm text-gray-800 dark:text-gray-100">
-                    {opt.label}
-                  </span>
+                  <span className="font-semibold text-sm text-ink">{opt.label}</span>
                   {modelMode === opt.key && (
                     <span className="text-[10px] font-bold text-primary-600 uppercase tracking-wide">
                       Aktiv
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{opt.desc}</p>
+                <p className="text-xs text-ink-light mb-2">{opt.desc}</p>
                 <span
                   className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${opt.badgeClass}`}
                 >
@@ -880,11 +875,11 @@ export default function Settings() {
             ))}
           </div>
           {modelMode === 'produktiv' && (
-            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3">
-              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1">
+            <div className="rounded-lg border border-status-aktiv-border bg-status-aktiv-bg p-3">
+              <p className="text-xs font-semibold text-status-aktiv-text mb-1">
                 Kostenhinweis Produktivmodus
               </p>
-              <p className="text-xs text-amber-700 dark:text-amber-400">
+              <p className="text-xs text-status-aktiv-text">
                 Kreative Pfade (Ideation, Smart-Fragen, Post-Generierung) laufen auf{' '}
                 <code className="font-mono">bedrock/claude-sonnet-4-6@eu-central-1</code> (Bedrock
                 Frankfurt, EU-souveraen). Kosten ca. $3/1M Input-Token statt $0.075 im Testmodus —
@@ -893,7 +888,7 @@ export default function Settings() {
             </div>
           )}
           {modelModeSaving && (
-            <p className="text-xs text-gray-400 animate-pulse">Wird gespeichert...</p>
+            <p className="text-xs text-ink-muted animate-pulse">Wird gespeichert...</p>
           )}
         </CardContent>
       </Card>
@@ -912,11 +907,9 @@ export default function Settings() {
         className="max-w-lg"
       >
         <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="flex items-center gap-2 text-sm text-ink-light">
             <span>Pfad:</span>
-            <span className="font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-              {browserPath}
-            </span>
+            <span className="font-mono bg-surface-bg px-2 py-1 rounded">{browserPath}</span>
           </div>
 
           {/* Navigation */}
@@ -934,20 +927,20 @@ export default function Settings() {
           )}
 
           {browserLoading ? (
-            <p className="text-sm text-gray-500 py-4 text-center">Lade...</p>
+            <p className="text-sm text-ink-light py-4 text-center">Lade...</p>
           ) : (
             <div className="max-h-64 overflow-y-auto space-y-1">
               {browserEntries.length === 0 && (
-                <p className="text-sm text-gray-400 py-4 text-center">Keine Unterordner</p>
+                <p className="text-sm text-ink-muted py-4 text-center">Keine Unterordner</p>
               )}
               {browserEntries.map((entry) => (
                 <div
                   key={entry.path}
-                  className="flex items-center justify-between p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg"
+                  className="flex items-center justify-between p-2 hover:bg-surface-bg rounded-lg"
                 >
                   <button
                     onClick={() => browseTo(entry.path + '/')}
-                    className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary-600"
+                    className="flex items-center gap-2 text-sm text-ink-light hover:text-primary-600"
                   >
                     <span>📁</span> {entry.name}
                   </button>
@@ -959,7 +952,7 @@ export default function Settings() {
             </div>
           )}
 
-          <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+          <div className="flex gap-2 pt-2 border-t border-surface-border">
             <Button size="sm" onClick={() => selectFolder(browserPath.replace(/\/$/, ''))}>
               Diesen Ordner waehlen
             </Button>

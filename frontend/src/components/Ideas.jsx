@@ -42,15 +42,15 @@ import TimeFilter from './TimeFilter'
 import IdeaVariants from './IdeaVariants'
 
 const STATUS_MAP = {
-  new: { label: 'Neu', color: 'bg-blue-100 text-blue-700', icon: Lightbulb },
+  new: { label: 'Neu', color: 'bg-status-neu-bg text-status-neu-text', icon: Lightbulb },
   questions_sent: {
     label: 'Fragen offen',
-    color: 'bg-amber-100 text-amber-700',
+    color: 'bg-status-aktiv-bg text-status-aktiv-text',
     icon: MessageCircleQuestion,
   },
   answers_received: {
     label: 'Beantwortet',
-    color: 'bg-emerald-100 text-emerald-700',
+    color: 'bg-status-fertig-bg text-status-fertig-text',
     icon: CheckCircle2,
   },
   content_generated: {
@@ -58,13 +58,25 @@ const STATUS_MAP = {
     color: 'bg-primary-100 text-primary-700',
     icon: Sparkles,
   },
-  dismissed: { label: 'Verworfen', color: 'bg-gray-100 text-gray-500', icon: AlertCircle },
-  skipped: { label: 'Übersprungen', color: 'bg-gray-100 text-gray-400', icon: SkipForward },
-  rejected: { label: 'Archiviert', color: 'bg-gray-100 text-gray-400', icon: Trash2 },
+  dismissed: {
+    label: 'Verworfen',
+    color: 'bg-status-archiviert-bg text-status-archiviert-text',
+    icon: AlertCircle,
+  },
+  skipped: {
+    label: 'Übersprungen',
+    color: 'bg-status-archiviert-bg text-status-archiviert-text',
+    icon: SkipForward,
+  },
+  rejected: {
+    label: 'Archiviert',
+    color: 'bg-status-archiviert-bg text-status-archiviert-text',
+    icon: Trash2,
+  },
 }
 
 function StatusBadge({ status }) {
-  const s = STATUS_MAP[status] || { label: status, color: 'bg-gray-100 text-gray-600' }
+  const s = STATUS_MAP[status] || { label: status, color: 'bg-surface-bg text-ink-light' }
   return (
     <span
       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${s.color}`}
@@ -78,10 +90,11 @@ function StatusBadge({ status }) {
 function RelevanceBar({ score }) {
   const s = score ?? 0
   const pct = Math.min(s * 10, 100)
-  const color = s >= 7 ? 'bg-emerald-500' : s >= 4 ? 'bg-amber-500' : 'bg-red-400'
+  const color =
+    s >= 7 ? 'bg-status-fertig-border' : s >= 4 ? 'bg-status-aktiv-border' : 'bg-status-fehler-border'
   return (
     <div className="flex items-center gap-2">
-      <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+      <div className="w-16 h-1.5 bg-surface-border rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
       <span className="text-xs text-ink-muted">{s.toFixed(1)}</span>
@@ -114,10 +127,10 @@ function InlineQA({
     questions.length > 0 && questions.every((_, i) => existingAnswerIndices.has(i))
 
   return (
-    <div className="border-t border-gray-100 mt-3 pt-4 space-y-3">
+    <div className="border-t border-surface-border mt-3 pt-4 space-y-3">
       {message && (
         <div
-          className={`p-2 rounded-lg text-xs ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}
+          className={`p-2 rounded-lg text-xs ${message.type === 'error' ? 'bg-status-fehler-bg text-status-fehler-text' : 'bg-status-fertig-bg text-status-fertig-text'}`}
         >
           {message.text}
         </div>
@@ -138,7 +151,7 @@ function InlineQA({
         return (
           <div
             key={idx}
-            className={`p-3 rounded-lg border ${answered ? 'border-emerald-200 bg-emerald-50/40' : 'border-gray-200 bg-gray-50'}`}
+            className={`p-3 rounded-lg border ${answered ? 'border-status-fertig-border bg-status-fertig-bg/40' : 'border-surface-border bg-surface-bg'}`}
           >
             <p className="text-xs font-medium text-ink mb-1.5">
               <span className="text-primary-600 mr-1">{idx + 1}.</span>
@@ -146,13 +159,13 @@ function InlineQA({
             </p>
             {answered ? (
               <div className="flex items-start gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-status-fertig-border mt-0.5 shrink-0" />
                 <p className="text-xs text-ink-light">{existingText}</p>
               </div>
             ) : (
               <div className="flex gap-2">
                 <textarea
-                  className="flex-1 text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                  className="flex-1 text-xs border border-surface-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
                   rows={2}
                   placeholder="Deine Antwort (min. 10 Zeichen)..."
                   value={answers[idx] || ''}
@@ -185,10 +198,10 @@ function InlineQA({
         <button
           onClick={onQuickGenerate}
           disabled={quickGenerating || generating}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-sm hover:bg-gray-200 disabled:opacity-50 transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-surface-bg border border-surface-border text-ink-light rounded-xl text-sm hover:bg-surface-border disabled:opacity-50 transition-colors"
           title="Post direkt aus Ideen-Metadaten generieren — ohne Fragen beantworten"
         >
-          <Zap className="w-4 h-4 text-amber-500" />
+          <Zap className="w-4 h-4 text-status-aktiv-text" />
           {quickGenerating ? 'Quick-Post wird erstellt...' : '⚡ Quick Post (ohne Q&A)'}
         </button>
       )}
@@ -214,7 +227,7 @@ function IdeaCard({ idea, onToggle, isExpanded, inlineContent, isSelected, onSel
 
   return (
     <div
-      className={`bg-white rounded-xl border transition-colors ${isSelected ? 'border-red-300 bg-red-50/30' : isExpanded ? 'border-primary-300 shadow-sm' : 'border-surface-border hover:border-primary-300'}`}
+      className={`bg-white rounded-xl border transition-colors ${isSelected ? 'border-status-fehler-border bg-status-fehler-bg/30' : isExpanded ? 'border-primary-300 shadow-sm' : 'border-surface-border hover:border-primary-300'}`}
     >
       <div className="p-5">
         <div className="flex items-start justify-between gap-3">
@@ -223,13 +236,13 @@ function IdeaCard({ idea, onToggle, isExpanded, inlineContent, isSelected, onSel
               type="checkbox"
               checked={isSelected}
               onChange={(e) => onSelect(idea.id, e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-gray-300 text-red-500 cursor-pointer mt-0.5"
+              className="w-3.5 h-3.5 rounded border-surface-border text-status-fehler-text cursor-pointer mt-0.5"
             />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <StatusBadge status={idea.status} />
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-100 text-xs text-ink-light">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface-bg text-xs text-ink-light">
                 <Tag className="w-3 h-3" />
                 {idea.angle}
               </span>
@@ -247,7 +260,7 @@ function IdeaCard({ idea, onToggle, isExpanded, inlineContent, isSelected, onSel
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-surface-border">
           <span className="text-[11px] text-ink-muted flex items-center gap-1">
             <Clock className="w-3 h-3" />
             {idea.created_at ? new Date(idea.created_at).toLocaleDateString('de-DE') : '-'}
@@ -353,7 +366,7 @@ function IdeaDetail({ ideaId, onClose }) {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <StatusBadge status={idea.status} />
-              <span className="px-2 py-0.5 rounded-md bg-gray-100 text-xs text-ink-light">
+              <span className="px-2 py-0.5 rounded-md bg-surface-bg text-xs text-ink-light">
                 {idea.angle}
               </span>
             </div>
@@ -381,7 +394,7 @@ function IdeaDetail({ ideaId, onClose }) {
 
         {message && (
           <div
-            className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}
+            className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-status-fehler-bg text-status-fehler-text' : 'bg-status-fertig-bg text-status-fertig-text'}`}
           >
             {message.text}
           </div>
@@ -394,7 +407,7 @@ function IdeaDetail({ ideaId, onClose }) {
             return (
               <div
                 key={idx}
-                className={`p-4 rounded-lg border ${answered ? 'border-emerald-200 bg-emerald-50/50' : 'border-gray-200 bg-gray-50'}`}
+                className={`p-4 rounded-lg border ${answered ? 'border-status-fertig-border bg-status-fertig-bg/50' : 'border-surface-border bg-surface-bg'}`}
               >
                 <p className="text-sm font-medium text-ink mb-2">
                   <span className="text-primary-600 mr-1">{idx + 1}.</span>
@@ -402,13 +415,13 @@ function IdeaDetail({ ideaId, onClose }) {
                 </p>
                 {answered ? (
                   <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-status-fertig-border mt-0.5 shrink-0" />
                     <p className="text-sm text-ink-light">{answers[idx]}</p>
                   </div>
                 ) : (
                   <div className="flex gap-2">
                     <textarea
-                      className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+                      className="flex-1 text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
                       rows={2}
                       placeholder="Deine Antwort..."
                       value={answers[idx] || ''}
@@ -430,7 +443,7 @@ function IdeaDetail({ ideaId, onClose }) {
 
         {/* Generate Post Button */}
         {allAnswered && idea.status !== 'content_generated' && (
-          <div className="mt-6 pt-4 border-t border-gray-100">
+          <div className="mt-6 pt-4 border-t border-surface-border">
             <button
               onClick={handleGeneratePost}
               disabled={generating}
@@ -477,21 +490,26 @@ function TriageCard({ idea, onSkip, onGenerate, skipping, generating }) {
   const score = idea.relevance_score ?? 0
   const pct = Math.min(score * 10, 100)
   const scoreColor =
-    score >= 7 ? 'text-emerald-600' : score >= 4 ? 'text-amber-600' : 'text-red-500'
-  const barColor = score >= 7 ? 'bg-emerald-500' : score >= 4 ? 'bg-amber-500' : 'bg-red-400'
+    score >= 7
+      ? 'text-status-fertig-text'
+      : score >= 4
+        ? 'text-status-aktiv-text'
+        : 'text-status-fehler-text'
+  const barColor =
+    score >= 7 ? 'bg-status-fertig-border' : score >= 4 ? 'bg-status-aktiv-border' : 'bg-status-fehler-border'
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 bg-white border border-surface-border rounded-lg hover:border-gray-300 transition-colors group">
+    <div className="flex items-center gap-3 px-4 py-2.5 bg-white border border-surface-border rounded-lg hover:border-primary-300 transition-colors group">
       {/* Score pill */}
       <div className="flex flex-col items-center gap-0.5 w-10 shrink-0">
         <span className={`text-sm font-bold tabular-nums ${scoreColor}`}>{score.toFixed(1)}</span>
-        <div className="w-8 h-1 bg-gray-200 rounded-full overflow-hidden">
+        <div className="w-8 h-1 bg-surface-border rounded-full overflow-hidden">
           <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
         </div>
       </div>
 
       {/* Angle badge */}
-      <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 w-20 truncate">
+      <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-bg text-ink-light w-20 truncate">
         {idea.angle || '—'}
       </span>
 
@@ -502,7 +520,7 @@ function TriageCard({ idea, onSkip, onGenerate, skipping, generating }) {
 
       {/* Source hint */}
       {idea.source_name && (
-        <span className="hidden lg:inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 max-w-[120px] truncate">
+        <span className="hidden lg:inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-bg text-ink-light max-w-[120px] truncate">
           {idea.source_name}
         </span>
       )}
@@ -531,7 +549,7 @@ function TriageCard({ idea, onSkip, onGenerate, skipping, generating }) {
           onClick={() => onSkip(idea.id)}
           disabled={skipping}
           title="Idee überspringen"
-          className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-gray-500 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 disabled:opacity-40 transition-colors"
+          className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-ink-light bg-surface-bg border border-surface-border rounded-md hover:bg-surface-border disabled:opacity-40 transition-colors"
         >
           {skipping ? (
             <Loader2 className="w-3 h-3 animate-spin" />
@@ -934,7 +952,7 @@ export default function Ideas() {
               <button
                 onClick={handleBulkArchive}
                 disabled={archiving}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-status-fehler-text bg-status-fehler-bg border border-status-fehler-border rounded-lg hover:bg-status-fehler-border disabled:opacity-50 transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 {archiving ? 'Archiviere...' : `${selectedIds.size} archivieren`}
@@ -959,7 +977,7 @@ export default function Ideas() {
             }}
             disabled={batchGenerating}
             title="Generiert Ideen für alle content_ready Items ohne Ideen"
-            className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-status-fertig-text bg-status-fertig-bg border border-status-fertig-border rounded-lg hover:bg-status-fertig-border disabled:opacity-50 transition-colors"
           >
             {batchGenerating ? '⏳' : '🚀'} Alle generieren
           </button>
@@ -987,6 +1005,9 @@ export default function Ideas() {
             }}
             disabled={batchGenerating}
             title="Löscht generische Ideen und generiert neue mit deinem Branchenprofil — behebt CIO/Enterprise-Themen für Handwerker"
+            // bewusst behalten: eigene Farbe fuer diese Sonderaktion, um sie visuell von
+            // den anderen 4 Header-Buttons (fehler/fertig/primary) abzuheben — kein
+            // Status, sondern eine gesonderte "KI-Neugenerierung mit Profil"-Aktion.
             className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 disabled:opacity-50 transition-colors"
           >
             🎯 Mit Profil neu
@@ -996,7 +1017,7 @@ export default function Ideas() {
               setShowManualIdea(true)
               setManualMsg(null)
             }}
-            className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
+            className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-status-fertig-text bg-status-fertig-bg border border-status-fertig-border rounded-lg hover:bg-status-fertig-border transition-colors"
             title="Eigene Idee ohne LLM eintragen"
           >
             <Plus className="w-3.5 h-3.5" /> Manuelle Idee
@@ -1007,7 +1028,7 @@ export default function Ideas() {
           >
             <Plus className="w-4 h-4" /> Neue Ideen
           </button>
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-surface-bg rounded-lg p-1">
             {filters.map((f) => (
               <button
                 key={f.value}
@@ -1022,7 +1043,7 @@ export default function Ideas() {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-surface-bg rounded-lg p-1">
             {[
               { v: 0, l: 'Alle' },
               { v: 5, l: '5+' },
@@ -1044,7 +1065,7 @@ export default function Ideas() {
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
-            className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="px-2 py-1.5 text-xs border border-surface-border rounded-lg bg-white text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-500"
           >
             <option value="">Alle Quellen</option>
             {sources.map((s) => (
@@ -1070,7 +1091,7 @@ export default function Ideas() {
                   toast.error('Fehler: ' + e.message)
                 }
               }}
-              className="px-2 py-1 text-[10px] font-medium text-red-600 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 transition-colors"
+              className="px-2 py-1 text-[10px] font-medium text-status-fehler-text bg-status-fehler-bg border border-status-fehler-border rounded-md hover:bg-status-fehler-border transition-colors"
               title="Alle neuen Ideen dieser Quelle archivieren"
             >
               <Trash2 className="w-3 h-3 inline mr-0.5" />
@@ -1080,7 +1101,7 @@ export default function Ideas() {
           <select
             value={angleFilter}
             onChange={(e) => setAngleFilter(e.target.value)}
-            className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="px-2 py-1.5 text-xs border border-surface-border rounded-lg bg-white text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-500"
           >
             <option value="">Alle Angles</option>
             {['meinung', 'howto', 'story', 'kontroverse', 'statistik', 'trend'].map((a) => (
@@ -1107,19 +1128,19 @@ export default function Ideas() {
           <button
             onClick={() => setSortBy((s) => (s === 'relevance' ? 'date' : 'relevance'))}
             title={sortBy === 'relevance' ? 'Sortiert nach Relevanz' : 'Sortiert nach Datum'}
-            className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+            className="px-3 py-1.5 text-xs font-medium border border-surface-border rounded-lg bg-white text-ink-light hover:bg-surface-bg transition-colors"
           >
             {sortBy === 'relevance' ? '★ Relevanz' : '📅 Datum'}
           </button>
           <button
             onClick={handleSelectLowScore}
             title="Wählt alle Ideen mit Score < 4 aus"
-            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg bg-white hover:bg-red-50 transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-status-fehler-text border border-status-fehler-border rounded-lg bg-white hover:bg-status-fehler-bg transition-colors"
           >
             <Trash2 className="w-3 h-3" /> Score&lt;4 wählen
           </button>
           {/* View mode toggle */}
-          <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-1">
+          <div className="flex items-center gap-0.5 bg-surface-bg rounded-lg p-1">
             <button
               onClick={() => setViewMode('list')}
               title="Kartenansicht"
@@ -1152,15 +1173,15 @@ export default function Ideas() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Ideen durchsuchen (Titel, Beschreibung)…"
-            className="w-full pl-8 pr-8 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 placeholder-gray-400"
+            className="w-full pl-8 pr-8 py-1.5 text-xs border border-surface-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 placeholder-gray-400"
           />
-          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted text-xs">
             🔍
           </span>
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink-light text-xs font-bold"
             >
               ✕
             </button>
@@ -1184,7 +1205,7 @@ export default function Ideas() {
                 setSelectedIds(new Set(visibleIds))
               }
             }}
-            className="whitespace-nowrap px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+            className="whitespace-nowrap px-3 py-1.5 text-xs font-medium border border-surface-border rounded-lg bg-white text-ink-light hover:bg-surface-bg transition-colors"
           >
             {ideas
               .filter((i) => {
@@ -1208,18 +1229,18 @@ export default function Ideas() {
       </div>
 
       {batchMsg && (
-        <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700 font-medium">
+        <div className="mb-4 p-3 bg-status-fertig-bg border border-status-fertig-border rounded-lg text-sm text-status-fertig-text font-medium">
           {batchMsg}
         </div>
       )}
       {archiveMsg && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 font-medium">
+        <div className="mb-4 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-sm text-status-fehler-text font-medium">
           {archiveMsg}
         </div>
       )}
       {quickGenProgress && (
         <div
-          className={`mb-4 p-3 rounded-xl border text-sm ${quickGenerating ? 'bg-accent-50 border-accent-200 text-accent-800' : quickGenProgress.errors === 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}
+          className={`mb-4 p-3 rounded-xl border text-sm ${quickGenerating ? 'bg-accent-50 border-accent-200 text-accent-800' : quickGenProgress.errors === 0 ? 'bg-status-fertig-bg border-status-fertig-border text-status-fertig-text' : 'bg-status-aktiv-bg border-status-aktiv-border text-status-aktiv-text'}`}
         >
           <div className="flex items-center gap-3">
             <span className="font-semibold">
@@ -1246,14 +1267,14 @@ export default function Ideas() {
 
       {/* Source Breakdown Panel — shows idea count per source with cleanup actions */}
       {sourceBreakdown && sourceBreakdown.sources && sourceBreakdown.sources.length > 0 && (
-        <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 overflow-hidden">
+        <div className="mb-4 rounded-xl border border-surface-border bg-surface-bg overflow-hidden">
           <button
-            className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-100 transition-colors"
+            className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-surface-bg transition-colors"
             onClick={() => setShowSourceBreakdown((v) => !v)}
           >
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-ink">Ideen nach Quelle</span>
-              <span className="text-xs text-ink-muted bg-white border border-gray-200 px-1.5 py-0.5 rounded">
+              <span className="text-xs text-ink-muted bg-white border border-surface-border px-1.5 py-0.5 rounded">
                 {sourceBreakdown.total.toLocaleString('de')} gesamt ·{' '}
                 {sourceBreakdown.sources.length} Quellen
               </span>
@@ -1263,10 +1284,10 @@ export default function Ideas() {
             </span>
           </button>
           {showSourceBreakdown && (
-            <div className="border-t border-gray-200">
+            <div className="border-t border-surface-border">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="bg-gray-100 border-b border-gray-200">
+                  <tr className="bg-surface-bg border-b border-surface-border">
                     <th className="text-left px-4 py-2 font-medium text-ink-muted">Quelle</th>
                     <th className="text-right px-3 py-2 font-medium text-ink-muted">Ideen</th>
                     <th className="text-right px-3 py-2 font-medium text-ink-muted">Neu</th>
@@ -1277,7 +1298,7 @@ export default function Ideas() {
                   {sourceBreakdown.sources.map((src) => (
                     <tr
                       key={src.source_id}
-                      className="border-b border-gray-100 last:border-0 hover:bg-white/60"
+                      className="border-b border-surface-border last:border-0 hover:bg-white/60"
                     >
                       <td className="px-4 py-2 font-medium text-ink truncate max-w-[220px]">
                         {src.source_name}
@@ -1285,7 +1306,7 @@ export default function Ideas() {
                       <td className="px-3 py-2 text-right font-mono text-ink-muted">
                         {src.idea_count.toLocaleString('de')}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-amber-700">
+                      <td className="px-3 py-2 text-right font-mono text-status-aktiv-text">
                         {src.new_count.toLocaleString('de')}
                       </td>
                       <td className="px-3 py-2 text-right">
@@ -1322,7 +1343,7 @@ export default function Ideas() {
                                   toast.error('Fehler: ' + e.message)
                                 }
                               }}
-                              className="px-2 py-0.5 text-[10px] text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors"
+                              className="px-2 py-0.5 text-[10px] text-status-fehler-text bg-status-fehler-bg border border-status-fehler-border rounded hover:bg-status-fehler-border transition-colors"
                             >
                               Archivieren
                             </button>
@@ -1363,7 +1384,7 @@ export default function Ideas() {
                 <select
                   value={selectedItemId}
                   onChange={(e) => setSelectedItemId(e.target.value)}
-                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 >
                   <option value="">— Video waehlen —</option>
                   {analyzedItems.map((item) => (
@@ -1390,11 +1411,15 @@ export default function Ideas() {
         </div>
       )}
 
-      {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+      {error && (
+        <div className="mb-4 p-3 bg-status-fehler-bg text-status-fehler-text rounded-lg text-sm">
+          {error}
+        </div>
+      )}
 
       {triageMsg && (
         <div
-          className={`mb-4 p-3 rounded-lg text-sm font-medium ${triageMsg.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}
+          className={`mb-4 p-3 rounded-lg text-sm font-medium ${triageMsg.type === 'error' ? 'bg-status-fehler-bg text-status-fehler-text border border-status-fehler-border' : 'bg-status-fertig-bg text-status-fertig-text border border-status-fertig-border'}`}
         >
           {triageMsg.text}
         </div>
@@ -1404,7 +1429,7 @@ export default function Ideas() {
         <div className="text-center py-12 text-ink-muted">Lade Ideen...</div>
       ) : ideas.length === 0 ? (
         <div className="text-center py-12">
-          <Lightbulb className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <Lightbulb className="w-12 h-12 text-ink-muted mx-auto mb-3" />
           <p className="text-sm text-ink-light">Keine Ideen in diesem Zeitraum.</p>
           <p className="text-xs text-ink-muted mt-1">Probier einen größeren Zeitraum.</p>
           {timeFilter.period !== 'all' && (
@@ -1504,7 +1529,7 @@ export default function Ideas() {
               />
             ))}
           {ideas.length < ideasTotal && (
-            <div className="flex items-center justify-center gap-3 py-4 border-t border-gray-100">
+            <div className="flex items-center justify-center gap-3 py-4 border-t border-surface-border">
               <span className="text-xs text-ink-muted">
                 {ideas.length} von {ideasTotal.toLocaleString('de')} geladen
               </span>
@@ -1535,7 +1560,7 @@ export default function Ideas() {
               <h2 className="text-base font-bold text-ink">Manuelle Idee erstellen</h2>
               <button
                 onClick={() => setShowManualIdea(false)}
-                className="text-gray-400 hover:text-gray-600 text-lg font-bold"
+                className="text-ink-muted hover:text-ink-light text-lg font-bold"
               >
                 ✕
               </button>
@@ -1546,24 +1571,24 @@ export default function Ideas() {
             </p>
             {manualMsg && (
               <div
-                className={`p-3 rounded-lg text-xs font-medium ${manualMsg.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}
+                className={`p-3 rounded-lg text-xs font-medium ${manualMsg.type === 'error' ? 'bg-status-fehler-bg text-status-fehler-text border border-status-fehler-border' : 'bg-status-fertig-bg text-status-fertig-text border border-status-fertig-border'}`}
               >
                 {manualMsg.text}
               </div>
             )}
             <div>
               <label className="block text-xs font-medium text-ink mb-1">
-                Titel <span className="text-red-500">*</span>
+                Titel <span className="text-status-fehler-text">*</span>
               </label>
               <input
                 type="text"
                 value={manualTitle}
                 onChange={(e) => setManualTitle(e.target.value)}
                 placeholder="z.B. Heizungsoptimierung im Winter: 5 Tipps für SHK-Kunden"
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 maxLength={200}
               />
-              <p className="text-[10px] text-gray-400 mt-0.5">{manualTitle.length}/200</p>
+              <p className="text-[10px] text-ink-muted mt-0.5">{manualTitle.length}/200</p>
             </div>
             <div>
               <label className="block text-xs font-medium text-ink mb-1">
@@ -1573,7 +1598,7 @@ export default function Ideas() {
                 value={manualDesc}
                 onChange={(e) => setManualDesc(e.target.value)}
                 placeholder="Kurze Beschreibung des Themas..."
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
                 rows={3}
                 maxLength={1000}
               />
@@ -1584,7 +1609,7 @@ export default function Ideas() {
                 <select
                   value={manualAngle}
                   onChange={(e) => setManualAngle(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   {['manual', 'howto', 'meinung', 'story', 'kontroverse', 'statistik', 'trend'].map(
                     (a) => (
@@ -1605,21 +1630,21 @@ export default function Ideas() {
                 value={manualHook}
                 onChange={(e) => setManualHook(e.target.value)}
                 placeholder="z.B. 'Die meisten Hausbesitzer wissen nicht, dass...'"
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 maxLength={300}
               />
             </div>
             <div className="flex gap-3 pt-2">
               <button
                 onClick={() => setShowManualIdea(false)}
-                className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-ink-light border border-surface-border rounded-xl hover:bg-surface-bg transition-colors"
               >
                 Abbrechen
               </button>
               <button
                 onClick={handleCreateManualIdea}
                 disabled={manualSaving || manualTitle.trim().length < 5}
-                className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-status-fertig-border hover:bg-status-fertig-text rounded-xl disabled:opacity-50 transition-colors"
               >
                 {manualSaving ? '⏳ Speichern...' : '✓ Idee erstellen'}
               </button>

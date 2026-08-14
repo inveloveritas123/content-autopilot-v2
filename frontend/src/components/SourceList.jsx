@@ -139,44 +139,44 @@ function SourceCard({
     .filter(Boolean)
   const convColor =
     s.conversion_pct >= 60
-      ? 'text-emerald-600'
+      ? 'text-status-fertig-text'
       : s.conversion_pct >= 30
-        ? 'text-amber-600'
-        : 'text-red-500'
+        ? 'text-status-aktiv-text'
+        : 'text-status-fehler-text'
 
   // Health badge logic
   const isTop = s.total_items > 0 && s.conversion_pct === 100
   const needsKey = s.total_items > 0 && s.conversion_pct < 20 && s.transcription_failed > 5
   const isStale = s.is_stale && source.is_active
   const healthBadge = isTop ? (
-    <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700">
+    <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-status-fertig-bg text-status-fertig-text">
       ★ Top
     </span>
   ) : isStale ? (
     <span
-      className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-500"
+      className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-surface-border text-ink-muted"
       title={`Letztes Item vor ${s.last_item_days_ago} Tagen`}
     >
       ● Veraltet
     </span>
   ) : needsKey ? (
-    <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700">
+    <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-status-aktiv-bg text-status-aktiv-text">
       ⚠ API-Key
     </span>
   ) : null
 
   return (
     <div
-      className={`bg-white rounded-xl border transition-colors ${source.is_active ? 'border-surface-border hover:border-primary-300' : 'border-gray-200 opacity-60'}`}
+      className={`bg-white rounded-xl border transition-colors ${source.is_active ? 'border-surface-border hover:border-primary-300' : 'border-surface-border opacity-60'}`}
     >
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div
-              className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${source.is_active ? 'bg-primary-50' : 'bg-gray-100'}`}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${source.is_active ? 'bg-primary-50' : 'bg-surface-bg'}`}
             >
               <Icon
-                className={`w-4.5 h-4.5 ${source.is_active ? 'text-primary-600' : 'text-gray-400'}`}
+                className={`w-4.5 h-4.5 ${source.is_active ? 'text-primary-600' : 'text-ink-muted'}`}
               />
             </div>
             <div className="min-w-0">
@@ -193,7 +193,7 @@ function SourceCard({
             <button
               onClick={() => onCheck(source.id)}
               disabled={checking}
-              className="p-1.5 rounded-md hover:bg-gray-100 text-ink-muted hover:text-primary-600 transition-colors"
+              className="p-1.5 rounded-md hover:bg-surface-bg text-ink-muted hover:text-primary-600 transition-colors"
               title="Jetzt pruefen"
             >
               {checking ? (
@@ -204,17 +204,17 @@ function SourceCard({
             </button>
             <button
               onClick={() => onToggle(source)}
-              className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
+              className="p-1.5 rounded-md hover:bg-surface-bg transition-colors"
               title={source.is_active ? 'Deaktivieren' : 'Aktivieren'}
             >
               <Power
-                className={`w-4 h-4 ${source.is_active ? 'text-emerald-500' : 'text-gray-400'}`}
+                className={`w-4 h-4 ${source.is_active ? 'text-status-fertig-text' : 'text-ink-muted'}`}
               />
             </button>
             {s.total_items > 100 && s.content_ready === 0 && (
               <button
                 onClick={handleArchiveAll}
-                className="p-1.5 rounded-md hover:bg-orange-50 text-ink-muted hover:text-orange-600 transition-colors"
+                className="p-1.5 rounded-md hover:bg-status-aktiv-bg text-ink-muted hover:text-status-aktiv-text transition-colors"
                 title={`Alle ${s.total_items} Items archivieren + Quelle deaktivieren`}
               >
                 <Archive className="w-4 h-4" />
@@ -222,7 +222,7 @@ function SourceCard({
             )}
             <button
               onClick={() => onDelete(source.id)}
-              className="p-1.5 rounded-md hover:bg-red-50 text-ink-muted hover:text-red-500 transition-colors"
+              className="p-1.5 rounded-md hover:bg-status-fehler-bg text-ink-muted hover:text-status-fehler-text transition-colors"
               title="Loeschen"
             >
               <Trash2 className="w-4 h-4" />
@@ -237,9 +237,9 @@ function SourceCard({
               <p className="text-sm font-bold text-ink">{s.total_items}</p>
               <p className="text-[10px] text-ink-muted">Items</p>
             </div>
-            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden mx-1">
+            <div className="flex-1 h-1.5 bg-surface-bg rounded-full overflow-hidden mx-1">
               <div
-                className="h-full bg-emerald-400 rounded-full transition-all"
+                className="h-full bg-status-fertig-border rounded-full transition-all"
                 style={{ width: `${Math.max(s.conversion_pct, 2)}%` }}
               />
             </div>
@@ -248,19 +248,21 @@ function SourceCard({
               <p className="text-[10px] text-ink-muted">→ Content</p>
             </div>
             <div className="text-center">
-              <p className="text-sm font-bold text-emerald-600">{s.content_ready}</p>
+              <p className="text-sm font-bold text-status-fertig-text">{s.content_ready}</p>
               <p className="text-[10px] text-ink-muted">Bereit</p>
             </div>
             {s.transcription_failed > 0 && (
               <div className="text-center">
-                <p className="text-sm font-bold text-red-500">{s.transcription_failed}</p>
+                <p className="text-sm font-bold text-status-fehler-text">
+                  {s.transcription_failed}
+                </p>
                 <p className="text-[10px] text-ink-muted">Fehler</p>
               </div>
             )}
             {s.transcription_success_rate != null && (
               <div className="text-center ml-auto" title="Transkriptions-Erfolgsrate">
                 <p
-                  className={`text-sm font-bold ${s.transcription_success_rate >= 70 ? 'text-emerald-600' : s.transcription_success_rate >= 40 ? 'text-amber-600' : 'text-red-500'}`}
+                  className={`text-sm font-bold ${s.transcription_success_rate >= 70 ? 'text-status-fertig-text' : s.transcription_success_rate >= 40 ? 'text-status-aktiv-text' : 'text-status-fehler-text'}`}
                 >
                   {s.transcription_success_rate}%
                 </p>
@@ -270,7 +272,7 @@ function SourceCard({
             {s.last_item_days_ago != null && (
               <div className="text-center" title={`Letztes Item vor ${s.last_item_days_ago} Tagen`}>
                 <p
-                  className={`text-sm font-bold ${s.last_item_days_ago <= 7 ? 'text-emerald-600' : s.last_item_days_ago <= 30 ? 'text-amber-600' : 'text-gray-400'}`}
+                  className={`text-sm font-bold ${s.last_item_days_ago <= 7 ? 'text-status-fertig-text' : s.last_item_days_ago <= 30 ? 'text-status-aktiv-text' : 'text-ink-muted'}`}
                 >
                   {s.last_item_days_ago}d
                 </p>
@@ -281,10 +283,10 @@ function SourceCard({
         )}
 
         {/* Keyword Filter */}
-        <div className="mt-3 pt-2 border-t border-gray-100">
+        <div className="mt-3 pt-2 border-t border-surface-border">
           {kwEdit ? (
             <div className="flex items-center gap-1.5">
-              <Tag className="w-3 h-3 text-violet-500 shrink-0" />
+              <Tag className="w-3 h-3 text-accent-600 shrink-0" />
               <input
                 value={kwInput}
                 onChange={(e) => setKwInput(e.target.value)}
@@ -293,44 +295,44 @@ function SourceCard({
                   if (e.key === 'Escape') setKwEdit(false)
                 }}
                 placeholder="KI, Startup, LinkedIn (kommagetrennt)"
-                className="flex-1 text-xs border border-violet-200 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                className="flex-1 text-xs border border-accent-200 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-accent-400"
                 autoFocus
               />
               <button
                 onClick={handleSaveKeywords}
                 disabled={kwSaving}
-                className="text-xs px-2 py-1 bg-violet-700 text-white rounded-md hover:bg-violet-800 disabled:opacity-50 shrink-0"
+                className="text-xs px-2 py-1 bg-accent-700 text-white rounded-md hover:bg-accent-800 disabled:opacity-50 shrink-0"
               >
                 {kwSaving ? '...' : 'OK'}
               </button>
               <button
                 onClick={() => setKwEdit(false)}
-                className="text-xs text-gray-400 hover:text-gray-600 shrink-0"
+                className="text-xs text-ink-muted hover:text-ink-light shrink-0"
               >
                 ✕
               </button>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 flex-wrap">
-              <Tag className="w-3 h-3 text-gray-400 shrink-0" />
+              <Tag className="w-3 h-3 text-ink-muted shrink-0" />
               {kwChips.length > 0 ? (
                 kwChips.map((kw) => (
                   <span
                     key={kw}
-                    className="px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 text-[10px] font-medium"
+                    className="px-1.5 py-0.5 rounded bg-accent-50 text-accent-700 text-[10px] font-medium"
                   >
                     {kw}
                   </span>
                 ))
               ) : (
-                <span className="text-[10px] text-gray-400">Kein Keyword-Filter</span>
+                <span className="text-[10px] text-ink-muted">Kein Keyword-Filter</span>
               )}
               <button
                 onClick={() => {
                   setKwInput(source.keywords || '')
                   setKwEdit(true)
                 }}
-                className="ml-auto text-[10px] text-gray-400 hover:text-violet-600 shrink-0"
+                className="ml-auto text-[10px] text-ink-muted hover:text-accent-600 shrink-0"
               >
                 {kwChips.length > 0 ? 'Bearbeiten' : '+ Filter setzen'}
               </button>
@@ -338,7 +340,7 @@ function SourceCard({
           )}
         </div>
 
-        <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
+        <div className="flex items-center gap-4 mt-3 pt-3 border-t border-surface-border">
           <div className="flex items-center gap-1.5 text-xs text-ink-muted">
             <Clock className="w-3 h-3" />
             {relativeTime(source.last_checked_at)}
@@ -346,7 +348,7 @@ function SourceCard({
           <select
             value={source.polling_interval_minutes || DEFAULT_INTERVALS[source.type] || 60}
             onChange={(e) => onUpdateInterval(source.id, parseInt(e.target.value))}
-            className="text-xs border border-gray-200 rounded-md px-2 py-1 text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="text-xs border border-surface-border rounded-md px-2 py-1 text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-500"
           >
             {INTERVAL_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -359,13 +361,13 @@ function SourceCard({
               onClick={handleAnalyzeAll}
               disabled={analyzing}
               title={`${transcribedCount} transkribierte Artikel analysieren`}
-              className="text-[10px] px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-md font-medium transition-colors disabled:opacity-50"
+              className="text-[10px] px-2 py-0.5 bg-status-aktiv-bg hover:bg-status-aktiv-border text-status-aktiv-text border border-status-aktiv-border rounded-md font-medium transition-colors disabled:opacity-50"
             >
               {analyzing ? '...' : analyzeResult || `Analyse (${transcribedCount})`}
             </button>
           )}
           <span
-            className={`ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${source.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}
+            className={`ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${source.is_active ? 'bg-status-fertig-bg text-status-fertig-text' : 'bg-surface-border text-ink-muted'}`}
           >
             {source.is_active ? 'Aktiv' : 'Pausiert'}
           </span>
@@ -439,12 +441,12 @@ function AddSourceForm({ type, onAdd, onCancel }) {
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               placeholder="YouTube-Kanal suchen..."
-              className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="flex-1 text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
             <button
               onClick={handleSearch}
               disabled={searching}
-              className="px-3 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              className="px-3 py-2 bg-surface-bg rounded-lg hover:bg-surface-border transition-colors"
             >
               {searching ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -459,7 +461,7 @@ function AddSourceForm({ type, onAdd, onCancel }) {
                 <button
                   key={ch.channel_id}
                   onClick={() => selectChannel(ch)}
-                  className="w-full text-left flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 text-sm"
+                  className="w-full text-left flex items-center gap-2 p-2 rounded-lg hover:bg-surface-bg text-sm"
                 >
                   {ch.thumbnail && (
                     <img src={ch.thumbnail} alt="" className="w-8 h-8 rounded-full" />
@@ -478,7 +480,7 @@ function AddSourceForm({ type, onAdd, onCancel }) {
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
           placeholder="Name"
-          className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
 
         {type === 'youtube' ? (
@@ -486,7 +488,7 @@ function AddSourceForm({ type, onAdd, onCancel }) {
             value={form.channel_id}
             onChange={(e) => setForm({ ...form, channel_id: e.target.value })}
             placeholder="Channel-ID oder Kanal-URL"
-            className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         ) : (
           <input
@@ -499,7 +501,7 @@ function AddSourceForm({ type, onAdd, onCancel }) {
                   ? 'Podcast-RSS URL'
                   : 'Webseiten-URL'
             }
-            className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         )}
 
@@ -511,7 +513,7 @@ function AddSourceForm({ type, onAdd, onCancel }) {
               onChange={(e) =>
                 setForm({ ...form, polling_interval_minutes: parseInt(e.target.value) })
               }
-              className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="text-sm border border-surface-border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               {INTERVAL_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -581,12 +583,12 @@ function YouTubeVideoSearch() {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
           placeholder="z.B. KI Handwerk Digitalisierung..."
-          className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="flex-1 text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
         <button
           onClick={handleSearch}
           disabled={loading || !query.trim()}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-surface-bg rounded-lg hover:bg-surface-border disabled:opacity-50 transition-colors"
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
         </button>
@@ -600,17 +602,17 @@ function YouTubeVideoSearch() {
               href={v.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-gray-50 transition-colors group"
+              className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-surface-bg transition-colors group"
             >
               {v.thumbnail ? (
                 <img
                   src={v.thumbnail}
                   alt=""
-                  className="w-20 h-12 rounded object-cover shrink-0 bg-gray-100"
+                  className="w-20 h-12 rounded object-cover shrink-0 bg-surface-bg"
                 />
               ) : (
-                <div className="w-20 h-12 rounded bg-gray-100 flex items-center justify-center shrink-0">
-                  <Play className="w-5 h-5 text-gray-400" />
+                <div className="w-20 h-12 rounded bg-surface-bg flex items-center justify-center shrink-0">
+                  <Play className="w-5 h-5 text-ink-muted" />
                 </div>
               )}
               <div className="flex-1 min-w-0">
@@ -621,14 +623,14 @@ function YouTubeVideoSearch() {
                   {v.channel_name && (
                     <span className="text-[10px] text-ink-muted">{v.channel_name}</span>
                   )}
-                  {v.duration && <span className="text-[10px] text-gray-400">{v.duration}</span>}
+                  {v.duration && <span className="text-[10px] text-ink-muted">{v.duration}</span>}
                   {v.view_count && (
-                    <span className="text-[10px] text-gray-400">{v.view_count}</span>
+                    <span className="text-[10px] text-ink-muted">{v.view_count}</span>
                   )}
-                  {v.published && <span className="text-[10px] text-gray-400">{v.published}</span>}
+                  {v.published && <span className="text-[10px] text-ink-muted">{v.published}</span>}
                 </div>
               </div>
-              <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-primary-500 shrink-0 mt-0.5" />
+              <ExternalLink className="w-3.5 h-3.5 text-ink-muted group-hover:text-primary-500 shrink-0 mt-0.5" />
             </a>
           ))}
         </div>
@@ -654,13 +656,13 @@ function DiscoverCard({ item, onAdd, adding }) {
           }}
         />
       ) : (
-        <div className="w-11 h-11 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+        <div className="w-11 h-11 rounded-lg bg-surface-bg flex items-center justify-center shrink-0">
           {item.source_type === 'podcast' ? (
-            <Mic className="w-5 h-5 text-gray-400" />
+            <Mic className="w-5 h-5 text-ink-muted" />
           ) : item.source_type === 'website' ? (
-            <Globe className="w-5 h-5 text-gray-400" />
+            <Globe className="w-5 h-5 text-ink-muted" />
           ) : (
-            <Radio className="w-5 h-5 text-gray-400" />
+            <Radio className="w-5 h-5 text-ink-muted" />
           )}
         </div>
       )}
@@ -685,12 +687,12 @@ function DiscoverCard({ item, onAdd, adding }) {
             <span className="text-xs text-ink-muted">{item.episode_count} Eps.</span>
           )}
           {item.feed_url && (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700">
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-status-fertig-bg text-status-fertig-text">
               RSS
             </span>
           )}
           {item.genre && (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600">
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-surface-bg text-ink-light">
               {item.genre}
             </span>
           )}
@@ -698,7 +700,7 @@ function DiscoverCard({ item, onAdd, adding }) {
       </div>
       <div className="shrink-0 mt-0.5">
         {item.already_added ? (
-          <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700">
+          <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-status-fertig-bg text-status-fertig-text">
             Hinzugefuegt
           </span>
         ) : (
@@ -812,7 +814,7 @@ function DiscoverTab({ sources }) {
             onChange={(e) => setTopics(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleDiscover()}
             placeholder="z.B. KI, LinkedIn Marketing, Handwerk, Digitalisierung KMU"
-            className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="flex-1 text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
           <button
             onClick={handleDiscover}
@@ -852,7 +854,7 @@ function DiscoverTab({ sources }) {
 
       {results && !loading && (
         <>
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          <div className="flex gap-1 bg-surface-bg rounded-lg p-1">
             {tabs.map((t) => (
               <button
                 key={t.key}
@@ -865,7 +867,7 @@ function DiscoverTab({ sources }) {
               >
                 {t.label}
                 {t.count > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-gray-200 text-[10px]">
+                  <span className="px-1.5 py-0.5 rounded-full bg-surface-border text-[10px]">
                     {t.count}
                   </span>
                 )}
@@ -894,7 +896,7 @@ function DiscoverTab({ sources }) {
 
       {!results && !loading && (
         <div className="text-center py-16">
-          <Compass className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <Compass className="w-12 h-12 text-ink-muted mx-auto mb-3" />
           <p className="text-sm text-ink-light">Themen eingeben und auf "Entdecken" klicken</p>
         </div>
       )}
@@ -902,14 +904,17 @@ function DiscoverTab({ sources }) {
   )
 }
 
+// Pipeline-Status → Tier-2-Status-Token. analyzing/analyzed/generating teilen sich
+// status-neu (alle "in Bearbeitung, noch nicht fertig") — das 5-Werte-Vokabular kennt
+// keine feinere Zwischenstufe; die Badges bleiben per Label-Text unterscheidbar.
 const STATUS_COLORS = {
-  new: 'bg-gray-100 text-gray-600',
-  transcribed: 'bg-amber-100 text-amber-700',
-  analyzing: 'bg-blue-100 text-blue-700',
-  analyzed: 'bg-indigo-100 text-indigo-700',
-  generating: 'bg-purple-100 text-purple-700',
-  content_ready: 'bg-emerald-100 text-emerald-700',
-  transcription_failed: 'bg-red-100 text-red-600',
+  new: 'bg-surface-border text-ink-light',
+  transcribed: 'bg-status-aktiv-bg text-status-aktiv-text',
+  analyzing: 'bg-status-neu-bg text-status-neu-text',
+  analyzed: 'bg-status-neu-bg text-status-neu-text',
+  generating: 'bg-status-neu-bg text-status-neu-text',
+  content_ready: 'bg-status-fertig-bg text-status-fertig-text',
+  transcription_failed: 'bg-status-fehler-bg text-status-fehler-text',
 }
 
 function SourceItemsModal({ sourceId, sourceName, onClose }) {
@@ -944,7 +949,7 @@ function SourceItemsModal({ sourceId, sourceName, onClose }) {
         className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
           <div>
             <h3 className="font-semibold text-ink text-sm">{sourceName}</h3>
             <p className="text-xs text-ink-muted mt-0.5">{total} Items in der Pipeline</p>
@@ -956,7 +961,7 @@ function SourceItemsModal({ sourceId, sourceName, onClose }) {
                 setStatusFilter(e.target.value)
                 setOffset(0)
               }}
-              className="text-xs border border-gray-200 rounded-lg px-2 py-1 text-ink-muted bg-white"
+              className="text-xs border border-surface-border rounded-lg px-2 py-1 text-ink-muted bg-white"
             >
               <option value="">Alle Status</option>
               <option value="transcribed">Warten auf Analyse</option>
@@ -965,7 +970,7 @@ function SourceItemsModal({ sourceId, sourceName, onClose }) {
               <option value="content_ready">Fertig</option>
               <option value="transcription_failed">Fehler</option>
             </select>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-ink-muted">
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-bg text-ink-muted">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 className="w-4 h-4"
@@ -993,7 +998,7 @@ function SourceItemsModal({ sourceId, sourceName, onClose }) {
             <div className="text-center py-12 text-ink-muted text-sm">Keine Items gefunden</div>
           ) : (
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
+              <thead className="sticky top-0 bg-surface-bg border-b border-surface-border">
                 <tr>
                   <th className="text-left px-5 py-2.5 font-medium text-ink-muted">Titel</th>
                   <th className="px-3 py-2.5 font-medium text-ink-muted text-right">Status</th>
@@ -1002,12 +1007,12 @@ function SourceItemsModal({ sourceId, sourceName, onClose }) {
               </thead>
               <tbody>
                 {items.map((item) => (
-                  <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/60">
+                  <tr key={item.id} className="border-b border-surface-border hover:bg-surface-bg/60">
                     <td className="px-5 py-2.5">
                       <div className="flex items-center gap-1.5">
                         {!item.has_transcript && (
                           <span
-                            className="text-[9px] bg-amber-100 text-amber-600 rounded px-1 py-0.5 shrink-0"
+                            className="text-[9px] bg-status-aktiv-bg text-status-aktiv-text rounded px-1 py-0.5 shrink-0"
                             title="Kein Transkript — Titel wird als Fallback verwendet"
                           >
                             RSS
@@ -1020,7 +1025,7 @@ function SourceItemsModal({ sourceId, sourceName, onClose }) {
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <span
-                        className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-medium ${STATUS_COLORS[item.status] || 'bg-gray-100 text-gray-600'}`}
+                        className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-medium ${STATUS_COLORS[item.status] || 'bg-surface-bg text-ink-light'}`}
                       >
                         {item.status}
                       </span>
@@ -1041,7 +1046,7 @@ function SourceItemsModal({ sourceId, sourceName, onClose }) {
         </div>
 
         {pages > 1 && (
-          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+          <div className="flex items-center justify-between px-5 py-3 border-t border-surface-border">
             <span className="text-xs text-ink-muted">
               Seite {currentPage} / {pages}
             </span>
@@ -1049,14 +1054,14 @@ function SourceItemsModal({ sourceId, sourceName, onClose }) {
               <button
                 disabled={offset === 0}
                 onClick={() => setOffset(Math.max(0, offset - LIMIT))}
-                className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50"
+                className="px-2.5 py-1 text-xs border border-surface-border rounded-lg disabled:opacity-40 hover:bg-surface-bg"
               >
                 ← Zurück
               </button>
               <button
                 disabled={offset + LIMIT >= total}
                 onClick={() => setOffset(offset + LIMIT)}
-                className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50"
+                className="px-2.5 py-1 text-xs border border-surface-border rounded-lg disabled:opacity-40 hover:bg-surface-bg"
               >
                 Weiter →
               </button>
@@ -1141,13 +1146,15 @@ function FunnelTab({
     const isAnalyzing = analyzingSourceId === src.source_id
     return (
       <tr
-        className={`border-b border-gray-100 last:border-0 ${highlight ? 'bg-emerald-50/40' : 'hover:bg-gray-50/60'}`}
+        className={`border-b border-surface-border last:border-0 ${highlight ? 'bg-status-fertig-bg/40' : 'hover:bg-surface-bg/60'}`}
       >
         <td className="px-4 py-2.5">
           <div className="flex items-center gap-1.5">
-            {stuck && !highlight && <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />}
+            {stuck && !highlight && (
+              <AlertTriangle className="w-3 h-3 text-status-aktiv-text shrink-0" />
+            )}
             {highlight && (
-              <span className="text-emerald-600 text-[10px] font-bold uppercase tracking-wide">
+              <span className="text-status-fertig-text text-[10px] font-bold uppercase tracking-wide">
                 SHK
               </span>
             )}
@@ -1161,7 +1168,7 @@ function FunnelTab({
         </td>
         <td className="px-3 py-2.5">
           <div className="flex items-center gap-2">
-            <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div className="w-20 h-1.5 bg-surface-border rounded-full overflow-hidden">
               <div className="h-full bg-primary-400 rounded-full" style={{ width: `${barW}%` }} />
             </div>
             <span className="text-xs font-mono text-ink-muted">
@@ -1171,21 +1178,24 @@ function FunnelTab({
         </td>
         <td className="px-3 py-2.5 text-right">
           <span
-            className={`text-xs font-mono ${hasIdeas ? 'text-blue-700 font-semibold' : stuck ? 'text-amber-600' : 'text-gray-400'}`}
+            className={`text-xs font-mono ${hasIdeas ? 'text-status-neu-text font-semibold' : stuck ? 'text-status-aktiv-text' : 'text-ink-muted'}`}
           >
             {src.ideas.toLocaleString('de')}
           </span>
         </td>
         <td className="px-3 py-2.5 text-right">
+          {/* bewusst behalten: eigene Akzentfarbe fuer die Posts-Spalte, damit sie sich
+              in der Funnel-Tabelle optisch von Ideen (status-neu) und Approved (status-fertig)
+              unterscheidet, obwohl "Posts" selbst kein Status ist */}
           <span
-            className={`text-xs font-mono ${src.posts > 0 ? 'text-purple-700' : 'text-gray-400'}`}
+            className={`text-xs font-mono ${src.posts > 0 ? 'text-accent-700' : 'text-ink-muted'}`}
           >
             {src.posts.toLocaleString('de')}
           </span>
         </td>
         <td className="px-3 py-2.5 text-right">
           <span
-            className={`text-xs font-mono ${src.approved > 0 ? 'text-emerald-700 font-semibold' : 'text-gray-400'}`}
+            className={`text-xs font-mono ${src.approved > 0 ? 'text-status-fertig-text font-semibold' : 'text-ink-muted'}`}
           >
             {src.approved.toLocaleString('de')}
           </span>
@@ -1196,7 +1206,7 @@ function FunnelTab({
               <button
                 onClick={() => onCheckSource(src.source_id)}
                 disabled={isChecking || batchChecking}
-                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-medium text-status-fertig-text bg-status-fertig-bg border border-status-fertig-border rounded hover:bg-status-fertig-border transition-colors disabled:opacity-50"
                 title="Neue Artikel dieser Quelle abrufen"
               >
                 {isChecking ? (
@@ -1211,7 +1221,7 @@ function FunnelTab({
               <button
                 onClick={() => onAnalyzeSource(src.source_id)}
                 disabled={isAnalyzing}
-                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors disabled:opacity-50"
+                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-medium text-status-neu-text bg-status-neu-bg border border-status-neu-border rounded hover:bg-status-neu-border transition-colors disabled:opacity-50"
                 title="Items dieser Quelle analysieren und Ideen generieren (benötigt LLM-Budget)"
               >
                 {isAnalyzing ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : '🧠'}
@@ -1221,7 +1231,7 @@ function FunnelTab({
             {hasItems && onPreviewItems && (
               <button
                 onClick={() => onPreviewItems(src.source_id, src.source_name)}
-                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-gray-100 transition-colors"
+                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-medium text-ink-light bg-surface-bg border border-surface-border rounded hover:bg-surface-bg transition-colors"
                 title="Items dieser Quelle in der Pipeline ansehen"
               >
                 📋 Items
@@ -1231,13 +1241,13 @@ function FunnelTab({
               <button
                 onClick={() => handleArchiveIdeas(src)}
                 disabled={archiving === src.source_id}
-                className="px-1.5 py-0.5 text-[9px] text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
+                className="px-1.5 py-0.5 text-[9px] text-status-fehler-text bg-status-fehler-bg border border-status-fehler-border rounded hover:bg-status-fehler-border transition-colors disabled:opacity-50"
               >
                 {archiving === src.source_id ? '...' : 'Ideen löschen'}
               </button>
             )}
             {stuck && !onAnalyzeSource && (
-              <span className="text-[10px] text-amber-600 font-medium">Analyse nötig</span>
+              <span className="text-[10px] text-status-aktiv-text font-medium">Analyse nötig</span>
             )}
           </div>
         </td>
@@ -1248,20 +1258,20 @@ function FunnelTab({
   return (
     <div>
       {archiveMsg && (
-        <div className="mb-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium">
+        <div className="mb-3 p-2.5 bg-status-fertig-bg border border-status-fertig-border rounded-lg text-xs text-status-fertig-text font-medium">
           {archiveMsg}
         </div>
       )}
 
       {/* SHK sources — highlight as relevant */}
       {relevant.length > 0 && (
-        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50/30 overflow-hidden">
-          <div className="px-4 py-2 bg-emerald-50 border-b border-emerald-200 flex items-center justify-between">
+        <div className="mb-4 rounded-xl border border-status-fertig-border bg-status-fertig-bg/30 overflow-hidden">
+          <div className="px-4 py-2 bg-status-fertig-bg border-b border-status-fertig-border flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-emerald-800">
+              <span className="text-xs font-semibold text-status-fertig-text">
                 Relevante SHK/Handwerk-Quellen
               </span>
-              <span className="ml-2 text-[10px] text-emerald-600">
+              <span className="ml-2 text-[10px] text-status-fertig-text">
                 — diese sollten aktiv Ideen produzieren
               </span>
             </div>
@@ -1270,7 +1280,7 @@ function FunnelTab({
                 <button
                   onClick={onBatchCheckSHK}
                   disabled={batchChecking}
-                  className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold text-emerald-700 bg-white border border-emerald-300 rounded-lg hover:bg-emerald-50 disabled:opacity-50 transition-colors"
+                  className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold text-status-fertig-text bg-white border border-status-fertig-border rounded-lg hover:bg-status-fertig-bg disabled:opacity-50 transition-colors"
                   title="Aktuelle Artikel von allen SHK-Quellen abrufen"
                 >
                   {batchChecking ? (
@@ -1285,12 +1295,22 @@ function FunnelTab({
           </div>
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-emerald-100 bg-emerald-50/50">
-                <th className="text-left px-4 py-1.5 font-medium text-emerald-800">Quelle</th>
-                <th className="text-left px-3 py-1.5 font-medium text-emerald-800">Items</th>
-                <th className="text-right px-3 py-1.5 font-medium text-emerald-800">Ideen</th>
-                <th className="text-right px-3 py-1.5 font-medium text-emerald-800">Posts</th>
-                <th className="text-right px-3 py-1.5 font-medium text-emerald-800">Approved</th>
+              <tr className="border-b border-status-fertig-border bg-status-fertig-bg/50">
+                <th className="text-left px-4 py-1.5 font-medium text-status-fertig-text">
+                  Quelle
+                </th>
+                <th className="text-left px-3 py-1.5 font-medium text-status-fertig-text">
+                  Items
+                </th>
+                <th className="text-right px-3 py-1.5 font-medium text-status-fertig-text">
+                  Ideen
+                </th>
+                <th className="text-right px-3 py-1.5 font-medium text-status-fertig-text">
+                  Posts
+                </th>
+                <th className="text-right px-3 py-1.5 font-medium text-status-fertig-text">
+                  Approved
+                </th>
                 <th className="py-1.5 px-3"></th>
               </tr>
             </thead>
@@ -1305,16 +1325,16 @@ function FunnelTab({
 
       {/* Other active sources */}
       {irrelevant.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-          <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
-            <span className="text-xs font-semibold text-gray-700">Andere Quellen</span>
-            <span className="ml-2 text-[10px] text-gray-500">
+        <div className="rounded-xl border border-surface-border bg-white overflow-hidden">
+          <div className="px-4 py-2 bg-surface-bg border-b border-surface-border">
+            <span className="text-xs font-semibold text-ink-light">Andere Quellen</span>
+            <span className="ml-2 text-[10px] text-ink-light">
               — prüfe ob relevant für deine Nische
             </span>
           </div>
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50">
+              <tr className="border-b border-surface-border bg-surface-bg/50">
                 <th className="text-left px-4 py-1.5 font-medium text-ink-muted">Quelle</th>
                 <th className="text-left px-3 py-1.5 font-medium text-ink-muted">Items</th>
                 <th className="text-right px-3 py-1.5 font-medium text-ink-muted">Ideen</th>
@@ -1479,7 +1499,7 @@ export default function SourceList() {
       </div>
 
       {/* Main Tabs */}
-      <div className="flex gap-1 mb-5 border-b border-gray-200">
+      <div className="flex gap-1 mb-5 border-b border-surface-border">
         <button
           onClick={() => setMainTab('sources')}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
@@ -1516,13 +1536,13 @@ export default function SourceList() {
 
       {mainTab === 'funnel' && (
         <div>
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">
+          <div className="mb-4 p-3 bg-status-neu-bg border border-status-neu-border rounded-xl text-xs text-status-neu-text">
             <strong>Pipeline-Übersicht</strong>: Zeigt wie viele Items jede Quelle in jeder Stufe
             hat (Items → Ideen → Posts → Approved). SHK/Handwerk-Quellen sind grün markiert. Quellen
             mit Items aber 0 Ideen haben ein ⚠️ (Analyse nötig).
           </div>
           {funnelMsg && (
-            <div className="mb-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium">
+            <div className="mb-3 p-2.5 bg-status-fertig-bg border border-status-fertig-border rounded-lg text-xs text-status-fertig-text font-medium">
               {funnelMsg}
             </div>
           )}
@@ -1547,7 +1567,7 @@ export default function SourceList() {
       {mainTab === 'sources' && (
         <>
           {/* Type filter tabs */}
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 mb-5 overflow-x-auto">
+          <div className="flex items-center gap-1 bg-surface-bg rounded-lg p-1 mb-5 overflow-x-auto">
             {SOURCE_TYPES.map((t) => {
               const count = t.key ? counts[t.key] || 0 : (sources || []).length
               return (
@@ -1563,7 +1583,7 @@ export default function SourceList() {
                   <t.icon className="w-3.5 h-3.5" />
                   {t.label}
                   {count > 0 && (
-                    <span className="ml-1 px-1.5 py-0.5 rounded-full bg-gray-200 text-[10px]">
+                    <span className="ml-1 px-1.5 py-0.5 rounded-full bg-surface-border text-[10px]">
                       {count}
                     </span>
                   )}
@@ -1596,7 +1616,7 @@ export default function SourceList() {
               })
               if (problemSources.length === 0 && backlogSources.length === 0) return null
               return (
-                <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                <div className="mb-4 rounded-xl border border-surface-border bg-surface-bg p-3">
                   <div className="text-xs font-semibold text-ink-muted uppercase tracking-wide mb-2">
                     Quellen-Status
                   </div>
@@ -1608,14 +1628,14 @@ export default function SourceList() {
                       const maxCost = (items * 0.003).toFixed(2)
                       return (
                         <div key={src.id} className="flex items-center gap-2 text-xs">
-                          <span className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
+                          <span className="w-2 h-2 rounded-full bg-status-fehler-border shrink-0" />
                           <span className="font-medium text-ink truncate max-w-[180px]">
                             {src.name}
                           </span>
-                          <span className="text-red-600">
+                          <span className="text-status-fehler-text">
                             {items.toLocaleString('de-DE')} Items, 0 Content
                           </span>
-                          <span className="text-gray-400 ml-auto shrink-0">
+                          <span className="text-ink-muted ml-auto shrink-0">
                             ~${minCost}–${maxCost}
                           </span>
                         </div>
@@ -1630,14 +1650,14 @@ export default function SourceList() {
                         const maxCost = (waiting * 0.003).toFixed(2)
                         return (
                           <div key={src.id} className="flex items-center gap-2 text-xs">
-                            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                            <span className="w-2 h-2 rounded-full bg-status-aktiv-border shrink-0" />
                             <span className="font-medium text-ink truncate max-w-[180px]">
                               {src.name}
                             </span>
-                            <span className="text-amber-700">
+                            <span className="text-status-aktiv-text">
                               {waiting} transkribiert, wartet auf Analyse
                             </span>
-                            <span className="text-gray-400 ml-auto shrink-0">
+                            <span className="text-ink-muted ml-auto shrink-0">
                               ~${minCost}–${maxCost}
                             </span>
                           </div>
@@ -1650,7 +1670,7 @@ export default function SourceList() {
 
           {filtered.length === 0 ? (
             <div className="text-center py-12">
-              <Radio className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <Radio className="w-10 h-10 text-ink-muted mx-auto mb-3" />
               <p className="text-sm text-ink-light">
                 Keine Quellen{' '}
                 {activeTypeTab

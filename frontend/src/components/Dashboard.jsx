@@ -49,7 +49,12 @@ function FrequencyAdvisor({ approved, drafts }) {
   const total = (approved || 0) + (drafts || 0)
   const weeks = freq > 0 ? Math.floor((approved || 0) / freq) : 0
   const totalWeeks = freq > 0 ? Math.floor(total / freq) : 0
-  const color = weeks >= 8 ? 'text-emerald-600' : weeks >= 4 ? 'text-amber-600' : 'text-red-500'
+  const color =
+    weeks >= 8
+      ? 'text-status-fertig-text'
+      : weeks >= 4
+        ? 'text-status-aktiv-text'
+        : 'text-status-fehler-text'
   const barPct = Math.min(100, (weeks / 12) * 100)
   return (
     <div className="bg-white rounded-xl border border-surface-border p-5">
@@ -62,7 +67,7 @@ function FrequencyAdvisor({ approved, drafts }) {
           <button
             key={f}
             onClick={() => setFreq(f)}
-            className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${freq === f ? 'bg-primary-600 text-white' : 'bg-gray-100 text-ink-muted hover:bg-gray-200'}`}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${freq === f ? 'bg-primary-600 text-white' : 'bg-surface-bg text-ink-muted hover:bg-surface-border'}`}
           >
             {f}×
           </button>
@@ -73,9 +78,9 @@ function FrequencyAdvisor({ approved, drafts }) {
           <span className="text-ink-muted">{approved} freigegeben</span>
           <span className={`font-bold ${color}`}>{weeks} Wochen</span>
         </div>
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-2 bg-surface-bg rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all ${weeks >= 8 ? 'bg-emerald-500' : weeks >= 4 ? 'bg-amber-400' : 'bg-red-400'}`}
+            className={`h-full rounded-full transition-all ${weeks >= 8 ? 'bg-status-fertig-border' : weeks >= 4 ? 'bg-status-aktiv-border' : 'bg-status-fehler-border'}`}
             style={{ width: `${barPct}%` }}
           />
         </div>
@@ -90,21 +95,27 @@ function FrequencyAdvisor({ approved, drafts }) {
 }
 
 function KpiCard({ icon: Icon, label, value, sub, color, onClick }) {
+  // KPI-Kategorie → Tier-2-Status-Token wo eine Status-Bedeutung vorliegt
+  // (emerald="fertig", blue="neu/info", red="fehler"); teal/amber sind reine
+  // Tier-1-Primitive ohne Status-Bedeutung (Kategorie-Unterscheidung in der KPI-Reihe).
+  // bewusst behalten: purple bleibt eigene Primitive-Farbe (nicht Teil des
+  // Tier-2-Vokabulars) — "Entwürfe" braucht in der 6er-KPI-Reihe eine von
+  // primary/accent/status-* unterscheidbare 6. Farbe, sonst kollidiert sie visuell.
   const bgMap = {
     teal: 'bg-primary-50',
     amber: 'bg-accent-50',
-    emerald: 'bg-emerald-50',
-    blue: 'bg-blue-50',
+    emerald: 'bg-status-fertig-bg',
+    blue: 'bg-status-neu-bg',
     purple: 'bg-purple-50',
-    red: 'bg-red-50',
+    red: 'bg-status-fehler-bg',
   }
   const textMap = {
     teal: 'text-primary-700',
     amber: 'text-accent-700',
-    emerald: 'text-emerald-700',
-    blue: 'text-blue-700',
+    emerald: 'text-status-fertig-text',
+    blue: 'text-status-neu-text',
     purple: 'text-purple-700',
-    red: 'text-red-600',
+    red: 'text-status-fehler-text',
   }
   return (
     <div
@@ -137,14 +148,16 @@ function PipelineBar({ pipeline }) {
     'generating',
     'transcription_failed',
   ]
+  // teal ist 1:1 identisch zu primary in diesem Projekt (verifiziert in vorherigen
+  // Tranchen) — analyzed migriert direkt zu primary-500.
   const colors = {
-    content_ready: 'bg-emerald-500',
-    analyzed: 'bg-teal-500',
-    transcribed: 'bg-blue-400',
-    transcribing: 'bg-yellow-400',
-    analyzing: 'bg-yellow-400',
-    generating: 'bg-yellow-400',
-    transcription_failed: 'bg-red-400',
+    content_ready: 'bg-status-fertig-border',
+    analyzed: 'bg-primary-500',
+    transcribed: 'bg-status-neu-border',
+    transcribing: 'bg-status-aktiv-border',
+    analyzing: 'bg-status-aktiv-border',
+    generating: 'bg-status-aktiv-border',
+    transcription_failed: 'bg-status-fehler-border',
   }
   const labels = {
     content_ready: 'Content bereit',
@@ -210,25 +223,29 @@ function TodayBrief({ brief, navigate }) {
 
   const scoreColor =
     momentum_score >= 70
-      ? 'text-emerald-600'
+      ? 'text-status-fertig-text'
       : momentum_score >= 40
-        ? 'text-amber-600'
-        : 'text-red-500'
+        ? 'text-status-aktiv-text'
+        : 'text-status-fehler-text'
   const scoreBar =
-    momentum_score >= 70 ? 'bg-emerald-500' : momentum_score >= 40 ? 'bg-amber-400' : 'bg-red-400'
+    momentum_score >= 70
+      ? 'bg-status-fertig-border'
+      : momentum_score >= 40
+        ? 'bg-status-aktiv-border'
+        : 'bg-status-fehler-border'
 
   return (
-    <div className="bg-gradient-to-r from-primary-50 to-indigo-50 rounded-xl border border-primary-200 p-5 mb-5">
+    <div className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-xl border border-primary-200 p-5 mb-5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-primary-600" />
           <span className="text-sm font-semibold text-ink">Heute — {today.day_name}</span>
           {today.is_good_posting_day ? (
-            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-medium">
+            <span className="px-2 py-0.5 bg-status-fertig-bg text-status-fertig-text rounded-full text-[10px] font-medium">
               Guter Post-Tag
             </span>
           ) : (
-            <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-[10px]">
+            <span className="px-2 py-0.5 bg-surface-border text-ink-light rounded-full text-[10px]">
               Wochenende
             </span>
           )}
@@ -236,7 +253,7 @@ function TodayBrief({ brief, navigate }) {
         {/* Momentum Score */}
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-ink-muted">Momentum</span>
-          <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <div className="w-16 h-1.5 bg-surface-border rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full ${scoreBar}`}
               style={{ width: `${momentum_score}%` }}
@@ -368,31 +385,33 @@ function SmartInsights({ sourceFunnel, recentPosts, scheduled }) {
   const insights = [
     bestSource && {
       icon: Award,
-      color: 'text-emerald-700 bg-emerald-50 border-emerald-200',
-      iconColor: 'text-emerald-600',
+      color: 'text-status-fertig-text bg-status-fertig-bg border-status-fertig-border',
+      iconColor: 'text-status-fertig-text',
       title: 'Beste Quelle',
       body: `${bestSource.name} — ${Math.round(bestSource.approval_rate * 100)}% Freigaberate (${bestSource.approved_count}/${bestSource.posts_count} Posts)`,
     },
     gapPillar && {
       icon: Target,
-      color: 'text-amber-700 bg-amber-50 border-amber-200',
-      iconColor: 'text-amber-600',
+      color: 'text-status-aktiv-text bg-status-aktiv-bg border-status-aktiv-border',
+      iconColor: 'text-status-aktiv-text',
       title: 'Pillar-Lücke',
       body: `${PILLAR_LABELS[gapPillar[0]]?.emoji} ${PILLAR_LABELS[gapPillar[0]]?.label} fehlt — nur ${gapPillar[1]} Posts bisher`,
     },
     {
       icon: velocityUp ? TrendingUp : TrendingDown,
       color: velocityUp
-        ? 'text-blue-700 bg-blue-50 border-blue-200'
-        : 'text-red-700 bg-red-50 border-red-200',
-      iconColor: velocityUp ? 'text-blue-600' : 'text-red-500',
+        ? 'text-status-neu-text bg-status-neu-bg border-status-neu-border'
+        : 'text-status-fehler-text bg-status-fehler-bg border-status-fehler-border',
+      iconColor: velocityUp ? 'text-status-neu-text' : 'text-status-fehler-text',
       title: 'Content-Velocity',
       body: `${last7} Posts letzte 7 Tage (${velocityUp ? '+' : ''}${velocityDelta} vs. Vorwoche)`,
     },
+    // bewusst behalten: eigene Akzentfarbe fuer "Nächster Post" — 4. Insight-Kategorie
+    // ohne Status-Bedeutung, braucht Unterscheidung von den 3 Status-artigen Karten.
     countdownText && {
       icon: CalendarDays,
-      color: 'text-violet-700 bg-violet-50 border-violet-200',
-      iconColor: 'text-violet-600',
+      color: 'text-accent-700 bg-accent-50 border-accent-200',
+      iconColor: 'text-accent-600',
       title: 'Nächster Post',
       body: `${countdownText} — ${new Date(nextPost.scheduled_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`,
     },
@@ -500,7 +519,7 @@ function WeekScheduleWidget({ scheduled, approved, navigate }) {
 
       {fillResult && (
         <div
-          className={`mb-3 px-3 py-2 rounded-lg text-xs font-medium ${fillResult.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}
+          className={`mb-3 px-3 py-2 rounded-lg text-xs font-medium ${fillResult.ok ? 'bg-status-fertig-bg text-status-fertig-text' : 'bg-status-fehler-bg text-status-fehler-text'}`}
         >
           {fillResult.text}
         </div>
@@ -519,12 +538,12 @@ function WeekScheduleWidget({ scheduled, approved, navigate }) {
                   day.isToday
                     ? 'border-primary-400 bg-primary-50 shadow-sm'
                     : hasPost
-                      ? 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100'
+                      ? 'border-status-fertig-border bg-status-fertig-bg hover:bg-status-fertig-border'
                       : isGap
-                        ? 'border-amber-200 bg-amber-50 hover:bg-amber-100'
+                        ? 'border-status-aktiv-border bg-status-aktiv-bg hover:bg-status-aktiv-border'
                         : day.isPast
-                          ? 'border-gray-100 bg-gray-50'
-                          : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
+                          ? 'border-surface-border bg-surface-bg'
+                          : 'border-surface-border bg-surface-bg hover:bg-surface-border'
                 }`}
             >
               <p
@@ -533,7 +552,7 @@ function WeekScheduleWidget({ scheduled, approved, navigate }) {
                 {day.label}
               </p>
               <p
-                className={`text-base font-bold leading-none mb-1.5 ${day.isToday ? 'text-primary-700' : day.isPast ? 'text-gray-400' : 'text-ink'}`}
+                className={`text-base font-bold leading-none mb-1.5 ${day.isToday ? 'text-primary-700' : day.isPast ? 'text-ink-muted' : 'text-ink'}`}
               >
                 {day.d.getDate()}
               </p>
@@ -542,18 +561,20 @@ function WeekScheduleWidget({ scheduled, approved, navigate }) {
                   {day.posts.slice(0, 2).map((p, j) => (
                     <div
                       key={j}
-                      className="w-full h-1.5 rounded-full bg-emerald-500"
+                      className="w-full h-1.5 rounded-full bg-status-fertig-border"
                       title={`${new Date(p.scheduled_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`}
                     />
                   ))}
                   {day.posts.length > 2 && (
-                    <p className="text-[9px] text-emerald-600">+{day.posts.length - 2}</p>
+                    <p className="text-[9px] text-status-fertig-text">
+                      +{day.posts.length - 2}
+                    </p>
                   )}
                 </div>
               ) : isGap ? (
-                <div className="text-amber-400 text-xs leading-none">!</div>
+                <div className="text-status-aktiv-text text-xs leading-none">!</div>
               ) : day.isWeekend ? (
-                <div className="text-gray-300 text-xs leading-none">—</div>
+                <div className="text-ink-muted text-xs leading-none">—</div>
               ) : null}
             </div>
           )
@@ -561,7 +582,7 @@ function WeekScheduleWidget({ scheduled, approved, navigate }) {
       </div>
 
       {gapDays > 0 && approved === 0 && (
-        <p className="text-[11px] text-amber-600 mt-3 text-center">
+        <p className="text-[11px] text-status-aktiv-text mt-3 text-center">
           ⚠️ {gapDays} freie Werktage — erst Posts freigeben, dann einplanen
         </p>
       )}
@@ -657,29 +678,33 @@ function ContentStreakCalendar({ posts }) {
     return isNewMonth ? first.date.toLocaleDateString('de-DE', { month: 'short' }) : ''
   })
 
+  // published/approved teilen sich status-fertig (border=kräftiger Ton fuer
+  // veröffentlicht, bg=heller Ton fuer freigegeben) — das 5-Werte-Vokabular kennt
+  // keine feinere Zwischenstufe fuer diese Zweistufigkeit.
   function cellColor(d) {
-    if (d.isFuture) return 'bg-gray-100'
-    if (d.act.published > 0) return 'bg-emerald-600'
-    if (d.act.approved > 0) return 'bg-emerald-300'
-    if (d.act.draft > 0) return 'bg-amber-200'
-    return 'bg-gray-100'
+    if (d.isFuture) return 'bg-surface-bg'
+    if (d.act.published > 0) return 'bg-status-fertig-border'
+    if (d.act.approved > 0) return 'bg-status-fertig-bg'
+    if (d.act.draft > 0) return 'bg-status-aktiv-bg'
+    return 'bg-surface-bg'
   }
 
   return (
     <div className="bg-white rounded-xl border border-surface-border p-5 mb-5">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
-          <Flame className="w-4 h-4 text-orange-500" /> Content-Aktivität — 12 Wochen
+          <Flame className="w-4 h-4 text-accent-500" /> Content-Aktivität — 12 Wochen
         </h2>
         <div className="flex items-center gap-4 text-[11px] text-ink-muted">
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm bg-emerald-600 inline-block" /> Veröffentlicht
+            <span className="w-3 h-3 rounded-sm bg-status-fertig-border inline-block" />{' '}
+            Veröffentlicht
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm bg-emerald-300 inline-block" /> Freigegeben
+            <span className="w-3 h-3 rounded-sm bg-status-fertig-bg inline-block" /> Freigegeben
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm bg-amber-200 inline-block" /> Entwurf
+            <span className="w-3 h-3 rounded-sm bg-status-aktiv-bg inline-block" /> Entwurf
           </span>
         </div>
       </div>
@@ -687,15 +712,19 @@ function ContentStreakCalendar({ posts }) {
       {/* Stats row */}
       <div className="flex items-center gap-6 mb-4">
         <div className="text-center">
-          <div className="text-2xl font-black text-orange-500 leading-none">{streak}</div>
+          <div className="text-2xl font-black text-accent-500 leading-none">{streak}</div>
           <div className="text-[10px] text-ink-muted mt-0.5">Streak (Tage)</div>
         </div>
         <div className="text-center">
-          <div className="text-2xl font-black text-emerald-600 leading-none">{bestStreak}</div>
+          <div className="text-2xl font-black text-status-fertig-text leading-none">
+            {bestStreak}
+          </div>
           <div className="text-[10px] text-ink-muted mt-0.5">Bester Streak</div>
         </div>
         <div className="text-center">
-          <div className="text-2xl font-black text-blue-600 leading-none">{postsThisWeek}</div>
+          <div className="text-2xl font-black text-status-neu-text leading-none">
+            {postsThisWeek}
+          </div>
           <div className="text-[10px] text-ink-muted mt-0.5">Diese Woche</div>
         </div>
         <div className="text-center">
@@ -901,8 +930,8 @@ export default function Dashboard() {
               }
               className={`flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors disabled:opacity-60 ${
                 automationStatus.paused
-                  ? 'text-white bg-amber-500 border-amber-600 hover:bg-amber-600'
-                  : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
+                  ? 'text-white bg-status-aktiv-border border-status-aktiv-text hover:bg-status-aktiv-text'
+                  : 'text-ink-light bg-white border-surface-border hover:bg-surface-bg'
               }`}
             >
               {automationToggling ? (
@@ -922,7 +951,7 @@ export default function Dashboard() {
           <button
             onClick={handleAutoPump}
             disabled={autoPumping}
-            className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 hover:bg-emerald-100 disabled:opacity-60 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-medium text-status-fertig-text bg-status-fertig-bg border border-status-fertig-border rounded-lg px-3 py-1.5 hover:bg-status-fertig-border disabled:opacity-60 transition-colors"
             title="Analysieren + Generieren + Ideation für alle wartenden Items"
           >
             {autoPumping ? (
@@ -934,7 +963,7 @@ export default function Dashboard() {
           </button>
           <button
             onClick={loadAll}
-            className="text-xs text-ink-muted hover:text-primary-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50"
+            className="text-xs text-ink-muted hover:text-primary-600 border border-surface-border rounded-lg px-3 py-1.5 hover:bg-surface-bg"
           >
             Aktualisieren
           </button>
@@ -943,7 +972,7 @@ export default function Dashboard() {
 
       {pumpResult && (
         <div
-          className={`mb-4 p-3 rounded-lg text-sm flex items-center gap-2 ${pumpResult.ok ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700'}`}
+          className={`mb-4 p-3 rounded-lg text-sm flex items-center gap-2 ${pumpResult.ok ? 'bg-status-fertig-bg text-status-fertig-text border border-status-fertig-border' : 'bg-status-fehler-bg text-status-fehler-text'}`}
         >
           {pumpResult.ok ? (
             <Zap className="w-4 h-4 shrink-0" />
@@ -955,7 +984,7 @@ export default function Dashboard() {
       )}
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm flex items-center gap-2">
+        <div className="mb-4 p-3 bg-status-fehler-bg text-status-fehler-text rounded-lg text-sm flex items-center gap-2">
           <AlertCircle className="w-4 h-4" /> {error}
         </div>
       )}
@@ -1023,7 +1052,7 @@ export default function Dashboard() {
         ]
         const completedCount = steps.filter((s) => s.done).length
         return (
-          <div className="mb-5 rounded-xl border border-primary-200 bg-gradient-to-r from-primary-50 to-blue-50 p-4">
+          <div className="mb-5 rounded-xl border border-primary-200 bg-gradient-to-r from-primary-50 to-status-neu-bg p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Target className="w-4 h-4 text-primary-600" />
@@ -1050,15 +1079,15 @@ export default function Dashboard() {
                   key={i}
                   className={`flex items-start gap-2.5 p-3 rounded-lg border transition-all cursor-pointer ${
                     step.done
-                      ? 'bg-white/70 border-emerald-200 opacity-70'
+                      ? 'bg-white/70 border-status-fertig-border opacity-70'
                       : step.urgent
-                        ? 'bg-white border-amber-300 shadow-sm hover:shadow-md'
+                        ? 'bg-white border-status-aktiv-border shadow-sm hover:shadow-md'
                         : 'bg-white/80 border-primary-100 hover:border-primary-300'
                   }`}
                   onClick={step.done ? undefined : step.action}
                 >
                   <div
-                    className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${step.done ? 'bg-emerald-500' : step.urgent ? 'bg-amber-400' : 'bg-gray-200'}`}
+                    className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${step.done ? 'bg-status-fertig-border' : step.urgent ? 'bg-status-aktiv-border' : 'bg-surface-border'}`}
                   >
                     {step.done ? (
                       <CheckCircle2 className="w-3 h-3 text-white" />
@@ -1068,7 +1097,7 @@ export default function Dashboard() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p
-                      className={`text-xs font-semibold leading-snug ${step.done ? 'text-emerald-800 line-through decoration-emerald-400' : step.urgent ? 'text-amber-900' : 'text-ink'}`}
+                      className={`text-xs font-semibold leading-snug ${step.done ? 'text-status-fertig-text line-through decoration-status-fertig-border' : step.urgent ? 'text-status-aktiv-text' : 'text-ink'}`}
                     >
                       {step.title}
                     </p>
@@ -1076,7 +1105,7 @@ export default function Dashboard() {
                     {!step.done && (
                       <button
                         onClick={step.action}
-                        className={`mt-1.5 text-[10px] font-semibold ${step.urgent ? 'text-amber-700 hover:text-amber-900' : 'text-primary-600 hover:text-primary-800'}`}
+                        className={`mt-1.5 text-[10px] font-semibold ${step.urgent ? 'text-status-aktiv-text hover:text-ink' : 'text-primary-600 hover:text-primary-800'}`}
                       >
                         {step.actionLabel}
                       </button>
@@ -1086,7 +1115,7 @@ export default function Dashboard() {
               ))}
             </div>
             {!hasBrandVoice && (
-              <div className="mt-3 px-3 py-2 bg-amber-100 border border-amber-200 rounded-lg text-xs text-amber-800">
+              <div className="mt-3 px-3 py-2 bg-status-aktiv-bg border border-status-aktiv-border rounded-lg text-xs text-status-aktiv-text">
                 ⚠️ <strong>Brand Voice nicht eingerichtet</strong> — die KI generiert generische
                 Inhalte ohne Branchenbezug. Bitte Brand Voice Wizard starten.
               </div>
@@ -1155,13 +1184,13 @@ export default function Dashboard() {
 
       {/* Pipeline budget exceeded warning */}
       {data?.llm_budget_exceeded && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm flex items-start gap-3">
-          <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+        <div className="mb-4 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-sm flex items-start gap-3">
+          <AlertCircle className="w-4 h-4 text-status-fehler-text shrink-0 mt-0.5" />
           <div className="flex-1">
-            <span className="font-semibold text-red-800">
+            <span className="font-semibold text-status-fehler-text">
               🔴 KI-Pipeline pausiert: Requesty.ai Portal-Budget erschöpft.
             </span>
-            <span className="text-red-700 ml-1">
+            <span className="text-status-fehler-text ml-1">
               Bitte bei{' '}
               <a
                 href="https://requesty.ai"
@@ -1179,7 +1208,7 @@ export default function Dashboard() {
               const minCost = (waiting * 0.0005).toFixed(2)
               const maxCost = (waiting * 0.003).toFixed(2)
               return (
-                <div className="mt-1 text-red-700">
+                <div className="mt-1 text-status-fehler-text">
                   <span className="font-medium">{waiting.toLocaleString('de-DE')} Artikel</span>{' '}
                   warten — ca.{' '}
                   <span className="font-medium">
@@ -1191,7 +1220,7 @@ export default function Dashboard() {
             })()}
           </div>
           <button
-            className="shrink-0 px-3 py-1 bg-red-700 hover:bg-red-800 text-white text-xs font-semibold rounded-lg transition-colors"
+            className="shrink-0 px-3 py-1 bg-status-fehler-text hover:bg-status-fehler-text/80 text-white text-xs font-semibold rounded-lg transition-colors"
             title="Erst Guthaben bei requesty.ai aufladen, dann diesen Button klicken"
             onClick={async () => {
               if (
@@ -1217,14 +1246,14 @@ export default function Dashboard() {
       {!data?.llm_budget_exceeded &&
         (pipeline.transcribed || 0) > 500 &&
         (pipeline.analyzing || 0) === 0 && (
-          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="mb-4 p-3 bg-status-aktiv-bg border border-status-aktiv-border rounded-lg text-sm flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-status-aktiv-text shrink-0 mt-0.5" />
             <div>
-              <span className="font-medium text-amber-800">
+              <span className="font-medium text-status-aktiv-text">
                 {(pipeline.transcribed || 0).toLocaleString('de')} Items warten auf Analyse —
                 Pipeline möglicherweise blockiert.
               </span>
-              <span className="text-amber-700 ml-1">
+              <span className="text-status-aktiv-text ml-1">
                 Falls KI-Aufrufe fehlschlagen: Guthaben bei{' '}
                 <a
                   href="https://requesty.ai"
@@ -1265,17 +1294,19 @@ export default function Dashboard() {
         const totalIrrelevant = irrelevantSources.reduce((sum, s) => sum + s.new_count, 0)
         if (totalIrrelevant === 0) return null
         return (
-          <div className="mb-5 rounded-xl border border-orange-200 bg-orange-50 overflow-hidden">
-            <div className="px-4 py-2.5 bg-orange-100 border-b border-orange-200 flex items-center justify-between">
+          <div className="mb-5 rounded-xl border border-status-aktiv-border bg-status-aktiv-bg overflow-hidden">
+            <div className="px-4 py-2.5 bg-status-aktiv-bg border-b border-status-aktiv-border flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-orange-600">🧹</span>
-                <span className="text-sm font-semibold text-orange-900">Bereinigung empfohlen</span>
-                <span className="px-2 py-0.5 text-[10px] bg-orange-200 text-orange-800 rounded-full font-medium">
+                <span className="text-status-aktiv-text">🧹</span>
+                <span className="text-sm font-semibold text-status-aktiv-text">
+                  Bereinigung empfohlen
+                </span>
+                <span className="px-2 py-0.5 text-[10px] bg-status-aktiv-border text-status-aktiv-text rounded-full font-medium">
                   {totalIrrelevant.toLocaleString('de')} irrelevante Ideen
                 </span>
               </div>
               {cleanupMsg ? (
-                <span className="text-xs font-semibold text-emerald-700">{cleanupMsg}</span>
+                <span className="text-xs font-semibold text-status-fertig-text">{cleanupMsg}</span>
               ) : (
                 <button
                   onClick={async () => {
@@ -1299,7 +1330,7 @@ export default function Dashboard() {
                     setCleaningUp(false)
                   }}
                   disabled={cleaningUp}
-                  className="px-3 py-1 text-xs font-semibold bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                  className="px-3 py-1 text-xs font-semibold bg-status-aktiv-border hover:bg-status-aktiv-text text-white rounded-lg transition-colors disabled:opacity-50"
                 >
                   {cleaningUp
                     ? 'Archiviere...'
@@ -1308,7 +1339,7 @@ export default function Dashboard() {
               )}
             </div>
             <div className="px-4 py-2.5">
-              <p className="text-xs text-orange-800 mb-2">
+              <p className="text-xs text-status-aktiv-text mb-2">
                 Diese Quellen produzieren Ideen ohne SHK/Handwerk-Bezug — archiviere sie, um Platz
                 für relevante Inhalte zu schaffen:
               </p>
@@ -1316,7 +1347,7 @@ export default function Dashboard() {
                 {irrelevantSources.slice(0, 6).map((src) => (
                   <span
                     key={src.source_id}
-                    className="px-2 py-0.5 text-[10px] bg-white border border-orange-200 text-orange-700 rounded-full"
+                    className="px-2 py-0.5 text-[10px] bg-white border border-status-aktiv-border text-status-aktiv-text rounded-full"
                   >
                     {src.source_name.length > 30
                       ? src.source_name.slice(0, 28) + '…'
@@ -1325,7 +1356,7 @@ export default function Dashboard() {
                   </span>
                 ))}
                 {irrelevantSources.length > 6 && (
-                  <span className="px-2 py-0.5 text-[10px] text-orange-600">
+                  <span className="px-2 py-0.5 text-[10px] text-status-aktiv-text">
                     +{irrelevantSources.length - 6} weitere
                   </span>
                 )}
@@ -1355,15 +1386,15 @@ export default function Dashboard() {
         const totalShkIdeas = shkWithItems.reduce((sum, s) => sum + (s.ideas || 0), 0)
         const allHaveIdeas = shkWithItems.every((s) => (s.ideas || 0) > 0)
         return (
-          <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 overflow-hidden">
-            <div className="px-4 py-2.5 bg-blue-100 border-b border-blue-200 flex items-center justify-between">
+          <div className="mb-5 rounded-xl border border-status-neu-border bg-status-neu-bg overflow-hidden">
+            <div className="px-4 py-2.5 bg-status-neu-bg border-b border-status-neu-border flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-blue-600" />
-                <span className="text-sm font-semibold text-blue-900">
+                <Sparkles className="w-4 h-4 text-status-neu-text" />
+                <span className="text-sm font-semibold text-status-neu-text">
                   {allHaveIdeas ? '✅ SHK-Quellen aktiv' : '🔄 SHK-Analyse läuft'}
                 </span>
                 {totalShkIdeas > 0 && (
-                  <span className="px-2 py-0.5 text-[10px] bg-blue-200 text-blue-800 rounded-full font-medium">
+                  <span className="px-2 py-0.5 text-[10px] bg-status-neu-border text-status-neu-text rounded-full font-medium">
                     {totalShkIdeas} Ideen verfügbar
                   </span>
                 )}
@@ -1371,7 +1402,7 @@ export default function Dashboard() {
               {totalShkIdeas > 0 && (
                 <button
                   onClick={() => navigate('/ideas')}
-                  className="text-xs font-medium text-blue-700 hover:text-blue-900 flex items-center gap-1"
+                  className="text-xs font-medium text-status-neu-text hover:text-ink flex items-center gap-1"
                 >
                   Ideen ansehen <ArrowRight className="w-3 h-3" />
                 </button>
@@ -1383,20 +1414,20 @@ export default function Dashboard() {
                 const pct = s.items > 0 ? Math.min(100, Math.round((ideaCount / s.items) * 100)) : 0
                 return (
                   <div key={s.source_id} className="flex items-center gap-3">
-                    <span className="text-xs text-blue-800 font-medium truncate flex-1 min-w-0">
+                    <span className="text-xs text-status-neu-text font-medium truncate flex-1 min-w-0">
                       {s.source_name}
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
-                      <div className="w-16 h-1.5 bg-blue-200 rounded-full overflow-hidden">
+                      <div className="w-16 h-1.5 bg-status-neu-border rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-blue-500 rounded-full transition-all"
+                          className="h-full bg-primary-500 rounded-full transition-all"
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <span className="text-[11px] text-blue-600 w-16 text-right">
+                      <span className="text-[11px] text-status-neu-text w-16 text-right">
                         {s.items} →{' '}
                         <span
-                          className={`font-semibold ${ideaCount > 0 ? 'text-emerald-700' : 'text-blue-400'}`}
+                          className={`font-semibold ${ideaCount > 0 ? 'text-status-fertig-text' : 'text-status-neu-text'}`}
                         >
                           {ideaCount}
                         </span>
@@ -1406,7 +1437,7 @@ export default function Dashboard() {
                 )
               })}
               {!allHaveIdeas && (
-                <p className="text-[11px] text-blue-600 mt-1">
+                <p className="text-[11px] text-status-neu-text mt-1">
                   Ideen werden im Hintergrund generiert — Seite aktualisiert sich automatisch alle
                   30 Sek.
                 </p>
@@ -1426,7 +1457,7 @@ export default function Dashboard() {
       <div className="bg-white rounded-xl border border-surface-border p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-violet-500" /> Vorschläge der Woche
+            <Sparkles className="w-4 h-4 text-accent-500" /> Vorschläge der Woche
             <span className="text-[10px] font-normal text-ink-muted">— P07 Themen-Research</span>
           </h2>
         </div>
@@ -1450,24 +1481,30 @@ export default function Dashboard() {
 
           {ideas.length === 0 ? (
             <div className="text-center py-8">
-              <Lightbulb className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+              <Lightbulb className="w-8 h-8 text-ink-muted mx-auto mb-2" />
               <p className="text-sm text-ink-light">Noch keine Ideen.</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-surface-border">
               {ideas.slice(0, 6).map((idea) => {
                 const statusInfo = {
-                  new: { label: 'Neu', color: 'bg-blue-100 text-blue-700' },
-                  questions_sent: { label: 'Fragen offen', color: 'bg-amber-100 text-amber-700' },
-                  answers_received: { label: 'Bereit', color: 'bg-emerald-100 text-emerald-700' },
+                  new: { label: 'Neu', color: 'bg-status-neu-bg text-status-neu-text' },
+                  questions_sent: {
+                    label: 'Fragen offen',
+                    color: 'bg-status-aktiv-bg text-status-aktiv-text',
+                  },
+                  answers_received: {
+                    label: 'Bereit',
+                    color: 'bg-status-fertig-bg text-status-fertig-text',
+                  },
                   content_generated: { label: 'Post da', color: 'bg-primary-100 text-primary-700' },
-                }[idea.status] || { label: idea.status, color: 'bg-gray-100 text-gray-600' }
+                }[idea.status] || { label: idea.status, color: 'bg-surface-bg text-ink-light' }
 
                 return (
                   <div
                     key={idea.id}
                     onClick={() => navigate('/ideas')}
-                    className="py-2.5 flex items-center justify-between cursor-pointer hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors"
+                    className="py-2.5 flex items-center justify-between cursor-pointer hover:bg-surface-bg -mx-2 px-2 rounded-lg transition-colors"
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <span
@@ -1496,12 +1533,12 @@ export default function Dashboard() {
                 {
                   label: 'Quellen',
                   value: data?.active_sources?.length || 0,
-                  color: 'text-blue-700 bg-blue-50',
+                  color: 'text-status-neu-text bg-status-neu-bg',
                 },
                 {
                   label: 'In Verarbeitung',
                   value: s.processing || 0,
-                  color: 'text-yellow-700 bg-yellow-50',
+                  color: 'text-status-aktiv-text bg-status-aktiv-bg',
                 },
                 {
                   label: 'Posts (Entwurf)',
@@ -1511,12 +1548,14 @@ export default function Dashboard() {
                 {
                   label: 'Posts (Freigegeben)',
                   value: s.approved || 0,
-                  color: 'text-emerald-700 bg-emerald-50',
+                  color: 'text-status-fertig-text bg-status-fertig-bg',
                 },
                 {
                   label: 'Posts (Eingeplant)',
+                  // teal ist 1:1 identisch zu primary in diesem Projekt (verifiziert
+                  // in vorherigen Tranchen) — direkt zu primary migriert.
                   value: scheduled.length,
-                  color: 'text-teal-700 bg-teal-50',
+                  color: 'text-primary-700 bg-primary-50',
                 },
               ].map((row) => (
                 <div key={row.label} className="flex items-center justify-between">
@@ -1552,10 +1591,10 @@ export default function Dashboard() {
                   return (
                     <div
                       key={sp.id || i}
-                      className={`flex items-center gap-2 p-1.5 rounded-lg ${isToday ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}
+                      className={`flex items-center gap-2 p-1.5 rounded-lg ${isToday ? 'bg-status-fertig-bg' : 'hover:bg-surface-bg'}`}
                     >
                       <span
-                        className={`text-[10px] font-mono font-semibold shrink-0 ${isToday ? 'text-emerald-700' : 'text-ink-muted'}`}
+                        className={`text-[10px] font-mono font-semibold shrink-0 ${isToday ? 'text-status-fertig-text' : 'text-ink-muted'}`}
                       >
                         {dt.toLocaleDateString('de-DE', {
                           weekday: 'short',
@@ -1565,7 +1604,7 @@ export default function Dashboard() {
                         {dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                       {isToday && (
-                        <span className="text-[10px] bg-emerald-200 text-emerald-800 px-1 rounded shrink-0">
+                        <span className="text-[10px] bg-status-fertig-border text-status-fertig-text px-1 rounded shrink-0">
                           Heute
                         </span>
                       )}
