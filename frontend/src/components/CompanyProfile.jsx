@@ -34,6 +34,9 @@ const FIELD_LABELS = {
   values_short: 'Werte (kurz)',
 }
 
+// bewusst behalten: 7 Provenance-Quellen-Badges sind eine Kategorie-Identität
+// (nicht Status), das 5-Werte-Status-Vokabular passt hier nicht 1:1 — Farben
+// bleiben als individuelle Hex-Werte für <span style={{background: badge.color}}>.
 const SOURCE_BADGES = {
   manual_input: { label: 'Manuell', color: '#16a34a' },
   md_upload: { label: 'MD-Upload', color: '#2563eb' },
@@ -166,19 +169,23 @@ export default function CompanyProfile() {
         <Building2 size={22} style={{ display: 'inline', marginRight: 8 }} />
         Unternehmens-Profil
       </h1>
-      <p style={{ color: '#6b7280', marginBottom: 16, fontSize: 14 }}>
+      <p className="text-ink-light" style={{ marginBottom: 16, fontSize: 14 }}>
         Optional — wird automatisch aus Wizard, MD-Upload und Sprachnotizen ergänzt. Alle Quellen
         sind nachvollziehbar (Audit-Trail).
       </p>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, borderBottom: '1px solid #e5e7eb' }}>
+      <div
+        className="border-surface-border"
+        style={{ display: 'flex', gap: 8, marginBottom: 16, borderBottom: '1px solid' }}
+      >
         <button
           onClick={() => setTab('form')}
+          className={tab === 'form' ? 'border-primary-600' : 'border-transparent'}
           style={{
             padding: '8px 16px',
             background: 'none',
             border: 'none',
-            borderBottom: tab === 'form' ? '2px solid #2563eb' : 'none',
+            borderBottom: '2px solid',
             cursor: 'pointer',
           }}
         >
@@ -186,11 +193,12 @@ export default function CompanyProfile() {
         </button>
         <button
           onClick={() => setTab('provenance')}
+          className={tab === 'provenance' ? 'border-primary-600' : 'border-transparent'}
           style={{
             padding: '8px 16px',
             background: 'none',
             border: 'none',
-            borderBottom: tab === 'provenance' ? '2px solid #2563eb' : 'none',
+            borderBottom: '2px solid',
             cursor: 'pointer',
           }}
         >
@@ -199,11 +207,12 @@ export default function CompanyProfile() {
         </button>
         <button
           onClick={() => setTab('pending')}
+          className={tab === 'pending' ? 'border-primary-600' : 'border-transparent'}
           style={{
             padding: '8px 16px',
             background: 'none',
             border: 'none',
-            borderBottom: tab === 'pending' ? '2px solid #2563eb' : 'none',
+            borderBottom: '2px solid',
             cursor: 'pointer',
           }}
         >
@@ -212,11 +221,12 @@ export default function CompanyProfile() {
         </button>
         <button
           onClick={() => setTab('import')}
+          className={tab === 'import' ? 'border-primary-600' : 'border-transparent'}
           style={{
             padding: '8px 16px',
             background: 'none',
             border: 'none',
-            borderBottom: tab === 'import' ? '2px solid #2563eb' : 'none',
+            borderBottom: '2px solid',
             cursor: 'pointer',
           }}
         >
@@ -227,10 +237,9 @@ export default function CompanyProfile() {
 
       {error && (
         <div
+          className="bg-status-fehler-bg text-status-fehler-text"
           style={{
             padding: 12,
-            background: '#fee2e2',
-            color: '#991b1b',
             borderRadius: 6,
             marginBottom: 12,
           }}
@@ -240,10 +249,9 @@ export default function CompanyProfile() {
       )}
       {savedAt && (
         <div
+          className="bg-status-fertig-bg text-status-fertig-text"
           style={{
             padding: 12,
-            background: '#dcfce7',
-            color: '#166534',
             borderRadius: 6,
             marginBottom: 12,
           }}
@@ -258,12 +266,12 @@ export default function CompanyProfile() {
             {Object.entries(FIELD_LABELS).map(([field, label]) => (
               <div key={field}>
                 <label
+                  className="text-ink"
                   style={{
                     display: 'block',
                     fontSize: 13,
                     fontWeight: 600,
                     marginBottom: 4,
-                    color: '#374151',
                   }}
                 >
                   {label}
@@ -274,10 +282,11 @@ export default function CompanyProfile() {
                     value={form[field] || ''}
                     onChange={(e) => update(field, e.target.value)}
                     rows={3}
+                    className="border-surface-border"
                     style={{
                       width: '100%',
                       padding: 8,
-                      border: '1px solid #d1d5db',
+                      border: '1px solid',
                       borderRadius: 4,
                       fontSize: 14,
                     }}
@@ -288,10 +297,11 @@ export default function CompanyProfile() {
                     type={field === 'founded_year' || field === 'headcount' ? 'number' : 'text'}
                     value={form[field] || ''}
                     onChange={(e) => update(field, e.target.value)}
+                    className="border-surface-border"
                     style={{
                       width: '100%',
                       padding: 8,
-                      border: '1px solid #d1d5db',
+                      border: '1px solid',
                       borderRadius: 4,
                       fontSize: 14,
                     }}
@@ -312,15 +322,16 @@ export default function CompanyProfile() {
       {tab === 'provenance' && (
         <div>
           {Object.keys(provenance).length === 0 ? (
-            <p style={{ color: '#6b7280' }}>Noch kein Audit-Trail.</p>
+            <p className="text-ink-light">Noch kein Audit-Trail.</p>
           ) : (
             Object.entries(provenance).map(([field, entries]) => (
               <div
                 key={field}
+                className="border-surface-border"
                 style={{
                   marginBottom: 16,
                   padding: 12,
-                  border: '1px solid #e5e7eb',
+                  border: '1px solid',
                   borderRadius: 6,
                 }}
               >
@@ -328,6 +339,8 @@ export default function CompanyProfile() {
                   {FIELD_LABELS[field] || field}
                 </div>
                 {entries.map((e, i) => {
+                  // bewusst behalten: Fallback-Grau für unbekannte Quelle, gleiche
+                  // Kategorie-Badge-Ausnahme wie SOURCE_BADGES oben.
                   const badge = SOURCE_BADGES[e.source] || { label: e.source, color: '#6b7280' }
                   return (
                     <div
@@ -352,11 +365,13 @@ export default function CompanyProfile() {
                       >
                         {badge.label}
                       </span>
-                      <span style={{ color: '#374151', flex: 1 }}>{e.value}</span>
-                      <span style={{ color: '#9ca3af', fontSize: 11 }}>
+                      <span className="text-ink" style={{ flex: 1 }}>
+                        {e.value}
+                      </span>
+                      <span className="text-ink-muted" style={{ fontSize: 11 }}>
                         conf {e.confidence.toFixed(2)}
                       </span>
-                      <span style={{ color: '#9ca3af', fontSize: 11 }}>
+                      <span className="text-ink-muted" style={{ fontSize: 11 }}>
                         {new Date(e.created_at).toLocaleDateString('de-DE')}
                       </span>
                     </div>
@@ -370,7 +385,7 @@ export default function CompanyProfile() {
 
       {tab === 'import' && (
         <div>
-          <p style={{ marginBottom: 12, color: '#374151', fontSize: 14 }}>
+          <p className="text-ink" style={{ marginBottom: 12, fontSize: 14 }}>
             Lade eine MD-Datei mit Onboarding-Notizen (Eric/Chris) hoch, oder paste den Inhalt
             direkt. Erwartete Sektionen: <code>## Firma</code>, <code>## Ansprechpartner</code>,{' '}
             <code>## USP</code>, <code>## Zielgruppe</code>, <code>## Werte</code>.
@@ -388,10 +403,11 @@ export default function CompanyProfile() {
             onChange={(e) => setMdContent(e.target.value)}
             rows={14}
             placeholder="# Onboarding — Firma&#10;&#10;## Firma&#10;- Name: ZKG GmbH&#10;- Branche: Coaching&#10;..."
+            className="border-surface-border"
             style={{
               width: '100%',
               padding: 8,
-              border: '1px solid #d1d5db',
+              border: '1px solid',
               borderRadius: 4,
               fontSize: 13,
               fontFamily: 'monospace',
@@ -414,10 +430,10 @@ export default function CompanyProfile() {
           </div>
           {importResult && (
             <div
+              className="bg-status-neu-bg"
               style={{
                 marginTop: 12,
                 padding: 12,
-                background: '#dbeafe',
                 borderRadius: 6,
                 fontSize: 14,
               }}
@@ -425,7 +441,7 @@ export default function CompanyProfile() {
               <strong>{importResult.parsed} Felder erkannt</strong> — {importResult.applied}{' '}
               übernommen, {importResult.pending} als Vorschlag.
               {importResult.fields_applied?.length > 0 && (
-                <div style={{ marginTop: 4, fontSize: 12, color: '#1e40af' }}>
+                <div className="text-status-neu-text" style={{ marginTop: 4, fontSize: 12 }}>
                   Felder: {importResult.fields_applied.join(', ')}
                 </div>
               )}
@@ -437,19 +453,20 @@ export default function CompanyProfile() {
       {tab === 'pending' && (
         <div>
           {pending.length === 0 ? (
-            <p style={{ color: '#6b7280' }}>Keine offenen Vorschläge.</p>
+            <p className="text-ink-light">Keine offenen Vorschläge.</p>
           ) : (
             pending.map((p) => {
+              // bewusst behalten: gleiche Kategorie-Badge-Ausnahme wie oben.
               const badge = SOURCE_BADGES[p.source] || { label: p.source, color: '#6b7280' }
               return (
                 <div
                   key={p.id}
+                  className="border-status-aktiv-border bg-status-aktiv-bg"
                   style={{
                     marginBottom: 12,
                     padding: 12,
-                    border: '1px solid #fcd34d',
+                    border: '1px solid',
                     borderRadius: 6,
-                    background: '#fffbeb',
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -467,11 +484,13 @@ export default function CompanyProfile() {
                     <strong style={{ flex: 1 }}>
                       {FIELD_LABELS[p.field_name] || p.field_name}
                     </strong>
-                    <span style={{ color: '#92400e', fontSize: 12 }}>
+                    <span className="text-status-aktiv-text" style={{ fontSize: 12 }}>
                       conf {p.confidence.toFixed(2)}
                     </span>
                   </div>
-                  <div style={{ marginTop: 6, color: '#374151' }}>{p.value}</div>
+                  <div className="text-ink" style={{ marginTop: 6 }}>
+                    {p.value}
+                  </div>
                   <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
                     <Button
                       data-testid={`btn-accept-${p.id}`}

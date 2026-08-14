@@ -3298,18 +3298,16 @@ function LeaderboardModal({ posts, onClose, onCommit }) {
               <div className="w-16 shrink-0">
                 <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1.5">
                   <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${qs.score * 10}%`,
-                      backgroundColor:
-                        qs.score >= 8
-                          ? '#10b981'
-                          : qs.score >= 6
-                            ? '#3b82f6'
-                            : qs.score >= 4
-                              ? '#f59e0b'
-                              : '#ef4444',
-                    }}
+                    className={`h-full rounded-full transition-all ${
+                      qs.score >= 8
+                        ? 'bg-status-fertig-text'
+                        : qs.score >= 6
+                          ? 'bg-status-neu-text'
+                          : qs.score >= 4
+                            ? 'bg-status-aktiv-text'
+                            : 'bg-status-fehler-text'
+                    }`}
+                    style={{ width: `${qs.score * 10}%` }}
                   />
                 </div>
                 <span className="text-[9px] text-ink-muted tabular-nums">{qs.score}/10</span>

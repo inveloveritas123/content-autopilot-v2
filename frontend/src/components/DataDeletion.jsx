@@ -17,13 +17,34 @@ const MODE_LABELS = {
   audit_selective: 'Einzelne Inhalte (mit IDs)',
 }
 
+// Löschanfrage-Status → Tier-2-Status-Token. hard_deleted teilt sich das
+// status-fehler-Token mit soft_deleted (beide "destruktiv/gefährlich"), da das
+// 5-Werte-Vokabular keine eigene "noch dunkleres Rot"-Abstufung vorsieht — die
+// Badges unterscheiden sich weiterhin per Label-Text. Klassennamen sind hier
+// statisch ausgeschrieben (kein Template-Literal), damit Tailwinds JIT-Scanner
+// sie findet.
 const STATUS_BADGES = {
-  pending: { label: 'Ausstehend', color: '#a16207' },
-  soft_deleted: { label: 'Soft-Deleted', color: '#dc2626' },
-  hard_deleted: { label: 'Hard-Deleted', color: '#7f1d1d' },
-  recovered: { label: 'Wiederhergestellt', color: '#16a34a' },
-  expired: { label: 'Abgelaufen', color: '#6b7280' },
-  rejected: { label: 'Abgelehnt', color: '#6b7280' },
+  pending: { label: 'Ausstehend', badgeClass: 'bg-status-aktiv-bg text-status-aktiv-text' },
+  soft_deleted: {
+    label: 'Soft-Deleted',
+    badgeClass: 'bg-status-fehler-bg text-status-fehler-text',
+  },
+  hard_deleted: {
+    label: 'Hard-Deleted',
+    badgeClass: 'bg-status-fehler-bg text-status-fehler-text',
+  },
+  recovered: {
+    label: 'Wiederhergestellt',
+    badgeClass: 'bg-status-fertig-bg text-status-fertig-text',
+  },
+  expired: {
+    label: 'Abgelaufen',
+    badgeClass: 'bg-status-archiviert-bg text-status-archiviert-text',
+  },
+  rejected: {
+    label: 'Abgelehnt',
+    badgeClass: 'bg-status-archiviert-bg text-status-archiviert-text',
+  },
 }
 
 export default function DataDeletion() {
@@ -96,17 +117,16 @@ export default function DataDeletion() {
         <ShieldOff size={22} style={{ display: 'inline', marginRight: 8 }} />
         Recht auf Vergessen (DSGVO Art. 17)
       </h1>
-      <p style={{ color: '#6b7280', marginBottom: 16, fontSize: 14 }}>
+      <p className="text-ink-light" style={{ marginBottom: 16, fontSize: 14 }}>
         Du kannst gespeicherte Daten in 4 Modi löschen. Soft-Delete mit 30 Tagen Recovery-Frist —
         danach unwiderruflich. Audit-Logs (Lösch-Anfragen) bleiben gemäß §147 AO erhalten.
       </p>
 
       {error && (
         <div
+          className="bg-status-fehler-bg text-status-fehler-text"
           style={{
             padding: 12,
-            background: '#fee2e2',
-            color: '#991b1b',
             borderRadius: 6,
             marginBottom: 12,
           }}
@@ -116,10 +136,9 @@ export default function DataDeletion() {
       )}
       {result && (
         <div
+          className="bg-status-aktiv-bg text-status-aktiv-text"
           style={{
             padding: 12,
-            background: '#fef3c7',
-            color: '#78350f',
             borderRadius: 6,
             marginBottom: 12,
           }}
@@ -134,18 +153,19 @@ export default function DataDeletion() {
       )}
 
       <div
+        className="border-status-fehler-border bg-status-fehler-bg"
         style={{
           marginBottom: 24,
           padding: 16,
-          border: '1px solid #fca5a5',
+          border: '1px solid',
           borderRadius: 6,
-          background: '#fef2f2',
         }}
       >
         <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>
           <AlertTriangle
             size={16}
-            style={{ display: 'inline', marginRight: 4, color: '#dc2626' }}
+            className="text-status-fehler-text"
+            style={{ display: 'inline', marginRight: 4 }}
           />
           Neue Lösch-Anfrage
         </h3>
@@ -158,7 +178,8 @@ export default function DataDeletion() {
               data-testid="deletion-mode"
               value={mode}
               onChange={(e) => setMode(e.target.value)}
-              style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }}
+              className="border-surface-border"
+              style={{ width: '100%', padding: 8, border: '1px solid', borderRadius: 4 }}
             >
               {Object.entries(MODE_LABELS).map(([v, label]) => (
                 <option key={v} value={v}>
@@ -179,7 +200,8 @@ export default function DataDeletion() {
                 value={olderThanDays}
                 onChange={(e) => setOlderThanDays(e.target.value)}
                 data-testid="deletion-older-than"
-                style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }}
+                className="border-surface-border"
+                style={{ width: '100%', padding: 8, border: '1px solid', borderRadius: 4 }}
               />
             </div>
           )}
@@ -191,7 +213,8 @@ export default function DataDeletion() {
               <select
                 value={classification}
                 onChange={(e) => setClassification(e.target.value)}
-                style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }}
+                className="border-surface-border"
+                style={{ width: '100%', padding: 8, border: '1px solid', borderRadius: 4 }}
               >
                 <option value="">— alle —</option>
                 <option value="werte">werte</option>
@@ -210,7 +233,8 @@ export default function DataDeletion() {
                 value={recordIds}
                 onChange={(e) => setRecordIds(e.target.value)}
                 placeholder="uuid1, uuid2, ..."
-                style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }}
+                className="border-surface-border"
+                style={{ width: '100%', padding: 8, border: '1px solid', borderRadius: 4 }}
               />
             </div>
           )}
@@ -223,7 +247,8 @@ export default function DataDeletion() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               maxLength={1000}
-              style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }}
+              className="border-surface-border"
+              style={{ width: '100%', padding: 8, border: '1px solid', borderRadius: 4 }}
             />
           </div>
         </div>
@@ -238,7 +263,10 @@ export default function DataDeletion() {
             </Button>
           ) : (
             <>
-              <span style={{ marginRight: 12, color: '#991b1b', fontWeight: 600 }}>
+              <span
+                className="text-status-fehler-text"
+                style={{ marginRight: 12, fontWeight: 600 }}
+              >
                 Sicher? {mode === 'full' && '⚠️ Löscht alle Daten + deaktiviert Konto.'}
               </span>
               <Button
@@ -263,11 +291,14 @@ export default function DataDeletion() {
 
       <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>Verlauf</h2>
       {history.length === 0 ? (
-        <p style={{ color: '#6b7280' }}>Keine Lösch-Anfragen.</p>
+        <p className="text-ink-light">Keine Lösch-Anfragen.</p>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
-            <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+            <tr
+              className="bg-surface-bg border-surface-border"
+              style={{ borderBottom: '1px solid' }}
+            >
               <th style={{ textAlign: 'left', padding: 8 }}>Datum</th>
               <th style={{ textAlign: 'left', padding: 8 }}>Modus</th>
               <th style={{ textAlign: 'left', padding: 8 }}>Status</th>
@@ -278,22 +309,28 @@ export default function DataDeletion() {
           </thead>
           <tbody>
             {history.map((h) => {
-              const badge = STATUS_BADGES[h.status] || { label: h.status, color: '#6b7280' }
+              const badge = STATUS_BADGES[h.status] || {
+                label: h.status,
+                badgeClass: 'bg-status-archiviert-bg text-status-archiviert-text',
+              }
               const recoverable =
                 h.status === 'soft_deleted' &&
                 h.recovery_until &&
                 new Date(h.recovery_until) > new Date()
               return (
-                <tr key={h.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                <tr
+                  key={h.id}
+                  className="border-surface-border"
+                  style={{ borderBottom: '1px solid' }}
+                >
                   <td style={{ padding: 8 }}>
                     {new Date(h.requested_at).toLocaleDateString('de-DE')}
                   </td>
                   <td style={{ padding: 8 }}>{MODE_LABELS[h.mode] || h.mode}</td>
                   <td style={{ padding: 8 }}>
                     <span
+                      className={badge.badgeClass}
                       style={{
-                        background: badge.color,
-                        color: 'white',
                         padding: '2px 8px',
                         borderRadius: 12,
                         fontSize: 11,

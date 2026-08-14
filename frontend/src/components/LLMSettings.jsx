@@ -883,6 +883,9 @@ function CostHistoryChart() {
           labelStyle={{ fontSize: 11 }}
           contentStyle={{ fontSize: 11, padding: '4px 8px' }}
         />
+        {/* bewusst behalten: Recharts-Bar-fill akzeptiert nur Farb-Literale, kein
+            Tailwind-Klassenkontext — Wert entspricht bewusst exakt primary-700
+            aus tailwind.config.js, keine neu erfundene Farbe. */}
         <Bar dataKey="eur" fill="#0F766E" radius={[3, 3, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>

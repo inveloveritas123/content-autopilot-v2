@@ -23,6 +23,9 @@ function escapeHtml(s) {
     .replace(/'/g, '&#039;')
 }
 
+// bewusst behalten: Force-Graph-Knoten-/Legenden-Farben (Canvas-Rendering via
+// ForceGraph2D, kein DOM/Tailwind-Kontext) — 4 unterscheidbare Daten-Kategorien,
+// keine Status-Bedeutung.
 const CLASS_COLORS = {
   werte: '#2563eb',
   stories: '#16a34a',
@@ -121,7 +124,7 @@ export default function MemoryViz() {
         <Network size={22} style={{ display: 'inline', marginRight: 8 }} />
         Gedächtnis-Vektor-Karte
       </h1>
-      <p style={{ color: '#6b7280', marginBottom: 16, fontSize: 14 }}>
+      <p className="text-ink-light" style={{ marginBottom: 16, fontSize: 14 }}>
         Jeder Punkt = ein Memory-Chunk. Verbindungen = Cosine-Similarity ≥ {edgeThreshold}. Klick
         auf Punkt = Details.
       </p>
@@ -144,7 +147,8 @@ export default function MemoryViz() {
             value={days}
             onChange={(e) => setDays(parseInt(e.target.value, 10) || 180)}
             data-testid="viz-days"
-            style={{ width: 100, padding: 6, border: '1px solid #d1d5db', borderRadius: 4 }}
+            className="border-surface-border"
+            style={{ width: 100, padding: 6, border: '1px solid', borderRadius: 4 }}
           />
         </div>
         <div>
@@ -153,7 +157,8 @@ export default function MemoryViz() {
             value={classification}
             onChange={(e) => setClassification(e.target.value)}
             data-testid="viz-class"
-            style={{ padding: 6, border: '1px solid #d1d5db', borderRadius: 4 }}
+            className="border-surface-border"
+            style={{ padding: 6, border: '1px solid', borderRadius: 4 }}
           >
             <option value="">— alle —</option>
             <option value="werte">werte</option>
@@ -167,7 +172,8 @@ export default function MemoryViz() {
             value={sourceType}
             onChange={(e) => setSourceType(e.target.value)}
             data-testid="viz-source"
-            style={{ padding: 6, border: '1px solid #d1d5db', borderRadius: 4 }}
+            className="border-surface-border"
+            style={{ padding: 6, border: '1px solid', borderRadius: 4 }}
           >
             <option value="">— alle —</option>
             <option value="voice_telegram">voice_telegram</option>
@@ -187,7 +193,8 @@ export default function MemoryViz() {
             value={edgeThreshold}
             onChange={(e) => setEdgeThreshold(parseFloat(e.target.value) || 0.75)}
             data-testid="viz-threshold"
-            style={{ width: 80, padding: 6, border: '1px solid #d1d5db', borderRadius: 4 }}
+            className="border-surface-border"
+            style={{ width: 80, padding: 6, border: '1px solid', borderRadius: 4 }}
           />
         </div>
         <Button data-testid="btn-viz-reload" onClick={load} disabled={loading}>
@@ -198,10 +205,9 @@ export default function MemoryViz() {
 
       {error && (
         <div
+          className="bg-status-fehler-bg text-status-fehler-text"
           style={{
             padding: 12,
-            background: '#fee2e2',
-            color: '#991b1b',
             borderRadius: 6,
             marginBottom: 12,
           }}
@@ -214,6 +220,8 @@ export default function MemoryViz() {
         {/* Should-Fix: ref auf Container, graphWidth aus ResizeObserver */}
         <div
           ref={containerRef}
+          // bewusst behalten: dunkler Canvas-Hintergrund für ForceGraph2D (Kontrast
+          // zu hellen Knoten/Kanten), keine Status-Bedeutung.
           style={{
             height: 600,
             background: '#0f172a',
@@ -224,18 +232,22 @@ export default function MemoryViz() {
         >
           {graphData.nodes.length === 0 ? (
             <div
+              className="text-ink-muted"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 height: '100%',
-                color: '#9ca3af',
               }}
             >
               <AlertCircle size={20} style={{ marginRight: 8 }} />
               {loading ? 'Lade Daten…' : 'Keine Memory-Chunks im gewählten Zeitraum / Filter.'}
             </div>
           ) : (
+            // bewusst behalten: ForceGraph2D-Canvas-Props (backgroundColor, nodeColor-
+            // Fallback, nodeLabel-HTML-Tooltip, linkColor) rendern außerhalb des
+            // Tailwind/DOM-Klassenkontexts — Canvas- bzw. Tooltip-Inline-Styles,
+            // keine Status-Bedeutung.
             <ForceGraph2D
               ref={fgRef}
               graphData={graphData}
@@ -257,7 +269,8 @@ export default function MemoryViz() {
 
         <div
           data-testid="viz-sidebar"
-          style={{ background: '#f9fafb', padding: 16, borderRadius: 8, fontSize: 13 }}
+          className="bg-surface-bg"
+          style={{ padding: 16, borderRadius: 8, fontSize: 13 }}
         >
           <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Statistik</h3>
           <div>
@@ -287,7 +300,7 @@ export default function MemoryViz() {
                 }}
               />
               <span style={{ flex: 1 }}>{c.name}</span>
-              <span style={{ color: '#6b7280' }}>{c.count}</span>
+              <span className="text-ink-light">{c.count}</span>
             </div>
           ))}
 
@@ -295,23 +308,23 @@ export default function MemoryViz() {
           {(data.stats?.by_source_type || []).map((s) => (
             <div key={s.name} style={{ display: 'flex', padding: '2px 0' }}>
               <span style={{ flex: 1 }}>{s.name}</span>
-              <span style={{ color: '#6b7280' }}>{s.count}</span>
+              <span className="text-ink-light">{s.count}</span>
             </div>
           ))}
 
           {selectedNode && (
             <div
               data-testid="viz-detail"
+              className="bg-surface-card border-surface-border"
               style={{
                 marginTop: 20,
                 padding: 12,
-                background: 'white',
-                border: '1px solid #e5e7eb',
+                border: '1px solid',
                 borderRadius: 6,
               }}
             >
               <h4 style={{ fontWeight: 600, marginBottom: 6 }}>Ausgewählt</h4>
-              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
+              <div className="text-ink-light" style={{ fontSize: 12, marginBottom: 4 }}>
                 {selectedNode.classification || 'unklassifiziert'} · {selectedNode.source_type}
               </div>
 
@@ -333,10 +346,10 @@ export default function MemoryViz() {
                   )}
                   {showConfirmDialog && (
                     <div
+                      className="bg-status-aktiv-bg"
                       style={{
                         marginTop: 8,
                         padding: 8,
-                        background: '#fef3c7',
                         borderRadius: 4,
                         fontSize: 12,
                       }}
@@ -344,7 +357,7 @@ export default function MemoryViz() {
                       <p style={{ fontWeight: 600, marginBottom: 4 }}>
                         Vollständigen Inhalt anzeigen?
                       </p>
-                      <p style={{ color: '#92400e', marginBottom: 6 }}>
+                      <p className="text-status-aktiv-text" style={{ marginBottom: 6 }}>
                         Dieser Zugriff wird im Audit-Log vermerkt.
                       </p>
                       <input
@@ -353,17 +366,21 @@ export default function MemoryViz() {
                         value={confirmReason}
                         onChange={(e) => setConfirmReason(e.target.value)}
                         data-testid="viz-confirm-reason"
+                        className="border-surface-border"
                         style={{
                           width: '100%',
                           padding: '4px 6px',
-                          border: '1px solid #d1d5db',
+                          border: '1px solid',
                           borderRadius: 4,
                           marginBottom: 6,
                           fontSize: 12,
                         }}
                       />
                       {fullTextError && (
-                        <div style={{ color: '#991b1b', fontSize: 11, marginBottom: 4 }}>
+                        <div
+                          className="text-status-fehler-text"
+                          style={{ fontSize: 11, marginBottom: 4 }}
+                        >
                           {fullTextError}
                         </div>
                       )}
@@ -386,11 +403,12 @@ export default function MemoryViz() {
                             setShowConfirmDialog(false)
                             setConfirmReason('')
                           }}
+                          className="border-surface-border"
                           style={{
                             fontSize: 11,
                             padding: '4px 8px',
                             background: 'transparent',
-                            border: '1px solid #d1d5db',
+                            border: '1px solid',
                           }}
                         >
                           Abbrechen
@@ -407,17 +425,18 @@ export default function MemoryViz() {
                   <div data-testid="viz-full-text" style={{ fontSize: 13 }}>
                     {fullTextData.full_text}
                   </div>
-                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+                  <div className="text-ink-muted" style={{ fontSize: 11, marginTop: 4 }}>
                     (Volltext — Zugriff wurde im Audit-Log vermerkt)
                   </div>
                   <Button
                     onClick={() => setFullTextData(null)}
+                    className="border-surface-border"
                     style={{
                       marginTop: 6,
                       fontSize: 11,
                       padding: '2px 6px',
                       background: 'transparent',
-                      border: '1px solid #d1d5db',
+                      border: '1px solid',
                     }}
                   >
                     Vorschau
@@ -425,7 +444,7 @@ export default function MemoryViz() {
                 </>
               )}
 
-              <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
+              <div className="text-ink-muted" style={{ fontSize: 11, marginTop: 6 }}>
                 {new Date(selectedNode.created_at).toLocaleString('de-DE')}
               </div>
             </div>

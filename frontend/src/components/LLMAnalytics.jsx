@@ -241,6 +241,8 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
             Keine Daten in den letzten 30 Tagen.
           </p>
         ) : (
+          // bewusst behalten: Recharts-Stroke-/Fill-Props (Deploy-Marker + Cost-
+          // Datenserie) sind Chart-Farben ohne Status-Bedeutung, keine Tier-2-Tokens.
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
               <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v) => v.slice(5)} />
@@ -277,6 +279,8 @@ function TrendsCacheTab({ loading, error, costTrend, cacheHitRate, runaway, onRe
         {!hasTrendData ? (
           <p className="text-sm text-ink-muted text-center py-6">Keine Daten.</p>
         ) : (
+          // bewusst behalten: Recharts-Stroke-Props (Deploy-Marker, Input-/Output-
+          // Token-Serien) sind Chart-Farben ohne Status-Bedeutung, keine Tier-2-Tokens.
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
               <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v) => v.slice(5)} />
@@ -586,6 +590,8 @@ function QualityGateTab({ loading, error, evalHistory, onReload }) {
               <Tooltip formatter={(v) => [v.toFixed(3), 'F1']} />
               <Legend iconSize={10} wrapperStyle={{ fontSize: 10 }} />
               {branchen.map((b, i) => {
+                // bewusst behalten: Branchen-Trendlinien-Palette (4 unterscheidbare
+                // Datenserien im Recharts-LineChart), keine Status-Bedeutung.
                 const COLORS = ['#10b981', '#f59e0b', '#6366f1', '#ef4444']
                 return (
                   <Line
