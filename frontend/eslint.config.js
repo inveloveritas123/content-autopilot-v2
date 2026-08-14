@@ -44,13 +44,30 @@ export default [
       // scharf geschaltet, sonst bricht `--max-warnings` den ganzen Build an
       // unmigrierten Altdateien. Auf 'error' heben, sobald D6 abgeschlossen ist.
       // Baseline bei Einführung (2026-08-14): 143 Hex-Fundstellen, eingefroren in
-      // package.json `lint`-Script (--max-warnings 234 = 91 alte + 143 neue). Diese
-      // Zahl darf nur SINKEN (jede migrierte Komponente senkt sie), nie angehoben
-      // werden um grün zu wirken.
+      // package.json `lint`-Script (--max-warnings N). Diese Zahl darf nur SINKEN
+      // (jede migrierte Komponente senkt sie), nie angehoben werden um grün zu wirken.
+      //
+      // Gate-Fix (2026-08-14, nach Hub-Rückmeldung zu agy-Tranche 2): die erste
+      // Fassung matchte JEDES Literal, dessen kompletter String-Wert dem
+      // Hex-Zeichenmuster entsprach — unabhängig vom Kontext. Zwei belegte
+      // Fehlalarme: '#146' (Issue-Nummer in einem Text-String,
+      // LLMAnalytics.jsx) und '#B2B' (Hashtag-String, Posts.jsx — 'B2B' ist
+      // zufällig gültiges Hex). Fix: der Selektor prüft jetzt zusätzlich, dass
+      // das Literal an einer FARBWERT-TRAGENDEN Stelle steht (JSX-Attribut
+      // color/fill/stroke/backgroundColor/borderColor o.ä., oder eine
+      // entsprechende Objekt-Property in einem style={{}}-Ausdruck) statt nur
+      // auf das Zeichenmuster allein zu vertrauen.
       'no-restricted-syntax': [
         'warn',
         {
-          selector: "Literal[value=/^#([0-9a-fA-F]{3}){1,2}$/]",
+          selector:
+            "JSXAttribute[name.name=/^(color|fill|stroke|backgroundColor|borderColor|background|bg)$/i] Literal[value=/^#([0-9a-fA-F]{3}){1,2}$/]",
+          message:
+            'Kein Roh-Hex-Farbwert im Component-Code — Tier-2-Token aus tailwind.config.js nutzen (status-*, primary-*, accent-*, surface-*, ink-*). Siehe docs/SSOT-FRONTEND-REDESIGN-2026-08-14.md.',
+        },
+        {
+          selector:
+            "Property[key.name=/^(color|fill|stroke|backgroundColor|borderColor|background)$/i] > Literal[value=/^#([0-9a-fA-F]{3}){1,2}$/]",
           message:
             'Kein Roh-Hex-Farbwert im Component-Code — Tier-2-Token aus tailwind.config.js nutzen (status-*, primary-*, accent-*, surface-*, ink-*). Siehe docs/SSOT-FRONTEND-REDESIGN-2026-08-14.md.',
         },
