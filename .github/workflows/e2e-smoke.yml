@@ -24,6 +24,8 @@ jobs:
       DB_PASSWORD: citestpw
       E2E_BASE_URL: http://localhost:8601
       E2E_API_KEY: ci-test-tenant-key
+      E2E_LOGIN_EMAIL: e2e-owner@ci-test.local
+      E2E_LOGIN_PASSWORD: ci-test-password-2026
       NEXTCLOUD_PASSWORD: ci-placeholder
       NEXTCLOUD_DB_PASSWORD: ci-placeholder
 
@@ -88,7 +90,26 @@ jobs:
           # wir nutzen exec im Container fuer das Bootstrap-Script.
           docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml \
             exec -T postgres-ci psql -U autopilot -d content_autopilot_v2 \
-            -c "INSERT INTO tenants (id, api_key, name, slug, created_at) VALUES (gen_random_uuid(), '${{ env.E2E_API_KEY }}', 'CI Test Tenant', 'ci-test-tenant', NOW()) ON CONFLICT (api_key) DO NOTHING;"
+            -c "INSERT INTO tenants (id, api_key, name, slug, agentur_id, created_at) VALUES (gen_random_uuid(), '${{ env.E2E_API_KEY }}', 'CI Test Tenant', 'ci-test-tenant', 'ci-test-agency', NOW()) ON CONFLICT (api_key) DO NOTHING;"
+
+      - name: Bootstrap CI-Login-User (E2E Login-Flow, #90/D6)
+        env:
+          E2E_LOGIN_EMAIL: ${{ env.E2E_LOGIN_EMAIL }}
+          E2E_LOGIN_PASSWORD: ${{ env.E2E_LOGIN_PASSWORD }}
+        run: |
+          # Passwort-Hash ist scrypt mit Python-generiertem Salt (services/auth.py::hash_password) —
+          # kein reiner SQL-Insert möglich, daher Hash im Container erzeugen und einbetten.
+          # agency.slug MUSS mit tenants.agentur_id oben übereinstimmen, sonst greift
+          # user_may_access_tenant() (role='owner' → alle Tenants der eigenen Agentur) nicht,
+          # und der Login-E2E-Test bekäme "kein Zugang eingerichtet" statt das Dashboard.
+          HASH=$(docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml \
+            exec -T backend-v2 python -c "from services.auth import hash_password; print(hash_password('${E2E_LOGIN_PASSWORD}'))" | tr -d '\r')
+          docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml \
+            exec -T postgres-ci psql -U autopilot -d content_autopilot_v2 \
+            -c "INSERT INTO agencies (id, name, slug, created_at) VALUES (gen_random_uuid(), 'CI Test Agency', 'ci-test-agency', NOW()) ON CONFLICT (slug) DO NOTHING;"
+          docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml \
+            exec -T postgres-ci psql -U autopilot -d content_autopilot_v2 \
+            -c "INSERT INTO users (id, email, agency_id, role, password_hash, is_active, created_at) SELECT gen_random_uuid(), '${E2E_LOGIN_EMAIL}', id, 'owner', '${HASH}', true, NOW() FROM agencies WHERE slug = 'ci-test-agency' ON CONFLICT (email) DO NOTHING;"
 
       - name: Wait for /api/health
         timeout-minutes: 3
