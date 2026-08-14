@@ -181,10 +181,10 @@ function ProviderCard({
   const { toast } = useToast()
   const statusColor =
     provider.last_test_status === 'ok'
-      ? 'text-emerald-500'
+      ? 'text-status-fertig-text'
       : provider.last_test_status === 'error'
-        ? 'text-red-500'
-        : 'text-gray-400'
+        ? 'text-status-fehler-text'
+        : 'text-ink-muted'
   const StatusIcon =
     provider.last_test_status === 'ok'
       ? CheckCircle2
@@ -339,13 +339,13 @@ function ProviderCard({
 
   return (
     <div
-      className={`bg-white rounded-xl border transition-colors ${editOpen ? 'border-primary-300' : provider.is_active ? 'border-surface-border' : 'border-gray-200 opacity-60'}`}
+      className={`bg-white rounded-xl border transition-colors ${editOpen ? 'border-primary-300' : provider.is_active ? 'border-surface-border' : 'border-surface-border opacity-60'}`}
     >
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <div
-              className={`w-9 h-9 rounded-lg flex items-center justify-center ${provider.is_active ? 'bg-primary-50' : 'bg-gray-100'}`}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center ${provider.is_active ? 'bg-primary-50' : 'bg-surface-bg'}`}
             >
               <StatusIcon className={`w-4.5 h-4.5 ${statusColor}`} />
             </div>
@@ -353,7 +353,7 @@ function ProviderCard({
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold text-ink">{provider.name}</h3>
                 {provider.is_default && (
-                  <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                  <Star className="w-3.5 h-3.5 text-accent-500 fill-accent-500" />
                 )}
               </div>
               <p className="text-xs text-ink-muted">
@@ -364,7 +364,7 @@ function ProviderCard({
           <div className="flex items-center gap-1.5">
             <button
               onClick={openEditForm}
-              className={`p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md hover:bg-gray-100 ${editOpen ? 'text-primary-600 bg-primary-50' : 'text-ink-muted hover:text-primary-600'}`}
+              className={`p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md hover:bg-surface-bg ${editOpen ? 'text-primary-600 bg-primary-50' : 'text-ink-muted hover:text-primary-600'}`}
               title="Bearbeiten"
             >
               <Pencil className="w-4 h-4" />
@@ -372,23 +372,23 @@ function ProviderCard({
             <button
               onClick={() => onTest(provider.id)}
               disabled={testing}
-              className="p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md hover:bg-gray-100 text-ink-muted hover:text-primary-600"
+              className="p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md hover:bg-surface-bg text-ink-muted hover:text-primary-600"
               title="Testen"
             >
               {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
             </button>
             <button
               onClick={() => onToggleDefault(provider)}
-              className="p-1.5 rounded-md hover:bg-gray-100"
+              className="p-1.5 rounded-md hover:bg-surface-bg"
               title="Als Default setzen"
             >
               <Star
-                className={`w-4 h-4 ${provider.is_default ? 'text-amber-500 fill-amber-500' : 'text-gray-300'}`}
+                className={`w-4 h-4 ${provider.is_default ? 'text-accent-500 fill-accent-500' : 'text-ink-muted'}`}
               />
             </button>
             <button
               onClick={() => onToggleActive(provider)}
-              className={`px-2 py-0.5 rounded-full text-[11px] font-semibold transition-colors ${provider.is_active ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+              className={`px-2 py-0.5 rounded-full text-[11px] font-semibold transition-colors ${provider.is_active ? 'bg-status-fertig-bg text-status-fertig-text hover:bg-status-fertig-border' : 'bg-surface-bg text-ink-muted hover:bg-surface-border'}`}
               title={provider.is_active ? 'Deaktivieren' : 'Aktivieren'}
             >
               {provider.is_active ? 'Aktiv' : 'Inaktiv'}
@@ -396,7 +396,7 @@ function ProviderCard({
             {!provider.is_active && (
               <button
                 onClick={() => onDelete(provider.id)}
-                className="p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md hover:bg-red-50 text-ink-muted hover:text-red-500"
+                className="p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md hover:bg-status-fehler-bg text-ink-muted hover:text-status-fehler-text"
                 title="Loeschen"
               >
                 <Trash2 className="w-4 h-4" />
@@ -405,16 +405,20 @@ function ProviderCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100">
+        <div className="flex items-center gap-3 mt-3 pt-3 border-t border-surface-border">
           <span
             className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
               provider.task_assignment === 'all'
                 ? 'bg-primary-50 text-primary-700'
                 : provider.task_assignment === 'analysis'
-                  ? 'bg-blue-50 text-blue-700'
+                  ? 'bg-status-neu-bg text-status-neu-text'
                   : provider.task_assignment === 'creative'
-                    ? 'bg-purple-50 text-purple-700'
-                    : 'bg-amber-50 text-amber-700'
+                    ? // bewusst behalten: 4. unterscheidbare Kategorie-Badge-Farbe
+                      // (Alle/Analyse/Kreativ/Transkription) neben all=primary,
+                      // analysis=status-neu, default=accent — kein 1:1-Tier-2-
+                      // Äquivalent für eine 4. gleichzeitig sichtbare Kategorie.
+                      'bg-purple-50 text-purple-700'
+                    : 'bg-accent-50 text-accent-700'
             }`}
           >
             {TASK_OPTIONS.find((t) => t.value === provider.task_assignment)?.label ||
@@ -424,7 +428,7 @@ function ProviderCard({
             <span className="text-[11px] text-ink-muted font-mono">{provider.api_key_masked}</span>
           )}
           {provider.config?.caching && (
-            <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded-full">
+            <span className="text-[11px] bg-primary-50 text-primary-700 px-1.5 py-0.5 rounded-full">
               Caching
             </span>
           )}
@@ -432,13 +436,13 @@ function ProviderCard({
 
         {/* Cost bar with editable limit */}
         <div
-          className={`mt-3 pt-3 border-t border-gray-100 p-2 rounded-lg ${isBlocked ? 'bg-red-50' : isWarning ? 'bg-amber-50' : 'bg-gray-50'}`}
+          className={`mt-3 pt-3 border-t border-surface-border p-2 rounded-lg ${isBlocked ? 'bg-status-fehler-bg' : isWarning ? 'bg-status-aktiv-bg' : 'bg-surface-bg'}`}
         >
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[11px] text-ink-muted">Tageskosten</span>
             <div className="flex items-center gap-1">
               <span
-                className={`text-[11px] font-semibold ${isBlocked ? 'text-red-600' : isWarning ? 'text-amber-600' : 'text-ink'}`}
+                className={`text-[11px] font-semibold ${isBlocked ? 'text-status-fehler-text' : isWarning ? 'text-status-aktiv-text' : 'text-ink'}`}
               >
                 ${(spent / 100).toFixed(2)} /
               </span>
@@ -458,12 +462,15 @@ function ProviderCard({
                     autoFocus
                   />
                   <span className="text-[11px] text-ink-muted">USD</span>
-                  <button onClick={saveLimit} className="text-emerald-600 hover:text-emerald-700">
+                  <button
+                    onClick={saveLimit}
+                    className="text-status-fertig-text hover:text-status-fertig-text"
+                  >
                     <Check className="w-3 h-3" />
                   </button>
                   <button
                     onClick={() => setEditingLimit(false)}
-                    className="text-gray-400 hover:text-gray-600"
+                    className="text-ink-muted hover:text-ink-light"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -479,15 +486,15 @@ function ProviderCard({
               )}
             </div>
           </div>
-          <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <div className="w-full h-1.5 bg-surface-border rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all ${isBlocked ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-primary-500'}`}
+              className={`h-full rounded-full transition-all ${isBlocked ? 'bg-status-fehler-text' : isWarning ? 'bg-status-aktiv-text' : 'bg-primary-500'}`}
               style={{ width: `${pct}%` }}
             />
           </div>
           {isBlocked && (
             <div className="mt-2 flex items-center gap-2 flex-wrap">
-              <p className="text-[10px] text-red-600 font-medium">LIMIT ERREICHT</p>
+              <p className="text-[10px] text-status-fehler-text font-medium">LIMIT ERREICHT</p>
               <div className="flex gap-1 ml-auto">
                 <button
                   onClick={async () => {
@@ -499,7 +506,7 @@ function ProviderCard({
                     }
                   }}
                   disabled={resetting}
-                  className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded-md hover:bg-amber-200 border border-amber-200 transition-colors"
+                  className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] font-semibold bg-status-aktiv-bg text-status-aktiv-text rounded-md hover:bg-status-aktiv-border border border-status-aktiv-border transition-colors"
                   title="Tageskosten auf 0 zurücksetzen"
                 >
                   {resetting ? (
@@ -513,7 +520,7 @@ function ProviderCard({
                   <button
                     key={usd}
                     onClick={() => onUpdateLimit(provider.id, limit + usd * 100)}
-                    className="px-2 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700 rounded-md hover:bg-red-200 border border-red-200 transition-colors"
+                    className="px-2 py-0.5 text-[10px] font-semibold bg-status-fehler-bg text-status-fehler-text rounded-md hover:bg-status-fehler-border border border-status-fehler-border transition-colors"
                     title={`Limit um +$${usd} erhöhen`}
                   >
                     +${usd}
@@ -534,7 +541,7 @@ function ProviderCard({
                   }
                 }}
                 disabled={resetting || spent === 0}
-                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-ink-muted hover:text-amber-600 hover:bg-amber-50 rounded transition-colors disabled:opacity-30"
+                className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-ink-muted hover:text-status-aktiv-text hover:bg-status-aktiv-bg rounded transition-colors disabled:opacity-30"
                 title="Tageskosten auf 0 zurücksetzen"
               >
                 {resetting ? (
@@ -558,7 +565,7 @@ function ProviderCard({
         </div>
 
         {/* Model selector */}
-        <div className="mt-2 pt-2 border-t border-gray-100">
+        <div className="mt-2 pt-2 border-t border-surface-border">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] text-ink-muted shrink-0">Modell:</span>
             {editingModel ? (
@@ -580,7 +587,7 @@ function ProviderCard({
                     await onUpdateModel(provider.id, modelInput)
                     setEditingModel(false)
                   }}
-                  className="text-emerald-600 hover:text-emerald-700 shrink-0"
+                  className="text-status-fertig-text hover:text-status-fertig-text shrink-0"
                 >
                   <Check className="w-3 h-3" />
                 </button>
@@ -589,7 +596,7 @@ function ProviderCard({
                     setModelInput(provider.model_name || '')
                     setEditingModel(false)
                   }}
-                  className="text-gray-400 hover:text-gray-600 shrink-0"
+                  className="text-ink-muted hover:text-ink-light shrink-0"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -611,7 +618,9 @@ function ProviderCard({
         </div>
 
         {provider.last_test_error && (
-          <p className="text-[11px] text-red-500 mt-2 truncate">{provider.last_test_error}</p>
+          <p className="text-[11px] text-status-fehler-text mt-2 truncate">
+            {provider.last_test_error}
+          </p>
         )}
       </div>
 
@@ -631,7 +640,7 @@ function ProviderCard({
                   value={editForm.api_key}
                   onChange={(e) => setEditForm({ ...editForm, api_key: e.target.value })}
                   placeholder="sk-... (nur ausfuellen um zu aendern)"
-                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono bg-white"
+                  className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono bg-white"
                 />
                 <button
                   type="button"
@@ -670,7 +679,7 @@ function ProviderCard({
                 <select
                   value={editForm.model_name}
                   onChange={(e) => setEditForm({ ...editForm, model_name: e.target.value })}
-                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 >
                   <option value="">— bitte wählen —</option>
                   {editModels.map((m) => (
@@ -683,7 +692,7 @@ function ProviderCard({
                 <select
                   value={editForm.model_name}
                   onChange={(e) => setEditForm({ ...editForm, model_name: e.target.value })}
-                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 >
                   <option value="">— Freitext / kein Modell —</option>
                   {REQUESTY_MODELS.map((m) => (
@@ -702,7 +711,7 @@ function ProviderCard({
                 <select
                   value={editForm.task_assignment}
                   onChange={(e) => setEditForm({ ...editForm, task_assignment: e.target.value })}
-                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 >
                   {TASK_OPTIONS.map((t) => (
                     <option key={t.value} value={t.value}>
@@ -723,7 +732,7 @@ function ProviderCard({
                   onChange={(e) =>
                     setEditForm({ ...editForm, cost_limit_daily_cents: e.target.value })
                   }
-                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 />
               </div>
             </div>
@@ -734,7 +743,7 @@ function ProviderCard({
                 type="checkbox"
                 checked={editForm.caching}
                 onChange={(e) => setEditForm({ ...editForm, caching: e.target.checked })}
-                className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                className="w-4 h-4 rounded border-surface-border text-primary-600 focus:ring-primary-500"
               />
               <span className="text-sm text-ink">Prompt-Caching aktivieren</span>
               <span className="text-[11px] text-ink-muted">
@@ -746,13 +755,13 @@ function ProviderCard({
             {editTestResult && (
               <div className="flex items-center gap-2 text-xs">
                 {editTestResult.status === 'ok' ? (
-                  <span className="text-emerald-700 flex items-center gap-1">
+                  <span className="text-status-fertig-text flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     Verbindung OK · {editTestResult.latency_ms}ms
                   </span>
                 ) : (
                   <span
-                    className="text-red-700 flex items-center gap-1 truncate"
+                    className="text-status-fehler-text flex items-center gap-1 truncate"
                     title={editTestResult.error}
                   >
                     <XCircle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -771,12 +780,12 @@ function ProviderCard({
                 <summary className="cursor-pointer text-ink-muted hover:text-ink select-none">
                   Verbindungs-Log ({editLogEntries.length})
                 </summary>
-                <div className="mt-1 max-h-40 overflow-y-auto bg-white rounded p-2 space-y-0.5 font-mono border border-gray-100">
+                <div className="mt-1 max-h-40 overflow-y-auto bg-white rounded p-2 space-y-0.5 font-mono border border-surface-border">
                   {editLogEntries.map((e, i) => {
                     const colorMap = {
-                      ok: 'text-emerald-700',
-                      error: 'text-red-700',
-                      warn: 'text-amber-700',
+                      ok: 'text-status-fertig-text',
+                      error: 'text-status-fehler-text',
+                      warn: 'text-status-aktiv-text',
                       info: 'text-ink-muted',
                     }
                     const ts = e.ts.toTimeString().slice(0, 8)
@@ -794,7 +803,7 @@ function ProviderCard({
             <div className="flex gap-2 justify-between pt-1">
               <button
                 onClick={() => onDelete(provider.id)}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg border border-red-200 transition-colors"
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-status-fehler-text hover:bg-status-fehler-bg rounded-lg border border-status-fehler-border transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Loeschen
               </button>
@@ -906,10 +915,10 @@ function BenchmarkResult({ result, onClose }) {
   const isOk = result.status === 'ok'
   const isBudget = result.status === 'budget_exceeded'
   const bgClass = isOk
-    ? 'bg-emerald-50 border-emerald-200'
+    ? 'bg-status-fertig-bg border-status-fertig-border'
     : isBudget
-      ? 'bg-amber-50 border-amber-200'
-      : 'bg-red-50 border-red-200'
+      ? 'bg-status-aktiv-bg border-status-aktiv-border'
+      : 'bg-status-fehler-bg border-status-fehler-border'
   return (
     <div className={`mt-2 p-3 rounded-lg text-xs border ${bgClass}`}>
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -920,7 +929,7 @@ function BenchmarkResult({ result, onClose }) {
           {result.latency_ms > 0 && <span className="text-ink-muted">{result.latency_ms}ms</span>}
           {result.quality_score != null && (
             <span
-              className={`font-semibold px-1.5 py-0.5 rounded ${result.quality_score >= 80 ? 'bg-emerald-100 text-emerald-700' : result.quality_score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}
+              className={`font-semibold px-1.5 py-0.5 rounded ${result.quality_score >= 80 ? 'bg-status-fertig-bg text-status-fertig-text' : result.quality_score >= 60 ? 'bg-status-aktiv-bg text-status-aktiv-text' : 'bg-status-fehler-bg text-status-fehler-text'}`}
             >
               {result.quality_score.toFixed(0)}/100
             </span>
@@ -934,7 +943,9 @@ function BenchmarkResult({ result, onClose }) {
         </button>
       </div>
       {result.error ? (
-        <p className={isBudget ? 'text-amber-700' : 'text-red-600'}>{result.error}</p>
+        <p className={isBudget ? 'text-status-aktiv-text' : 'text-status-fehler-text'}>
+          {result.error}
+        </p>
       ) : (
         <pre className="whitespace-pre-wrap text-ink text-[10px] leading-relaxed max-h-32 overflow-y-auto">
           {result.result_preview}
@@ -973,12 +984,12 @@ function TaskAssignmentTable({ providers }) {
   }
 
   return (
-    <div className="mt-5 pt-5 border-t border-gray-100">
+    <div className="mt-5 pt-5 border-t border-surface-border">
       <h3 className="text-xs font-semibold text-ink mb-3">Aufgaben-Zuordnung</h3>
-      <div className="overflow-hidden rounded-lg border border-gray-200">
+      <div className="overflow-hidden rounded-lg border border-surface-border">
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
+            <tr className="bg-surface-bg border-b border-surface-border">
               <th className="px-3 py-2 text-left font-medium text-ink-muted">Aufgabe</th>
               <th className="px-3 py-2 text-left font-medium text-ink-muted">Modell</th>
               <th className="px-3 py-2 text-left font-medium text-ink-muted">Kosten</th>
@@ -993,14 +1004,14 @@ function TaskAssignmentTable({ providers }) {
               const hasResult = step && results[step]
               return (
                 <Fragment key={row.task}>
-                  <tr className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                  <tr className={i % 2 === 0 ? 'bg-white' : 'bg-surface-bg/50'}>
                     <td className="px-3 py-2 text-ink">{row.task}</td>
                     <td className="px-3 py-2">
                       <span
                         className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
                           row.tier === 'flash'
-                            ? 'bg-blue-50 text-blue-700'
-                            : 'bg-purple-50 text-purple-700'
+                            ? 'bg-primary-50 text-primary-700'
+                            : 'bg-accent-50 text-accent-700'
                         }`}
                       >
                         {row.model}
@@ -1120,7 +1131,7 @@ function RoutingOverridePanel() {
   if (!routing) return null
 
   return (
-    <div className="mt-5 pt-5 border-t border-gray-100">
+    <div className="mt-5 pt-5 border-t border-surface-border">
       <div className="flex items-center gap-2 mb-3">
         <h3 className="text-xs font-semibold text-ink">Live Routing Override</h3>
         <span className="text-[10px] text-ink-muted">
@@ -1132,10 +1143,10 @@ function RoutingOverridePanel() {
           </span>
         )}
       </div>
-      <div className="overflow-hidden rounded-lg border border-gray-200">
+      <div className="overflow-hidden rounded-lg border border-surface-border">
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
+            <tr className="bg-surface-bg border-b border-surface-border">
               <th className="px-3 py-2 text-left font-medium text-ink-muted">Schritt</th>
               <th className="px-3 py-2 text-left font-medium text-ink-muted">Modell</th>
               <th className="px-3 py-2 text-right font-medium text-ink-muted">Kosten/1M</th>
@@ -1150,7 +1161,7 @@ function RoutingOverridePanel() {
               const isSaving = saving === row.purpose
               const costInfo = row.cost_per_1m_usd != null ? `$${row.cost_per_1m_usd}/1M` : '—'
               return (
-                <tr key={row.purpose} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                <tr key={row.purpose} className={i % 2 === 0 ? 'bg-white' : 'bg-surface-bg/50'}>
                   <td className="px-3 py-2 font-medium text-ink">{row.label}</td>
                   <td className="px-3 py-2">
                     <select
@@ -1158,7 +1169,7 @@ function RoutingOverridePanel() {
                       onChange={(e) =>
                         setOverrides((prev) => ({ ...prev, [row.purpose]: e.target.value }))
                       }
-                      className="text-[11px] border border-gray-200 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400 max-w-[200px]"
+                      className="text-[11px] border border-surface-border rounded px-1.5 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400 max-w-[200px]"
                     >
                       {ROUTING_MODELS.map((m) => (
                         <option key={m.key} value={m.key}>
@@ -1175,7 +1186,9 @@ function RoutingOverridePanel() {
                   </td>
                   <td className="px-3 py-2 text-right">
                     {isSaved ? (
-                      <span className="text-[10px] text-emerald-600 font-medium">Gespeichert</span>
+                      <span className="text-[10px] text-status-fertig-text font-medium">
+                        Gespeichert
+                      </span>
                     ) : (
                       <button
                         onClick={() => handleSave(row.purpose)}
@@ -1183,7 +1196,7 @@ function RoutingOverridePanel() {
                         className={`px-2 py-0.5 text-[10px] font-medium rounded border transition-colors ${
                           changed
                             ? 'text-primary-700 bg-primary-50 border-primary-200 hover:bg-primary-100'
-                            : 'text-gray-300 border-gray-100 cursor-default'
+                            : 'text-ink-muted border-surface-border cursor-default'
                         }`}
                       >
                         {isSaving ? '...' : 'Speichern'}
@@ -1339,12 +1352,12 @@ function AddProviderModal({ onClose, onSave }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
           <div className="flex items-center gap-2">
             {step === 'form' && (
               <button
                 onClick={() => setStep('select')}
-                className="mr-1 p-1 rounded-md hover:bg-gray-100 text-ink-muted hover:text-ink"
+                className="mr-1 p-1 rounded-md hover:bg-surface-bg text-ink-muted hover:text-ink"
               >
                 <X className="w-4 h-4 rotate-180" style={{ transform: 'rotate(180deg)' }} />
               </button>
@@ -1355,7 +1368,7 @@ function AddProviderModal({ onClose, onSave }) {
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md hover:bg-gray-100 text-ink-muted"
+            className="p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md hover:bg-surface-bg text-ink-muted"
           >
             <X className="w-4 h-4" />
           </button>
@@ -1373,7 +1386,7 @@ function AddProviderModal({ onClose, onSave }) {
                   <button
                     key={opt.value}
                     onClick={() => handleSelectProvider(opt)}
-                    className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-primary-300 hover:bg-primary-50/50 transition-colors text-left group"
+                    className="flex items-center gap-3 p-3 rounded-xl border border-surface-border hover:border-primary-300 hover:bg-primary-50/50 transition-colors text-left group"
                   >
                     <span className="text-2xl">{opt.emoji}</span>
                     <div>
@@ -1397,7 +1410,7 @@ function AddProviderModal({ onClose, onSave }) {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="z.B. Requesty Production"
-                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
 
@@ -1410,7 +1423,7 @@ function AddProviderModal({ onClose, onSave }) {
                     value={form.api_key}
                     onChange={(e) => setForm({ ...form, api_key: e.target.value })}
                     placeholder="sk-..."
-                    className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+                    className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
                   />
                   <button
                     type="button"
@@ -1429,7 +1442,7 @@ function AddProviderModal({ onClose, onSave }) {
                   value={form.base_url}
                   onChange={(e) => setForm({ ...form, base_url: e.target.value })}
                   placeholder="https://api.openai.com/v1"
-                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
 
@@ -1455,7 +1468,7 @@ function AddProviderModal({ onClose, onSave }) {
                   <select
                     value={form.model_name}
                     onChange={(e) => setForm({ ...form, model_name: e.target.value })}
-                    className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
                     <option value="">— bitte wählen —</option>
                     {models.map((m) => (
@@ -1469,7 +1482,7 @@ function AddProviderModal({ onClose, onSave }) {
                     value={form.model_name}
                     onChange={(e) => setForm({ ...form, model_name: e.target.value })}
                     placeholder="z.B. gpt-4o-mini oder vertex/gemini-2.5-flash-lite@..."
-                    className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 )}
                 {!supportsListing &&
@@ -1487,7 +1500,7 @@ function AddProviderModal({ onClose, onSave }) {
                   <select
                     value={form.task_assignment}
                     onChange={(e) => setForm({ ...form, task_assignment: e.target.value })}
-                    className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
                     {TASK_OPTIONS.map((t) => (
                       <option key={t.value} value={t.value}>
@@ -1506,7 +1519,7 @@ function AddProviderModal({ onClose, onSave }) {
                     min="0"
                     value={form.cost_limit_daily_cents}
                     onChange={(e) => setForm({ ...form, cost_limit_daily_cents: e.target.value })}
-                    className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
               </div>
@@ -1517,13 +1530,13 @@ function AddProviderModal({ onClose, onSave }) {
                   type="checkbox"
                   checked={form.caching}
                   onChange={(e) => setForm({ ...form, caching: e.target.checked })}
-                  className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  className="w-4 h-4 rounded border-surface-border text-primary-600 focus:ring-primary-500"
                 />
                 <span className="text-sm text-ink">Prompt-Caching aktivieren</span>
               </label>
 
               {/* #136: Verbindung-testen-Button */}
-              <div className="border-t border-gray-100 pt-3 space-y-2">
+              <div className="border-t border-surface-border pt-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <button
                     type="button"
@@ -1539,14 +1552,14 @@ function AddProviderModal({ onClose, onSave }) {
                     Verbindung testen
                   </button>
                   {testResult?.ok && (
-                    <span className="text-[11px] text-emerald-700 flex items-center gap-1">
+                    <span className="text-[11px] text-status-fertig-text flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
                       {testResult.latency_ms}ms · {testResult.tokens_used || 0} Tokens
                     </span>
                   )}
                   {testResult && !testResult.ok && (
                     <span
-                      className="text-[11px] text-red-700 flex items-center gap-1 truncate max-w-[280px]"
+                      className="text-[11px] text-status-fehler-text flex items-center gap-1 truncate max-w-[280px]"
                       title={testResult.error}
                     >
                       <XCircle className="w-3 h-3 flex-shrink-0" />
@@ -1562,7 +1575,7 @@ function AddProviderModal({ onClose, onSave }) {
                       type="checkbox"
                       checked={forceSave}
                       onChange={(e) => setForceSave(e.target.checked)}
-                      className="w-3.5 h-3.5 rounded border-gray-300 text-primary-600"
+                      className="w-3.5 h-3.5 rounded border-surface-border text-primary-600"
                     />
                     Trotz Fehler speichern (z.B. wenn Provider gerade aufgeladen werden muss)
                   </label>
@@ -1577,12 +1590,12 @@ function AddProviderModal({ onClose, onSave }) {
                     <summary className="cursor-pointer text-ink-muted hover:text-ink select-none">
                       Verbindungs-Log ({logEntries.length})
                     </summary>
-                    <div className="mt-1 max-h-40 overflow-y-auto bg-gray-50 rounded p-2 space-y-0.5 font-mono">
+                    <div className="mt-1 max-h-40 overflow-y-auto bg-surface-bg rounded p-2 space-y-0.5 font-mono">
                       {logEntries.map((e, i) => {
                         const colorMap = {
-                          ok: 'text-emerald-700',
-                          error: 'text-red-700',
-                          warn: 'text-amber-700',
+                          ok: 'text-status-fertig-text',
+                          error: 'text-status-fehler-text',
+                          warn: 'text-status-aktiv-text',
                           info: 'text-ink-muted',
                         }
                         const ts = e.ts.toTimeString().slice(0, 8)
@@ -1815,15 +1828,15 @@ export default function LLMSettings() {
             </thead>
             <tbody>
               {allTestResults.map((r) => (
-                <tr key={r.providerId} className="border-t border-gray-100">
+                <tr key={r.providerId} className="border-t border-surface-border">
                   <td className="py-1.5 font-medium text-ink">{r.name}</td>
                   <td className="py-1.5 text-right">
                     {r.status === 'ok' ? (
-                      <span className="text-emerald-700 inline-flex items-center gap-1">
+                      <span className="text-status-fertig-text inline-flex items-center gap-1">
                         <CheckCircle2 className="w-3 h-3" /> ok
                       </span>
                     ) : (
-                      <span className="text-red-700 inline-flex items-center gap-1">
+                      <span className="text-status-fehler-text inline-flex items-center gap-1">
                         <XCircle className="w-3 h-3" /> {r.http_status || 'fail'}
                       </span>
                     )}
@@ -1845,8 +1858,8 @@ export default function LLMSettings() {
       )}
 
       {providers.length === 0 ? (
-        <div className="text-center py-8 bg-gray-50 rounded-xl">
-          <Cpu className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+        <div className="text-center py-8 bg-surface-bg rounded-xl">
+          <Cpu className="w-8 h-8 text-ink-muted mx-auto mb-2" />
           <p className="text-sm text-ink-light">Kein KI-Provider konfiguriert.</p>
           <button
             onClick={() => setShowAddModal(true)}
@@ -1877,7 +1890,7 @@ export default function LLMSettings() {
 
       {/* Cost History */}
       {providers.length > 0 && (
-        <div className="mt-5 pt-5 border-t border-gray-100">
+        <div className="mt-5 pt-5 border-t border-surface-border">
           <h3 className="text-xs font-semibold text-ink mb-3">Kosten der letzten 7 Tage</h3>
           <CostHistoryChart />
         </div>

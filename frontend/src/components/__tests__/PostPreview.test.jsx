@@ -78,16 +78,16 @@ describe('PostPreview', () => {
     expect(screen.queryByText(/Carousel/)).toBeNull()
   })
 
-  test('renders hashtags with blue color class', () => {
+  test('renders hashtags with primary color class', () => {
     render(<PostPreview text="Post mit #LinkedIn und #Content" />)
     const hashtag = screen.getByText('#LinkedIn')
-    expect(hashtag.className).toContain('text-blue-600')
+    expect(hashtag.className).toContain('text-primary-600')
   })
 
-  test('renders mentions with blue color class', () => {
+  test('renders mentions with primary color class', () => {
     render(<PostPreview text="Danke @MaxMustermann fuer den Tipp" />)
     const mention = screen.getByText('@MaxMustermann')
-    expect(mention.className).toContain('text-blue-600')
+    expect(mention.className).toContain('text-primary-600')
   })
 
   test('switching device tab resets expansion state for new device', () => {

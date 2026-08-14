@@ -17,20 +17,20 @@ const TYPE_LABELS = {
 function SlideCard({ slide, index, total, onMove, onChange, onDelete }) {
   const [editing, setEditing] = useState(false)
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 flex gap-3">
+    <div className="bg-white border border-surface-border rounded-xl p-4 flex gap-3">
       <div className="flex flex-col items-center gap-1 shrink-0">
         <span className="text-xs font-bold text-ink-muted w-6 text-center">{index + 1}</span>
         <button
           onClick={() => onMove(index, -1)}
           disabled={index === 0}
-          className="text-gray-400 hover:text-gray-700 disabled:opacity-20 text-xs"
+          className="text-ink-muted hover:text-ink-light disabled:opacity-20 text-xs"
         >
           ↑
         </button>
         <button
           onClick={() => onMove(index, 1)}
           disabled={index === total - 1}
-          className="text-gray-400 hover:text-gray-700 disabled:opacity-20 text-xs"
+          className="text-ink-muted hover:text-ink-light disabled:opacity-20 text-xs"
         >
           ↓
         </button>
@@ -43,7 +43,7 @@ function SlideCard({ slide, index, total, onMove, onChange, onDelete }) {
           {!editing && (
             <button
               onClick={() => setEditing(true)}
-              className="text-xs text-blue-600 hover:text-blue-800 ml-auto"
+              className="text-xs text-primary-600 hover:text-primary-800 ml-auto"
             >
               Bearbeiten
             </button>
@@ -51,14 +51,14 @@ function SlideCard({ slide, index, total, onMove, onChange, onDelete }) {
           {editing && (
             <button
               onClick={() => setEditing(false)}
-              className="text-xs text-emerald-600 hover:text-emerald-800 ml-auto"
+              className="text-xs text-status-fertig-text hover:text-status-fertig-text ml-auto"
             >
               Fertig
             </button>
           )}
           <button
             onClick={() => onDelete(index)}
-            className="text-xs text-red-400 hover:text-red-600"
+            className="text-xs text-status-fehler-text/70 hover:text-status-fehler-text"
           >
             x
           </button>
@@ -69,14 +69,14 @@ function SlideCard({ slide, index, total, onMove, onChange, onDelete }) {
               value={slide.title || ''}
               onChange={(e) => onChange(index, 'title', e.target.value)}
               placeholder="Titel / Ueberschrift"
-              className="w-full border border-gray-200 rounded px-2 py-1 text-sm"
+              className="w-full border border-surface-border rounded px-2 py-1 text-sm"
             />
             <textarea
               value={slide.body || ''}
               onChange={(e) => onChange(index, 'body', e.target.value)}
               placeholder="Inhalt"
               rows={3}
-              className="w-full border border-gray-200 rounded px-2 py-1 text-sm resize-none"
+              className="w-full border border-surface-border rounded px-2 py-1 text-sm resize-none"
             />
           </div>
         ) : (
@@ -185,13 +185,13 @@ export default function CarouselEditor({
       </div>
 
       {pdfUrl && (
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
-          <div className="bg-gray-50 px-4 py-2 flex items-center justify-between">
+        <div className="border border-surface-border rounded-xl overflow-hidden">
+          <div className="bg-surface-bg px-4 py-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-ink-muted">PDF-Vorschau</span>
             <a
               href={pdfUrl}
               download="carousel.pdf"
-              className="text-xs text-blue-600 hover:text-blue-800"
+              className="text-xs text-primary-600 hover:text-primary-800"
             >
               Download
             </a>

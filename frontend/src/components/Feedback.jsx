@@ -31,28 +31,46 @@ const TREND_MAP = {
   improving: {
     label: 'Wird besser',
     icon: TrendingUp,
-    color: 'text-emerald-600',
-    bg: 'bg-emerald-50',
+    color: 'text-status-fertig-text',
+    bg: 'bg-status-fertig-bg',
   },
-  declining: { label: 'Ruecklaeufig', icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50' },
-  stable: { label: 'Stabil', icon: Minus, color: 'text-amber-600', bg: 'bg-amber-50' },
-  no_data: { label: 'Noch keine Daten', icon: BarChart3, color: 'text-gray-500', bg: 'bg-gray-50' },
+  declining: {
+    label: 'Ruecklaeufig',
+    icon: TrendingDown,
+    color: 'text-status-fehler-text',
+    bg: 'bg-status-fehler-bg',
+  },
+  stable: {
+    label: 'Stabil',
+    icon: Minus,
+    color: 'text-status-aktiv-text',
+    bg: 'bg-status-aktiv-bg',
+  },
+  no_data: {
+    label: 'Noch keine Daten',
+    icon: BarChart3,
+    color: 'text-ink-light',
+    bg: 'bg-surface-bg',
+  },
 }
 
+// Status-Bedeutung: 'teal'/'amber' referenzieren bereits die Primitive-Basis
+// (Standard-KPI); 'emerald'/'blue'/'red' markieren eine Bewertung der Kennzahl
+// (gut/neutral/kritisch) und mappen deshalb auf die Status-Tokens.
 function StatCard({ icon: Icon, label, value, sub, color = 'teal' }) {
   const bgMap = {
     teal: 'bg-primary-50',
     amber: 'bg-accent-50',
-    emerald: 'bg-emerald-50',
-    blue: 'bg-blue-50',
-    red: 'bg-red-50',
+    emerald: 'bg-status-fertig-bg',
+    blue: 'bg-status-neu-bg',
+    red: 'bg-status-fehler-bg',
   }
   const textMap = {
     teal: 'text-primary-700',
     amber: 'text-accent-700',
-    emerald: 'text-emerald-700',
-    blue: 'text-blue-700',
-    red: 'text-red-700',
+    emerald: 'text-status-fertig-text',
+    blue: 'text-status-neu-text',
+    red: 'text-status-fehler-text',
   }
   return (
     <div className="bg-white rounded-xl border border-surface-border p-5">
@@ -74,7 +92,7 @@ function AnglesChart({ data }) {
   if (!data || data.length === 0) {
     return (
       <div className="text-center py-8">
-        <BarChart3 className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+        <BarChart3 className="w-8 h-8 text-ink-muted mx-auto mb-2" />
         <p className="text-sm text-ink-light">Noch keine Angle-Daten.</p>
       </div>
     )
@@ -193,7 +211,7 @@ function PerformanceForm({ onSubmitted }) {
           <select
             value={form.content_piece_id}
             onChange={(e) => updateField('content_piece_id', e.target.value)}
-            className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
           >
             <option value="">— Post waehlen —</option>
             {posts.map((p) => (
@@ -221,7 +239,7 @@ function PerformanceForm({ onSubmitted }) {
               value={form[f.key]}
               onChange={(e) => updateField(f.key, e.target.value)}
               placeholder="0"
-              className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
         ))}
@@ -233,7 +251,7 @@ function PerformanceForm({ onSubmitted }) {
             type="datetime-local"
             value={form.posted_at}
             onChange={(e) => updateField('posted_at', e.target.value)}
-            className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
       </div>
@@ -241,7 +259,9 @@ function PerformanceForm({ onSubmitted }) {
       {message && (
         <div
           className={`p-3 rounded-lg text-sm flex items-center gap-2 ${
-            message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
+            message.type === 'error'
+              ? 'bg-status-fehler-bg text-status-fehler-text'
+              : 'bg-status-fertig-bg text-status-fertig-text'
           }`}
         >
           {message.type === 'error' ? (
@@ -302,7 +322,7 @@ export default function Feedback() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm flex items-center gap-2">
+        <div className="mb-4 p-3 bg-status-fehler-bg text-status-fehler-text rounded-lg text-sm flex items-center gap-2">
           <AlertCircle className="w-4 h-4" /> {error}
         </div>
       )}
@@ -355,13 +375,13 @@ export default function Feedback() {
         {/* Interpretation */}
         <div className="bg-white rounded-xl border border-surface-border p-5">
           <h2 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-emerald-600" />
+            <TrendingUp className="w-4 h-4 text-status-fertig-text" />
             Einordnung
           </h2>
 
           {!stats || stats.total_posts === 0 ? (
             <div className="text-center py-8">
-              <BarChart3 className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+              <BarChart3 className="w-8 h-8 text-ink-muted mx-auto mb-2" />
               <p className="text-sm text-ink-light">Noch keine Daten vorhanden.</p>
               <p className="text-xs text-ink-muted mt-1">
                 Gib unten LinkedIn-Performance ein, damit das Lernsystem starten kann.
@@ -369,7 +389,7 @@ export default function Feedback() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="p-3 rounded-lg bg-gray-50">
+              <div className="p-3 rounded-lg bg-surface-bg">
                 <p className="text-xs font-medium text-ink mb-1">Edit-Distanz</p>
                 <p className="text-sm text-ink-light">
                   {stats.avg_edit_distance < 50
@@ -380,7 +400,7 @@ export default function Feedback() {
                 </p>
               </div>
 
-              <div className="p-3 rounded-lg bg-gray-50">
+              <div className="p-3 rounded-lg bg-surface-bg">
                 <p className="text-xs font-medium text-ink mb-1">Engagement-Rate</p>
                 <p className="text-sm text-ink-light">
                   {stats.avg_engagement_rate >= 5
@@ -394,7 +414,7 @@ export default function Feedback() {
               </div>
 
               {stats.top_angles?.length > 0 && (
-                <div className="p-3 rounded-lg bg-gray-50">
+                <div className="p-3 rounded-lg bg-surface-bg">
                   <p className="text-xs font-medium text-ink mb-1">Bester Angle</p>
                   <p className="text-sm text-ink-light">
                     <span className="font-medium text-primary-700">

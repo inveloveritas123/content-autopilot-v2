@@ -68,8 +68,8 @@ function CustomerApp() {
 
   if (checking) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      <div className="min-h-screen bg-surface-bg flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-ink-muted" />
       </div>
     )
   }
@@ -95,10 +95,10 @@ function CustomerApp() {
 
   if (noTenant) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-surface-bg flex items-center justify-center p-4">
         <div className="max-w-sm text-center">
           <p className="text-ink font-semibold mb-1">Kein Zugang eingerichtet</p>
-          <p className="text-gray-500 text-sm">
+          <p className="text-ink-light text-sm">
             Dein Account ist noch keinem Unternehmen zugeordnet. Bitte wende dich an dein
             Zukunftsbund-Team.
           </p>

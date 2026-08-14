@@ -460,7 +460,11 @@ export default function UserManagement() {
           text-slate-500 = dunkle Admin-Seitenkörper-Oberfläche (Tabelle, Buttons) —
           kein Dark-Surface-Token vorhanden, Tier-2-Palette ist bewusst Light-only
           (Dark-Mode am 2026-08-14 entfernt, siehe tailwind.config.js). amber und teal
-          sind primitive-identisch zu accent und primary und deshalb migriert. */}
+          sind primitive-identisch zu accent und primary und deshalb migriert. Ebenso
+          bewusst behalten: bg-red-900/30|40, border-red-700/50, text-red-300 = Fehler-
+          Banner und "Deaktiviert"-Badge auf dunklem Grund — das status-fehler-Token ist
+          ein helles Tier-2-Token (für Badges auf weißem Grund konzipiert) und auf der
+          dunklen Admin-Fläche nicht kontraststark genug. */}
       {/* Page header */}
       <div className="mb-6 flex items-center justify-between">
         <div>

@@ -17,19 +17,23 @@ function UsageBar({ current, limit, label }) {
   const pct = limit > 0 ? Math.min(100, Math.round((current / limit) * 100)) : 0
   const isWarn = pct >= 80
   const isCrit = pct >= 100
-  const barColor = isCrit ? 'bg-red-500' : isWarn ? 'bg-amber-400' : 'bg-primary-500'
+  const barColor = isCrit
+    ? 'bg-status-fehler-text'
+    : isWarn
+      ? 'bg-status-aktiv-text'
+      : 'bg-primary-500'
 
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-sm">
         <span className="text-ink-muted">{label}</span>
         <span
-          className={`font-semibold ${isCrit ? 'text-red-700' : isWarn ? 'text-amber-600' : 'text-ink'}`}
+          className={`font-semibold ${isCrit ? 'text-status-fehler-text' : isWarn ? 'text-status-aktiv-text' : 'text-ink'}`}
         >
           {current.toLocaleString()} / {limit.toLocaleString()}
         </span>
       </div>
-      <div className="h-3 bg-gray-100 rounded-full overflow-hidden min-w-0">
+      <div className="h-3 bg-surface-bg rounded-full overflow-hidden min-w-0">
         <div
           className={`h-full rounded-full transition-all duration-300 ${barColor}`}
           style={{ width: `${pct}%` }}
@@ -86,7 +90,7 @@ export default function ThrottleStatusCard({ adminToken, tenantId, className = '
           disabled={loading}
           aria-label="Throttle-Status aktualisieren"
           className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg
-                     text-ink-muted hover:text-ink hover:bg-gray-100
+                     text-ink-muted hover:text-ink hover:bg-surface-bg
                      disabled:opacity-40 transition-colors"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
@@ -98,7 +102,7 @@ export default function ThrottleStatusCard({ adminToken, tenantId, className = '
         <div
           role="alert"
           className="mx-4 mb-2 flex items-start gap-2 rounded-lg px-3 py-2
-                     text-red-700 bg-red-50 border border-red-200 text-sm"
+                     text-status-fehler-text bg-status-fehler-bg border border-status-fehler-border text-sm"
         >
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
           <span>
@@ -110,7 +114,7 @@ export default function ThrottleStatusCard({ adminToken, tenantId, className = '
 
       {/* Content */}
       <div className="p-4 pt-2 space-y-4">
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-status-fehler-text">{error}</p>}
 
         {!data && !loading && !error && (
           <p className="text-sm text-ink-muted">Kein Admin-Token konfiguriert.</p>
@@ -139,7 +143,7 @@ export default function ThrottleStatusCard({ adminToken, tenantId, className = '
               <span className="text-sm text-ink-muted">Throttled (letzte 24 h)</span>
               <span
                 className={`text-sm font-semibold min-w-[44px] min-h-[44px] flex items-center justify-end
-                  ${data.throttled_24h > 0 ? 'text-amber-600' : 'text-ink-muted'}`}
+                  ${data.throttled_24h > 0 ? 'text-status-aktiv-text' : 'text-ink-muted'}`}
               >
                 {data.throttled_24h}
               </span>
