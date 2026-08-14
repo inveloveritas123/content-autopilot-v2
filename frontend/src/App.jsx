@@ -26,6 +26,7 @@ import CompanyProfile from './components/CompanyProfile'
 import DataDeletion from './components/DataDeletion'
 import MemoryViz from './components/MemoryViz'
 import PipelineModels from './components/PipelineModels'
+import Features from './components/Features'
 import AdminApp from './components/admin/AdminApp'
 
 // Admin-SPA wird AUSSERHALB des Kunden-Layouts gerendert.
@@ -153,6 +154,7 @@ function CustomerApp() {
         <Route path="/settings/company-profile" element={<CompanyProfile />} />
         <Route path="/settings/data-deletion" element={<DataDeletion />} />
         <Route path="/memory/viz" element={<MemoryViz />} />
+        <Route path="/features" element={<Features />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Layout>

@@ -20,6 +20,7 @@ import {
   Sparkles,
   Menu,
   X,
+  LayoutGrid,
 } from 'lucide-react'
 import TenantSwitcher from './TenantSwitcher'
 
@@ -182,6 +183,28 @@ export default function Layout({ children }) {
               isMvp={isMvp}
               onNavigate={() => setMobileNavOpen(false)}
             />
+          </div>
+        )}
+
+        {/* #90-Fortsetzung (D4): im MVP-Modus bleiben ausgeblendete Seiten über
+            diese Sammelansicht auffindbar — "aufräumen", nicht "verstecken". */}
+        {isMvp && (
+          <div className="mt-4 pt-3 border-t border-surface-border space-y-0.5">
+            <NavLink
+              to="/features"
+              onClick={() => setMobileNavOpen(false)}
+              className={({ isActive }) =>
+                clsx(
+                  'flex items-center gap-3 px-3 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-primary-50 text-primary-700 border-l-2 border-primary-700'
+                    : 'text-ink-light hover:bg-gray-50 hover:text-ink'
+                )
+              }
+            >
+              <LayoutGrid className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={1.75} />
+              Weitere Funktionen
+            </NavLink>
           </div>
         )}
 
