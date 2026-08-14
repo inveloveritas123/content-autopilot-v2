@@ -6,24 +6,42 @@ Schicht-3-Sicherheit: Response bekommt NUR features, NICHT Original-Transkript.
 
 from __future__ import annotations  # Python 3.9-Kompatibilität: str | None Syntax
 
-import hashlib
 import json
 import logging
-import os
 import random
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import Enum
 
 from sqlalchemy import text
 
 from models.base import sync_session_factory
 from services.pipeline_llm import call_pipeline_llm
+from services.repo_prompt import lade_repo_prompt
 
 logger = logging.getLogger(__name__)
 
-MAX_QUESTIONS_TARGETED = 3  # Board 5.2: max 2–3 Rückfragen (Issue #17)
-MAX_QUESTIONS_RANDOM_SMART = 3
+# Gesprächslänge: der Entwurf sagt „typisches Gespräch: 3-5 Nachrichten hin und
+# her". Beide Modi laufen durch dieselbe p08_response — ein Auseinanderlaufen
+# wäre eine zweite, unbegründete Zahl an derselben Weiche.
+MAX_QUESTIONS_TARGETED = 5
+MAX_QUESTIONS_RANDOM_SMART = 5
+
+# Kostenbremse. Greift nur, wenn jemand die Zahlen oben hochsetzt — sie kann
+# ausschließlich ein OFFER auslösen, nie ein CLOSED. Das Gespräch endet dadurch
+# nie von selbst, es hört nur auf, teurer zu werden.
+MAX_QUESTIONS_HARD_CAP = 8
+
+# Fest verdrahtete Texte der beiden Ausgänge, die NICHT vom LLM kommen dürfen.
+# Genau hier lag der Fehler vom 04.08.2026: den Zustand bestimmte der Zähler im
+# Code, den Text das LLM — verbunden mit `or`. Der Zähler gewann, das LLM schrieb
+# trotzdem eine Frage, und der Nutzer beantwortete eine Frage an eine Session,
+# die es nicht mehr gab.
+OFFER_MESSAGE = "Das reicht mir für einen guten Post. Soll ich ihn schreiben?"
+CLOSE_MESSAGE = "Alles klar — ich schreibe ihn. Gleich hier im Chat."
+DECLINE_MESSAGE = "Kein Problem, ich warte. Erzähl weiter, wenn du magst."
 
 # 17 question categories for random_smart mode
 QUESTION_CATEGORIES = [
@@ -69,53 +87,112 @@ class OpenerResult:
     category: str
 
 
+class ResponseOutcome(str, Enum):
+    """Die drei — und nur diese drei — erlaubten Ausgänge einer Antwortrunde.
+
+    | Ausgang  | Session danach | Text                                          |
+    |----------|----------------|-----------------------------------------------|
+    | `ASK`    | `active`       | Rückfrage des LLM                             |
+    | `OFFER`  | `active`       | Abschluss-Angebot, fest verdrahtet            |
+    | `CLOSED` | `closed`       | Abschlusstext — **nie** eine Frage            |
+    """
+
+    ASK = "ask"
+    OFFER = "offer"
+    CLOSED = "closed"
+
+
 @dataclass
 class ResponseResult:
+    """Zustand und Text gehören zusammen — deshalb liegen sie in einem Typ.
+
+    Vorher trug diese Klasse `message` und `is_closed` als UNABHÄNGIGE Felder;
+    „geschlossen + Frage" war damit überhaupt darstellbar, und genau das ist am
+    04.08.2026 passiert. Jetzt bestimmt `outcome` beides, und `__post_init__`
+    lehnt die unzulässigen Kombinationen ab. Der Fehler ist damit nicht behoben,
+    sondern nicht mehr formulierbar — statt an zwei Aufrufstellen repariert, wo
+    er an der dritten wieder aufginge.
+
+    `is_closed` bleibt als abgeleitete Eigenschaft erhalten, damit bestehende
+    Aufrufer (tasks/telegram_task.py) unverändert weiterlaufen.
+    """
+
     next_action: str
     message: str
     quality: str
     session_id: str
-    is_closed: bool
+    outcome: ResponseOutcome
     # #19: Nur ein ECHTER Übergang active→closed darf die Post-Generierung
     # triggern. Spät-/Doppel-Events auf eine bereits geschlossene Session
     # liefern is_closed=True, aber was_already_closed=True → kein Re-Trigger.
     was_already_closed: bool = False
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.outcome, ResponseOutcome):
+            raise ValueError(f"outcome muss ein ResponseOutcome sein, nicht {self.outcome!r}")
+
+        text_stripped = (self.message or "").strip()
+
+        if self.outcome is ResponseOutcome.CLOSED and text_stripped.endswith("?"):
+            # Der Kern der Sache: eine geschlossene Session darf den Nutzer nicht
+            # noch etwas fragen. Er antwortet sonst ins Leere — belegt am
+            # 04.08.2026, 12:57:19 UTC (routed_to = NULL).
+            raise ValueError(
+                "CLOSED darf nie mit einer Frage enden — der Nutzer würde ins Leere antworten. "
+                f"Text: {text_stripped[:120]!r}"
+            )
+
+        if self.outcome is ResponseOutcome.OFFER and not text_stripped.endswith("?"):
+            # Ein Angebot, das nicht fragt, ist keins — der Nutzer wüsste nicht,
+            # dass jetzt seine Bestätigung dran ist.
+            raise ValueError(
+                "OFFER muss den Nutzer um Bestätigung bitten und mit einer Frage enden. "
+                f"Text: {text_stripped[:120]!r}"
+            )
+
+        if self.outcome is ResponseOutcome.ASK and not text_stripped:
+            raise ValueError("ASK ohne Text: das Gespräch bliebe ohne sichtbaren Zug stehen")
+
+    @property
+    def is_closed(self) -> bool:
+        return self.outcome is ResponseOutcome.CLOSED
+
+
+# Genau die Schlüssel, die p08_opener und p08_response an .format() übergeben.
+# `lade_repo_prompt` probiert das Template damit BEIM LADEN durch — schlägt es
+# fehl, greift der Notnagel. Ohne die Probe stürbe `.format()` erst in
+# p08_opener/p08_response, also nach dem Laden und ausserhalb jedes Rückfalls:
+# aus einem dümmeren Bot würde ein harter Ausfall des Gesprächs.
+_PLATZHALTER_PROBE = {
+    "mode": "",
+    "topic": "",
+    "voice_profile": "",
+    "recent_messages": "",
+    "features_json": "",
+    "question_index": 0,
+    "max_questions": 0,
+}
+
+
+#: Der P08-Prompt lebt im REPO, nicht in content-truth. Begruendung und
+#: Vorgeschichte: services/repo_prompt.py.
+_P08_DATEI = "P08_conversation.md"
+
 
 def _load_p08_prompt():
-    """Load P08 prompt from NC via PromptLoader, fallback to local file, then hardcoded."""
-    try:
-        from services.prompt_loader import get_default_prompt_loader
+    """Laedt den P08-Prompt aus backend/prompts/, sonst den eingebauten Notnagel.
 
-        loader = get_default_prompt_loader()
-        loaded = loader.load("P08")
-        if not loaded.user_prompt_template:
-            raise ValueError("user_prompt_template leer (Section-Header-Mismatch in Prompt-Datei?)")
-        return loaded
-    except Exception as e:
-        logger.warning(f"[P08] PromptLoader fehlgeschlagen, nutze lokalen Fallback: {e}")
-
-    # Try local file
-    local_path = os.path.normpath(
-        os.path.join(os.path.dirname(__file__), "..", "prompts", "P08_conversation.md")
-    )
-    if os.path.exists(local_path):
-        try:
-            with open(local_path, encoding="utf-8") as f:
-                content = f.read()
-            from services.prompt_loader import LoadedPrompt, _extract_section
-
-            sha = hashlib.sha256(content.encode()).hexdigest()
-            return LoadedPrompt(
-                content=content,
-                system_prompt=_extract_section(content, "System-Prompt"),
-                user_prompt_template=_extract_section(content, "User-Prompt"),
-                sha=sha,
-                loaded_at=datetime.now(UTC),
-                source_path=local_path,
-            )
-        except Exception as le:
-            logger.warning(f"[P08] Lokaler Fallback fehlgeschlagen: {le}")
+    ⚠️ Bis zum 06.08.2026 stand hier zuerst ein `loader.load("P08")` gegen
+    content-truth. Die dortige Datei (18.694 Bytes, Stand 12.06.2026) verlangt
+    `{name}`, `{branche}`, `{standort}`, `{teamgroesse}`, `{du_oder_sie}`,
+    `{signalwoerter}` — Platzhalter, die es im Code nicht gibt. Die
+    Platzhalter-Probe warf deshalb bei JEDEM Aufruf `KeyError: 'name'`, und der
+    Bot lief immer auf der Repo-Datei. Der Rueckfall war die Quelle, hiess aber
+    nicht so. Die content-truth-Datei ist entfernt, der Schritt hier auch.
+    """
+    geladen = lade_repo_prompt(_P08_DATEI, platzhalter_probe=_PLATZHALTER_PROBE)
+    if geladen is not None:
+        return geladen
 
     # Hardcoded fallback
     from services.prompt_loader import LoadedPrompt
@@ -133,19 +210,183 @@ def _load_p08_prompt():
     )
 
 
-def _get_recent_messages(messages: list, n: int = 3) -> str:
-    """Returns last n messages as a formatted string."""
-    if not messages:
-        return "(Noch keine Nachrichten)"
-    recent = messages[-n:]
+# Ein Nutzertext, der selbst „</user_input>" enthält, könnte die Kapselung von
+# innen aufbrechen. Die Marker werden deshalb aus dem Text entfernt, bevor er
+# eingepackt wird — der Inhalt bleibt lesbar, der Rahmen bleibt dicht.
+_USER_INPUT_MARKER = re.compile(r"</?user_input>", re.IGNORECASE)
+
+
+def _kapseln(user_text: str) -> str:
+    return f"<user_input>{_USER_INPUT_MARKER.sub('', user_text)}</user_input>"
+
+
+def _get_recent_messages(
+    messages: list, aktuelle_antwort: str | None = None, max_messages: int = 40
+) -> str:
+    """Gesprächsverlauf DIESER Session — mit den echten Sätzen des Nutzers.
+
+    ⚠️ Ein Eintrag in `messages` trägt Züge aus ZWEI Runden: `user_transcript`
+    ist die Antwort, die die Runde auslöste, `bot` die daraus erzeugte NEUE
+    Frage. Der Nutzertext ist also ÄLTER als der Bot-Text daneben. Bis zum
+    06.08.2026 stand hier `Bot:` vor `Nutzer:` — jedes Paar ging verdreht in den
+    Prompt, das Modell las A1 als Antwort auf Q2.
+
+    `aktuelle_antwort` ist der Satz, auf den der Bot gerade antworten soll. Er
+    steht noch nicht in `messages` (angehängt wird erst in `_persistiere_runde`,
+    also NACH dem LLM-Aufruf) und erreichte das Modell vorher nur als
+    `features_json`. Belegt an Louis' Lauf vom 06.08.2026, 12:25 UTC: sein
+    Einspruch „Ich habe doch gerade erklärt, welches Problem wir gelöst haben"
+    kam als `{"topic_keywords": ["erklärt", "Problem", "gelöst"]}` an — das liest
+    sich wie ein Sachbeitrag, und der Bot fragte munter weiter. Genau das war das
+    „er versteht mich erst eine Antwort später".
+
+    Schicht-3 wurde neu gezogen, nicht gestrichen (Entscheid Louis, 04.08.2026).
+    Vorher bekam das LLM ausschließlich `bot` + `user_features_summary`, also:
+
+        Bot: Großartig! Um Ihnen am besten zu helfen…
+        Nutzer: {"topic_keywords": ["Kundengespräch", "E-Mail-Automatisierung"], …}
+
+    Nie den Satz selbst. „Es wird nicht erkannt, dass es sich immer um den
+    gleichen Post handelt" war damit keine Fehlfunktion, sondern eine
+    Architektur-Konsequenz: der Bot führte das Gespräch anhand von Stichwort-
+    listen und konnte „wie gesagt" gar nicht auflösen.
+
+    Was die Grenze jetzt noch schützt: `messages` stammt ausschließlich aus der
+    per `session_id` geladenen Zeile. Nichts aus anderen Sessions, nichts von
+    anderen Tenants. Was sie NICHT mehr schützt: Selbst-Injection durch den
+    Tenant — bewusst in Kauf genommen, denn dieselben Rohtexte erreichen ohnehin
+    ein LLM (`session_post_task` baut den Post genau daraus).
+
+    `max_messages` ist eine Ausreißer-Bremse, keine Gesprächsgrenze: bei den
+    vorgesehenen 3–5 Runden greift sie nie.
+    """
     parts = []
-    for m in recent:
+    for m in messages[-max_messages:] if messages else []:
+        user_text = (m.get("user_transcript") or "").strip()
+        if user_text:
+            parts.append(f"Nutzer: {_kapseln(user_text)}")
+        else:
+            # Altbestand ohne Rohtext (vor #19). Die Opener-Zeile hat weder das
+            # eine noch das andere — sie bekommt gar keine Nutzer-Zeile, denn zu
+            # diesem Zeitpunkt hatte der Nutzer noch nichts gesagt.
+            summary = m.get("user_features_summary")
+            if summary:
+                parts.append(f"Nutzer: {summary}")
         bot_text = m.get("bot", "")
-        features_summary = m.get("user_features_summary", "(keine Features)")
-        if features_summary is None:
-            features_summary = "(keine Features)"
-        parts.append(f"Bot: {bot_text}\nNutzer: {features_summary}")
+        if bot_text:
+            parts.append(f"Bot: {bot_text}")
+
+    frisch = (aktuelle_antwort or "").strip()
+    if frisch:
+        parts.append(f"Nutzer: {_kapseln(frisch)}")
+
+    if not parts:
+        return "(Noch keine Nachrichten)"
     return "\n\n".join(parts)
+
+
+# --- Bestätigung nach einem OFFER --------------------------------------------
+# Bewusst deterministisch und ohne LLM: der Bot hat gerade eine Ja/Nein-Frage
+# gestellt, der Möglichkeitsraum ist drei Werte groß. Das ist KEINE Rückkehr zum
+# abgeschafften Intent-Raten (Entscheid 30.07., „Bot rät nicht, er fragt").
+_ZUSTIMMUNG = frozenset(
+    {
+        "ja",
+        "jaa",
+        "jaaa",
+        "jo",
+        "joa",
+        "jep",
+        "jup",
+        "yes",
+        "yep",
+        "klar",
+        "gerne",
+        "bitte",
+        "ok",
+        "okay",
+        "oki",
+        "passt",
+        "perfekt",
+        "super",
+        "mach",
+        "machs",
+        "mach das",
+        "los",
+        "leg los",
+        "schreib",
+        "schreib ihn",
+        "schreibs",
+        "gern",
+        "genau",
+        "stimmt",
+        "sicher",
+    }
+)
+_ABLEHNUNG = frozenset(
+    {
+        "nein",
+        "ne",
+        "nee",
+        "nö",
+        "noe",
+        "no",
+        "nope",
+        "stop",
+        "stopp",
+        "warte",
+        "moment",
+        "noch",
+        "nicht",
+        "abbrechen",
+        "später",
+        "spaeter",
+    }
+)
+_ZUSTIMMUNG_EMOJI = ("👍", "✅", "👌", "🙌")
+_NUR_BUCHSTABEN = re.compile(r"[^\wäöüß ]+", re.UNICODE)
+
+
+def _classify_confirmation(user_text: str | None) -> str:
+    """'zustimmung' | 'ablehnung' | 'weiterer_inhalt'.
+
+    Im Zweifel **immer** 'weiterer_inhalt' — dann redet der Nutzer weiter,
+    statt dass ein Post gegen seinen Willen entsteht. Ablehnung wird VOR
+    Zustimmung geprüft, damit „ja, aber warte" nie als Freigabe durchgeht.
+    """
+    if not user_text:
+        return "weiterer_inhalt"
+
+    roh = user_text.strip()
+    if roh in _ZUSTIMMUNG_EMOJI or (len(roh) <= 4 and any(e in roh for e in _ZUSTIMMUNG_EMOJI)):
+        return "zustimmung"
+
+    normalisiert = _NUR_BUCHSTABEN.sub(" ", roh.lower())
+    tokens = normalisiert.split()
+    if not tokens:
+        return "weiterer_inhalt"
+    # Mehr als vier Wörter ist keine bloße Bestätigung mehr, sondern Inhalt.
+    if len(tokens) > 4:
+        return "weiterer_inhalt"
+
+    if any(t in _ABLEHNUNG for t in tokens):
+        return "ablehnung"
+    if all(t in _ZUSTIMMUNG for t in tokens):
+        return "zustimmung"
+    return "weiterer_inhalt"
+
+
+def _letzte_bot_aktion(messages: list) -> str:
+    """Was der Bot zuletzt getan hat — aus der Nachricht selbst, nicht aus `status`.
+
+    Kein versteckter Zustand und keine Migration nötig: „was der Bot zuletzt
+    getan hat" gehört zur Nachricht und wird atomar mit ihr geschrieben.
+    `status` bleibt unangetastet — `session_post_task.py` und
+    `_load_active_session` hängen an dessen Werten.
+    """
+    if not messages or not isinstance(messages[-1], dict):
+        return ""
+    return messages[-1].get("next_action") or ""
 
 
 def _select_random_category(tenant_id: str) -> str:
@@ -178,8 +419,77 @@ def _select_random_category(tenant_id: str) -> str:
         return random.choice(QUESTION_CATEGORIES)
 
 
+#: Was das Modell laut Prompt (Zeile 71) liefern darf. Alles andere ist kein
+#: Steuerwort, sondern Text, der zufaellig an dieser Stelle stand.
+_ERLAUBTE_ACTIONS = ("vertiefen", "pivot", "close")
+
+#: Die haeufigste Bruchform von JSON aus einem Sprachmodell: innere
+#: Anfuehrungszeichen ohne Escape — am 06.08.2026 live gemessen als
+#: `"message": "... diese "wichtigeren Themen" fuer ..."`.
+#:
+#: Zwei Muster in dieser Reihenfolge, nicht eines mit Alternative: ein greedy
+#: `.*` vor `(A|B)` laeuft bis zur SPAETESTEN Uebereinstimmung und schluckt bei
+#: `…Kunden?", "quality": "silber"}` den halben Rest mit. Erst den engen Anker
+#: (ein bekannter Folgeschluessel des Schemas) versuchen, dann den weiten.
+#:
+#: Die Ankerliste ist bewusst auf die Schluessel aus dem Prompt (Zeile 71)
+#: festgenagelt statt auf `[a-z_]+`: nach `message` kann laut Vertrag nur
+#: `next_action` oder `quality` kommen. Alles andere ist Text des Modells.
+_MESSAGE_MIT_FOLGESCHLUESSEL = re.compile(
+    r'"message"\s*:\s*"(?P<text>.*)"\s*,\s*"(?:next_action|quality)"\s*:',
+    re.DOTALL,
+)
+_MESSAGE_AM_ENDE = re.compile(r'"message"\s*:\s*"(?P<text>.*)"\s*\}\s*$', re.DOTALL)
+_ACTION_REPARATUR = re.compile(r'"next_action"\s*:\s*"([a-z_]+)"')
+_QUALITY_REPARATUR = re.compile(r'"quality"\s*:\s*"([a-z]+)"')
+
+#: Was der Nutzer hoert, wenn auch die Reparatur nicht greift. Bewusst ohne
+#: Entschuldigungsformel und ohne Fehlerjargon: er soll weiterreden koennen,
+#: nicht erfahren, dass ein Parser gescheitert ist.
+_UNLESBAR_TEXT = "Da hab ich mich verhaspelt. Sag das nochmal — wie meinst du das?"
+
+
+def _repariere_json(text_stripped: str) -> dict | None:
+    """Zieht die Felder aus kaputtem JSON. None, wenn nicht mal die Nachricht drin steht.
+
+    Kein zweiter LLM-Aufruf: der Bruch ist mechanisch und die Reparatur auch,
+    ein Korrektur-Call kostete zwei Sekunden mitten im Gespraech.
+    """
+    treffer = _MESSAGE_MIT_FOLGESCHLUESSEL.search(text_stripped) or _MESSAGE_AM_ENDE.search(
+        text_stripped
+    )
+    if not treffer:
+        return None
+    nachricht = treffer.group("text").strip()
+    if not nachricht:
+        return None
+
+    action_treffer = _ACTION_REPARATUR.search(text_stripped)
+    action = action_treffer.group(1) if action_treffer else ""
+    quality_treffer = _QUALITY_REPARATUR.search(text_stripped)
+
+    return {
+        "next_action": action if action in _ERLAUBTE_ACTIONS else "vertiefen",
+        "message": nachricht[:500],
+        # Nicht auf "leer" raten: das schliesst die Session (siehe unten,
+        # `next_action == "close" or quality == "leer"`). Ein Parse-Fehler darf
+        # kein Gespraech beenden.
+        "quality": quality_treffer.group(1) if quality_treffer else "bronze",
+    }
+
+
 def _parse_llm_response(raw: str) -> dict:
-    """Parse JSON response from LLM. Returns dict with next_action, message, quality."""
+    """Parse JSON response from LLM. Returns dict with next_action, message, quality.
+
+    Der Rueckfall hat bis zum 06.08.2026 `raw[:500]` als `message` gesetzt —
+    also das rohe Modell-JSON an den Nutzer geschickt. Louis bekam im Telegram
+    `{"next_action": "vertiefen", "message": ...}` als Gespraechsbeitrag zu
+    lesen. Der Parser-Rueckfall war der Absender, nicht ein Sonderfall: JEDES
+    kaputte JSON landete so im Chat.
+
+    Ausfallrichtung jetzt: reparieren, sonst ein neutraler Satz. Rohtext geht
+    nie mehr raus.
+    """
     text_stripped = raw.strip()
     if text_stripped.startswith("```"):
         parts = text_stripped.split("```")
@@ -187,10 +497,28 @@ def _parse_llm_response(raw: str) -> dict:
         if text_stripped.startswith("json"):
             text_stripped = text_stripped[4:]
     try:
-        return json.loads(text_stripped)
+        geparst = json.loads(text_stripped)
     except Exception:
-        logger.warning(f"[P08] JSON-Parse fehlgeschlagen: {raw[:200]}")
-        return {"next_action": "vertiefen", "message": raw[:500], "quality": "bronze"}
+        pass
+    else:
+        if isinstance(geparst, dict):
+            return geparst
+        # Eine Liste oder ein blanker String ist kein Ergebnis, auch wenn
+        # json.loads zufrieden war — sonst faellt `.get()` beim Aufrufer um.
+        logger.warning("[P08] JSON war kein Objekt (%s)", type(geparst).__name__)
+        return {"next_action": "vertiefen", "message": _UNLESBAR_TEXT, "quality": "bronze"}
+
+    repariert = _repariere_json(text_stripped)
+    if repariert is not None:
+        # Kein Rohtext ins Log: der reparierte Fall ist der haeufige, und die
+        # Nachricht traegt Kundenkontext. Die Laenge reicht, um zu sehen, ob
+        # das ueberhandnimmt.
+        logger.warning("[P08] JSON kaputt, Nachricht repariert (%d Zeichen)", len(text_stripped))
+        return repariert
+
+    # Hier muss ein Mensch hinsehen — nur an dieser Stelle das Rohmaterial.
+    logger.error("[P08] JSON weder parsebar noch reparierbar: %s", text_stripped[:200])
+    return {"next_action": "vertiefen", "message": _UNLESBAR_TEXT, "quality": "bronze"}
 
 
 def _close_session_db(session_id: str, tenant_id: str) -> None:
@@ -203,10 +531,66 @@ def _close_session_db(session_id: str, tenant_id: str) -> None:
     """
     with sync_session_factory() as s:
         s.execute(
-            text("UPDATE bot_session SET status = 'closed', updated_at = NOW() WHERE id = :id"),
+            # `AND status = 'active'` : eine zwischenzeitlich abgebrochene ('expired')
+            # Session darf nicht nachträglich auf 'closed' gehoben werden — 'closed'
+            # ist die Bedingung, unter der session_post_task einen Post generiert.
+            text(
+                "UPDATE bot_session SET status = 'closed', updated_at = NOW() "
+                "WHERE id = :id AND status = 'active'"
+            ),
             {"id": session_id},
         )
         s.commit()
+
+
+def erzeuge_bot_session(
+    *,
+    tenant_id: str,
+    mode: str,
+    topic_idea_id: str | None,
+    frage: str,
+    category: str,
+) -> str:
+    """Legt eine aktive bot_session mit `frage` als messages[0] an.
+
+    Herausgezogen aus p08_opener, damit der Eingangs-Zug P14 dieselbe Zeile
+    schreibt statt eine zweite Form derselben Sache zu erfinden. P14 kommt mit
+    einer fertigen Frage; p08_opener holt sie sich vorher beim LLM.
+
+    Der Zustand liegt als Gesprächsinhalt vor, nicht als eigene Spalte (siehe
+    _letzte_bot_aktion). Die erste Nachricht ist immer eine Frage, nie ein
+    Angebot — deshalb ASK, fest verdrahtet.
+
+    Returns:
+        Die neue session_id (UUID als str).
+    """
+    session_id = str(uuid.uuid4())
+    messages = [
+        {
+            "bot": frage,
+            "user_features_summary": None,
+            "category": category,
+            "question_index": 1,
+            "next_action": ResponseOutcome.ASK.value,
+        }
+    ]
+    with sync_session_factory() as s:
+        s.execute(
+            text(
+                "INSERT INTO bot_session "
+                "(id, tenant_id, mode, topic_idea_id, current_question_index, messages, status) "
+                "VALUES (:id, :tid, :mode, :topicid, 1, CAST(:msgs AS jsonb), 'active')"
+            ),
+            {
+                "id": session_id,
+                "tid": tenant_id,
+                "mode": mode,
+                "topicid": topic_idea_id,
+                "msgs": json.dumps(messages),
+            },
+        )
+        s.commit()
+    return session_id
 
 
 def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> OpenerResult:
@@ -226,20 +610,28 @@ def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> O
                 with sync_session_factory() as s:
                     # Bug-Fix #36/§2.3: ursprünglich las der SELECT nicht-existente
                     # Spalten topic_keyword + category (kein ORM-Feld, keine Migration).
-                    # Jetzt: title, hook_suggestion, angle — alle verifiziert in
-                    # models/content_idea.py:39-44. Das echte Thema + Aufhänger fließen
-                    # so in die Opener-Frage ein.
+                    # Jetzt: title, hook_suggestion, angle, description — alle verifiziert
+                    # in models/content_idea.py:39-44.
+                    #
+                    # ⚠️ `description` gehört zwingend dazu: für Chat-Ideen schreibt
+                    # `_create_manual_idea` (p13_variants_task.py) `title = idea_text[:80]`
+                    # und `description = idea_text[:600]`, `hook_suggestion` aber NIE.
+                    # Ohne description war `title` deshalb kein Rückfall, sondern der
+                    # einzige Weg — das Modell sah 80 Zeichen und fragte nach dem
+                    # abgeschnittenen Wort ("In welchen Bus denn?", live 06.08.2026).
                     row = s.execute(
                         text(
-                            "SELECT title, hook_suggestion, angle FROM content_ideas "
+                            "SELECT title, hook_suggestion, angle, description "
+                            "FROM content_ideas "
                             "WHERE id = :id AND tenant_id = :tid LIMIT 1"
                         ),
                         {"id": topic_idea_id, "tid": tenant_id},
                     ).fetchone()
                     if row:
-                        # Bevorzuge hook_suggestion (Aufhänger) als Topic-Beschreibung,
-                        # Fallback auf title, dann Generic.
-                        topic = row[1] or row[0] or "Dein Thema"
+                        # Bevorzuge hook_suggestion (Aufhänger, von der Recherche
+                        # formuliert), dann description (der volle Text der Nachricht),
+                        # dann title (nur noch die Überschrift), dann Generic.
+                        topic = row[1] or row[3] or row[0] or "Dein Thema"
                         # angle als category (z.B. 'manual', 'howto', 'story')
                         if row[2]:
                             category = row[2]
@@ -284,49 +676,103 @@ def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> O
     )
     raw_output = res.text.strip()
     parsed = _parse_llm_response(raw_output)
-    question_text = parsed.get("message", raw_output[:500])
+    # Kein `raw_output` als Default: das war dasselbe Leck wie im Parser-Rueckfall,
+    # nur eine Zeile weiter. `_parse_llm_response` liefert `message` immer.
+    question_text = parsed.get("message") or _UNLESBAR_TEXT
 
     # 5. Create bot_session in DB
-    session_id = str(uuid.uuid4())
-    messages = [
-        {
-            "bot": question_text,
-            "user_features_summary": None,
-            "category": category,
-            "question_index": 1,
-        }
-    ]
-    with sync_session_factory() as s:
-        s.execute(
-            text(
-                "INSERT INTO bot_session "
-                "(id, tenant_id, mode, topic_idea_id, current_question_index, messages, status) "
-                "VALUES (:id, :tid, :mode, :topicid, 1, CAST(:msgs AS jsonb), 'active')"
-            ),
-            {
-                "id": session_id,
-                "tid": tenant_id,
-                "mode": mode,
-                "topicid": topic_idea_id,
-                "msgs": json.dumps(messages),
-            },
-        )
-        s.commit()
+    session_id = erzeuge_bot_session(
+        tenant_id=tenant_id,
+        mode=mode,
+        topic_idea_id=topic_idea_id,
+        frage=question_text,
+        category=category,
+    )
 
     # 6. Return result
     return OpenerResult(session_id=session_id, question_text=question_text, category=category)
 
 
+def _persistiere_runde(
+    session_id: str,
+    messages_list: list,
+    features: dict,
+    raw_transcript: str | None,
+    bot_text: str,
+    outcome: ResponseOutcome,
+    neuer_index: int,
+    neuer_status: str,
+) -> bool:
+    """Schreibt Antwort + Bot-Zug in einem UPDATE. True, wenn die Session noch lebte.
+
+    ⚠️ `AND status = 'active'` ist der Guard gegen ein Rennen: der Statuscheck in
+    p08_response liegt VOR dem LLM-Call (bis zu 3 Versuche à ≥300 s), dieser
+    Write danach. Bricht der Nutzer in diesem Fenster ab (`status='expired'`,
+    api/telegram.py `_cancel_active_session`), würde ein ungefilterter Write die
+    Session wieder auf 'active' setzen (Abbruch verpufft) oder auf 'closed' — und
+    'closed' lässt `tasks/session_post_task.py` einen Post aus den halben
+    Antworten bauen.
+    """
+    messages_list.append(
+        {
+            "bot": bot_text,
+            "user_features_summary": json.dumps(features)[:200],
+            # #19: Roh-Transkript für die spätere Post-Generierung (P12) — und
+            # seit 04.08. auch für den Gesprächsverlauf im P08-Prompt selbst,
+            # gekapselt in <user_input> (siehe _get_recent_messages).
+            "user_transcript": (raw_transcript or "")[:4000],
+            "question_index": neuer_index,
+            "next_action": outcome.value,
+        }
+    )
+    with sync_session_factory() as s:
+        res = s.execute(
+            text(
+                "UPDATE bot_session SET messages = CAST(:msgs AS jsonb), current_question_index = :idx, "
+                "status = :status, updated_at = NOW(), last_message_at = NOW() "
+                "WHERE id = :id AND status = 'active'"
+            ),
+            {
+                "msgs": json.dumps(messages_list),
+                "idx": neuer_index,
+                "status": neuer_status,
+                "id": session_id,
+            },
+        )
+        s.commit()
+        return getattr(res, "rowcount", 1) != 0
+
+
+def _abgebrochen_waehrend_verarbeitung(session_id: str, quality: str) -> ResponseResult:
+    """Session wurde während der Verarbeitung beendet.
+
+    was_already_closed=True hält den Post-Trigger im Caller zurück; der leere
+    Text unterdrückt die Folgefrage, die sonst NACH dem „Gespräch abgebrochen"
+    beim Nutzer landen würde.
+    """
+    logger.info("[P08] Session %s wurde während der Verarbeitung beendet", session_id)
+    return ResponseResult(
+        next_action="close",
+        message="",
+        quality=quality,
+        session_id=session_id,
+        outcome=ResponseOutcome.CLOSED,
+        was_already_closed=True,
+    )
+
+
 def p08_response(
     session_id: str, features: dict, raw_transcript: str | None = None
 ) -> ResponseResult:
-    """Process user features and return the next question or close signal.
+    """Eine Runde des Gesprächs — Rückfrage, Angebot oder Abschluss.
 
-    Layer-3 safety: only the features dict is passed to the LLM, never the
-    original transcript. The raw transcript (raw_transcript) is persisted into
-    bot_session.messages[*].user_transcript for later post generation (P12), but
-    NEVER reaches the P08 prompt — _get_recent_messages reads only `bot` +
-    `user_features_summary` (Layer-3 boundary, verified by test).
+    Genau drei Ausgänge (siehe `ResponseOutcome`). Der Zähler kann nur noch ein
+    OFFER auslösen, niemals ein CLOSED: das Gespräch endet nie von selbst, der
+    Bot bietet an und der Nutzer bestätigt (Entscheid Louis, 04.08.2026).
+
+    Schicht-3: Der Prompt sieht die echten Sätze DIESER Session, gekapselt in
+    `<user_input>`-Tags — nichts aus anderen Sessions, nichts von anderen
+    Tenants (`messages` stammt aus der per `session_id` geladenen Zeile).
     """
     # 1. Load session from DB
     with sync_session_factory() as s:
@@ -347,7 +793,7 @@ def p08_response(
             message="Session beendet.",
             quality="leer",
             session_id=session_id,
-            is_closed=True,
+            outcome=ResponseOutcome.CLOSED,
             was_already_closed=True,
         )
 
@@ -356,54 +802,94 @@ def p08_response(
     messages_raw = row[2]
     current_idx = row[3]
 
-    # 2. Check max questions
     max_q = MAX_QUESTIONS_TARGETED if mode == "targeted" else MAX_QUESTIONS_RANDOM_SMART
-    if current_idx >= max_q:
-        close_message = "Danke! Ich habe genug Material gesammelt."
-        # #19: Die LETZTE (oft beste) Antwort noch persistieren, bevor wir
-        # schließen — sonst fehlt sie dem Post-Input. Schicht-3: nur features-
-        # Summary + raw transcript in die Session, NIE in den P08-Prompt.
-        try:
-            messages_list = (
-                json.loads(messages_raw) if isinstance(messages_raw, str) else (messages_raw or [])
-            )
-            messages_list.append(
-                {
-                    "bot": close_message,
-                    "user_features_summary": json.dumps(features)[:200],
-                    "user_transcript": (raw_transcript or "")[:4000],
-                    "question_index": current_idx + 1,
-                }
-            )
-            with sync_session_factory() as s:
-                s.execute(
-                    text(
-                        "UPDATE bot_session SET messages = CAST(:msgs AS jsonb), "
-                        "updated_at = NOW(), last_message_at = NOW() WHERE id = :id"
-                    ),
-                    {"msgs": json.dumps(messages_list), "id": session_id},
-                )
-                s.commit()
-        except Exception as exc:
-            logger.warning(
-                "[P08] letzte Antwort vor Close nicht gespeichert: %s", type(exc).__name__
-            )
-        _close_session_db(session_id, tenant_id)
-        return ResponseResult(
-            next_action="close",
-            message=close_message,
-            quality="leer",
-            session_id=session_id,
-            is_closed=True,
-            was_already_closed=False,
-        )
-
-    # 3. Build LLM call — ONLY features, never original transcript
-    features_json = json.dumps(features)
+    # Die Kostenbremse darf die Gesprächslänge nur senken, nie anheben.
+    frage_grenze = min(max_q, MAX_QUESTIONS_HARD_CAP)
     messages_list = (
         json.loads(messages_raw) if isinstance(messages_raw, str) else (messages_raw or [])
     )
-    recent_messages = _get_recent_messages(messages_list)
+
+    # 2. Hat der Bot zuletzt ein Angebot gemacht? Dann ist jetzt die Bestätigung dran.
+    if _letzte_bot_aktion(messages_list) == ResponseOutcome.OFFER.value:
+        antwort = _classify_confirmation(raw_transcript)
+
+        if antwort == "zustimmung":
+            lebt = _persistiere_runde(
+                session_id,
+                messages_list,
+                features,
+                raw_transcript,
+                CLOSE_MESSAGE,
+                ResponseOutcome.CLOSED,
+                current_idx,  # kein neuer Bot-FRAGE-Zug — der Index bleibt stehen
+                "closed",
+            )
+            if not lebt:
+                return _abgebrochen_waehrend_verarbeitung(session_id, "leer")
+            return ResponseResult(
+                next_action="close",
+                message=CLOSE_MESSAGE,
+                quality="gold",
+                session_id=session_id,
+                outcome=ResponseOutcome.CLOSED,
+                was_already_closed=False,
+            )
+
+        if antwort == "ablehnung":
+            lebt = _persistiere_runde(
+                session_id,
+                messages_list,
+                features,
+                raw_transcript,
+                DECLINE_MESSAGE,
+                ResponseOutcome.ASK,
+                current_idx,
+                "active",
+            )
+            if not lebt:
+                return _abgebrochen_waehrend_verarbeitung(session_id, "bronze")
+            return ResponseResult(
+                next_action="vertiefen",
+                message=DECLINE_MESSAGE,
+                quality="bronze",
+                session_id=session_id,
+                outcome=ResponseOutcome.ASK,
+                was_already_closed=False,
+            )
+        # 'weiterer_inhalt' → normal weiter unten; die Nachricht zählt als Antwort.
+
+    # 3. Zähler-Grenze erreicht → Angebot, niemals Abschluss.
+    #    Ohne LLM-Aufruf: es gibt nichts mehr zu fragen, nur noch anzubieten.
+    #    Genau hier stand der Fehler vom 04.08.2026 — der Zähler entschied den
+    #    Zustand, das LLM lieferte den Text, und beides passte nicht zusammen.
+    if current_idx >= frage_grenze:
+        lebt = _persistiere_runde(
+            session_id,
+            messages_list,
+            features,
+            raw_transcript,
+            OFFER_MESSAGE,
+            ResponseOutcome.OFFER,
+            current_idx,
+            "active",
+        )
+        if not lebt:
+            return _abgebrochen_waehrend_verarbeitung(session_id, "bronze")
+        return ResponseResult(
+            next_action="offer",
+            message=OFFER_MESSAGE,
+            quality="silber",
+            session_id=session_id,
+            outcome=ResponseOutcome.OFFER,
+            was_already_closed=False,
+        )
+
+    # 4. Build LLM call
+    features_json = json.dumps(features)
+    # `raw_transcript` mitgeben: er landet erst in `_persistiere_runde` (nach
+    # diesem Aufruf) in `messages_list` — ohne ihn fehlt dem Modell ausgerechnet
+    # der Satz, auf den es antworten soll.
+    recent_messages = _get_recent_messages(messages_list, aktuelle_antwort=raw_transcript)
 
     voice_profile = ""
     try:
@@ -442,59 +928,64 @@ def p08_response(
     )
     raw_output = res.text.strip()
 
-    # 4. Parse JSON response
+    # 5. Parse JSON response
     parsed = _parse_llm_response(raw_output)
     next_action = parsed.get("next_action", "vertiefen")
-    response_message = parsed.get("message", raw_output[:500])
+    # Kein `raw_output` als Default — siehe _parse_llm_response. Dies war die
+    # dritte Stelle mit derselben Zeile; ueber sie ging das Modell-JSON in den Chat.
+    response_message = parsed.get("message") or _UNLESBAR_TEXT
     quality = parsed.get("quality", "bronze")
 
-    # 5. Determine is_closed
-    # Note: current_idx is 0-based index before this response. After this response it becomes
-    # current_idx+1. We close when the next index would reach/exceed max_q.
-    is_closed = next_action == "close" or quality == "leer" or current_idx + 1 >= max_q
+    # 6. Ausgang bestimmen. Der Zähler ist hier schon abgehandelt (Schritt 3) —
+    #    an dieser Stelle entscheidet ausschließlich das LLM, und zwar zwischen
+    #    ASK und CLOSED.
+    if next_action == "close" or quality == "leer":
+        outcome = ResponseOutcome.CLOSED
+        # „Nie mit einer Frage enden": endet der LLM-Text doch mit einem
+        # Fragezeichen, ersetzen wir ihn — sonst würde ResponseResult ihn
+        # ablehnen und die Runde stürbe an einer Formulierung.
+        if response_message.strip().endswith("?") or not response_message.strip():
+            logger.info(
+                "[P08] LLM-Abschluss endete mit einer Frage — ersetzt durch den festen Text"
+            )
+            response_message = CLOSE_MESSAGE
+    else:
+        outcome = ResponseOutcome.ASK
+        if not response_message.strip():
+            # Ein leerer Zug würde das Gespräch stumm stehen lassen.
+            outcome = ResponseOutcome.OFFER
+            response_message = OFFER_MESSAGE
 
-    # 6. Update session in DB — single UPDATE for messages + status (no second close call)
-    messages_list.append(
-        {
-            "bot": response_message,
-            "user_features_summary": json.dumps(features)[:200],
-            # #19: Roh-Transkript für die spätere Post-Generierung (P12).
-            # Schicht-3: landet NUR in der DB-Session, NIE im P08-Prompt
-            # (_get_recent_messages liest ausschließlich bot + features_summary).
-            "user_transcript": (raw_transcript or "")[:4000],
-            "question_index": current_idx + 1,
-        }
+    neuer_index = current_idx + 1 if outcome is ResponseOutcome.ASK else current_idx
+    neuer_status = "closed" if outcome is ResponseOutcome.CLOSED else "active"
+
+    lebt = _persistiere_runde(
+        session_id,
+        messages_list,
+        features,
+        raw_transcript,
+        response_message,
+        outcome,
+        neuer_index,
+        neuer_status,
     )
-    new_status = "closed" if is_closed else "active"
-    with sync_session_factory() as s:
-        s.execute(
-            text(
-                "UPDATE bot_session SET messages = CAST(:msgs AS jsonb), current_question_index = :idx, "
-                "status = :status, updated_at = NOW(), last_message_at = NOW() WHERE id = :id"
-            ),
-            {
-                "msgs": json.dumps(messages_list),
-                "idx": current_idx + 1,
-                "status": new_status,
-                "id": session_id,
-            },
-        )
-        s.commit()
+    if not lebt:
+        return _abgebrochen_waehrend_verarbeitung(session_id, quality)
 
     # #19: Der frühere `ready_for_p10`-Insert in content_ideas (toter Pfad,
     # kein Consumer) ist entfernt. Die Post-Generierung läuft jetzt über den
     # Trigger in _route_inbound_message → tasks.session_post_task, gespeist aus
     # bot_session.messages (raw transcripts), nicht über einen Platzhalter.
 
-    # 7. Return result. was_already_closed=False: dies IST der echte
-    # active→closed-Übergang (oben per Status-UPDATE vollzogen) → der Caller
-    # darf die Post-Generierung genau hier (und nur hier) triggern.
+    # 7. was_already_closed=False: dies IST der echte active→closed-Übergang
+    # (oben per Status-UPDATE vollzogen) → der Caller darf die Post-Generierung
+    # genau hier (und nur hier) triggern.
     return ResponseResult(
         next_action=next_action,
         message=response_message,
         quality=quality,
         session_id=session_id,
-        is_closed=is_closed,
+        outcome=outcome,
         was_already_closed=False,
     )
 

@@ -223,6 +223,7 @@ async def generate_ai_carousel(
     if not text_to_use:
         raise HTTPException(400, "post_text oder content_piece_id erforderlich")
 
+    from services.celery_inline import run_inline
     from tasks.p12c_task import run_p12c
 
     if data.async_mode:
@@ -232,10 +233,14 @@ async def generate_ai_carousel(
         )
         return {"task_id": task.id, "status": "queued"}
     else:
-        result = run_p12c.apply(
+        # Diese Stelle laeuft nur im FastAPI-Prozess und war deshalb nie
+        # betroffen. Trotzdem ueber `run_inline`: sonst bleibt die alte Form als
+        # Vorlage stehen, und die naechste Kopie landet wieder in einer Task.
+        result = run_inline(
+            run_p12c,
             args=[str(tenant.id), text_to_use, data.voice_hint, data.content_piece_id],
             kwargs={"slide_count": data.slide_count},
-        ).get()
+        )
         if result.get("status") == "failed":
             raise HTTPException(500, result.get("error", "Carousel-Generierung fehlgeschlagen"))
         # Check PDF size if generated

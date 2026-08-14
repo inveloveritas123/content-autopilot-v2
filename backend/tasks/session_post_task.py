@@ -23,6 +23,24 @@ Fail-open & Schicht-3
 * Geflaggte Posts (Sensitive-Detector) gehen NICHT roh in den Chat — stattdessen
   Review-Hinweis (Review-Queue-Pfad von #83 bleibt intakt).
 * Logs tragen NUR IDs/Typen, NIE Transkript-/Post-Fragmente (E2-Konvention).
+
+Die Zusage (Blocker 04./05.08.2026)
+-----------------------------------
+Bevor dieser Task startet, hat der Bot dem Nutzer bereits einen Post ZUGESAGT:
+``p08_service.CLOSE_MESSAGE`` — „Alles klar — ich schreibe ihn. Gleich hier im
+Chat." Diese Zusage ist der Vertrag, den der Task einlösen muss.
+
+Am 04.08.2026 hat er sie gebrochen, ohne ein Wort: die Pipeline warf, der Task
+kehrte über ``pipeline_exception`` still zurück (belegt am überlebenden
+Celery-Ergebnis in Redis, ``date_done`` 19:11:05.120755Z). Der Post lag als
+Entwurf in der DB, Louis wartete auf eine Nachricht, die nie kam.
+
+`_generate_post` hat ELF Ausgänge, und keiner sagte dem Nutzer etwas. Deshalb
+liegt die Quittung NICHT an den einzelnen Ausgängen, sondern in einer Klammer,
+die keiner von ihnen umgehen kann: `generate_post_from_session` ruft
+`_ensure_user_notified` über JEDES Ergebnis. Ein zwölfter Ausgang ist damit
+automatisch mitversorgt — die frühere Bauweise (Sorgfalt pro Zweig) hat genau
+daran versagt.
 """
 
 from __future__ import annotations
@@ -118,26 +136,135 @@ def _resolve_branche(tenant_id: str) -> str:
 def _build_qa_pairs(messages: list) -> list[dict]:
     """Baut Q/A-Paare aus bot_session.messages für den P12-Input.
 
-    messages[i]["bot"]            = die vom Bot gestellte Frage
-    messages[i]["user_transcript"] = die Roh-Antwort des Kunden (#19a)
+    ⚠️ Ein Eintrag trägt Züge aus ZWEI Runden:
 
-    Jeder Eintrag mit nicht-leerem user_transcript wird zu einem Paar
-    {"question_text": <bot-Frage>, "answer_text": <transkript>} (Format wie
-    api.ideas._run_p12_p12b_pipeline erwartet). Einträge ohne Transkript
-    (z.B. der Opener) werden übersprungen.
+        messages[i]["user_transcript"] = die Antwort, die Runde i auslöste
+        messages[i]["bot"]             = die daraus erzeugte NEUE Frage
+
+    Der Nutzertext ist also ÄLTER als der Bot-Text daneben; die Antwort gehört
+    an die Frage des VORGÄNGER-Eintrags. Bis zum 06.08.2026 paarte diese
+    Funktion beide Felder desselben Eintrags — Frage und Folge vertauscht.
+
+    An Louis' Session 5379b589 nachgemessen ging so sein Einspruch „Ich habe
+    doch gerade erklärt, welches Problem wir gelöst haben" als Antwort auf „Wie
+    hat der Kunde seine Kontakte denn vorher verwaltet?" in P12, und das
+    Abschluss-Angebot („Soll ich ihn schreiben?") wurde als Interviewfrage
+    behandelt. Dieselbe Verschiebung saß in `services/p08_service.py`
+    (`_get_recent_messages`) und war dort die Ursache für „er versteht meine
+    Eingabe erst um +1 Antwort verzögert".
+
+    Einträge ohne Transkript (z.B. der Opener) liefern kein Paar — wohl aber die
+    Frage für das nächste. Format wie api.ideas._run_p12_p12b_pipeline erwartet.
     """
     pairs: list[dict] = []
     if not isinstance(messages, list):
         return pairs
-    for entry in messages:
+    for i, entry in enumerate(messages):
         if not isinstance(entry, dict):
             continue
         answer = (entry.get("user_transcript") or "").strip()
         if not answer:
             continue
-        question = (entry.get("bot") or "").strip()
+        # Die Frage steht im Eintrag DAVOR. Fehlt der (nur bei kaputten Daten —
+        # der Opener hat nie ein Transkript), lieber eine leere Frage als eine
+        # verschluckte Antwort.
+        vorgaenger = messages[i - 1] if i > 0 and isinstance(messages[i - 1], dict) else {}
+        question = (vorgaenger.get("bot") or "").strip()
         pairs.append({"question_text": question, "answer_text": answer})
     return pairs
+
+
+# Rückfall-Texte für den Fall, dass der zugesagte Post nicht im Chat landet.
+# Zwei Lagen, weil der Nutzer zwei verschiedene Dinge wissen muss: liegt der
+# Post irgendwo (dann hol ihn dir), oder gibt es ihn gar nicht (dann probier's
+# nochmal). Ein einziger Allzweck-Satz würde im ersten Fall den fertigen Post
+# verschweigen. Der Bot duzt (Entscheidung Louis, 05.08.2026).
+_FALLBACK_ENTWURF_LIEGT_BEREIT = (
+    "Dein Post ist fertig — ich konnte ihn hier im Chat aber nicht zustellen. "
+    "Du findest ihn im Dashboard unter „Entwürfe“."
+)
+_FALLBACK_KEIN_POST = (
+    "Beim Schreiben ist etwas schiefgegangen — ich hab den Post nicht fertig "
+    "bekommen. Magst du es gleich nochmal versuchen?"
+)
+
+
+def _ensure_user_notified(session_id: str, tenant_id: str, result: dict) -> dict:
+    """Löst die Zusage aus CLOSE_MESSAGE ein — oder nimmt sie zurück.
+
+    Stempelt ``user_notified`` in JEDES Ergebnis:
+      True  – der Nutzer hat eine Nachricht in der Hand (den Post selbst, den
+              Review-Hinweis oder einen der Rückfall-Texte) ODER es war gar
+              keine Zusage offen (``already_generated``: der frühere Lauf hat
+              geliefert).
+      False – wir schulden eine Nachricht und konnten sie NICHT zustellen.
+              Das ist der einzige Zustand, in dem der Nutzer im Dunkeln steht;
+              er wird auf ERROR geloggt, damit er sichtbar bleibt.
+
+    Fail-open wie der ganze Task: diese Funktion wirft nie. Sie ist die letzte
+    Instanz vor dem Schweigen und darf nicht selbst zur Fehlerquelle werden.
+    """
+    try:
+        # Der Post (oder der Review-Hinweis) ist raus — Zusage eingelöst.
+        if result.get("sent") is True:
+            result["user_notified"] = True
+            return result
+
+        # Zweiter Enqueue derselben Session: der ERSTE Lauf hat geliefert.
+        # Hier zu schreiben hieße, dem Nutzer dieselbe Sache zweimal zu sagen.
+        if result.get("status") == "already_generated":
+            result["user_notified"] = True
+            return result
+
+        # Ab hier ist eine Zusage offen. status == "ok" heißt: der Post
+        # existiert (er scheiterte erst am Versand) — dann darf der Text ihn
+        # nicht totschweigen. Alles andere heißt: es gibt keinen Post.
+        text_msg = (
+            _FALLBACK_ENTWURF_LIEGT_BEREIT if result.get("status") == "ok" else _FALLBACK_KEIN_POST
+        )
+
+        chat_id = _resolve_chat_id(tenant_id)
+        if chat_id is None:
+            # Kein Kanal — wir KÖNNEN nicht reden. Nicht beschönigen.
+            logger.error(
+                "session_post_task: Zusage offen, aber kein aktiver Chat-Link "
+                "(tenant=%s session=%s reason=%s) — Nutzer bleibt ohne Antwort",
+                tenant_id,
+                session_id,
+                result.get("reason"),
+            )
+            result["user_notified"] = False
+            return result
+
+        from api.telegram import _send_telegram_message
+
+        sent = _send_telegram_message(chat_id, text_msg, tenant_id=tenant_id)
+        result["user_notified"] = bool(sent)
+        if not sent:
+            logger.error(
+                "session_post_task: Rückfall-Nachricht nicht zustellbar "
+                "(tenant=%s session=%s reason=%s) — Nutzer bleibt ohne Antwort",
+                tenant_id,
+                session_id,
+                result.get("reason"),
+            )
+        else:
+            logger.info(
+                "session_post_task: Zusage per Rückfall eingelöst " "(session=%s reason=%s)",
+                session_id,
+                result.get("reason"),
+            )
+        return result
+    except Exception as exc:
+        # E2: nur der Typ, nie str(exc) — Exception-Texte tragen Post-Fragmente.
+        logger.error(
+            "session_post_task: Quittung selbst fehlgeschlagen " "(tenant=%s session=%s): %s",
+            tenant_id,
+            session_id,
+            type(exc).__name__,
+        )
+        result["user_notified"] = False
+        return result
 
 
 @celery_app.task(
@@ -148,12 +275,41 @@ def _build_qa_pairs(messages: list) -> list[dict]:
 def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
     """Generiert beim Session-Close einen Post und sendet ihn in den Chat.
 
+    Dünne Klammer um `_generate_post`: sie garantiert, dass der Nutzer nach
+    JEDEM Ausgang eine Antwort bekommt (siehe Modul-Docstring, „Die Zusage").
+    Die eigentliche Arbeit — und alle elf Ausgänge — stehen in `_generate_post`.
+
     Args:
         session_id: bot_session.id der geschlossenen Session.
         tenant_id:  Tenant (für E3-Scope + chat_id-Auflösung).
 
-    Returns ein Status-Dict (für Tests/Observability). Fail-open: keine
-    Exception verlässt diese Funktion.
+    Returns ein Status-Dict (für Tests/Observability), immer inklusive
+    ``user_notified``. Fail-open: keine Exception verlässt diese Funktion.
+    """
+    try:
+        result = _generate_post(session_id, tenant_id)
+    except Exception as exc:
+        # _generate_post ist selbst fail-open; das hier ist der Gürtel zum
+        # Hosenträger. Ohne ihn würde ein Fehler im Task-Rumpf den Nutzer
+        # wieder stumm zurücklassen — genau der Blocker vom 04.08.2026.
+        logger.error(
+            "session_post_task: Task-Rumpf warf (session=%s): %s",
+            session_id,
+            type(exc).__name__,
+        )
+        result = {
+            "status": "error",
+            "reason": "task_body_exception",
+            "exception": type(exc).__name__,
+        }
+    return _ensure_user_notified(session_id, tenant_id, result)
+
+
+def _generate_post(session_id: str, tenant_id: str) -> dict:
+    """Erzeugt den Post und versucht die Zustellung. Sagt dem Nutzer NICHTS.
+
+    Die Quittung an den Nutzer hängt bewusst NICHT hier, sondern in
+    `_ensure_user_notified` — siehe Modul-Docstring.
     """
     # 1. Idempotenz-Gate (zuerst!) — existiert schon ein Piece für diese Session?
     try:
@@ -170,7 +326,10 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             logger.info("session_post_task: session=%s already has a post — skip", session_id)
             return {"status": "already_generated"}
     except Exception as exc:
-        logger.warning("session_post_task: idempotency gate failed: %s", type(exc).__name__)
+        # error statt warning (Review #128): dieser Task war vor PR #128 nie
+        # in conf.include und lief nie in Produktion — ohne ERROR-Level bleibt
+        # ein Ausfall unbemerkt (Sentry greift erst ab ERROR, sentry_config.py).
+        logger.error("session_post_task: idempotency gate failed: %s", type(exc).__name__)
         return {"status": "error", "reason": "idempotency_gate_failed"}
 
     # 2. Session laden (Tenant-Scope im WHERE = E3-Mandantentrennung)
@@ -186,7 +345,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
                 {"id": session_id, "tid": tenant_id},
             ).fetchone()
     except Exception as exc:
-        logger.warning("session_post_task: session load failed: %s", type(exc).__name__)
+        logger.error("session_post_task: session load failed: %s", type(exc).__name__)
         return {"status": "error", "reason": "session_load_failed"}
 
     if row is None:
@@ -270,8 +429,23 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             tenant_id, effective_idea_id, answers_list, voice_payload, avatar_payload
         )
     except Exception as exc:
-        logger.warning("session_post_task: pipeline raised: %s", type(exc).__name__)
-        return {"status": "error", "reason": "pipeline_exception"}
+        # Der Typ gehört ins ERGEBNIS, nicht nur ins Log. Grund (Blocker
+        # 04.08.2026): der Lauf hinterließ nur `reason='pipeline_exception'`;
+        # welche Exception es war, ließ sich nachher NICHT mehr feststellen —
+        # die Worker-Logs waren durch den nächsten Deploy (--force-recreate)
+        # weg, das Celery-Ergebnis in Redis trug den Typ nicht.
+        # KEIN exc_info/str(exc): p12 packt bei Parse-Fehlern den halben Post
+        # in die Exception-Message (E2 — Logs tragen nur IDs/Typen).
+        logger.error(
+            "session_post_task: pipeline raised (session=%s): %s",
+            session_id,
+            type(exc).__name__,
+        )
+        return {
+            "status": "error",
+            "reason": "pipeline_exception",
+            "exception": type(exc).__name__,
+        }
 
     if not isinstance(pipeline_result, dict) or pipeline_result.get("status") != "ok":
         reason = (
@@ -279,11 +453,12 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
             if isinstance(pipeline_result, dict)
             else "unknown"
         )
-        logger.info("session_post_task: pipeline not ok (reason=%s)", reason)
+        logger.error("session_post_task: pipeline not ok (reason=%s)", reason)
         return {"status": "error", "reason": reason}
 
     final_post = pipeline_result.get("final_post") or ""
     if not final_post:
+        logger.error("session_post_task: pipeline returned ok but final_post was empty")
         return {"status": "error", "reason": "empty_post"}
 
     p12_run_id = pipeline_result.get("p12_run_id")
@@ -291,16 +466,20 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
 
     # 6. Content-Piece markieren (bot_session_id) + P12b-Text übernehmen.
     #    Piece über p12_run_id finden (P12 hat es bereits angelegt). Fail-open.
+    #    RETURNING id fängt die content_pieces.id für das Action-Keyboard (Schritt 7) —
+    #    p12_run_id is None / kein Treffer → content_id bleibt None → Send ohne Keyboard.
+    content_id: str | None = None
     try:
         with sync_session_factory() as db:
             if p12_run_id:
-                db.execute(
+                _row = db.execute(
                     text(
                         "UPDATE content_pieces SET "
                         "content_text = :txt, "
                         "content_metadata = content_metadata || CAST(:meta AS jsonb) "
                         "WHERE tenant_id = :tid "
-                        "      AND content_metadata->>'p12_run_id' = :rid"
+                        "      AND content_metadata->>'p12_run_id' = :rid "
+                        "RETURNING id"
                     ),
                     {
                         "txt": final_post,
@@ -310,8 +489,9 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
                         "tid": tenant_id,
                         "rid": p12_run_id,
                     },
-                )
+                ).fetchone()
                 db.commit()
+                content_id = str(_row[0]) if _row else None
     except Exception as exc:
         logger.warning("session_post_task: piece marker update failed: %s", type(exc).__name__)
 
@@ -394,7 +574,14 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
     # 7. Post in den Chat. Geflaggt → NICHT roh senden (Review-Queue-Pfad #83).
     chat_id = _resolve_chat_id(tenant_id)
     if chat_id is None:
-        logger.info("session_post_task: no active chat link for tenant — post stored, not sent")
+        # ERROR, nicht INFO: eine offene Zusage ohne Kanal ist ein Ausfall,
+        # kein Betriebszustand. Auf INFO war dieser Ausgang faktisch unsichtbar.
+        logger.error(
+            "session_post_task: kein aktiver Chat-Link (tenant=%s session=%s) — "
+            "Post gespeichert, nicht gesendet",
+            tenant_id,
+            session_id,
+        )
         return {
             "status": "ok",
             "sent": False,
@@ -417,12 +604,19 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
         else:
             # W6: KI-Transparenz-Hinweis (EU-AI-Act Art. 50) abtrennbar unter den Post.
             from services.ai_disclosure import append_ai_notice
+            from api.telegram import _draft_action_keyboard
 
             _post_out = append_ai_notice(final_post[:_TELEGRAM_MAX_CHARS])
-            sent = _send_telegram_message(chat_id, _post_out, tenant_id=tenant_id)
+            _markup = _draft_action_keyboard(content_id) if content_id else None
+            sent = _send_telegram_message(
+                chat_id,
+                _post_out,
+                tenant_id=tenant_id,
+                reply_markup=_markup,
+            )
             sent_kind = "post"
     except Exception as exc:
-        logger.warning("session_post_task: telegram send failed: %s", type(exc).__name__)
+        logger.error("session_post_task: telegram send failed: %s", type(exc).__name__)
         return {
             "status": "ok",
             "sent": False,
@@ -433,7 +627,7 @@ def generate_post_from_session(self, session_id: str, tenant_id: str) -> dict:
         }
 
     if not sent:
-        logger.warning(
+        logger.error(
             "session_post_task: Post/Folgefrage konnte nicht an chat …%s gesendet werden"
             " (tenant=%s session=%s kind=%s) — _send_telegram_message returned False",
             str(chat_id)[-4:],

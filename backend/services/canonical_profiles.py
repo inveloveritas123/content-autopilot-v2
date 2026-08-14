@@ -34,11 +34,31 @@ TABLE_MAP = {
 _PROMPT_VERSION_RE = re.compile(r"^(p0[0-9]+|values)-v[0-9]+\.[0-9]+$")
 
 
-def is_canonical(payload: dict | None) -> bool:
-    """True, wenn der Payload kanonisch ist (gültige `_meta.prompt_version`).
+#: Eine Schema-Lücke auf WURZEL-Ebene: ein Pflichtfeld der Nutzlast fehlt komplett.
+#: Erzeugt von finalize_canonical() als "schema: (root): '<feld>' is a required property".
+#: Lücken in Unterobjekten ("schema: person.rolle: …") zählen NICHT — die Row ist
+#: dann inhaltlich unvollständig, aber strukturell kanonisch.
+_WURZEL_PFLICHTFELD_LUECKE = re.compile(r"^schema: \(root\): .+ is a required property$")
 
-    Alt-v2-Rows haben kein konformes `_meta.prompt_version` → False
-    (→ Konsument zeigt 'Re-Run empfohlen' statt verlustbehafteter Abbildung).
+
+def is_canonical(payload: dict | None) -> bool:
+    """True, wenn der Payload kanonisch ist — Etikett UND Struktur.
+
+    Zwei Bedingungen:
+      1. gültige `_meta.prompt_version` (Alt-v2-Rows haben keine)
+      2. kein Pflichtfeld der Wurzel fehlt (`_meta.luecken`)
+
+    Bedingung 2 kam am 06.08.2026 dazu. Vorher genügte die prompt_version, und
+    genau daran ist der Wächter vorbeigelaufen: Louis' und Erics Avatar-Rows
+    trugen ein sauberes "p04-v1.0" und meldeten im selben `_meta` alle acht
+    Pflichtfelder als gerissen — das LLM hatte die Prompt-Überschriften als Keys
+    geliefert (`IDENTITÄT` statt `identitaet`). Geprüft wurde das Etikett, nicht
+    die Ware; P12 schrieb daraufhin zwei Monate lang Posts ohne Avatar.
+
+    Das Signal war die ganze Zeit da — finalize_canonical schreibt es bei jeder
+    Erzeugung. Es wurde nur nie gelesen.
+
+    False führt beim Konsumenten zu 'Re-Run empfohlen', nicht zum Abbruch.
     """
     if not isinstance(payload, dict):
         return False
@@ -46,7 +66,14 @@ def is_canonical(payload: dict | None) -> bool:
     if not isinstance(meta, dict):
         return False
     pv = meta.get("prompt_version")
-    return isinstance(pv, str) and bool(_PROMPT_VERSION_RE.match(pv))
+    if not (isinstance(pv, str) and _PROMPT_VERSION_RE.match(pv)):
+        return False
+
+    for luecke in meta.get("luecken") or []:
+        if isinstance(luecke, str) and _WURZEL_PFLICHTFELD_LUECKE.match(luecke):
+            return False
+
+    return True
 
 
 def pick_active(rows: list, project_id: str | None = None) -> dict | None:

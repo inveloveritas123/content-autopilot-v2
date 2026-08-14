@@ -116,6 +116,7 @@ class _PipelineLLMStub:
     call_pipeline_llm = MagicMock()
     estimate_tier_cost = MagicMock(return_value=0.01)
     resolve_tier = MagicMock(return_value=("S6", {}))
+    PROMPT_MAX_TOKENS = {"P12": 8192}
 
     class BudgetExceededError(Exception):
         pass
@@ -125,6 +126,7 @@ _plm_stub = types.ModuleType("services.pipeline_llm")
 _plm_stub.call_pipeline_llm = MagicMock()
 _plm_stub.estimate_tier_cost = MagicMock(return_value=0.01)
 _plm_stub.resolve_tier = MagicMock(return_value=("S6", {}))
+_plm_stub.PROMPT_MAX_TOKENS = {"P12": 8192}
 
 
 class _PromptLoaderStub:

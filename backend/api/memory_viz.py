@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db, get_tenant
 from models.tenant import Tenant
+from services.soft_delete_filter import SQL_NICHT_GELOESCHT
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -87,7 +88,7 @@ async def get_viz_data(
     where = [
         "tenant_id = :tid",
         "embedding IS NOT NULL",
-        "deleted_at IS NULL",
+        SQL_NICHT_GELOESCHT,
         "created_at >= NOW() - make_interval(days => :days)",
     ]
     params: dict = {"tid": tenant.id, "days": days, "max_nodes": max_nodes}
@@ -191,10 +192,10 @@ async def get_viz_data(
 
     by_class = (
         await db.execute(
-            text("""
+            text(f"""
             SELECT classification, COUNT(*) AS n
             FROM memory_chunks
-            WHERE tenant_id = :tid AND deleted_at IS NULL
+            WHERE tenant_id = :tid AND {SQL_NICHT_GELOESCHT}
             GROUP BY classification ORDER BY n DESC
         """),
             {"tid": tenant.id},
@@ -202,10 +203,10 @@ async def get_viz_data(
     ).fetchall()
     by_source = (
         await db.execute(
-            text("""
+            text(f"""
             SELECT source_type, COUNT(*) AS n
             FROM memory_chunks
-            WHERE tenant_id = :tid AND deleted_at IS NULL
+            WHERE tenant_id = :tid AND {SQL_NICHT_GELOESCHT}
             GROUP BY source_type ORDER BY n DESC
         """),
             {"tid": tenant.id},
@@ -269,10 +270,10 @@ async def get_chunk_full_text(
     # Chunk laden — Tenant-Isolation sicherstellen
     row = (
         await db.execute(
-            text("""
+            text(f"""
             SELECT id, content_text, classification, source_type, created_at
             FROM memory_chunks
-            WHERE id = :cid AND tenant_id = :tid AND deleted_at IS NULL
+            WHERE id = :cid AND tenant_id = :tid AND {SQL_NICHT_GELOESCHT}
         """),
             {"cid": chunk_id, "tid": tenant.id},
         )

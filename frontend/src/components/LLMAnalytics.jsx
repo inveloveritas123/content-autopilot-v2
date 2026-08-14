@@ -756,7 +756,6 @@ export default function LLMAnalytics() {
     if (activeTab === 'trends') {
       loadTrendData()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
   async function loadEvalHistory() {
@@ -776,7 +775,6 @@ export default function LLMAnalytics() {
     if (activeTab === 'quality-gate') {
       loadEvalHistory()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
   useEffect(() => {

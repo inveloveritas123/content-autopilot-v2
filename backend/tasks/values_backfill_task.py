@@ -40,6 +40,8 @@ import json
 import logging
 import uuid
 
+from services.soft_delete_filter import SQL_NICHT_GELOESCHT
+
 logger = logging.getLogger(__name__)
 
 # Modell-Konstante — S4 gemäß Routing-Policy (Analyse-Qualität, frei ohne Confirm).
@@ -284,7 +286,7 @@ async def _backfill_tenant(tenant_id: str, *, db_execute, llm_complete_json) -> 
     chunk_rows_raw = await db_execute(
         "SELECT id, content_text, created_at "
         "FROM memory_chunks "
-        "WHERE tenant_id = :t AND classification = 'werte' "
+        f"WHERE tenant_id = :t AND classification = 'werte' AND {SQL_NICHT_GELOESCHT} "
         "ORDER BY created_at DESC",
         {"t": tenant_id},
     )

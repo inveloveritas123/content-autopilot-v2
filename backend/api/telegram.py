@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/telegram", tags=["Telegram"])
 
+DEFAULT_REGEN_FEEDBACK = (
+    "Formuliere den Post deutlich anders: anderer Hook, andere Struktur, gleicher Kerninhalt."
+)
+
 # ---------------------------------------------------------------------------
 # In-memory rate-limiter for bad webhook secret attempts (per IP)
 # ---------------------------------------------------------------------------
@@ -177,6 +181,37 @@ def _send_telegram_message(
 
         # Erfolg: Timestamp aktualisieren (best-effort)
         update_last_active(tenant_id)
+        # Erfolgreichen Send in telegram_message_log persistieren (best-effort).
+        # Ohne diese Zeile sind erfolgreiche Sends unsichtbar — bisher wurde NUR
+        # der Fehlerzweig geloggt (Instrumentierungs-Lücke #119). Der DoD-Marker
+        # „erster echter direction='out'" braucht diese Erfolgs-Zeile.
+        # Nur Metadaten (kein Nachrichtentext) — Datenschutz-Invariante wie im Fehlerzweig.
+        try:
+            with sync_session_factory() as db:
+                db.execute(
+                    text(
+                        "INSERT INTO telegram_message_log "
+                        "(tenant_id, direction, message_type, original_payload) "
+                        "VALUES (:tid, 'out', 'text', :payload::jsonb)"
+                    ),
+                    {
+                        "tid": tenant_id,
+                        "payload": json.dumps(
+                            {
+                                "chat_id_suffix": chat_id_suffix,
+                                "send_status": "sent",
+                            }
+                        ),
+                    },
+                )
+                db.commit()
+        except Exception as log_exc:
+            # Log-Persistierung ist best-effort — darf den (bereits erfolgreichen)
+            # Send-Pfad NICHT blockieren.
+            logger.debug(
+                "_send_telegram_message: telegram_message_log INSERT (sent) failed: %s",
+                type(log_exc).__name__,
+            )
         return True
     except Exception as e:
         logger.warning(
@@ -186,6 +221,133 @@ def _send_telegram_message(
             type(e).__name__,
         )
         return False
+
+
+def _draft_action_keyboard(content_id: str) -> dict:
+    """Inline-Keyboard für einen fertigen Entwurf (Stufe 1).
+
+    Jeder callback_data trägt die content_piece.id, damit der Callback-Handler
+    tenant-scoped genau dieses Piece freigeben/verwerfen/neu-schreiben kann.
+    """
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Freigeben", "callback_data": f"cmd:approve:{content_id}"},
+                {"text": "✏️ Nochmal anders", "callback_data": f"cmd:regenerate:{content_id}"},
+            ],
+            [{"text": "❌ Verwerfen", "callback_data": f"cmd:reject:{content_id}"}],
+        ]
+    }
+
+
+def _interview_cancel_keyboard() -> dict:
+    """Ausstieg aus einem laufenden Interview (C5).
+
+    Hängt an den Fragen der random_smart-/targeted-Gespräche. Ohne ihn gibt es
+    keinen sichtbaren Ausgang: solange eine bot_session aktiv ist, wird jede
+    eingehende Nachricht als Antwort auf die Frage geroutet, und Sessions haben
+    kein TTL.
+
+    Frisches Dict je Aufruf — ein geteiltes Modul-Dict könnte ein Caller mutieren.
+    """
+    return {"inline_keyboard": [[{"text": "❌ Abbrechen", "callback_data": "cmd:session_cancel"}]]}
+
+
+def _choice_keyboard(log_id: str) -> dict:
+    """Zwei Wege für eine frisch eingegangene Nachricht (PR 2).
+
+    Die log_id trägt beide callback_data: über sie liest der Handler den Text
+    tenant-gescopet nach, und sie ist zugleich der Idempotenz-Schlüssel gegen
+    Doppeldruck — Telegram behält alte Inline-Keyboards dauerhaft tippbar.
+
+    Frisches Dict je Aufruf — ein geteiltes Modul-Dict könnte ein Caller mutieren.
+    """
+    return {
+        "inline_keyboard": [
+            [{"text": "✍️ Daraus einen Post machen", "callback_data": f"cmd:msg_post:{log_id}"}],
+            [{"text": "🗄 Nur merken", "callback_data": f"cmd:msg_keep:{log_id}"}],
+        ]
+    }
+
+
+def _entry_keep_keyboard() -> dict:
+    """Der Ausstieg an der Eroeffnungsantwort des Eingangs-Zugs P14.
+
+    Sieht aus wie `🗄 Nur merken` aus `_choice_keyboard`, tut aber mehr: hier
+    LAEUFT bereits eine Session. `cmd:msg_keep` beendet keine — an dieser Stelle
+    waere es eine Attrappe (Bot bestaetigt, naechste Nachricht landet trotzdem
+    im Interview). Deshalb ein eigener Callback auf _cancel_active_session.
+
+    Keine log_id noetig: _cancel_active_session arbeitet tenant-weit, und ein
+    zweiter Tap sagt ehrlich „Es laeuft gerade kein Gespraech."
+
+    Frisches Dict je Aufruf — ein geteiltes Modul-Dict koennte ein Caller mutieren.
+    """
+    return {"inline_keyboard": [[{"text": "🗄 Nur merken", "callback_data": "cmd:entry_keep"}]]}
+
+
+def _approve_content_sync(content_id: str, tenant_id: str) -> str:
+    """Gibt ein content_piece frei (Telegram-Button). Tenant-scoped + idempotent.
+
+    Returns: 'approved' (neu freigegeben) | 'already' (war schon approved/published)
+             | 'not_found' (existiert nicht ODER gehört anderem Tenant).
+    Fail-open: bei DB-Fehler 'not_found' (kein Raise im Send-/Callback-Pfad).
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text("SELECT status FROM content_pieces WHERE id = :cid AND tenant_id = :tid"),
+                {"cid": content_id, "tid": tenant_id},
+            ).fetchone()
+            if row is None:
+                return "not_found"
+            if row[0] in ("approved", "published"):
+                return "already"
+            db.execute(
+                text(
+                    "UPDATE content_pieces SET status = 'approved', "
+                    "approval_method = 'telegram_button', approved_by = 'telegram', "
+                    "approved_at = now() "
+                    "WHERE id = :cid AND tenant_id = :tid"
+                ),
+                {"cid": content_id, "tid": tenant_id},
+            )
+            db.commit()
+            return "approved"
+    except Exception as exc:
+        logger.warning("_approve_content_sync failed: %s", type(exc).__name__)
+        return "not_found"
+
+
+def _reject_content_sync(content_id: str, tenant_id: str) -> str:
+    """Verwirft ein content_piece (Telegram-Button). Tenant-scoped + idempotent.
+
+    Returns: 'rejected' (neu verworfen) | 'already' (war schon rejected)
+             | 'not_found' (existiert nicht ODER gehört anderem Tenant).
+    Fail-open: bei DB-Fehler 'not_found' (kein Raise im Send-/Callback-Pfad).
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text("SELECT status FROM content_pieces WHERE id = :cid AND tenant_id = :tid"),
+                {"cid": content_id, "tid": tenant_id},
+            ).fetchone()
+            if row is None:
+                return "not_found"
+            if row[0] == "rejected":
+                return "already"
+            db.execute(
+                text(
+                    "UPDATE content_pieces SET status = 'rejected' "
+                    "WHERE id = :cid AND tenant_id = :tid"
+                ),
+                {"cid": content_id, "tid": tenant_id},
+            )
+            db.commit()
+            return "rejected"
+    except Exception as exc:
+        logger.warning("_reject_content_sync failed: %s", type(exc).__name__)
+        return "not_found"
 
 
 def _send_admin_telegram_message(chat_id: int, text_msg: str) -> None:
@@ -212,8 +374,48 @@ def _send_admin_telegram_message(chat_id: int, text_msg: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _handle_start_command(message: dict, token: str) -> None:
-    """Verify one-time token, activate tenant_telegram_link."""
+def _welcome_text(headline: str) -> str:
+    """Erstkontakt-Text: erklärt den Kernweg (Sprachnachricht → Post).
+
+    EIN Text für beide Eintrittspunkte — `/start <token>` (frisch verbunden) und
+    `/start` ohne Token (bereits verbunden, der Normalfall im Polling-Pfad). Vorher
+    hing die Anleitung daran, ob zufällig ein Token dabei war; ohne Token bekam der
+    Tester nur „✅ Du bist bereits verbunden!" und stand vor einer Sackgasse.
+
+    Die genannten Entwurfs-Buttons müssen mit `_draft_action_keyboard` übereinstimmen —
+    ein Hilfetext, der Knöpfe verspricht, die anders heißen, ist derselbe Defekt wie
+    ein falscher Zeitplan im /help.
+    """
+    return (
+        f"{headline}\n\n"
+        "So funktioniert's:\n"
+        "• 🎙 Schick mir eine Sprachnachricht mit einem Gedanken oder Erlebnis — "
+        "daraus wird ein LinkedIn-Post in deiner Stimme.\n"
+        "• 💡 Oder lass dir Ideen vorschlagen und wähl eine aus.\n"
+        "• Fertige Entwürfe kommen mit [✅ Freigeben] [✏️ Nochmal anders] [❌ Verwerfen].\n\n"
+        "Tippe /help für die Übersicht."
+    )
+
+
+def _welcome_keyboard() -> dict:
+    """Beide Einstiege des Erstkontakts. Frisches Dict je Aufruf (Caller mutieren)."""
+    return {
+        "inline_keyboard": [
+            [{"text": "🧠 So liest KI mich", "callback_data": "cmd:ki_profil"}],
+            [{"text": "💡 Ideen holen", "callback_data": "cmd:brainstorming"}],
+        ]
+    }
+
+
+def _handle_start_command(message: dict, token: str, expected_tenant_id: str | None = None) -> None:
+    """Verify one-time token, activate tenant_telegram_link.
+
+    Args:
+        expected_tenant_id: Wenn gesetzt (Aufruf aus dem Per-Tenant-Poller,
+            #62), muss der ueber den Token aufgeloeste Tenant damit
+            uebereinstimmen — verhindert dass ein fuer Tenant A generierter
+            Link ueber Tenant B's Bot aktiviert wird (E3-Scope).
+    """
 
     chat_id: int = message.get("chat", {}).get("id", 0)
     user_id: int = message.get("from", {}).get("id", 0)
@@ -236,6 +438,17 @@ def _handle_start_command(message: dict, token: str) -> None:
             return
 
         tenant_id, linked_at = row[0], row[1]
+
+        if expected_tenant_id is not None and str(tenant_id) != str(expected_tenant_id):
+            logger.warning(
+                "_handle_start_command: token tenant mismatch (poller=%s, token=%s)",
+                expected_tenant_id,
+                tenant_id,
+            )
+            # E3-Scope: die Nachricht kam über expected_tenant_id's eigenen Bot rein —
+            # die Ablehnung muss über denselben Bot raus, sonst verhallt sie (Review #128).
+            _send_telegram_message(chat_id, "Ungültiger Token.", tenant_id=str(expected_tenant_id))
+            return
 
         # Ensure linked_at is timezone-aware for comparison
         now = datetime.now(UTC)
@@ -283,9 +496,9 @@ def _handle_start_command(message: dict, token: str) -> None:
 
     _send_telegram_message(
         chat_id,
-        f"Verbunden mit {slug}. "
-        "Ab sofort schicke ich dir Fragen und du kannst mir Sprachnachrichten zurückgeben.",
+        _welcome_text(f"✅ Verbunden mit {slug}!"),
         tenant_id=str(tenant_id),
+        reply_markup=_welcome_keyboard(),
     )
 
 
@@ -652,7 +865,7 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
             sim = r.get("similarity") or 0
             preview = (r.get("content_text") or "")[:200]
             tag = r.get("classification") or "—"
-            lines.append(f"\n• {sim*100:.0f}% [{tag}] {preview}")
+            lines.append(f"\n• {sim * 100:.0f}% [{tag}] {preview}")
         _send_telegram_message(chat_id, "\n".join(lines)[:4000], tenant_id=tenant_id)
         return True
 
@@ -680,6 +893,15 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
             )
         return True
 
+    # C5 — Ausstieg. Hier und nicht in dispatch_inbound_update: _try_memory_command
+    # wird von BEIDEN Eingängen aufgerufen (telegram_webhook und
+    # dispatch_inbound_update), der Dispatch läuft nur im Poller. Zusätzlich fängt
+    # dieser Zweig das Kommando ab, BEVOR es als Content ins Gedächtnis oder als
+    # „unbekanntes Kommando" abgewiesen wird.
+    if cmd in ("/abbrechen", "/cancel", "/stop"):
+        _cancel_active_session(tenant_id, chat_id)
+        return True
+
     if cmd in ("/help", "/hilfe"):
         help_text = (
             "🤖 Content-Autopilot — dein KI-Ghostwriter für LinkedIn\n\n"
@@ -691,20 +913,24 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
             "• 💬 Text — direkt ins Gedächtnis\n"
             "• 📸 Foto — Inhalt erkannt & gespeichert\n\n"
             "─────────────────────────\n"
-            "💡 Proaktiver Dialog (Mo – Fr, 10 Uhr)\n"
-            "Jeden Werktagmorgen stelle ich dir eine Frage. "
+            # Der Default-Cron ist "0 9 * * 1,4" (services/random_smart_config.py),
+            # also Montag und Donnerstag um 9:00 — nicht werktäglich um 10. Der Cron
+            # ist pro Tenant konfigurierbar, deshalb "standardmäßig": der Satz bleibt
+            # wahr, auch wenn jemand den Rhythmus ändert.
+            "💡 Proaktiver Dialog\n"
+            "Standardmäßig montags und donnerstags morgens stelle ich dir eine Frage. "
             "Deine Antwort fließt direkt in deinen Content-Pool.\n\n"
             "─────────────────────────\n"
             "🔍 Befehle\n"
             "• /such <Begriff> — Semantische Suche\n"
             "• /notiz <Text> — Schnelle Notiz speichern\n"
+            "• /abbrechen — Laufendes Gespräch beenden\n"
             "• /help — Diese Übersicht\n\n"
             "─────────────────────────\n"
             "✨ Aus allem entsteht Content — kuratiert im Dashboard.\n"
             "🔒 EU-Server, DSGVO-konform."
         )
         buttons = [
-            [{"text": "🚀 Onboarding starten", "callback_data": "cmd:onboarding"}],
             [{"text": "🧠 So liest KI mich", "callback_data": "cmd:ki_profil"}],
             [{"text": "💡 Brainstorming — Ideen wählen", "callback_data": "cmd:brainstorming"}],
         ]
@@ -717,6 +943,190 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
         return True
 
     return False  # kein Memory-Command — normal verarbeiten
+
+
+# Das Stimmprofil entsteht ausschließlich aus dem Setup-Gespräch (Transkript →
+# Setup-Pipeline) und entwickelt sich danach nur automatisch aus den Eingaben des
+# Kunden weiter. Der Kunde stellt daran nichts ein. Der frühere getippte
+# Chat-Wizard widersprach dem und ist entfernt; diese beiden Texte fangen die
+# Reste ab, die Telegram noch anzeigt bzw. die wir noch nicht können.
+_VOICE_PROFILE_ORIGIN_TEXT = (
+    "🧠 Dein Stimmprofil entsteht aus dem Setup-Gespräch — nicht aus Fragen hier im "
+    "Chat. Danach lernt es automatisch aus deinen Sprachnachrichten und Texten weiter. "
+    "Du musst nichts einstellen.\n\n"
+    "Tippe /help → 'So liest KI mich', um zu sehen, wie die KI dich gerade liest."
+)
+
+_DOCUMENT_UNSUPPORTED_TEXT = (
+    "📄 Dokumente kann ich noch nicht auswerten. Schick mir den Inhalt als "
+    "Sprachnachricht oder als Text — das landet direkt in deinem Gedächtnis und "
+    "fließt in deinen Content."
+)
+
+
+_CHOICE_RETRY_TEXT = "Das hat gerade nicht geklappt — versuch es gleich nochmal."
+
+
+def _load_message_text(tenant_id: str, log_id: str) -> str:
+    """Text einer eingegangenen Nachricht — tenant-gescopet (E3).
+
+    Die log_id stammt aus callback_data und ist damit vom Nutzer wählbar; der
+    tenant_id-Filter ist die Zugriffskontrolle. Eine ungültige UUID lässt das
+    SELECT scheitern — gefangen, Rückgabe "" und damit dieselbe ehrliche Absage
+    wie bei einer unbekannten Nachricht.
+
+    `transcript_text` füllt ausschließlich `_process_voice`
+    (`_update_log_transcript`); bei Textnachrichten bleibt die Spalte NULL. Daher
+    der Rückgriff auf original_payload, das beide Formate kennt: `text` als String
+    (Telegram) oder als {"body": …} (WhatsApp-Adapter, vgl. telegram_task.py).
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text(
+                    "SELECT transcript_text, original_payload FROM telegram_message_log "
+                    "WHERE id = :lid AND tenant_id = :tid AND direction = 'in'"
+                ),
+                {"lid": log_id, "tid": tenant_id},
+            ).fetchone()
+    except Exception as exc:
+        logger.warning("load message text failed: %s", type(exc).__name__)
+        return ""
+    if row is None:
+        return ""
+    transcript = (row[0] or "").strip()
+    if transcript:
+        return transcript
+    payload = row[1] if isinstance(row[1], dict) else {}
+    raw = payload.get("text")
+    if isinstance(raw, dict):
+        return (raw.get("body") or "").strip()
+    if isinstance(raw, str):
+        return raw.strip()
+    return ""
+
+
+# ⚠️ Dieser Wert hat eine UNTERE Schranke, keine obere. Er muss länger sein als der
+# Worst Case von `p08_opener`: `pipeline_llm.py` rechnet `request_timeout =
+# max(300, …)` bei `max_retries=3`, also ≥ 900 s = 15 Minuten für einen einzigen
+# Opener — plus Wartezeit in der Queue. Wird das Fenster darunter gedrückt, ist es
+# genau dann blind, wenn es gebraucht wird: Der Nutzer sieht „Moment", der Opener
+# hängt in Retries, er drückt erneut — und bekommt eine zweite Idee, einen zweiten
+# Task und zwei aktive Sessions, von denen die ältere ohne TTL zurückbleibt.
+# Die Kosten sind asymmetrisch: ein zu langes Fenster kostet „Nachricht neu
+# schicken", ein zu kurzes eine Geister-Session. Im Zweifel also nach oben irren.
+_DOUBLE_PRESS_WINDOW_MIN = 30
+
+
+def _idea_exists_for_log(tenant_id: str, log_id: str) -> bool | None:
+    """Doppeldruck-Schutz. None = Prüfung fehlgeschlagen, Aussage unmöglich.
+
+    Telegram behält alte Inline-Keyboards dauerhaft tippbar — ohne diesen Check
+    startet jeder weitere Druck ein weiteres Interview. Nutzt denselben Schlüssel,
+    den `generate_variants_for_chat` bereits als Idempotenz-Marker führt.
+
+    ⚠️ Das Zeitfenster ist nicht kosmetisch. Der Schutz soll ein hektisches
+    Doppeltippen abfangen — das geschieht in Sekunden. Ohne Fenster sperrt jede
+    angelegte Idee ihre Nachricht für immer, auch wenn danach nichts läuft: wird
+    der Task nie ausgeführt (Worker tot, Broker geleert), greifen weder
+    `_detach_source_log` im Task noch der Enqueue-Fehlerpfad, und der Knopf bliebe
+    dauerhaft tot. Ein laufendes Interview fängt ohnehin der Session-Check ab, der
+    vor dieser Prüfung steht — das Fenster kann also kurz sein.
+
+    Weder fail-open noch fail-closed: beides wäre eine Behauptung über einen
+    Zustand, den wir nicht kennen. Der Aufrufer sagt dem Nutzer dann ehrlich,
+    dass es nicht geklappt hat.
+    """
+    try:
+        with sync_session_factory() as db:
+            row = db.execute(
+                text(
+                    "SELECT 1 FROM content_ideas WHERE tenant_id = :tid "
+                    "  AND source_context->>'source_log_id' = :lid "
+                    "  AND created_at > now() - make_interval(mins => :window) LIMIT 1"
+                ),
+                {"tid": tenant_id, "lid": str(log_id), "window": _DOUBLE_PRESS_WINDOW_MIN},
+            ).fetchone()
+        return row is not None
+    except Exception as exc:
+        logger.warning("idea existence check failed: %s", type(exc).__name__)
+        return None
+
+
+def _start_post_from_message(tenant_id: str, chat_id: int, log_id: str) -> None:
+    """[✍️ Daraus einen Post machen] — gezieltes Interview zu einer Nachricht.
+
+    Derselbe Weg wie die Hook-Wahl (C7): manuelle Idee anlegen, dann das Interview
+    ASYNCHRON eröffnen. `_start_targeted_session` → `p08_opener` ist ein LLM-Call
+    mit bis zu 3×300 s Timeout; inline aufgerufen blockiert er die Zustellung für
+    ALLE Tenants (der Poller iteriert Bots und Updates sequenziell).
+    """
+    text_content = _load_message_text(tenant_id, log_id)
+    if not text_content:
+        _send_telegram_message(
+            chat_id, "Hm — diese Nachricht finde ich nicht mehr.", tenant_id=tenant_id
+        )
+        return
+
+    try:
+        from tasks.telegram_task import _load_active_session
+
+        session_active = _load_active_session(tenant_id) is not None
+    except Exception as exc:
+        logger.warning("active session check failed: %s", type(exc).__name__)
+        session_active = False
+    if session_active:
+        _send_telegram_message(
+            chat_id,
+            "Wir sind gerade mitten in einem Gespräch — antworte einfach auf die Frage "
+            "oben, oder brich mit ❌ Abbrechen ab.",
+            tenant_id=tenant_id,
+        )
+        return
+
+    already = _idea_exists_for_log(tenant_id, log_id)
+    if already is None:
+        _send_telegram_message(chat_id, _CHOICE_RETRY_TEXT, tenant_id=tenant_id)
+        return
+    if already:
+        _send_telegram_message(chat_id, "✍️ Daran arbeite ich schon.", tenant_id=tenant_id)
+        return
+
+    try:
+        from tasks.p13_variants_task import _create_manual_idea
+
+        idea_id = _create_manual_idea(tenant_id, text_content[:1000], log_id, pending_choice=False)
+    except Exception as exc:
+        logger.warning("manual idea creation failed: %s", type(exc).__name__)
+        idea_id = None
+    if idea_id is None:
+        _send_telegram_message(chat_id, _CHOICE_RETRY_TEXT, tenant_id=tenant_id)
+        return
+
+    # ⚠️ NUR enqueuen, nie hier ausführen — sonst hängt der LLM-Call im Poll-Loop.
+    try:
+        from tasks.p13_variants_task import start_targeted_session_task
+
+        start_targeted_session_task.delay(tenant_id=tenant_id, idea_id=idea_id)
+    except Exception as exc:
+        logger.warning("targeted session enqueue failed: %s", type(exc).__name__)
+        # Die Idee ist bereits committet. Ohne dieses Lösen wäre der gleich folgende
+        # Rat „versuch es gleich nochmal" eine Falle: der Doppeldruck-Schutz fände
+        # sie und antwortete „Daran arbeite ich schon", obwohl nichts läuft.
+        try:
+            from tasks.p13_variants_task import _detach_source_log
+
+            _detach_source_log(tenant_id, idea_id)
+        except Exception as detach_exc:
+            logger.warning("detach after enqueue failure: %s", type(detach_exc).__name__)
+        _send_telegram_message(chat_id, _CHOICE_RETRY_TEXT, tenant_id=tenant_id)
+        return
+
+    _send_telegram_message(
+        chat_id,
+        "✍️ Alles klar — ich hab zwei, drei kurze Rückfragen. Moment.",
+        tenant_id=tenant_id,
+    )
 
 
 def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = None) -> None:
@@ -775,13 +1185,64 @@ def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = N
         _send_ki_profil(tenant_id_str, chat_id)
     elif data == "cmd:brainstorming":
         _send_brainstorming_menu(tenant_id_str, chat_id)
-    elif data == "cmd:onboarding":
-        _send_onboarding_start(tenant_id_str, chat_id)
-    elif data == "cmd:onboarding_next":
-        _onboarding_send_next_question(tenant_id_str, chat_id)
+    elif data in ("cmd:onboarding", "cmd:onboarding_next"):
+        # Telegram behält alte Inline-Keyboards im Chatverlauf: diese Buttons
+        # bleiben tippbar, obwohl der Wizard entfernt ist. Ein stiller No-Op wäre
+        # für den Tester ein kaputter Button.
+        _send_telegram_message(chat_id, _VOICE_PROFILE_ORIGIN_TEXT, tenant_id=tenant_id_str)
+    elif data == "cmd:session_cancel":
+        _cancel_active_session(tenant_id_str, chat_id)
+    elif data == "cmd:bs_generate":
+        _brainstorming_generate_ideas(tenant_id_str, chat_id)
     elif data.startswith("cmd:bs_pick:"):
         idea_id = data.split(":", 2)[2]
         _brainstorming_pick_idea(tenant_id_str, chat_id, idea_id)
+    elif data.startswith("cmd:approve:"):
+        content_id = data.split(":", 2)[2]
+        outcome = _approve_content_sync(content_id, tenant_id_str)
+        msg = {
+            "approved": "✅ Freigegeben. Kopier dir den Text oben und ab damit auf LinkedIn.",
+            "already": "✅ Der Post ist bereits freigegeben.",
+            "not_found": "Hm — diesen Entwurf finde ich nicht mehr.",
+        }[outcome]
+        _send_telegram_message(chat_id, msg, tenant_id=tenant_id_str)
+    elif data.startswith("cmd:reject:"):
+        content_id = data.split(":", 2)[2]
+        outcome = _reject_content_sync(content_id, tenant_id_str)
+        msg = {
+            "rejected": "❌ Verworfen.",
+            "already": "❌ War schon verworfen.",
+            "not_found": "Hm — diesen Entwurf finde ich nicht mehr.",
+        }[outcome]
+        _send_telegram_message(chat_id, msg, tenant_id=tenant_id_str)
+    elif data.startswith("cmd:regenerate:"):
+        content_id = data.split(":", 2)[2]
+        try:
+            from tasks.post_feedback_task import regenerate_post_from_feedback
+
+            regenerate_post_from_feedback.apply_async(
+                args=[content_id, tenant_id_str, DEFAULT_REGEN_FEEDBACK, None]
+            )
+            _send_telegram_message(
+                chat_id,
+                "✏️ Alles klar, ich schreibe ihn neu — kommt gleich.",
+                tenant_id=tenant_id_str,
+            )
+        except Exception as exc:
+            logger.warning("regenerate enqueue failed: %s", type(exc).__name__)
+            _send_telegram_message(chat_id, _CHOICE_RETRY_TEXT, tenant_id=tenant_id_str)
+    elif data.startswith("cmd:msg_post:"):
+        _start_post_from_message(tenant_id_str, chat_id, data.split(":", 2)[2])
+    elif data.startswith("cmd:msg_keep:"):
+        # Der Memory-Chunk liegt bereits — er wurde vor dem Senden der Buttons
+        # angelegt. Hier noch etwas zu schreiben wäre gespielte Arbeit.
+        _send_telegram_message(chat_id, "🗄 Gut — bleibt im Gedächtnis.", tenant_id=tenant_id_str)
+    elif data == "cmd:entry_keep":
+        # Der Memory-Chunk liegt bereits (vor allen Weichen gespeichert) und ist
+        # als Anweisung markiert. Zu beenden ist nur das Gespraech, das der
+        # Eingangs-Zug gerade eroeffnet hat. _cancel_active_session sendet die
+        # Bestaetigung selbst — hier keine zweite Nachricht.
+        _cancel_active_session(tenant_id_str, chat_id, bestaetigung=_NUR_MERKEN_TEXT)
 
 
 def _send_ki_profil(tenant_id: str, chat_id: int) -> None:
@@ -884,8 +1345,49 @@ def _send_brainstorming_menu(tenant_id: str, chat_id: int) -> None:
     )
 
 
+def _brainstorming_generate_ideas(tenant_id: str, chat_id: int) -> None:
+    """Löst eine frische Ideen-Runde aus (Button „🔄 Neue Ideen generieren").
+
+    Der Button existierte, war aber in keinem Callback-Zweig behandelt — ein Tipp
+    darauf tat schlicht nichts. Ohne `trigger_text` generiert P09 auf eigene Faust
+    aus den vorhandenen Quellen, statt zu einem vorgegebenen Thema zu arbeiten.
+    """
+    try:
+        from tasks.p09_chat_ideas_task import deliver_ideas_to_chat
+
+        # trigger_text ist Pflichtargument ohne Default (p09_chat_ideas_task.py:53).
+        # celery prüft die Signatur bereits im Client (strict_typing) — ohne diesen
+        # Wert wirft .delay() sofort TypeError, und der Tester bekam bei JEDEM Druck
+        # nur die Fehlermeldung unten. Leerer String = „ohne Vorgabe", die Task
+        # normalisiert selbst (`trigger_text = (trigger_text or "")[:500]`).
+        deliver_ideas_to_chat.delay(tenant_id=tenant_id, trigger_text="")
+    except Exception as e:
+        logger.warning("brainstorming_generate_ideas task failed: %s", type(e).__name__)
+        _send_telegram_message(
+            chat_id, "Fehler beim Starten der Ideen-Generierung.", tenant_id=tenant_id
+        )
+        return
+
+    _send_telegram_message(
+        chat_id,
+        "🔄 Ich sammle neue Ideen — das dauert einen Moment. Sie kommen hier im Chat an.",
+        tenant_id=tenant_id,
+    )
+
+
 def _brainstorming_pick_idea(tenant_id: str, chat_id: int, idea_id: str) -> None:
-    """Enqueued Ideen-Post-Generierung für ausgewählte Idee."""
+    """Startet aus der gewählten Idee das echte Post-Interview (C7).
+
+    Vorher lief die Wahl in `deliver_ideas_to_chat` — den Task, der Ideen *auflistet*.
+    Der Tester wählte also eine Idee und bekam die Ideenliste erneut; der Button
+    versprach einen Entwurf und lieferte keinen.
+
+    Der Weg zum Post ist strukturell an eine `bot_session` gebunden: erst deren
+    Schließen fährt P12→P12b und liefert den Entwurf mit Freigabe-Buttons. Die
+    Auswahl ruft deshalb denselben Kernpfad wie die Wahl eines P13-Hooks
+    (`_start_targeted_session`); eine Abkürzung „Post direkt generieren" würde ihn
+    umgehen.
+    """
     try:
         from sqlalchemy import text as _text
 
@@ -905,958 +1407,146 @@ def _brainstorming_pick_idea(tenant_id: str, chat_id: int, idea_id: str) -> None
         return
 
     title = row[0] or row[1] or "Idee"
+    # Ehrliche Ankündigung: es folgt ein Interview, kein sofortiger Entwurf.
     _send_telegram_message(
         chat_id,
-        f"✍️ Starte Post-Entwurf für: „{title[:80]}“\n\nEinen Moment bitte...",
+        f"✍️ Los geht's mit: „{title[:80]}“\n\n"
+        "Ich stelle dir dazu gleich ein paar kurze Fragen — antworte einfach per "
+        "Sprachnachricht. Aus deinen Antworten baue ich dann den Post.",
         tenant_id=tenant_id,
     )
-    # Enqueue P09 task — deliver_single_idea_to_chat existiert nicht; deliver_ideas_to_chat
-    # übernimmt die Ideen-Auswahl intern via Top-N-Heuristik.
+    # ⚠️ NUR enqueuen, nie hier ausführen: _start_targeted_session → p08_opener →
+    # call_pipeline_llm ist ein LLM-Call (bis 3×300s). Dieser Callback läuft im
+    # Poller, der Bots und Updates SEQUENZIELL abarbeitet — synchron würde ein Klick
+    # die Zustellung für ALLE Tenants blockieren. Die Absage bei Fehlschlag schickt
+    # der Task selbst (er kennt das Ergebnis, wir hier nicht).
     try:
-        from tasks.p09_chat_ideas_task import deliver_ideas_to_chat
+        from tasks.p13_variants_task import start_targeted_session_task
 
-        deliver_ideas_to_chat.delay(tenant_id=tenant_id, trigger_text=title[:500])
+        start_targeted_session_task.delay(tenant_id=tenant_id, idea_id=idea_id)
     except Exception as e:
-        logger.warning("brainstorming_pick_idea task failed: %s", e)
+        logger.warning(
+            "brainstorming_pick_idea: enqueue start_targeted_session failed: %s", type(e).__name__
+        )
         _send_telegram_message(
-            chat_id, "Fehler beim Starten der Post-Generierung.", tenant_id=tenant_id
+            chat_id,
+            "Das hat gerade nicht geklappt — versuch es gleich nochmal.",
+            tenant_id=tenant_id,
         )
 
 
-# ---------------------------------------------------------------------------
-# Onboarding-Wizard — Hilfs-Funktionen (rein, kein DB-Zugriff)
-# ---------------------------------------------------------------------------
+#: Was der Nutzer liest, wenn er das Interview aktiv abbricht (/abbrechen,
+#: [Abbrechen] an der Folgefrage). Ein Abbruch ist eine Korrektur — das Kreuz
+#: gehört dazu.
+_ABBRUCH_TEXT = (
+    "❌ Gespräch abgebrochen. Deine bisherigen Antworten bleiben im Gedächtnis, "
+    "aber ich frage nicht weiter.\n\n"
+    "Schick mir jederzeit eine Sprachnachricht oder tippe /help."
+)
+
+#: Was [🗄 Nur merken] am Eingangs-Zug beantwortet. Technisch derselbe Vorgang
+#: (die eben eröffnete Session wird beendet), fachlich das Gegenteil eines
+#: Abbruchs: der Nutzer WÄHLT den kürzeren Weg, er korrigiert nichts.
+#:
+#: ⚠️ Bis zum 06.08.2026 kam auf diesen Knopf `_ABBRUCH_TEXT` zurück. Louis las
+#: „❌ Gespräch abgebrochen" auf einen Knopf, der „🗄 Nur merken" heißt, und
+#: verstand es als Absturz („bei nur merken bricht der Chat ab"). Der Wortlaut
+#: des Knopfes und der Wortlaut der Antwort müssen dieselbe Sache meinen.
+_NUR_MERKEN_TEXT = (
+    "🗄 Gut — bleibt im Gedächtnis. Ich frage nicht weiter.\n\n"
+    "Schick mir jederzeit eine Sprachnachricht oder tippe /help."
+)
 
 
-def _onboarding_get_answers(messages: list) -> dict:
-    """Extrahiert alle bisher gesammelten Antworten aus session.messages."""
-    answers = {}
-    for msg in messages:
-        if msg.get("role") == "meta":
-            answers.update(msg.get("answers", {}))
-        elif msg.get("role") == "answer":
-            answers[msg["key"]] = msg["text"]
-    return answers
+def _cancel_active_session(
+    tenant_id: str, chat_id: int, *, bestaetigung: str | None = None
+) -> bool:
+    """Beendet ein laufendes Interview auf Wunsch des Nutzers (C5).
 
+    `bestaetigung` überschreibt NUR den Text, nicht den Vorgang: das Beenden
+    bleibt eine Stelle. Zwei Kopien dieser UPDATE-Logik wären ein zweiter Ort,
+    an dem 'expired' zu 'closed' verrutschen kann (siehe Warnung unten).
 
-def _onboarding_get_prefilled(messages: list) -> list:
-    """Gibt die Liste der vorausgefüllten Keys aus dem meta-Eintrag zurück."""
-    for msg in messages:
-        if msg.get("role") == "meta":
-            return msg.get("pre_filled_keys", [])
-    return []
+    Solange eine bot_session aktiv ist, routet `tasks/telegram_task.py`
+    (`_load_active_session`) JEDE eingehende Nachricht als Antwort auf die
+    gestellte Frage — und Sessions haben kein TTL. Ohne Ausstieg verschwindet
+    also alles im Interview, was der Nutzer danach schickt.
 
+    ⚠️ Status 'expired', NICHT 'closed':
+      1. `tasks/session_post_task.py:200` überspringt alles mit status != 'closed'.
+         'closed' würde die Post-Generierung scharf stellen — der Nutzer bricht ab
+         und bekommt trotzdem einen Post aus halben Antworten.
+      2. Die CHECK-Constraint erlaubt nur ('active','closed','expired')
+         (`alembic/versions/019_telegram_tables.py:99`), und `deploy.yml` fährt
+         KEIN `alembic upgrade head` — ein neuer Wert wäre auf dem Server eine
+         tote Migration.
 
-def _onboarding_next_question(questions: list, answers: dict) -> dict | None:
-    """Gibt die nächste unbeantwortete Frage zurück (required first, dann optional)."""
-    for q in questions:
-        if q["required"] and q["key"] not in answers:
-            return q
-    for q in questions:
-        if not q["required"] and q["key"] not in answers:
-            return q
-    return None
+    Fail-open (E2: nur type(exc).__name__ loggen), tenant-gescopet (E3).
 
-
-# ---------------------------------------------------------------------------
-# Onboarding-Wizard — Dokument-Upload + langer Text-Paste Hilfsfunktionen
-# ---------------------------------------------------------------------------
-
-
-def _telegram_download_file(tenant_id: str, file_id: str) -> bytes | None:
-    """Lädt eine Telegram-Datei über die Bot-API herunter."""
-    import httpx
-
-    from services.telegram_token_resolver import get_tenant_bot_token
-
-    token = get_tenant_bot_token(tenant_id)
-    if not token:
-        return None
-    try:
-        # getFile → file_path ermitteln
-        resp = httpx.get(
-            f"https://api.telegram.org/bot{token}/getFile",
-            params={"file_id": file_id},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        file_path = resp.json().get("result", {}).get("file_path")
-        if not file_path:
-            return None
-        # Datei herunterladen
-        data = httpx.get(
-            f"https://api.telegram.org/file/bot{token}/{file_path}",
-            timeout=30,
-        )
-        data.raise_for_status()
-        return data.content
-    except Exception as exc:
-        logger.warning("_telegram_download_file failed: %s", exc)
-        return None
-
-
-def _extract_text_from_bytes(file_bytes: bytes, mime_type: str, file_name: str) -> str | None:
-    """Extrahiert Text aus PDF, DOCX oder TXT. Max 50.000 Zeichen."""
-    name_lower = (file_name or "").lower()
-
-    # TXT
-    if "text/plain" in mime_type or name_lower.endswith(".txt"):
-        try:
-            return file_bytes.decode("utf-8", errors="replace")[:50_000]
-        except Exception:
-            return None
-
-    # PDF
-    if "pdf" in mime_type or name_lower.endswith(".pdf"):
-        try:
-            import io
-
-            from pypdf import PdfReader
-
-            reader = PdfReader(io.BytesIO(file_bytes))
-            pages = [page.extract_text() or "" for page in reader.pages]
-            return "\n".join(pages)[:50_000]
-        except Exception as exc:
-            logger.warning("PDF-Extraktion fehlgeschlagen: %s", exc)
-            return None
-
-    # DOCX
-    if "wordprocessingml" in mime_type or name_lower.endswith(".docx"):
-        try:
-            import io
-
-            from docx import Document
-
-            doc = Document(io.BytesIO(file_bytes))
-            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-            return "\n".join(paragraphs)[:50_000]
-        except Exception as exc:
-            logger.warning("DOCX-Extraktion fehlgeschlagen: %s", exc)
-            return None
-
-    return None  # Nicht unterstütztes Format
-
-
-def _extract_onboarding_answers_from_text(
-    tenant_id: str, raw_text: str, open_question_keys: list[str]
-) -> dict:
-    """LLM extrahiert Onboarding-Antworten aus einem freien Text.
-
-    Gibt nur Keys zurück die klar beantwortet werden konnten.
+    Returns:
+        True, wenn eine Session beendet wurde; sonst False.
     """
-    import re
-
-    from services.brand_voice import get_onboarding_questions
-    from services.pipeline_llm import call_pipeline_llm
-
-    questions = get_onboarding_questions()
-    open_qs = {q["key"]: q["question"] for q in questions if q["key"] in open_question_keys}
-
-    if not open_qs:
-        return {}
-
-    questions_block = "\n".join(f"- {key}: {question}" for key, question in open_qs.items())
-
-    prompt = f"""Du analysierst einen Text und extrahierst Antworten auf konkrete Onboarding-Fragen.
-
-TEXT:
-{raw_text[:8000]}
-
-OFFENE FRAGEN (Key → Frage):
-{questions_block}
-
-Extrahiere aus dem Text Antworten auf diese Fragen.
-Regeln:
-- Nur Keys aufnehmen die der Text KLAR beantwortet (min. 1 informativer Satz)
-- Keine Antworten erfinden oder extrapolieren
-- Antworten in der Sprache des Textes lassen
-- Wenn nichts ableitbar: leeres Objekt zurückgeben
-
-Antworte NUR als JSON-Objekt, z.B.:
-{{"company_description": "Wir sind...", "tone_preference": "professionell und direkt"}}"""
-
+    # ALLE aktiven Interview-Sessions beenden, nicht nur die neueste: `p08_opener`
+    # prüft beim Anlegen NICHT auf laufende Sessions, und die Ideenliste bleibt in
+    # Telegram tippbar — zwei Taps erzeugen also zwei aktive Sessions. Beendet man
+    # nur die neueste, findet `_load_active_session` (telegram_task.py, gleiche
+    # Query) die ältere und schluckt weiter Nachrichten, obwohl der Bot gerade
+    # „ich frage nicht weiter" gesagt hat. Ein Statement, kein SELECT davor.
+    cancelled = 0
+    cancelled_idea_ids: list[str] = []
     try:
-        result = call_pipeline_llm(
-            prompt_key="ONBOARDING_EXTRACT",
-            system_prompt="Du extrahierst strukturierte Daten aus Texten. Antworte NUR als JSON.",
-            user_content=prompt,
-            tenant_id=tenant_id,
-            tier_override="S2",
-        )
-        match = re.search(r"\{.*\}", result.text, re.DOTALL)
-        if match:
-            extracted = json.loads(match.group())
-            # Nur bekannte Keys durchlassen
-            return {k: v for k, v in extracted.items() if k in open_question_keys and v}
+        with sync_session_factory() as db:
+            rows = db.execute(
+                text(
+                    "UPDATE bot_session SET status = 'expired', updated_at = NOW() "
+                    "WHERE tenant_id = :tid AND status = 'active' "
+                    "      AND mode IN ('random_smart', 'targeted') "
+                    "RETURNING id, topic_idea_id"
+                ),
+                {"tid": tenant_id},
+            ).fetchall()
+            db.commit()
+            cancelled = len(rows or [])
+            cancelled_idea_ids = [str(r[1]) for r in (rows or []) if r[1]]
     except Exception as exc:
-        logger.warning("_extract_onboarding_answers_from_text failed: %s", exc)
-    return {}
-
-
-def _onboarding_handle_document(tenant_id: str, chat_id: int, document: dict) -> None:
-    """Verarbeitet ein hochgeladenes Dokument im Onboarding-Kontext."""
-    from services.brand_voice import get_onboarding_questions
-
-    file_id = document.get("file_id", "")
-    mime_type = document.get("mime_type", "")
-    file_name = document.get("file_name", "")
-
-    # Prüfen ob Format unterstützt
-    supported = (
-        "text/plain" in mime_type
-        or "pdf" in mime_type
-        or "wordprocessingml" in mime_type
-        or file_name.lower().endswith((".txt", ".pdf", ".docx"))
-    )
-    if not supported:
+        logger.warning("_cancel_active_session failed: %s", type(exc).__name__)
+        # Nicht stumm scheitern: sonst drückt der Tester „Abbrechen", bekommt nichts
+        # und sitzt weiter in der Session fest, ohne es zu wissen.
         _send_telegram_message(
             chat_id,
-            "⚠️ Format nicht unterstützt. Bitte schicke eine TXT-, PDF- oder DOCX-Datei.",
+            "Das konnte ich gerade nicht abbrechen — versuch es gleich nochmal.",
             tenant_id=tenant_id,
         )
-        return
+        return False
 
-    _send_telegram_message(
-        chat_id,
-        "📄 Datei erhalten — ich lese und extrahiere Infos…",
-        tenant_id=tenant_id,
-    )
-
-    # Datei herunterladen + Text extrahieren
-    file_bytes = _telegram_download_file(tenant_id, file_id)
-    if not file_bytes:
-        _send_telegram_message(
-            chat_id,
-            "⚠️ Datei konnte nicht heruntergeladen werden. Versuche es erneut.",
-            tenant_id=tenant_id,
-        )
-        return
-
-    raw_text = _extract_text_from_bytes(file_bytes, mime_type, file_name)
-    if not raw_text or len(raw_text.strip()) < 50:
-        _send_telegram_message(
-            chat_id,
-            "⚠️ Kein verwertbarer Text in der Datei gefunden.",
-            tenant_id=tenant_id,
-        )
-        return
-
-    # Aktive Session ermitteln (oder ohne Session → Memory speichern)
-    questions = get_onboarding_questions()
-    session = _onboarding_get_active_session(tenant_id)
-
-    if session:
-        answers = _onboarding_get_answers(session["messages"])
-    else:
-        answers = {}
-
-    open_required_keys = [q["key"] for q in questions if q["required"] and q["key"] not in answers]
-
-    if not open_required_keys and session:
-        _send_telegram_message(
-            chat_id,
-            "✅ Alle Pflichtfragen sind bereits beantwortet!",
-            tenant_id=tenant_id,
-        )
-        return
-
-    # LLM-Extraktion
-    extracted = _extract_onboarding_answers_from_text(
-        tenant_id, raw_text, open_required_keys or [q["key"] for q in questions if q["required"]]
-    )
-
-    if not extracted:
-        _send_telegram_message(
-            chat_id,
-            "🤔 Ich konnte keine eindeutigen Antworten auf die Onboarding-Fragen aus dem Text ableiten.\n\n"
-            "Tipp: Das Dokument sollte Infos zu deinem Unternehmen, Zielgruppe und Kommunikationsstil enthalten.",
-            tenant_id=tenant_id,
-        )
-        return
-
-    found_count = len(extracted)
-
-    if session:
-        # Antworten in bestehende Session schreiben
-        messages = session["messages"]
-        for key, answer in extracted.items():
-            messages.append({"role": "answer", "key": key, "text": answer, "source": "document"})
-            answers[key] = answer
-
-        answered_required = sum(1 for q in questions if q["required"] and q["key"] in answers)
-        total_required = sum(1 for q in questions if q["required"])
-        _onboarding_save_answer(session["id"], tenant_id, messages, answered_required)
-
-        if answered_required >= total_required:
-            # Alle Pflichtfragen beantwortet → Profil bauen
-            _onboarding_close_session(session["id"], tenant_id)
-            _send_telegram_message(
-                chat_id,
-                f"✅ {found_count} Antworten aus dem Dokument extrahiert!\n\n"
-                f"⏳ Alle Pflichtfragen beantwortet — ich erstelle dein Stimmprofil…",
-                tenant_id=tenant_id,
-            )
-            try:
-                _onboarding_save_voice_profile(tenant_id, answers)
-                _send_telegram_message(
-                    chat_id,
-                    "✅ Dein Stimmprofil ist fertig!\n\n"
-                    "Tippe /help → 'So liest KI mich' um es zu lesen.",
-                    tenant_id=tenant_id,
-                )
-            except Exception as exc:
-                logger.error("Onboarding profile save after doc upload failed: %s", exc)
-        else:
-            remaining = total_required - answered_required
-            _send_telegram_message(
-                chat_id,
-                f"✅ {found_count} Antworten aus dem Dokument extrahiert! ({answered_required} von {total_required} Pflichtfragen)\n\n"
-                f"Noch {remaining} Frage(n) offen:",
-                tenant_id=tenant_id,
-                reply_markup={
-                    "inline_keyboard": [
-                        [
-                            {
-                                "text": f"Frage {answered_required + 1} von {total_required} →",
-                                "callback_data": "cmd:onboarding_next",
-                            }
-                        ]
-                    ]
-                },
-            )
-    else:
-        # Kein aktives Onboarding → neue Session starten und Antworten direkt eintragen
-        session = _onboarding_create_session(tenant_id, extracted)
-        answers = extracted.copy()
-        answered_required = sum(1 for q in questions if q["required"] and q["key"] in answers)
-        total_required = sum(1 for q in questions if q["required"])
-
-        if answered_required >= total_required:
-            _onboarding_close_session(session["id"], tenant_id)
-            _send_telegram_message(
-                chat_id,
-                f"✅ {found_count} Antworten aus dem Dokument extrahiert — alle Pflichtfragen beantwortet!\n\n"
-                f"⏳ Ich erstelle dein Stimmprofil…",
-                tenant_id=tenant_id,
-            )
-            try:
-                _onboarding_save_voice_profile(tenant_id, answers)
-                _send_telegram_message(
-                    chat_id,
-                    "✅ Dein Stimmprofil ist fertig!\n\nTippe /help → 'So liest KI mich'.",
-                    tenant_id=tenant_id,
-                )
-            except Exception as exc:
-                logger.error(
-                    "Onboarding profile save after doc upload (no session) failed: %s", exc
-                )
-        else:
-            remaining = total_required - answered_required
-            _send_telegram_message(
-                chat_id,
-                f"✅ {found_count} Antworten extrahiert ({answered_required} von {total_required} Pflichtfragen).\n\n"
-                f"Noch {remaining} Frage(n) fehlen — drücke den Button um weiterzumachen:",
-                tenant_id=tenant_id,
-                reply_markup={
-                    "inline_keyboard": [
-                        [
-                            {
-                                "text": f"Weiter mit Frage {answered_required + 1} →",
-                                "callback_data": "cmd:onboarding_next",
-                            }
-                        ]
-                    ]
-                },
-            )
-
-
-def _onboarding_handle_bulk_text(tenant_id: str, chat_id: int, text: str, session: dict) -> None:
-    """Verarbeitet langen Text-Paste als Bulk-Antwort (analog zu Dokument-Upload)."""
-    from services.brand_voice import get_onboarding_questions
-
-    questions = get_onboarding_questions()
-    answers = _onboarding_get_answers(session["messages"])
-    open_required_keys = [q["key"] for q in questions if q["required"] and q["key"] not in answers]
-
-    _send_telegram_message(
-        chat_id,
-        "📝 Langer Text erkannt — ich extrahiere Onboarding-Infos…",
-        tenant_id=tenant_id,
-    )
-
-    extracted = _extract_onboarding_answers_from_text(tenant_id, text, open_required_keys)
-
-    if not extracted:
-        # Kein Bulk-Match → als normale Antwort auf aktuelle Frage behandeln
-        _onboarding_handle_answer(tenant_id, chat_id, text, session)
-        return
-
-    # Antworten in Session eintragen (analog zu _onboarding_handle_document)
-    messages = session["messages"]
-    for key, answer in extracted.items():
-        messages.append({"role": "answer", "key": key, "text": answer, "source": "bulk_text"})
-        answers[key] = answer
-
-    answered_required = sum(1 for q in questions if q["required"] and q["key"] in answers)
-    total_required = sum(1 for q in questions if q["required"])
-    _onboarding_save_answer(session["id"], tenant_id, messages, answered_required)
-
-    if answered_required >= total_required:
-        _onboarding_close_session(session["id"], tenant_id)
-        _send_telegram_message(
-            chat_id,
-            f"✅ {len(extracted)} Antworten erkannt — alle Pflichtfragen beantwortet!\n\n⏳ Erstelle Stimmprofil…",
-            tenant_id=tenant_id,
-        )
+    # Abgebrochene Interviews geben ihre Ursprungsnachricht wieder frei. Ohne das
+    # bliebe die Idee an ihre log_id gebunden, und der nächste Druck auf
+    # [✍️ Daraus einen Post machen] am selben Nachrichten-Bubble bekäme
+    # „Daran arbeite ich schon" — obwohl die Session gerade auf 'expired' steht und
+    # nichts läuft. Der Nutzer hat den Abbruch selbst ausgelöst und darf es
+    # danach erneut versuchen; genau dazu lädt der Abbruch-Text ihn auch ein.
+    # Eigenes try: ein Fehler hier darf die bereits erfolgte Absage nicht kippen.
+    for idea_id in cancelled_idea_ids:
         try:
-            _onboarding_save_voice_profile(tenant_id, answers)
-            _send_telegram_message(
-                chat_id,
-                "✅ Dein Stimmprofil ist fertig! Tippe /help → 'So liest KI mich'.",
-                tenant_id=tenant_id,
-            )
+            from tasks.p13_variants_task import _detach_source_log
+
+            _detach_source_log(tenant_id, idea_id)
         except Exception as exc:
-            logger.error("Bulk-text profile save failed: %s", exc)
-    else:
-        remaining = total_required - answered_required
+            logger.warning("detach after cancel failed: %s", type(exc).__name__)
+
+    # Senden erst NACH dem Schließen der DB-Session — _send_telegram_message
+    # macht einen HTTP-Call mit 5s Timeout, dafür bleibt keine Verbindung offen.
+    if cancelled == 0:
         _send_telegram_message(
             chat_id,
-            f"✅ {len(extracted)} Antworten erkannt ({answered_required} von {total_required}).\n"
-            f"Noch {remaining} Frage(n) offen:",
-            tenant_id=tenant_id,
-            reply_markup={
-                "inline_keyboard": [
-                    [
-                        {
-                            "text": f"Weiter mit Frage {answered_required + 1} →",
-                            "callback_data": "cmd:onboarding_next",
-                        }
-                    ]
-                ]
-            },
-        )
-
-
-# ---------------------------------------------------------------------------
-# Onboarding-Wizard — DB-Operationen (synchron via asyncio.run)
-# ---------------------------------------------------------------------------
-
-
-def _onboarding_preload_from_memory(tenant_id: str) -> dict:
-    """Liest memory_chunks und versucht Onboarding-Fragen vorauszubefüllen."""
-    import asyncio
-    import re
-
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-    from sqlalchemy.orm import sessionmaker as _sm
-
-    from config import settings as _s
-    from services.brand_voice import get_onboarding_questions
-    from services.pipeline_llm import call_pipeline_llm
-
-    question_keys = {q["key"]: q["question"] for q in get_onboarding_questions()}
-
-    async def _fetch_chunks():
-        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
-        SM = _sm(engine, class_=AsyncSession, expire_on_commit=False)
-        try:
-            async with SM() as db:
-                result = await db.execute(
-                    text(
-                        "SELECT content_text FROM memory_chunks "
-                        "WHERE tenant_id = :tid ORDER BY created_at DESC LIMIT 30"
-                    ),
-                    {"tid": tenant_id},
-                )
-                return [row[0] for row in result.all()]
-        finally:
-            await engine.dispose()
-
-    try:
-        chunks = asyncio.run(_fetch_chunks())
-    except Exception:
-        return {}
-
-    if not chunks:
-        return {}
-
-    memory_text = "\n---\n".join(chunks[:20])
-    questions_json = json.dumps(question_keys, ensure_ascii=False)
-
-    prompt = f"""Du analysierst Gedaechtnis-Eintraege eines Unternehmers und beantwortest strukturierte Onboarding-Fragen.
-
-Gedaechtnis-Eintraege:
-{memory_text}
-
-Fragen (Key → Frage):
-{questions_json}
-
-Gibt es genug Information um eine oder mehrere Fragen zu beantworten?
-Antworte als JSON-Objekt mit NUR den Keys fuer die du eine klare Antwort ableiten kannst.
-Wenn du dir nicht sicher bist, lass den Key weg. Beispiel: {{"company_description": "IT-Beratung...", "tone_preference": "professionell"}}
-Wenn gar nichts ableitbar: {{}}"""
-
-    try:
-        result = call_pipeline_llm(
-            prompt_key="ONBOARDING_PRELOAD",
-            system_prompt="Antworte NUR als JSON-Objekt, keine Erklaerungen.",
-            user_content=prompt,
-            tenant_id=tenant_id,
-            tier_override="S2",
-        )
-        json_match = re.search(r"\{.*\}", result.text, re.DOTALL)
-        if json_match:
-            return json.loads(json_match.group())
-    except Exception as exc:
-        logger.warning("_onboarding_preload_from_memory LLM failed: %s", exc)
-    return {}
-
-
-def _onboarding_close_stale_sessions(tenant_id: str) -> None:
-    """Schließt alle aktiven Onboarding-Sessions außer der neuesten."""
-    import asyncio
-
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-    from sqlalchemy.orm import sessionmaker as _sm
-
-    from config import settings as _s
-
-    async def _run():
-        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
-        SM = _sm(engine, class_=AsyncSession, expire_on_commit=False)
-        try:
-            async with SM() as db:
-                await db.execute(
-                    text("""UPDATE bot_session SET status='closed', updated_at=now()
-                            WHERE tenant_id=:tid AND mode='onboarding' AND status='active'
-                            AND id NOT IN (
-                                SELECT id FROM bot_session
-                                WHERE tenant_id=:tid AND mode='onboarding' AND status='active'
-                                ORDER BY created_at DESC LIMIT 1
-                            )"""),
-                    {"tid": tenant_id},
-                )
-                await db.commit()
-        finally:
-            await engine.dispose()
-
-    try:
-        asyncio.run(_run())
-    except Exception as exc:
-        logger.warning("_onboarding_close_stale_sessions failed: %s", exc)
-
-
-def _onboarding_get_active_session(tenant_id: str) -> dict | None:
-    """Gibt aktive Onboarding-Session zurück oder None."""
-    import asyncio
-
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-    from sqlalchemy.orm import sessionmaker as _sm
-
-    from config import settings as _s
-
-    async def _run():
-        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
-        SM = _sm(engine, class_=AsyncSession, expire_on_commit=False)
-        try:
-            async with SM() as db:
-                result = await db.execute(
-                    text(
-                        """SELECT id, messages, current_question_index
-                           FROM bot_session
-                           WHERE tenant_id = :tid AND mode = 'onboarding' AND status = 'active'
-                           ORDER BY created_at DESC LIMIT 1"""
-                    ),
-                    {"tid": tenant_id},
-                )
-                row = result.first()
-                if not row:
-                    return None
-                msgs = row[1] if isinstance(row[1], dict | list) else json.loads(row[1] or "[]")
-                return {
-                    "id": str(row[0]),
-                    "messages": msgs,
-                    "current_question_index": row[2],
-                }
-        finally:
-            await engine.dispose()
-
-    try:
-        return asyncio.run(_run())
-    except Exception as exc:
-        logger.warning("_onboarding_get_active_session failed: %s", exc)
-        return None
-
-
-def _onboarding_create_session(tenant_id: str, pre_filled: dict) -> dict:
-    """Legt neue Onboarding-Session an, speichert pre-filled Answers."""
-    import asyncio
-    import uuid as _uuid
-
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-    from sqlalchemy.orm import sessionmaker as _sm
-
-    from config import settings as _s
-
-    session_id = str(_uuid.uuid4())
-    meta_entry = {
-        "role": "meta",
-        "answers": pre_filled.copy(),
-        "pre_filled_keys": list(pre_filled.keys()),
-    }
-    messages = [meta_entry]
-
-    async def _run():
-        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
-        SM = _sm(engine, class_=AsyncSession, expire_on_commit=False)
-        try:
-            async with SM() as db:
-                await db.execute(
-                    text(
-                        """INSERT INTO bot_session
-                           (id, tenant_id, mode, current_question_index, messages, status)
-                           VALUES (:id, :tid, 'onboarding', 0, CAST(:msgs AS jsonb), 'active')"""
-                    ),
-                    {
-                        "id": session_id,
-                        "tid": tenant_id,
-                        "msgs": json.dumps(messages, ensure_ascii=False),
-                    },
-                )
-                await db.commit()
-        finally:
-            await engine.dispose()
-
-    asyncio.run(_run())
-    return {"id": session_id, "messages": messages, "current_question_index": 0}
-
-
-def _onboarding_save_answer(
-    session_id: str, tenant_id: str, messages: list, next_index: int
-) -> None:
-    """Persistiert den aktualisierten messages-Array + current_question_index."""
-    import asyncio
-
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-    from sqlalchemy.orm import sessionmaker as _sm
-
-    from config import settings as _s
-
-    async def _run():
-        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
-        SM = _sm(engine, class_=AsyncSession, expire_on_commit=False)
-        try:
-            async with SM() as db:
-                await db.execute(
-                    text(
-                        """UPDATE bot_session
-                           SET messages = CAST(:msgs AS jsonb),
-                               current_question_index = :idx,
-                               updated_at = now(),
-                               last_message_at = now()
-                           WHERE id = :sid AND tenant_id = :tid"""
-                    ),
-                    {
-                        "msgs": json.dumps(messages, ensure_ascii=False),
-                        "idx": next_index,
-                        "sid": session_id,
-                        "tid": tenant_id,
-                    },
-                )
-                await db.commit()
-        finally:
-            await engine.dispose()
-
-    asyncio.run(_run())
-
-
-def _onboarding_close_session(session_id: str, tenant_id: str) -> None:
-    """Setzt Session-Status auf 'closed'."""
-    import asyncio
-
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-    from sqlalchemy.orm import sessionmaker as _sm
-
-    from config import settings as _s
-
-    async def _run():
-        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
-        SM = _sm(engine, class_=AsyncSession, expire_on_commit=False)
-        try:
-            async with SM() as db:
-                await db.execute(
-                    text(
-                        "UPDATE bot_session SET status='closed', updated_at=now() "
-                        "WHERE id=:sid AND tenant_id=:tid"
-                    ),
-                    {"sid": session_id, "tid": tenant_id},
-                )
-                await db.commit()
-        finally:
-            await engine.dispose()
-
-    asyncio.run(_run())
-
-
-def _onboarding_save_voice_profile(tenant_id: str, answers: dict) -> None:
-    """Ruft build_voice_profile_from_onboarding auf und speichert in tenant_voice_profile."""
-    import asyncio
-
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-    from sqlalchemy.orm import sessionmaker as _sm
-
-    from config import settings as _s
-    from services.brand_voice import build_voice_profile_from_onboarding
-    from services.pipeline_llm import TIER_MODELS
-
-    # Synchroner Aufruf (build_voice_profile_from_onboarding ist jetzt sync)
-    profile = build_voice_profile_from_onboarding(answers)
-    model_id = TIER_MODELS.get("S4", "mistral/mistral-large-latest")
-
-    async def _run():
-        engine = create_async_engine(_s.database_url, pool_pre_ping=True)
-        SM = _sm(engine, class_=AsyncSession, expire_on_commit=False)
-        try:
-            async with SM() as db:
-                # Deaktiviere alte Profile
-                await db.execute(
-                    text("UPDATE tenant_voice_profile SET is_active=false WHERE tenant_id=:tid"),
-                    {"tid": tenant_id},
-                )
-                # Neues Profil einfügen (Pflichtfelder: version, prompt_version_hash, model_id)
-                await db.execute(
-                    text(
-                        """INSERT INTO tenant_voice_profile
-                           (tenant_id, version, source, payload, prompt_version_hash, model_id, is_active)
-                           VALUES (:tid, 1, 'onboarding', CAST(:payload AS jsonb), 'onboarding-v1', :model_id, true)"""
-                    ),
-                    {
-                        "tid": tenant_id,
-                        "payload": json.dumps(profile, ensure_ascii=False),
-                        "model_id": model_id,
-                    },
-                )
-                await db.commit()
-        finally:
-            await engine.dispose()
-
-    asyncio.run(_run())
-
-
-# ---------------------------------------------------------------------------
-# Onboarding-Wizard — Haupt-Einstiegspunkte
-# ---------------------------------------------------------------------------
-
-
-def _onboarding_send_next_question(tenant_id: str, chat_id: int) -> None:
-    """Sendet die nächste offene Onboarding-Frage (aufgerufen durch Button 'Nächste Frage →')."""
-    from services.brand_voice import get_onboarding_questions
-
-    questions = get_onboarding_questions()
-    session = _onboarding_get_active_session(tenant_id)
-    if not session:
-        _send_telegram_message(
-            chat_id,
-            "Kein laufendes Onboarding. Tippe /help → Onboarding starten.",
+            "Es läuft gerade kein Gespräch. Schick mir einfach eine "
+            "Sprachnachricht oder tippe /help.",
             tenant_id=tenant_id,
         )
-        return
+        return False
 
-    answers = _onboarding_get_answers(session["messages"])
-    total_required = sum(1 for q in questions if q["required"])
-    answered_required = sum(1 for q in questions if q["required"] and q["key"] in answers)
-
-    # Nur nächste PFLICHT-Frage senden
-    next_q = next((q for q in questions if q["required"] and q["key"] not in answers), None)
-
-    if not next_q:
-        _send_telegram_message(
-            chat_id,
-            "✅ Alle Pflichtfragen sind beantwortet!",
-            tenant_id=tenant_id,
-        )
-        return
-
-    # Frage in messages speichern
-    messages = session["messages"]
-    messages.append({"role": "question", "key": next_q["key"], "question": next_q["question"]})
-    _onboarding_save_answer(session["id"], tenant_id, messages, answered_required)
-
-    _send_telegram_message(
-        chat_id,
-        f"Frage {answered_required + 1} von {total_required}:\n\n{next_q['question']}\n\n"
-        f"✏️ Schreib deine Antwort einfach hier in den Chat.",
-        tenant_id=tenant_id,
-    )
-
-
-def _send_onboarding_start(tenant_id: str, chat_id: int) -> None:
-    """Startet oder setzt Onboarding-Wizard fort."""
-    from services.brand_voice import get_onboarding_questions
-
-    questions = get_onboarding_questions()
-
-    total_required = sum(1 for q in questions if q["required"])
-
-    # Laufende Session fortsetzen — alle älteren aktiven Sessions vorher schließen
-    _onboarding_close_stale_sessions(tenant_id)
-    session = _onboarding_get_active_session(tenant_id)
-    if session:
-        answers = _onboarding_get_answers(session["messages"])
-        next_q = _onboarding_next_question(questions, answers)
-        answered_count = sum(1 for q in questions if q["key"] in answers)
-        if next_q:
-            # Zeige Status + Button statt sofort Frage (User kann Frage anfordern)
-            _send_telegram_message(
-                chat_id,
-                f"🚀 Onboarding läuft noch! {answered_count} von {total_required} Fragen beantwortet.\n\n"
-                f"Drücke den Button um weiterzumachen:",
-                tenant_id=tenant_id,
-                reply_markup={
-                    "inline_keyboard": [
-                        [
-                            {
-                                "text": f"Frage {answered_count + 1} von {total_required} →",
-                                "callback_data": "cmd:onboarding_next",
-                            }
-                        ]
-                    ]
-                },
-            )
-        else:
-            _send_telegram_message(
-                chat_id, "✅ Onboarding bereits abgeschlossen!", tenant_id=tenant_id
-            )
-        return
-
-    # Neue Session: Vorausfüllen aus Memory
-    _send_telegram_message(
-        chat_id,
-        "🔍 Ich schaue kurz nach, was ich schon über dich weiß…",
-        tenant_id=tenant_id,
-    )
-    pre_filled = _onboarding_preload_from_memory(tenant_id)
-
-    session = _onboarding_create_session(tenant_id, pre_filled)
-    answers = pre_filled.copy()
-    next_q = _onboarding_next_question(questions, answers)
-
-    if not next_q:
-        # Alles vorausgefüllt — direkt speichern
-        _onboarding_save_voice_profile(tenant_id, answers)
-        _onboarding_close_session(session["id"], tenant_id)
-        _send_telegram_message(
-            chat_id,
-            "✅ Ich konnte alle Infos aus deinen bisherigen Nachrichten ableiten!\n\n"
-            "Dein Stimmprofil ist fertig. Tippe /help → 'So liest KI mich' um es zu sehen.",
-            tenant_id=tenant_id,
-        )
-        return
-
-    pre_note = ""
-    if pre_filled:
-        known_count = len(pre_filled)
-        pre_note = f"_(Ich kenne bereits {known_count} Antwort(en) aus deinen Nachrichten.)_\n\n"
-
-    _send_telegram_message(
-        chat_id,
-        f"🚀 Lass uns starten — {total_required} kurze Fragen zu dir & deinem Business.\n\n"
-        f"{pre_note}"
-        f"Frage 1 von {total_required}:\n{next_q['question']}\n\n"
-        f"✏️ Schreib deine Antwort einfach hier in den Chat.",
-        tenant_id=tenant_id,
-    )
-
-
-def _onboarding_handle_answer(
-    tenant_id: str, chat_id: int, answer_text: str, session: dict
-) -> None:
-    """Verarbeitet eine Antwort im Onboarding-Wizard."""
-    from services.brand_voice import get_onboarding_questions
-
-    questions = get_onboarding_questions()
-    messages = session["messages"]
-    answers = _onboarding_get_answers(messages)
-
-    # Aktuelle Frage ermitteln (was haben wir zuletzt gefragt?)
-    current_key = None
-    for msg in reversed(messages):
-        if msg.get("role") == "question":
-            current_key = msg["key"]
-            break
-
-    if not current_key:
-        # Erste Antwort — nimm die erste unbeantwortete Frage
-        first_q = _onboarding_next_question(questions, answers)
-        current_key = first_q["key"] if first_q else None
-
-    if current_key:
-        messages.append({"role": "answer", "key": current_key, "text": answer_text})
-        answers[current_key] = answer_text
-
-    total_required = sum(1 for q in questions if q["required"])
-    answered_required = sum(1 for q in questions if q["required"] and q["key"] in answers)
-    # q_num = wie viele required-Fragen bereits beantwortet (für Fortschrittsanzeige)
-    q_num = min(answered_required, total_required)
-
-    # Nur noch required-Fragen stellen — nach Abschluss aller Pflichtfragen Profil bauen
-    next_required_q = next(
-        (q for q in questions if q["required"] and q["key"] not in answers), None
-    )
-
-    if next_required_q:
-        # Noch nicht alle Pflichtfragen beantwortet — Bestätigung + Button
-        _onboarding_save_answer(session["id"], tenant_id, messages, q_num)
-        _send_telegram_message(
-            chat_id,
-            f"✅ Gespeichert! ({answered_required} von {total_required} Pflichtfragen beantwortet)\n\n"
-            f"Bereit für die nächste Frage?",
-            tenant_id=tenant_id,
-            reply_markup={
-                "inline_keyboard": [
-                    [
-                        {
-                            "text": f"Frage {answered_required + 1} von {total_required} →",
-                            "callback_data": "cmd:onboarding_next",
-                        }
-                    ]
-                ]
-            },
-        )
-    else:
-        # Alle Pflichtfragen beantwortet — Profil speichern
-        _onboarding_save_answer(session["id"], tenant_id, messages, q_num)
-        _onboarding_close_session(session["id"], tenant_id)
-
-        _send_telegram_message(
-            chat_id,
-            "⏳ Alle Fragen beantwortet — ich erstelle jetzt dein Stimmprofil…",
-            tenant_id=tenant_id,
-        )
-        try:
-            _onboarding_save_voice_profile(tenant_id, answers)
-            _send_telegram_message(
-                chat_id,
-                "✅ Dein Stimmprofil ist fertig!\n\n"
-                "Tippe /help → 'So liest KI mich' um es zu lesen.\n\n"
-                "Das Profil wird automatisch ergänzt wenn du weitere Sprachnachrichten oder Texte schickst.",
-                tenant_id=tenant_id,
-            )
-        except Exception as exc:
-            logger.error("Onboarding profile save failed: %s", exc)
-            _send_telegram_message(
-                chat_id,
-                "⚠️ Profil konnte nicht gespeichert werden. "
-                "Versuche es in ein paar Minuten erneut mit /help → Onboarding.",
-                tenant_id=tenant_id,
-            )
+    _send_telegram_message(chat_id, bestaetigung or _ABBRUCH_TEXT, tenant_id=tenant_id)
+    return True
 
 
 def _memory_search_sync(tenant_id: str, query: str, limit: int = 5) -> list[dict]:
@@ -1875,7 +1565,18 @@ def _memory_search_sync(tenant_id: str, query: str, limit: int = 5) -> list[dict
         try:
             async with SessionMaker() as db:
                 return await search_similar(
-                    db, tenant_id=tenant_id, query_text=query, limit=limit, min_similarity=0.0
+                    db,
+                    tenant_id=tenant_id,
+                    query_text=query,
+                    limit=limit,
+                    min_similarity=0.0,
+                    # Diese Stelle ist eine ANSICHT, kein Erzeuger: der einzige Aufrufer ist
+                    # der /such-Zweig in _try_memory_command, und das Ergebnis geht direkt
+                    # als Nachricht an den Nutzer. Sie ist das Telegram-Gegenstueck zu
+                    # /memory/search und muss wie dieses den Rohbestand zeigen — sonst waere
+                    # Markiertes in keinem Kanal mehr sichtbar, den Louis taeglich benutzt,
+                    # und ein Markierungsfehler fiele niemandem mehr auf.
+                    include_instructions=True,
                 )
         finally:
             await engine.dispose()
@@ -1946,10 +1647,14 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
     text_content: str = message.get("text", "") or ""
     chat_id_for_dispatch: int = message.get("chat", {}).get("id", 0)
 
-    # Dokument-Upload → Onboarding-Extraktion
+    # Dokument-Upload — es gibt noch keinen Ingest-Pfad für Dateien. Früher lief das
+    # in den Onboarding-Wizard (und konnte dabei ein Stimmprofil überschreiben); der
+    # ist entfernt. Ehrlich absagen statt still verwerfen.
     document = message.get("document")
     if document:
-        _onboarding_handle_document(tenant_id, chat_id_for_dispatch, document)
+        _send_telegram_message(
+            chat_id_for_dispatch, _DOCUMENT_UNSUPPORTED_TEXT, tenant_id=tenant_id
+        )
         return
 
     # Determine message type
@@ -1969,13 +1674,24 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
         stripped = text_content.strip()
         cmd_only = stripped.lower().split()[0].split("@")[0] if stripped.startswith("/") else ""
 
-        # /start für bereits verbundenen User → Bestätigung statt silent drop
+        # /start <token> → Deeplink-Bestätigung verarbeiten (#62 — vorher wurde
+        # jedes /start im Polling-Pfad pauschal als "bereits verbunden"
+        # beantwortet, ohne den Token je zu prüfen; tenant_telegram_link blieb
+        # dauerhaft 'pending'). /start ohne Token → Bestätigung wie bisher.
         if cmd_only == "/start":
-            _send_telegram_message(
-                chat_id_for_dispatch,
-                "✅ Du bist bereits verbunden!\n\nSchick mir Gedanken, Sprachnachrichten oder Fotos — ich behalte alles im Gedächtnis.\n\n/help zeigt alle Kommandos.",
-                tenant_id=tenant_id,
-            )
+            token_arg = stripped[len("/start") :].strip()
+            if token_arg:
+                _handle_start_command(message, token_arg, expected_tenant_id=tenant_id)
+            else:
+                # C1: derselbe Erstkontakt wie nach dem Token-Link. Ein bereits
+                # verbundener Tester tippt genau das — und bekam bisher nur eine
+                # Bestätigung ohne Anleitung und ohne Button.
+                _send_telegram_message(
+                    chat_id_for_dispatch,
+                    _welcome_text("✅ Du bist verbunden!"),
+                    tenant_id=tenant_id,
+                    reply_markup=_welcome_keyboard(),
+                )
             return
 
         # Unbekanntes Kommando → Hinweis
@@ -1987,27 +1703,26 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
             )
             return
 
-        # Aktive Onboarding-Session → kurz=Antwort, lang=Bulk-Extraktion
-        onboarding_session = _onboarding_get_active_session(tenant_id)
-        if onboarding_session:
-            if len(stripped) >= 300:
-                _onboarding_handle_bulk_text(
-                    tenant_id, chat_id_for_dispatch, stripped, onboarding_session
-                )
-            else:
-                _onboarding_handle_answer(
-                    tenant_id, chat_id_for_dispatch, stripped, onboarding_session
-                )
-            return
+        # Kein Onboarding-Abfangen mehr: Text ist immer Content-Eingabe. Vorher
+        # verschluckte eine offene Wizard-Session jede Nachricht als Antwort auf eine
+        # Frage — auch tagelang später, weil Sessions kein TTL haben.
 
-        # Zu kurzer Text → Hinweis statt stilles Drop
-        if len(stripped) < 10:
-            _send_telegram_message(
-                chat_id_for_dispatch,
-                "💬 Zu kurz fürs Gedächtnis. Schreib einfach einen ganzen Satz!",
-                tenant_id=tenant_id,
-            )
-            return
+        # Zu kurzer Text → Hinweis statt stilles Drop.
+        #
+        # ⚠️ Die Laengenpruefung liegt seit 04.08.2026 HINTER der Session-Abfrage.
+        # Innerhalb eines Gespraechs zaehlt jede Laenge: „ja" ist die vorgesehene
+        # Bestaetigung eines Abschluss-Angebots und war vorher schon hier weg.
+        # Dieselbe Bedingung sichert `_process_text` — siehe hat_aktives_gespraech.
+        from tasks.telegram_task import MIN_TEXT_LEN, hat_aktives_gespraech
+
+        if len(stripped) < MIN_TEXT_LEN:
+            if not hat_aktives_gespraech(tenant_id):
+                _send_telegram_message(
+                    chat_id_for_dispatch,
+                    "💬 Zu kurz fürs Gedächtnis. Schreib einfach einen ganzen Satz!",
+                    tenant_id=tenant_id,
+                )
+                return
 
     # update_id-Deduplizierungs-Marker in payload injizieren
     update_id = update.get("update_id")

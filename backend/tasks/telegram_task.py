@@ -20,15 +20,18 @@ import os
 import types
 
 import httpx
+from celery.exceptions import SoftTimeLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from config import settings
 from models.base import sync_session_factory
+from services.anweisungs_marker import MARKER_PATCH_JSON
 from services.voice_transcription import (
     TranscriptionError,
     TranscriptionResult,
+    TranscriptionUnavailable,
     transcribe_voice,
 )
 from tasks.celery_app import celery_app
@@ -81,18 +84,23 @@ def _update_log_transcript(log_id: str, transcript: str, model: str, confidence:
 def _load_active_session(tenant_id: str) -> object | None:
     """Lädt die aktive bot_session des Tenants (random_smart oder targeted).
 
-    Gibt ein leichtgewichtiges SimpleNamespace(id, status) zurück (KEIN
-    ORM-Model — route_telegram_intent greift nur per getattr/str darauf zu)
-    oder None, wenn keine aktive Session existiert.
+    Gibt ein leichtgewichtiges SimpleNamespace(id, status, current_question)
+    zurück (KEIN ORM-Model — route_telegram_intent greift nur per
+    getattr/str auf id/status zu) oder None, wenn keine aktive Session
+    existiert.
 
     #57: Filter auf mode IN ('random_smart','targeted') erweitert — ohne dies
     umgehen targeted-Antworten still das p08-Routing (p08_service unterstützt
     targeted bereits).
+
+    #62: current_question (letzte bot-Frage aus messages[-1]["bot"]) wird
+    mitgeladen, damit Layer-1 die Nutzer-Antwort gegen die tatsächlich
+    gestellte Frage klassifizieren kann statt blind zu raten.
     """
     with sync_session_factory() as db:
         row = db.execute(
             text(
-                "SELECT id, status FROM bot_session "
+                "SELECT id, status, messages FROM bot_session "
                 "WHERE tenant_id = :tid AND status = 'active' "
                 "      AND mode IN ('random_smart', 'targeted') "
                 "ORDER BY created_at DESC LIMIT 1"
@@ -101,7 +109,330 @@ def _load_active_session(tenant_id: str) -> object | None:
         ).fetchone()
     if row is None:
         return None
-    return types.SimpleNamespace(id=row.id, status=row.status)
+    current_question = ""
+    awaiting_confirmation = False
+    messages = row.messages or []
+    if isinstance(messages, list) and messages:
+        last_entry = messages[-1]
+        if isinstance(last_entry, dict):
+            current_question = (last_entry.get("bot") or "").strip()
+            # Hat der Bot zuletzt ein Abschluss-Angebot gemacht? Dann ist die
+            # naechste Nachricht die Bestaetigung — sie MUSS bei p08_response
+            # ankommen, auch wenn Schicht 1 ein blosses „ja" als Smalltalk
+            # einordnet. Ohne diese Weiche haenge das Gespraech am Ja fest.
+            awaiting_confirmation = last_entry.get("next_action") == "offer"
+    return types.SimpleNamespace(
+        id=row.id,
+        status=row.status,
+        current_question=current_question,
+        awaiting_confirmation=awaiting_confirmation,
+    )
+
+
+#: Kürzester Text, der ausserhalb eines Gespraechs noch als Gedaechtnis-Eintrag
+#: durchgeht. Innerhalb eines Gespraechs zaehlt jede Laenge — „ja" ist die
+#: vorgesehene Bestaetigung eines Abschluss-Angebots.
+MIN_TEXT_LEN = 10
+
+
+def hat_aktives_gespraech(tenant_id: str) -> bool:
+    """True, wenn gerade ein Bot-Gespraech laeuft.
+
+    ⚠️ Gemeinsame Regel fuer BEIDE Kurztext-Filter — `api/telegram.py`
+    (vor dem Dispatch) und `_process_text` (danach). Wer nur einen der beiden
+    an die Session koppelt, laesst „ja" durch die Vordertuer und verliert es an
+    der Hintertuer.
+
+    Fail-open zu False, und die Richtung ist Absicht: bei einem DB-Fehler
+    verhaelt sich der Filter wie bisher (Hinweis statt Verarbeitung), statt
+    ungeprueft alles durchzulassen.
+    """
+    try:
+        return _load_active_session(tenant_id) is not None
+    except Exception as exc:
+        logger.warning("Kurztext-Gate: Session-Abfrage fehlgeschlagen: %s", type(exc).__name__)
+        return False
+
+
+def _is_pending_variant_choice(tenant_id: str, text_content: str) -> bool:
+    """True nur bei OFFENEM Varianten-Marker UND parsebarem Wahl-Token.
+
+    Beide Bedingungen zusammen. Ein reiner Marker-Check wäre falsch: der Marker
+    lebt 24 Stunden (`_P13_CHOICE_WINDOW_HOURS`), ein veralteter würde die Weiche
+    kippen und damit ausgerechnet den LLM-Pfad wieder öffnen, den
+    `_awaits_user_choice` schließt.
+
+    Token zuerst — reines Regex, spart den DB-Treffer im Normalfall.
+    """
+    try:
+        from tasks.p13_variants_task import _load_pending_idea, _parse_choice_token
+
+        if _parse_choice_token(text_content) is None:
+            return False
+        return _load_pending_idea(tenant_id) is not None
+    except Exception as exc:
+        logger.warning("pending variant check failed: %s", type(exc).__name__)
+        return False
+
+
+def _awaits_user_choice(tenant_id: str, text_content: str) -> bool:
+    """True = der Nutzer muss entscheiden, was mit der Nachricht passieren soll.
+
+    Ersetzt den LLM-Rateschritt: statt zu klassifizieren, was jemand wollte, fragt
+    der Bot nach. Nur wenn ein bestehender Pfad die Nachricht nachweislich
+    erwartet, bleibt es beim alten Verhalten.
+
+    Seit P14 (services/p14_entry_service.py) laeuft hinter dieser Weiche bei
+    JEDER Nachricht, die sie passiert, ein eigener S2-Aufruf
+    (`_versuche_gespraechsstart`) — auch bei denen, die am Ende trotzdem die
+    zwei Buttons bekommen. Die Doktrin ("bei Substanz wird gefragt, nicht
+    geraten") gilt weiter, nur der Weg dorthin ist jetzt ein anderer.
+
+    Fail-open zu False, und die Richtung ist Absicht: Wirft z. B.
+    `_load_active_session`, wissen wir nicht, ob ein Interview läuft. False führt
+    zurück in `_route_inbound_message`, das die Session selbst noch einmal lädt —
+    eine laufende Antwort geht also nicht verloren. True („im Zweifel fragen")
+    wäre hier gefährlicher: es würde die Antwort auf eine offene Interview-Frage
+    verwerfen und das Gespräch stehen lassen.
+    """
+    try:
+        if _load_active_session(tenant_id) is not None:
+            return False
+
+        from services.chat_intent_heuristics import is_idea_request
+
+        if is_idea_request(text_content):
+            return False
+
+        return not _is_pending_variant_choice(tenant_id, text_content)
+    except Exception as exc:
+        logger.warning("choice gate failed: %s", type(exc).__name__)
+        return False
+
+
+#: Wie viel Text die Quittung zitiert, bevor sie zum Auszug wird.
+_QUITTUNG_GRENZE = 80
+
+
+def _quittungs_zitat(text_content: str, grenze: int = _QUITTUNG_GRENZE) -> str:
+    """Der zitierte Teil einer Quittung — nie mitten im Wort, als Auszug erkennbar.
+
+    Die Quittung ist eine Aussage darüber, was im Gedächtnis liegt. Ein harter Schnitt
+    bei `grenze` macht daraus eine falsche Aussage: aus „in ein Business-Netzwerk" wurde
+    live am 06.08.2026 „in ein Bus…" — ein Wort, das niemand gesagt hat — und der Nutzer
+    las daraus, es werde nur sein erster Satz gespeichert. Gespeichert wird immer alles.
+
+    Deshalb zwei Änderungen gegenüber dem harten Schnitt: an der letzten Wortgrenze
+    trennen, und den tatsächlichen Umfang danebenstellen, statt ihn zu verschweigen.
+
+    Die Längenangabe zählt den übergebenen Text, nicht den gekürzten — sie soll ja
+    gerade sagen, wie viel mehr gespeichert ist als hier steht.
+    """
+    voll = text_content or ""
+    if len(voll) <= grenze:
+        return f"„{voll.rstrip()}“"
+
+    kopf = voll[:grenze]
+    # Ein einzelnes überlanges Wort hat keine Wortgrenze — dann ist der harte Schnitt
+    # die einzige Möglichkeit, und ein leerer Auszug wäre die schlechtere.
+    schnitt = kopf.rsplit(" ", 1)[0].rstrip(" ,;:–—-") if " " in kopf else kopf.rstrip()
+    return f"„{schnitt}…“ (von {len(voll)} Zeichen)"
+
+
+def _send_choice_prompt(
+    tenant_id: str, chat_id: int, log_id: str, text_content: str, icon: str
+) -> bool:
+    """Bestätigung plus die zwei Wege. True, wenn zugestellt.
+
+    Kein Rollback nötig, wenn der Versand scheitert: es wurde keine Session
+    eröffnet, die als Falle zurückbliebe, und der Memory-Chunk liegt bereits.
+    Aber protokollieren statt schlucken — dieser Prompt ist der einzige sichtbare
+    Ausgang der Nachricht.
+    """
+    try:
+        from api.telegram import _choice_keyboard, _send_telegram_message
+
+        sent = _send_telegram_message(
+            chat_id,
+            f"{icon} Notiert: {_quittungs_zitat(text_content)}\n\nWas soll ich damit machen?",
+            tenant_id=tenant_id,
+            reply_markup=_choice_keyboard(log_id),
+        )
+    except Exception as exc:
+        logger.warning("choice prompt send failed: %s", type(exc).__name__)
+        return False
+    if not sent:
+        logger.warning(
+            "telegram_task: Wahl-Prompt nicht zugestellt (tenant=%s, log_id=%s)",
+            tenant_id,
+            log_id,
+        )
+    return sent
+
+
+def _verwerfe_session(session_id: str) -> None:
+    """Rollback einer gerade angelegten Session (fail-open).
+
+    Kommt die Eroeffnungsfrage nicht an, bleibt sonst eine UNSICHTBARE Session
+    zurueck: `_load_active_session` findet sie, und jede weitere Nachricht des
+    Nutzers wird als Antwort auf eine Frage geroutet, die er nie gelesen hat.
+    Sessions haben kein TTL.
+
+    Status 'expired', nicht 'closed' — 'closed' stellt in
+    `tasks/session_post_task.py` die Post-Generierung scharf.
+    """
+    try:
+        with sync_session_factory() as db:
+            db.execute(
+                text(
+                    "UPDATE bot_session SET status = 'expired', updated_at = NOW() "
+                    "WHERE id = :id AND status = 'active'"
+                ),
+                {"id": session_id},
+            )
+            db.commit()
+    except Exception as exc:
+        logger.warning("p14 session rollback failed: %s", type(exc).__name__)
+
+
+#: Steuerungsmerkmal fuer Nachrichten, die ein Gespraech eroeffnet haben.
+#: Bewusst in `metadata`, nicht in `classification` — dort steht eine
+#: INHALTLICHE Kategorie, die store_chunk(classify=True) selbst vergibt und die
+#: values_backfill_task auswertet.
+#:
+#: Wert und Auswerter leben in services/anweisungs_marker.py — hier steht nur noch
+#: der Zeiger, damit Setzer und Filter nicht auseinanderlaufen koennen.
+_ANWEISUNGS_MARKER = MARKER_PATCH_JSON
+
+
+def _markiere_chunk_als_anweisung(tenant_id: str, log_id: str) -> bool:
+    """Markiert die Chunks dieser Nachricht als Steuer-Anweisung (Spec §7).
+
+    Die Nachricht liegt bereits als Memory-Chunk im Gedaechtnis —
+    `_store_chunk_async` laeuft VOR allen Weichen. Damit ist der Chunk fuer
+    spaetere Konsumenten filterbar. Das Filtern selbst ist NICHT Teil dieser
+    Arbeit: heute wird das Merkmal per Default von `search_similar` (RAG),
+    von `p06_profile_extractor_task` (Voice-Profil) und von `memory_picker`
+    ausgewertet — die eine Wahrheit dazu liegt in
+    `services/anweisungs_marker.py`. Hier entsteht nur das Merkmal.
+
+    ⚠️ Adressiert ueber `source_ref`, NICHT ueber die zurueckgegebene Chunk-ID:
+    `_store_chunk_async` gibt laut eigenem Docstring nur die ID des ERSTEN
+    Chunks zurueck; ein laengerer Text wird gechunkt, und die uebrigen blieben
+    unmarkiert.
+
+    Loeschen waere unumkehrbar; der Rohtext liegt ohnehin im
+    telegram_message_log. Fail-open: ein Markierungsfehler darf nie ein
+    Gespraech verhindern.
+
+    Returns:
+        True, wenn das UPDATE durchlief; sonst False.
+    """
+    try:
+        with sync_session_factory() as db:
+            db.execute(
+                text(
+                    "UPDATE memory_chunks "
+                    "SET metadata = COALESCE(metadata, CAST('{}' AS jsonb)) "
+                    "               || CAST(:patch AS jsonb) "
+                    "WHERE tenant_id = :tid AND source_ref = :ref"
+                ),
+                {
+                    "patch": _ANWEISUNGS_MARKER,
+                    "tid": tenant_id,
+                    "ref": f"telegram_message_log:{log_id}",
+                },
+            )
+            db.commit()
+        return True
+    except Exception as exc:
+        logger.warning("p14 chunk marking failed: %s", type(exc).__name__)
+        return False
+
+
+def _versuche_gespraechsstart(
+    tenant_id: str, text_content: str, log_id: str, chat_id: int | None
+) -> dict | None:
+    """P14 — eine Anweisung wird ein Gespraech. None heisst: weiter zu den Buttons.
+
+    Laeuft NUR, wenn `_awaits_user_choice` True gesagt hat; Session, P13-Wahl und
+    P09 sind damit bereits ausgeschlossen (Gate-Reihenfolge der Spec §4).
+
+    Die Antwort des Zuges IST die Eroeffnungsfrage und zugleich messages[0] der
+    Session — sie ersetzt den p08_opener-Aufruf, sie kommt nicht obendrauf.
+
+    Jeder Fehler gibt None zurueck: der Aufrufer sendet dann die zwei Buttons.
+    Nie Stille, nie eine halbe Session.
+    """
+    try:
+        from services.p14_entry_service import HANDLUNG_GESPRAECH, p14_entry
+
+        entscheidung = p14_entry(tenant_id, text_content)
+    except SoftTimeLimitExceeded:
+        # Muss vor dem Exception-Katalog stehen — siehe _route_inbound_message.
+        raise
+    except Exception as exc:
+        logger.warning("p14 entry gate failed: %s", type(exc).__name__)
+        return None
+
+    if getattr(entscheidung, "handlung", None) != HANDLUNG_GESPRAECH:
+        return None
+
+    ziel_chat = chat_id or _resolve_chat_id(tenant_id)
+    if ziel_chat is None:
+        # Ohne Chat kaeme die Frage nie an. Dann lieber keine Session, die auf
+        # eine Antwort wartet, die niemand geben kann.
+        logger.warning("p14: kein chat auffindbar (tenant=%s) — kein Gespraechsstart", tenant_id)
+        return None
+
+    try:
+        from services.p08_service import erzeuge_bot_session
+
+        session_id = erzeuge_bot_session(
+            tenant_id=tenant_id,
+            mode="targeted",
+            topic_idea_id=None,
+            frage=entscheidung.antwort,
+            # Der Folgeprompt liest messages[0]["category"] als „Thema des
+            # Gespraechs" (p08_service.py). Die ausloesende Nachricht sagt darueber
+            # mehr als das Steuerwort „targeted".
+            category=(text_content or "").strip()[:120] or "targeted",
+        )
+    except Exception as exc:
+        logger.warning("p14 session insert failed: %s", type(exc).__name__)
+        return None
+
+    try:
+        from api.telegram import _entry_keep_keyboard, _send_telegram_message
+
+        gesendet = _send_telegram_message(
+            ziel_chat,
+            entscheidung.antwort,
+            tenant_id=tenant_id,
+            reply_markup=_entry_keep_keyboard(),
+        )
+    except Exception as exc:
+        logger.warning("p14 opener send failed: %s", type(exc).__name__)
+        gesendet = False
+
+    if not gesendet:
+        # Die Session zuruecknehmen, sonst schluckt sie ab jetzt jede Nachricht.
+        _verwerfe_session(session_id)
+        return None
+
+    # Fail-open, und zwar hier zusaetzlich: der Vertrag „eine Markierung
+    # verhindert nie ein Gespraech" darf nicht davon abhaengen, dass der
+    # Aufgerufene sich benimmt.
+    try:
+        _markiere_chunk_als_anweisung(tenant_id, log_id)
+    except Exception as exc:
+        logger.warning("p14 chunk marking raised: %s", type(exc).__name__)
+
+    return {
+        "routed_to": "p14_gespraech",
+        "bot_session_id": session_id,
+        "p14_message_sent": True,
+    }
 
 
 def _resolve_chat_id(tenant_id: str) -> int | None:
@@ -164,6 +495,47 @@ def _resolve_last_post(tenant_id: str) -> object | None:
     except Exception as exc:
         logger.warning("_resolve_last_post failed: %s", type(exc).__name__)
         return None
+
+
+#: Routing-Ziele, die dem Nutzer nachweislich selbst antworten (direkt oder über
+#: einen enqueueten Task). Alles andere braucht eine sichtbare Quittung, sonst
+#: endet die Nachricht still — der eine Zustand, den dieser Entwurf ausschliesst.
+#:
+#: Positivliste, nicht Negativliste: ein neues Routing-Ziel ist im Zweifel stumm,
+#: und dann soll die Quittung greifen statt zu fehlen.
+_ZIELE_MIT_EIGENER_ANTWORT = frozenset(
+    {
+        "p08_response",
+        "p09_ideation",
+        "p13_variants",
+        "voice_feedback_api",
+        "p14_gespraech",
+    }
+)
+
+
+#: Flags, mit denen ein Ziel meldet, ob sein antwortender Task wirklich in die
+#: Warteschlange kam. Steht eines auf False, hat NIEMAND den Nutzer erreicht —
+#: dann braucht es die Quittung, obwohl das Ziel in der Positivliste steht.
+_ENQUEUE_FLAGS = ("p13_enqueued", "regen_enqueued")
+
+
+def _braucht_sichtbare_quittung(routing_info: dict) -> bool:
+    """True, wenn nach dem Routing niemand mehr mit dem Nutzer spricht.
+
+    Zwei Bedingungen, nicht eine: das Ziel muss selbst antworten KÖNNEN (Positiv-
+    liste) UND sein Task muss tatsächlich enqueued worden sein. Ein gescheiterter
+    Enqueue behält den Zielnamen bei — ohne die zweite Prüfung wäre das wieder
+    Stille, diesmal im Mechanismus gegen Stille.
+
+    `deduped` bleibt ausgenommen: Doppel-Event auf eine bereits beantwortete
+    Nachricht.
+    """
+    if routing_info.get("deduped"):
+        return False
+    if routing_info.get("routed_to") not in _ZIELE_MIT_EIGENER_ANTWORT:
+        return True
+    return any(routing_info.get(flag) is False for flag in _ENQUEUE_FLAGS)
 
 
 def _route_inbound_message(
@@ -335,6 +707,7 @@ def _route_inbound_message(
             transcript=text_content,
             tenant_id=tenant_id,
             session_state="active",
+            current_question=getattr(session, "current_question", ""),
         )
         decision = route_telegram_intent(extraction, tenant_id, current_session=session)
 
@@ -366,11 +739,31 @@ def _route_inbound_message(
             chat_id = _resolve_chat_id(tenant_id)
             if chat_id is not None and result.message:
                 try:
-                    from api.telegram import (
+                    from api.telegram import (  # Lazy-Import wie scheduler.py:104
+                        _interview_cancel_keyboard,
                         _send_telegram_message,
-                    )  # Lazy-Import wie scheduler.py:104
+                    )
 
-                    sent = _send_telegram_message(chat_id, result.message, tenant_id=tenant_id)
+                    # C5: Solange das Gespräch weiterläuft, hängt an der Frage ein
+                    # sichtbarer Ausgang. An der Abschluss-Nachricht nicht — dann
+                    # ist die Session ohnehin zu.
+                    #
+                    # ⚠️ Diese Annahme war bis 04.08.2026 FALSCH und der Grund,
+                    # warum Louis eine Frage ohne Abbrechen-Knopf bekam: `is_closed`
+                    # konnte vom Zähler gesetzt sein, während der Text vom LLM eine
+                    # frische Frage war. Seither garantiert der Typ es —
+                    # `is_closed` ist `outcome is CLOSED`, und CLOSED kann keinen
+                    # Fragetext tragen (ResponseResult.__post_init__). Ein Angebot
+                    # ist `OFFER`, hält die Session offen und behält den Ausgang.
+                    if result.is_closed:
+                        sent = _send_telegram_message(chat_id, result.message, tenant_id=tenant_id)
+                    else:
+                        sent = _send_telegram_message(
+                            chat_id,
+                            result.message,
+                            tenant_id=tenant_id,
+                            reply_markup=_interview_cancel_keyboard(),
+                        )
                     routing_info["p08_message_sent"] = sent
                     if not sent:
                         logger.warning(
@@ -405,6 +798,11 @@ def _route_inbound_message(
                     routing_info["post_generation_enqueued"] = False
 
         return routing_info
+    except SoftTimeLimitExceeded:
+        # Muss vor dem Exception-Katalog stehen: SoftTimeLimitExceeded erbt von
+        # Exception und würde sonst hier als gewöhnlicher Routing-Fehler enden —
+        # der Task liefe scheinbar normal weiter statt sich abwickeln zu lassen.
+        raise
     except Exception as exc:
         # E2: nur Exception-Typ loggen, nie str(exc) — könnte Prompt-/PII-Fragmente tragen.
         logger.warning("inbound routing failed: %s", type(exc).__name__)
@@ -515,12 +913,91 @@ async def _store_chunk_async(
 # ── celery task ─────────────────────────────────────────────────────────
 
 
-@celery_app.task(name="tasks.telegram_task.process_telegram_update", bind=True, max_retries=1)
+def _dispatch_voice(task, log_id: str, tenant_id: str, payload: dict) -> dict:
+    """Voice-Zweig samt Retry-Entscheidung.
+
+    Bewusst eine gewöhnliche Funktion mit `task` als Parameter statt Code im Task-Rumpf:
+    Ein Celery-Task mit `bind=True` ist ein Objekt, dessen `__call__` das echte `self`
+    selbst einsetzt — ein von Hand übergebener Fake-Task landete als erstes Argument.
+    So ist die Retry-Logik ohne Celery-Laufzeit prüfbar.
+    """
+    try:
+        return _process_voice(log_id, tenant_id, payload)
+    except TranscriptionUnavailable as exc:
+        if task.request.retries < task.max_retries:
+            # 30/60/120s — ein einzelner Nachschlag überlebt ein Ratenlimit selten.
+            countdown = 30 * 2**task.request.retries
+            if task.request.retries == 0:
+                # Genau einmal ankündigen, nicht bei jedem Versuch.
+                _notify_voice_user(tenant_id, payload, exc.user_message or _VOICE_MSG_BUSY)
+            logger.warning(
+                "voice vorübergehend gescheitert, Retry %d/%d in %ds: %s",
+                task.request.retries + 1,
+                task.max_retries,
+                countdown,
+                exc,
+            )
+            raise task.retry(exc=exc, countdown=countdown) from exc
+
+        logger.error("voice: Retry-Vorrat erschöpft: %s", exc)
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_GAVE_UP)
+        return {"status": "error", "reason": "transcription_unavailable_exhausted"}
+    except TranscriptionError as exc:
+        # Der Nutzer wurde schon in _process_voice informiert — hier nicht doppeln.
+        logger.warning("voice endgültig gescheitert: %s", exc)
+        return {"status": "error", "reason": str(exc)[:120]}
+    except Exception as exc:
+        # Letzter Riegel. Alles, was hier ankommt, ist per Definition unerwartet —
+        # sonst hätte es eine der beiden Klauseln oben getroffen. Ohne diesen Fang
+        # stirbt der Task still und der Absender wartet auf eine Antwort, die nie kommt.
+        logger.exception("voice: unerwarteter Fehler")
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_GAVE_UP)
+        _alert_admin_voice_failure(tenant_id, f"unerwartet: {exc!r}"[:200], "unexpected")
+        return {"status": "error", "reason": "unexpected"}
+
+
+# 1200s/1260s statt eines globalen Limits in celery_app.conf: Dieser Task bedient
+# alle drei message_type-Zweige (voice/photo/text), und sowohl _process_voice als
+# auch _process_text laufen am Ende durch _route_inbound_message in
+# services/pipeline_llm.py, wo request_timeout = max(300, …) bei max_retries=3
+# gilt — ein einzelner Routing-Call darf legitim bis zu 900s dauern (eingefroren
+# in tests/test_explicit_choice_callbacks.py:302-311). Der Voice-Erfolgspfad
+# durchläuft Transkription UND danach dieses Routing, also addieren sich:
+#   ~40s  Telegram-Download   (zwei sequenzielle GETs, je timeout=20)
+#   ~186s Transkription       (zwei Adapter in Kette, je 3 × 30s + 1s/2s Backoff = 93s)
+#   ~900s Routing             (max(300, …) mit max_retries=3)
+#   ------------------------
+#   ~1126s realistischer Einzel-Worst-Case
+#
+# Seit P14 (services/p14_entry_service.py) gilt das nur noch fuer den
+# _route_inbound_message-Zweig. _versuche_gespraechsstart laeuft VOR dem
+# Routing und schliesst es bei Treffer aus (siehe _process_voice/_process_text)
+# — P14 addiert sich also NICHT zu den ~900s Routing, sondern ersetzt sie in
+# diesem Zweig durch einen eigenen, vergleichbar teuren Call:
+#   P14 (Tier S2, max_tokens=2000): request_timeout = max(300, …) = 300s,
+#   max_retries=3 → bis zu 3 × 300s + Backoff (1s + 2s) ≈ 903s.
+#   ~40s Download + ~186s Transkription + ~903s P14 ≈ 1129s Einzel-Worst-Case
+#   im _awaits_user_choice-Zweig. Vor P14 lag dieser Zweig ohne LLM-Call bei
+#   ~226s und hatte ~975s Luft zu soft_time_limit=1200 — jetzt sind es ~70s.
+#
+# 1200s/1260s liegen knapp über diesem legitimen Worst-Case — kein enges Limit,
+# sondern ein Riegel gegen einen echt hängenden Task. Die eigentliche Eindämmung
+# des Transkriptions-Beins ist der 30s-httpx-Timeout in
+# services/voice_transcription.py; dieses Limit greift nur, wenn trotzdem etwas
+# hängen bleibt.
+@celery_app.task(
+    name="tasks.telegram_task.process_telegram_update",
+    bind=True,
+    max_retries=3,
+    soft_time_limit=1200,
+    time_limit=1260,
+)
 def process_telegram_update(self, log_id: str) -> dict:
     """Verarbeitet eine telegram_message_log-Zeile.
 
     Returns dict mit Statusinfo. Idempotent: wenn transcript_text
-    schon gesetzt, wird kein erneuter Transcribe-Call gemacht.
+    schon gesetzt, wird kein erneuter Transcribe-Call gemacht — ein Retry
+    kann deshalb keine Dopplung erzeugen.
     """
     row = _load_log_row(log_id)
     if row is None:
@@ -536,14 +1013,131 @@ def process_telegram_update(self, log_id: str) -> dict:
     message_type = row["message_type"]
 
     if message_type == "voice":
-        return _process_voice(log_id, tenant_id, payload)
+        return _dispatch_voice(self, log_id, tenant_id, payload)
     elif message_type == "photo":
         return _process_photo(log_id, tenant_id, payload)
     else:
         return _process_text(log_id, tenant_id, payload)
 
 
+# ── Voice-Fehlermeldungen (Spec §4.2) ───────────────────────────────────
+# Produkttext, kein Debug-Output. Die Ursache steht drin, die Technik nicht:
+# Ein Nutzer soll erfahren, was er tun kann, nicht welchen Statuscode der Router lieferte.
+_VOICE_MSG_NO_FILE = "🎤 Ich konnte die Sprachnachricht nicht lesen — bitte schick sie noch einmal."
+_VOICE_MSG_DOWNLOAD = (
+    "🎤 Ich konnte die Sprachnachricht nicht laden — ich versuche es gleich noch einmal."
+)
+_VOICE_MSG_BUSY = (
+    "🎤 Der Transkriptionsdienst ist gerade überlastet — ich versuche es gleich noch einmal."
+)
+_VOICE_MSG_TRANSCRIBE_FAILED = (
+    "🎤 Ich konnte die Sprachnachricht nicht transkribieren — bitte schick sie noch einmal."
+)
+_VOICE_MSG_EMPTY = "🎤 Die Sprachnachricht kam bei mir leer an — bitte schick sie noch einmal."
+# Transkript liegt vor, nur das Speichern ist gescheitert — eine der Meldungen oben
+# würde etwas anderes behaupten, als tatsächlich passiert ist.
+_VOICE_MSG_NOT_SAVED = (
+    "🎤 Ich habe deine Sprachnachricht verstanden, konnte sie aber nicht speichern — "
+    "bitte schick sie sicherheitshalber noch einmal."
+)
+# Wenn der Retry-Vorrat aufgebraucht ist: kein weiteres „gleich nochmal" versprechen.
+_VOICE_MSG_GAVE_UP = (
+    "🎤 Ich konnte deine Sprachnachricht leider nicht verarbeiten. Bitte schick sie noch einmal."
+)
+
+_VOICE_ALERT_REDIS_KEY = "voice-asr-alert"
+
+
+def _notify_voice_user(tenant_id: str, payload: dict, message: str) -> bool:
+    """Meldung an den Absender. Fail-open — eine misslungene Meldung darf nichts sprengen.
+
+    Fehlt 'chat' im Payload, wird der Tenant-Chat aufgelöst; ohne beides bleibt nur der
+    Betreiber-Alarm (der Nutzer ist dann schlicht nicht adressierbar).
+
+    Die chat_id-Ermittlung sitzt bewusst mit im try: 'chat' kommt aus original_payload,
+    einem unvalidierten DB-Feld. Ist 'chat' wahrheitswertig, aber kein Dict (z. B. ein
+    kaputter String), würfe `.get("id")` sonst außerhalb jeder Absicherung — und würde
+    hier die TranscriptionError/-Unavailable ersetzen, die der Nutzer eigentlich erfahren
+    sollte. `if not chat_id: return False` bleibt aber ein eigener Zweig, kein except:
+    „kein Chat ermittelbar" ist etwas anderes als „Senden fehlgeschlagen".
+    """
+    try:
+        chat_id = (payload.get("chat") or {}).get("id") or _resolve_chat_id(tenant_id)
+        if not chat_id:
+            logger.warning("voice failure: kein chat_id ermittelbar (tenant=%s)", tenant_id)
+            return False
+
+        from api.telegram import _send_telegram_message
+
+        return _send_telegram_message(int(chat_id), message, tenant_id=tenant_id)
+    except Exception as exc:
+        logger.warning("voice failure notice send failed: %s", type(exc).__name__)
+        return False
+
+
+def _alert_admin_voice_failure(tenant_id: str, reason: str, category: str) -> None:
+    """Betreiber-Alarm, höchstens einmal pro UTC-Tag — entprellt pro Ursache UND Tenant.
+
+    Grundmuster aus services/llm.py::_maybe_send_global_cap_alert, aber NICHT dessen
+    globaler Key: dort ist die Kostengrenze eine einzige globale Größe, ein globaler
+    Key also richtig. Hier sind es mehrere Ursachen über mehrere Tenants — ein
+    gemeinsamer Key ließe einen Bedienfehler (z. B. eine Sprachnachricht ohne file_id)
+    frühmorgens den einzigen Alarm-Platz des Tages verbrauchen, und ein echter Ausfall
+    später am Tag verschwände spurlos dahinter. `category` ist bewusst ein Literal an
+    der Aufrufstelle, nicht aus `reason` abgeleitet — der Fehlertext variiert (jeder
+    Router-Body sieht anders aus) und würde damit gar nichts entprellen.
+    Fail-open in jedem Fall.
+    """
+    try:
+        if not settings.telegram_admin_chat_id:
+            logger.warning(
+                "_alert_admin_voice_failure: telegram_admin_chat_id not configured, skipping"
+            )
+            return
+
+        import datetime as _dt
+
+        import redis as _redis
+
+        today = _dt.datetime.now(_dt.UTC).date().isoformat()
+        r = _redis.from_url(settings.redis_url, decode_responses=True)
+        try:
+            was_set = r.set(
+                f"{_VOICE_ALERT_REDIS_KEY}:{category}:{tenant_id}:{today}",
+                "1",
+                nx=True,
+                ex=86400,
+            )
+        finally:
+            r.close()
+        if not was_set:
+            return
+
+        from api.telegram import _send_admin_telegram_message
+
+        _send_admin_telegram_message(
+            int(settings.telegram_admin_chat_id),
+            f"⚠️ Sprachnachricht nicht verarbeitet (tenant={tenant_id}): {reason}",
+        )
+    except Exception as exc:
+        logger.warning("voice admin alert failed (non-fatal): %s", exc)
+
+
 def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
+    """Verarbeitet eine Sprachnachricht: Download, Transkription, Speichern, Routing.
+
+    Raises:
+        TranscriptionError: fehlende file_id, endgültig gescheiterte Transkription
+            oder leeres Transkript — der Nutzer wurde vor dem Raise bereits benachrichtigt.
+        TranscriptionUnavailable: Download- oder Transkriptionsfehler, die
+            `_dispatch_voice` retryt. Der Nutzer wird erst dort benachrichtigt.
+        SoftTimeLimitExceeded: reicht unverändert durch, statt in eines der obigen
+            Ergebnisse verpackt zu werden — siehe FIX 2.
+
+    Nur der Erfolgspfad (inkl. des Chunk-Speicher-Fehlers, der als
+    ``{"status": "transcribed_no_chunk", ...}`` zurückkommt) liefert das
+    annotierte ``dict`` regulär zurück.
+    """
     voice_obj: dict = payload.get("voice") or {}
     file_id = voice_obj.get("file_id")
     duration = int(voice_obj.get("duration") or 0)
@@ -551,11 +1145,23 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
 
     if not file_id:
         logger.warning("voice ohne file_id, log_id=%s", log_id)
-        return {"status": "error", "reason": "no_file_id"}
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_NO_FILE)
+        _alert_admin_voice_failure(tenant_id, "voice ohne file_id", "no_file_id")
+        raise TranscriptionError("voice ohne file_id")
 
     audio_bytes = _telegram_get_file(file_id, tenant_id)
     if not audio_bytes:
-        return {"status": "error", "reason": "download_failed"}
+        # Bewusst vorübergehend: _telegram_get_file liefert auch bei endgültigen Ursachen
+        # None. Ein endgültiger Fehler dreimal wiederholt kostet drei wirkungslose Aufrufe,
+        # ein vorübergehender Fehler endgültig behandelt kostet die Nachricht.
+        #
+        # Der Nutzertext reist an der Ausnahme mit, statt hier gesendet zu werden: Bei drei
+        # Retries würde der Absender sonst dreimal „ich versuche es gleich noch einmal"
+        # lesen. Wann er ihn liest, entscheidet _dispatch_voice.
+        _alert_admin_voice_failure(tenant_id, "Telegram-Download fehlgeschlagen", "download")
+        raise TranscriptionUnavailable(
+            "Telegram-Download fehlgeschlagen", user_message=_VOICE_MSG_DOWNLOAD
+        )
 
     try:
         result: TranscriptionResult = transcribe_voice(
@@ -564,13 +1170,23 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
             language_hint="de",
             tenant_id=tenant_id,
         )
+    except TranscriptionUnavailable as exc:
+        logger.warning("transcribe_voice vorübergehend fehlgeschlagen: %s", exc)
+        _alert_admin_voice_failure(tenant_id, str(exc)[:200], "transient")
+        if not exc.user_message:
+            exc.user_message = _VOICE_MSG_BUSY
+        raise
     except TranscriptionError as exc:
-        logger.warning("transcribe_voice fail: %s", exc)
-        return {"status": "error", "reason": str(exc)[:80]}
+        logger.warning("transcribe_voice endgültig fehlgeschlagen: %s", exc)
+        _notify_voice_user(tenant_id, payload, exc.user_message or _VOICE_MSG_TRANSCRIBE_FAILED)
+        _alert_admin_voice_failure(tenant_id, str(exc)[:200], "terminal")
+        raise
 
     transcript = (result.text or "").strip()
     if not transcript:
-        return {"status": "error", "reason": "empty_transcript"}
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_EMPTY)
+        _alert_admin_voice_failure(tenant_id, "leeres Transkript", "empty")
+        raise TranscriptionError("leeres Transkript")
 
     _update_log_transcript(log_id, transcript, result.model_id or "unknown", result.confidence)
 
@@ -587,26 +1203,19 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         chunk_id = asyncio.run(
             _store_chunk_async(tenant_id, source_type, transcript, log_id, chunk_metadata)
         )
+    except SoftTimeLimitExceeded:
+        # Muss vor dem Exception-Katalog stehen — siehe _route_inbound_message.
+        raise
     except Exception as exc:
         logger.warning("store_voice_chunk failed: %s", exc)
+        # Ohne diese beiden Zeilen hört der Absender nichts und der Betreiber
+        # erfährt nichts — vier Zeilen unterhalb von Code, den dieser Branch
+        # gerade umgeschrieben hat, um genau das nie wieder zuzulassen.
+        _notify_voice_user(tenant_id, payload, _VOICE_MSG_NOT_SAVED)
+        _alert_admin_voice_failure(tenant_id, str(exc)[:200], "chunk")
         return {"status": "transcribed_no_chunk", "reason": str(exc)[:120]}
 
-    # Bestätigung an den Nutzer senden
     chat_id_voice = (payload.get("chat") or {}).get("id")
-    if chat_id_voice and channel == "telegram":
-        preview = transcript[:80].rstrip()
-        suffix = "…" if len(transcript) > 80 else ""
-        try:
-            from api.telegram import _send_telegram_message
-
-            _send_telegram_message(
-                chat_id_voice,
-                f"🎤 Gespeichert: „{preview}{suffix}“",
-                tenant_id=tenant_id,
-            )
-        except Exception:
-            pass
-
     result_dict = {
         "status": "ok",
         "transcript_chars": len(transcript),
@@ -614,6 +1223,42 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
         "source_type": source_type,
         "channel": channel,
     }
+
+    # PR 2 — Weiche VOR dem Routing: greift sie, entscheidet der Nutzer per Button
+    # und es läuft kein LLM-Rateschritt. Nur für Telegram: die Buttons sind ein
+    # Inline-Keyboard, das der WhatsApp-Adapter nicht kennt.
+    if channel == "telegram" and _awaits_user_choice(tenant_id, transcript):
+        # Fallback auf den Tenant-Chat: fehlt „chat" im Payload, wäre die Nachricht
+        # sonst ohne jede Reaktion zu Ende — der Zustand, den PR 2 beseitigt hat.
+        target_chat = chat_id_voice or _resolve_chat_id(tenant_id)
+
+        # P14 — eine Anweisung ist kein Inhalt. Greift der Zug nicht (oder faellt
+        # er aus), bleibt es bei den zwei Buttons: dieselbe Weiche, sichtbarer
+        # Ausgang statt Stille.
+        gespraech = _versuche_gespraechsstart(tenant_id, transcript, log_id, target_chat)
+        if gespraech is not None:
+            result_dict.update(gespraech)
+            return result_dict
+
+        result_dict["routed_to"] = "awaiting_user_choice"
+        result_dict["choice_prompt_sent"] = bool(target_chat) and _send_choice_prompt(
+            tenant_id, target_chat, log_id, transcript, "🎤"
+        )
+        return result_dict
+
+    # Bestätigung an den Nutzer senden
+    if chat_id_voice and channel == "telegram":
+        try:
+            from api.telegram import _send_telegram_message
+
+            _send_telegram_message(
+                chat_id_voice,
+                f"🎤 Gespeichert: {_quittungs_zitat(transcript)}",
+                tenant_id=tenant_id,
+            )
+        except Exception as exc:
+            logger.warning("voice confirmation send failed: %s", type(exc).__name__)
+
     routing_info = _route_inbound_message(tenant_id, transcript, log_id=log_id)
     if routing_info:
         result_dict.update(routing_info)
@@ -703,7 +1348,12 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
         text_content = ""
     if not text_content:
         return {"status": "skipped", "reason": "empty_text"}
-    if len(text_content) < 10:
+    if len(text_content) < MIN_TEXT_LEN and not hat_aktives_gespraech(tenant_id):
+        # Zweites Kurztext-Gate. Seit 04.08.2026 an dieselbe Session-Bedingung
+        # gekoppelt wie das erste in api/telegram.py — „ja" auf ein
+        # Abschluss-Angebot muss beide passieren, sonst verschwindet die
+        # Bestaetigung zwischen den beiden Filtern.
+        #
         # #36 S4 Kurztext-Bypass: „2" als Varianten-Wahl hat len<10 und würde
         # hier normalerweise gestoppt. Wenn ein Pending-Marker existiert und
         # der Text ein gültiges Choice-Token ist, durchlassen.
@@ -739,6 +1389,23 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
         "source_type": "manual_note",
         "channel": channel,
     }
+    chat_id = (payload.get("chat") or {}).get("id")
+
+    # PR 2 — dieselbe Weiche wie im Voice-Pfad (Louis, 30.07.: Text-Parität).
+    if channel == "telegram" and _awaits_user_choice(tenant_id, text_content):
+        target_chat = chat_id or _resolve_chat_id(tenant_id)
+
+        gespraech = _versuche_gespraechsstart(tenant_id, text_content, log_id, target_chat)
+        if gespraech is not None:
+            result_dict.update(gespraech)
+            return result_dict
+
+        result_dict["routed_to"] = "awaiting_user_choice"
+        result_dict["choice_prompt_sent"] = bool(target_chat) and _send_choice_prompt(
+            tenant_id, target_chat, log_id, text_content, "📝"
+        )
+        return result_dict
+
     routing_info = _route_inbound_message(tenant_id, text_content, log_id=log_id)
     if routing_info:
         result_dict.update(routing_info)
@@ -756,18 +1423,22 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
         except Exception:
             pass  # fail-open: Beobachtung ist Kür, kein Blocker
 
-    if not routing_info and channel == "telegram":
-        # Memory-Default → Bestätigung senden
-        chat_id = (payload.get("chat") or {}).get("id")
-        if chat_id:
-            try:
-                from api.telegram import _send_telegram_message
+    # F4: kein Routing-Gate hat gegriffen (routing_info is None) ODER das Ziel
+    # antwortet nicht selbst (truthy Dict, aber nicht in _ZIELE_MIT_EIGENER_ANTWORT)
+    # → Memory-Default-Quittung senden, sonst endet die Nachricht in Stille.
+    if (
+        channel == "telegram"
+        and chat_id
+        and (routing_info is None or _braucht_sichtbare_quittung(routing_info))
+    ):
+        try:
+            from api.telegram import _send_telegram_message
 
-                _send_telegram_message(
-                    chat_id,
-                    "✅ Gespeichert im Gedächtnis.",
-                    tenant_id=tenant_id,
-                )
-            except Exception:
-                pass
+            _send_telegram_message(
+                chat_id,
+                "✅ Gespeichert im Gedächtnis.",
+                tenant_id=tenant_id,
+            )
+        except Exception as exc:
+            logger.warning("text confirmation send failed: %s", type(exc).__name__)
     return result_dict

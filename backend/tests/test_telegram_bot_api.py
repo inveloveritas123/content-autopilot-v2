@@ -33,12 +33,20 @@ UTC = UTC
 # Minimal stubs for unavailable heavy dependencies
 # ---------------------------------------------------------------------------
 
+# Names this module injects into sys.modules. Tracked so we can remove them again
+# once the module under test is imported — otherwise these stubs leak into later
+# test modules collected in the same interpreter (see cleanup note below the
+# import). Only names we actually create are recorded; pre-existing real modules
+# are never touched.
+_STUBBED_MODULES: list[str] = []
+
 
 def _stub(name: str) -> types.ModuleType:
     """Return existing module or create a blank stub in sys.modules."""
     if name not in sys.modules:
         m = types.ModuleType(name)
         sys.modules[name] = m
+        _STUBBED_MODULES.append(name)
     return sys.modules[name]
 
 
@@ -92,6 +100,7 @@ _fake_settings.sync_database_url = "postgresql://stub:stub@localhost/stub_db"
 config_stub = types.SimpleNamespace(settings=_fake_settings)
 if "config" not in sys.modules:
     sys.modules["config"] = config_stub  # type: ignore[assignment]
+    _STUBBED_MODULES.append("config")
 
 # Stub services.crypto — we want deterministic behaviour without real Fernet
 _crypto_mod = _stub("services.crypto")
@@ -139,6 +148,16 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import api.telegram_bots as bot_module
+
+# Restore sys.modules isolation: the stubs above only needed to be in place while
+# importing the module under test. `bot_module` already holds its bound references
+# (router, get_db, get_tenant_id used in the dependency overrides below), so the
+# stubs can be removed now. Leaving them installed leaks into later-collected test
+# modules in the same interpreter — e.g. test_telegram_outbound_pertenant.py, whose
+# api/telegram.py imports `get_tenant`, a name our `dependencies` stub omits. Mirrors
+# the cleanup pattern documented in test_prompt_studio_api.py.
+for _name in _STUBBED_MODULES:
+    sys.modules.pop(_name, None)
 
 # Build minimal test app
 _app = FastAPI()
@@ -530,3 +549,64 @@ def test_token_never_in_post_error_response():
     body_text = resp.text
     assert evil_token not in body_text
     assert "SUPERSECRETTOKEN_MUSTNOTLEAK12345" not in body_text
+
+
+# ---------------------------------------------------------------------------
+# POST — Telegram nicht erreichbar → 503 (NICHT 400)
+# ---------------------------------------------------------------------------
+
+
+def test_post_netzwerkfehler_returns_503_nicht_400():
+    """Ein Netzwerkfehler darf NICHT als Token-Ablehnung ausgegeben werden.
+
+    Am 03.08.2026 scheiterte eine Bot-Registrierung an einem ReadTimeout, die API
+    antwortete aber "Token von Telegram abgelehnt" (400). Derselbe Token lief
+    danach unveraendert durch. Wer der Meldung glaubt, widerruft einen intakten
+    Token und legt ihn neu an — ein irreversibler Schritt aufgrund einer
+    Falschaussage.
+
+    503 sagt: kein Urteil erhalten, nochmal versuchen. 400 sagt: Token ist
+    kaputt. Das sind verschiedene Aussagen und duerfen nicht denselben Code teilen.
+    """
+    db = _make_empty_db_session()
+    _app.dependency_overrides[bot_module.get_tenant_id] = _override_tenant_id()
+    _app.dependency_overrides[bot_module.get_db] = _override_db(db)
+    try:
+        unreachable = AsyncMock(side_effect=bot_module.TelegramUnavailable("ReadTimeout"))
+        with patch.object(bot_module, "_telegram_get_me", new=unreachable):
+            resp = client.post(
+                _URL,
+                json={"token": _VALID_TOKEN},
+                headers={"X-API-Key": "test-key"},
+            )
+    finally:
+        _app.dependency_overrides.clear()
+
+    assert resp.status_code == 503, f"erwartet 503, bekam {resp.status_code}"
+    body = resp.json()
+    detail = body.get("detail", "")
+    assert (
+        "abgelehnt" not in detail
+    ), f"Meldung darf keine Token-Ablehnung behaupten — ist: {detail!r}"
+    assert _VALID_TOKEN not in str(body)
+
+
+def test_telegram_get_me_wirft_bei_netzwerkfehler_statt_none():
+    """_telegram_get_me muss Netzwerkfehler von echter Ablehnung unterscheiden.
+
+    Frueher gab beides None zurueck — die Information, ob ueberhaupt ein Urteil
+    vorliegt, ging genau hier verloren.
+    """
+    import asyncio
+
+    import httpx as _httpx
+    import pytest as _pytest
+
+    failing_client = AsyncMock()
+    failing_client.__aenter__ = AsyncMock(return_value=failing_client)
+    failing_client.__aexit__ = AsyncMock(return_value=False)
+    failing_client.get = AsyncMock(side_effect=_httpx.ReadTimeout("timeout"))
+
+    with patch.object(bot_module.httpx, "AsyncClient", return_value=failing_client):
+        with _pytest.raises(bot_module.TelegramUnavailable):
+            asyncio.run(bot_module._telegram_get_me("123456:FAKE"))

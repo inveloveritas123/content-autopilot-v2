@@ -11,9 +11,30 @@ KEIN Datenbank-Zugriff nötig — alles via MagicMock.
 """
 
 import asyncio
+import importlib
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _ensure_real_config():
+    """Guarantee the real ``config`` module for these tests.
+
+    The suite shares one interpreter and several other test modules install a
+    lightweight ``config`` stub in ``sys.modules`` (a SimpleNamespace) that does
+    not carry the throttle settings. Every test here does ``from config import
+    settings`` and patches ``settings.max_calls_*``; if a stub without those
+    attributes leaked in from an earlier-collected module the patch raises
+    AttributeError. Force the real module regardless of collection order.
+    """
+    mod = sys.modules.get("config")
+    if mod is None or getattr(mod, "__file__", None) is None:
+        sys.modules.pop("config", None)
+        importlib.import_module("config")
+    yield
+
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
 

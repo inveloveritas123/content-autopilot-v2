@@ -195,6 +195,142 @@ def validate_canonical(prompt_key: str, payload: dict) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Top-Level-Keys: Prompt-Überschriften auf Schema-Namen zurückführen
+# ---------------------------------------------------------------------------
+
+
+def _vergleichsschluessel(name: str) -> str:
+    """Reduziert einen Key auf die Form, in der er mit Schema-Namen vergleichbar ist.
+
+    Klein, Umlaute transliteriert (wie die Schemas sie schreiben: identitaet),
+    führende Gliederungsnummer entfernt, alle Trenner zu '_'.
+
+        IDENTITÄT              → identitaet
+        SPRACHE DER ZIELGRUPPE → sprache_der_zielgruppe
+        SPRACHE_DER_ZIELGRUPPE → sprache_der_zielgruppe
+        8_CONTENT-RESERVOIR    → content_reservoir
+    """
+    s = (name or "").strip().lower()
+    for src, dst in [("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")]:
+        s = s.replace(src, dst)
+    s = re.sub(r"^\d+[\s_.\-]+", "", s)  # Gliederungsnummer aus dem Prompt
+    s = re.sub(r"[^a-z0-9]+", "_", s)
+    return s.strip("_")
+
+
+def normalisiere_top_level_keys(prompt_key: str, payload: dict) -> tuple[dict, list]:
+    """Führt Top-Level-Keys auf die Namen des kanonischen Schemas zurück.
+
+    Hintergrund (Prod-Befund 06.08.2026): Das LLM übernimmt gelegentlich die
+    Abschnitts-Überschriften des Prompts als JSON-Keys — `IDENTITÄT` statt
+    `identitaet`, `1_PERSON` statt `person`. Der Inhalt darunter ist kanonisch,
+    nur der Name nicht. P12s `prune()` macht einen exakten Key-Match und verwirft
+    solche Felder lautlos; Louis' und Erics Avatar kamen dadurch mit 0 von 3
+    Feldern beim Post-Prompt an.
+
+    Umbenannt wird ausschließlich auf einen Namen, den das Schema führt — die
+    Zielmenge ist damit bekannt und die Zuordnung rät nicht. Unbekannte Keys
+    bleiben unverändert stehen (nie verwerfen), und ein bereits belegter
+    kanonischer Name wird nie überschrieben.
+
+    Returns:
+        (doc, umbenennungen): ``doc`` mit korrigierten Namen, ``umbenennungen``
+        als Liste von (alt, neu) — leer, wenn nichts zu tun war.
+    """
+    if not isinstance(payload, dict):
+        return {}, []
+
+    try:
+        schema = load_canonical_schema(prompt_key)
+    except Exception as exc:
+        # Fail-open: die Profilerzeugung darf daran nicht sterben. Aber NICHT
+        # stumm — ohne Schema gibt es keine Zielmenge, die Normalisierung ist
+        # dann wirkungslos, und ein lautloser No-Op ist genau der Fehlertyp,
+        # gegen den diese Funktion gebaut wurde.
+        logger.error(
+            "normalisiere_top_level_keys(%s): Schema nicht ladbar (%s: %s) — "
+            "Top-Level-Keys bleiben ungeprüft. CONTENT_TRUTH_BASE_PATH korrekt?",
+            prompt_key,
+            type(exc).__name__,
+            exc,
+        )
+        return dict(payload), []
+
+    nach_vergleichsform = {
+        _vergleichsschluessel(name): name for name in (schema.get("properties") or {})
+    }
+
+    doc: dict = {}
+    umbenennungen: list = []
+    for key, wert in payload.items():
+        ziel = nach_vergleichsform.get(_vergleichsschluessel(key))
+        if ziel is None or ziel == key or ziel in payload:
+            doc[key] = wert
+            continue
+        doc[ziel] = wert
+        umbenennungen.append((key, ziel))
+
+    return doc, umbenennungen
+
+
+def aktualisiere_schema_luecken(prompt_key: str, payload: dict) -> tuple[dict, list, list]:
+    """Setzt die Schema-Einträge in ``_meta.luecken`` auf den aktuellen Validierungsstand.
+
+    Nötig nach einer Reparatur am Bestand: `normalisiere_top_level_keys()` behebt
+    den Strukturbruch, aber die bei der Erzeugung protokollierten Lücken bleiben
+    im ``_meta`` stehen. `is_canonical()` liest genau diese Liste — die reparierte
+    Row gälte also weiterhin als kaputt, und der Wächter meldete bei jedem Lauf
+    grundlos "Re-Run empfohlen". Ein Wächter, der ohne Anlass meckert, wird
+    ignoriert; genau so wurde das Lücken-Signal ursprünglich wertlos.
+
+    Bloßes STREICHEN reicht dabei nicht. Solange ein Pflichtfeld auf Wurzelebene
+    fehlt, prüft jsonschema das zugehörige Unterobjekt gar nicht erst — erst die
+    Reparatur legt die darunterliegenden Fehler frei (bei Erics Kundenkontext am
+    06.08.2026: neun Stück). Wer nur streicht, hinterlässt eine leere Liste an
+    einer Row mit neun echten Befunden und macht den Wächter blind statt ehrlich.
+    Deshalb werden die Schema-Einträge ERSETZT, nicht gefiltert.
+
+    Freitext-Notizen (ohne ``schema: ``-Präfix) bleiben unangetastet — sie sind
+    inhaltliche Hinweise und gehen die Strukturprüfung nichts an.
+
+    Returns:
+        (doc, entfernt, neu): ``doc`` mit aktualisierter Lückenliste, dazu die
+        weggefallenen und die neu hinzugekommenen Schema-Einträge.
+    """
+    if not isinstance(payload, dict):
+        return {}, [], []
+
+    meta = payload.get("_meta")
+    if not isinstance(meta, dict):
+        return payload, [], []
+
+    try:
+        aktuell = [f"schema: {e}" for e in validate_canonical(prompt_key, payload)]
+    except Exception as exc:
+        logger.error(
+            "aktualisiere_schema_luecken(%s): Validierung nicht moeglich (%s: %s) — "
+            "Lueckenliste bleibt unveraendert.",
+            prompt_key,
+            type(exc).__name__,
+            exc,
+        )
+        return payload, [], []
+
+    bisher = list(meta.get("luecken") or [])
+    freitext = [x for x in bisher if not (isinstance(x, str) and x.startswith("schema: "))]
+    schema_bisher = [x for x in bisher if isinstance(x, str) and x.startswith("schema: ")]
+
+    entfernt = [x for x in schema_bisher if x not in aktuell]
+    neu = [x for x in aktuell if x not in schema_bisher]
+    if not entfernt and not neu:
+        return payload, [], []
+
+    doc = dict(payload)
+    doc["_meta"] = {**meta, "luecken": freitext + aktuell}
+    return doc, entfernt, neu
+
+
+# ---------------------------------------------------------------------------
 # Deklarative Mapping-Tabellen
 # ---------------------------------------------------------------------------
 # Jeder Eintrag ist ein Dict mit:
@@ -1587,6 +1723,20 @@ def finalize_canonical(prompt_key: str, parsed: dict, *, meta: dict) -> tuple[di
     """
     key = prompt_key.lower()
     doc: dict = dict(parsed) if isinstance(parsed, dict) else {}
+
+    # Prompt-Überschriften als Keys (IDENTITÄT, 1_PERSON) zurückführen, BEVOR
+    # validiert wird — sonst meldet die Validierung acht gerissene Pflichtfelder
+    # für ein Dokument, dessen Inhalt vollständig ist.
+    doc, umbenennungen = normalisiere_top_level_keys(key, doc)
+    if umbenennungen:
+        logger.warning(
+            "finalize_canonical(%s): %d Top-Level-Key(s) aus Prompt-Überschriften "
+            "auf Schema-Namen zurückgeführt: %s",
+            key,
+            len(umbenennungen),
+            ", ".join(f"{alt}→{neu}" for alt, neu in umbenennungen),
+        )
+
     final_meta = dict(meta)
     doc["_meta"] = final_meta
 

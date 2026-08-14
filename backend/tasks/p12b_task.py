@@ -105,6 +105,74 @@ _P12B_SCHEMA = _load_schema()
 
 
 # ---------------------------------------------------------------------------
+# Entscheidung des Lektors
+# ---------------------------------------------------------------------------
+# Der LIVE-Prompt (aus der DB) verlangt `status` mit DREI Werten. Der Code las
+# bis 05.08.2026 `decision` mit zweien — ein Name, den der Live-Prompt an keiner
+# Stelle enthält. Gemessen (2/2 Läufe) antwortete P12b `status="optimiert"` plus
+# fertig redigiertem Post; der Code fand kein `decision` und fiel in den Zweig
+# `zurueck_an_p12`. Folgen: der redigierte Post wurde jedes Mal verworfen, P12
+# lief ein zweites Mal (~40 s, ~1 ct) und hinterließ einen verwaisten Entwurf,
+# `optimiert` war unerreichbar und die Quote-Validierung (#86) lief nie.
+#
+# `decision` wird weiter als Rückfall gelesen: die Datei prompts/p12b_lektor.md
+# und ältere Prompt-Fassungen benutzen diesen Namen.
+_ENTSCHEIDUNG_OPTIMIERT = "optimiert"
+_ENTSCHEIDUNG_UNVERAENDERT = "unveraendert"
+_ENTSCHEIDUNG_ZURUECK = "zurueck_an_p12"
+_ENTSCHEIDUNG_UNBEKANNT = "unbekannt"
+
+_BEKANNTE_ENTSCHEIDUNGEN = frozenset(
+    {_ENTSCHEIDUNG_OPTIMIERT, _ENTSCHEIDUNG_UNVERAENDERT, _ENTSCHEIDUNG_ZURUECK}
+)
+
+
+def _lies_entscheidung(output_json: dict, run_id: str) -> str:
+    """Liest das Urteil des Lektors aus dem LLM-Output.
+
+    Reihenfolge: `status` (Live-Vertrag) vor `decision` (Alt-Vertrag).
+
+    Ein unbekannter oder fehlender Wert ergibt ``"unbekannt"`` — und
+    ``"unbekannt"`` schleift **nicht** zurück an P12. Genau diese Gleichsetzung
+    („ich verstehe die Antwort nicht" = „der Post muss überarbeitet werden") war
+    der Fehler: Unwissen kostete einen kompletten zweiten P12-Lauf. Der teure
+    Zweig braucht eine ausdrückliche Ansage, nicht das Ausbleiben einer.
+    """
+    roh = output_json.get("status") or output_json.get("decision")
+    if isinstance(roh, str):
+        roh = roh.strip().lower()
+        if roh in _BEKANNTE_ENTSCHEIDUNGEN:
+            return roh
+
+    # ERROR, nicht WARNING: hier kippt der Lektor-Pass lautlos in einen anderen
+    # Modus. Als Schema-WARNING gab es diesen Befund monatelang — gelesen hat
+    # ihn niemand.
+    logger.error(
+        "p12b run_id=%s: unbekanntes Urteil %r (Schlüssel: %s) — Post wird "
+        "unveraendert ausgeliefert, KEINE Revisionsrunde",
+        run_id,
+        roh,
+        sorted(output_json.keys()) if isinstance(output_json, dict) else type(output_json).__name__,
+    )
+    return _ENTSCHEIDUNG_UNBEKANNT
+
+
+def _finaler_post(decision: str, output_json: dict, p12_output: dict) -> str:
+    """Welcher Text geht raus?
+
+    Nur ``optimiert`` liefert die Fassung des Lektors. ``unveraendert`` sagt
+    ausdrücklich „ich habe nichts geändert", ``unbekannt`` heißt „ich weiß es
+    nicht" — in beiden Fällen ist P12s Original die belegbare Wahl.
+
+    Auch bei ``optimiert`` bleibt ein Rückfall nötig: der Live-Prompt setzt
+    ``optimierter_post`` ausdrücklich auf ``null``, wenn er nichts liefert.
+    """
+    if decision == _ENTSCHEIDUNG_OPTIMIERT:
+        return output_json.get("optimierter_post") or p12_output["post"]
+    return p12_output["post"]
+
+
+# ---------------------------------------------------------------------------
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
 
@@ -373,9 +441,13 @@ def run_p12b(
         # ------------------------------------------------------------------
         # 10. Loop-Schutz
         # ------------------------------------------------------------------
-        decision = output_json.get("decision", "")
+        decision = _lies_entscheidung(output_json, run_id)
 
-        if decision == "zurueck_an_p12" and loop_iteration >= 1:
+        # Nur ein AUSDRÜCKLICHES "zurueck_an_p12" löst eine Revisionsrunde aus.
+        # Alles andere (optimiert / unveraendert / unbekannt) liefert aus.
+        liefert_aus = decision != _ENTSCHEIDUNG_ZURUECK
+
+        if decision == _ENTSCHEIDUNG_ZURUECK and loop_iteration >= 1:
             logger.warning(
                 "p12b: Loop-Limit erreicht (iteration=%d), liefere Original aus",
                 loop_iteration,
@@ -421,8 +493,11 @@ def run_p12b(
         # Läuft VOR _finalize_run damit Audit-Status korrekt ist.
         # Fail-open: DB-Fehler blockieren den Post-Flow nicht.
         # ------------------------------------------------------------------
-        if decision == "optimiert":
-            final_post_candidate = output_json.get("optimierter_post", p12_output["post"])
+        # Prüft den Text, der TATSÄCHLICH rausgeht — also bei jedem
+        # ausliefernden Urteil, nicht nur bei "optimiert". Vorher hing dieser
+        # Gate am nie erreichbaren decision == "optimiert" und lief damit nie.
+        if liefert_aus:
+            final_post_candidate = _finaler_post(decision, output_json, p12_output)
             try:
                 from services.quote_validator import validate_post_quotes
 
@@ -496,24 +571,31 @@ def run_p12b(
             status="done",
         )
 
-        if decision == "optimiert":
+        if liefert_aus:
+            final_post = _finaler_post(decision, output_json, p12_output)
             logger.info(
-                "p12b run_id=%s: decision=optimiert, final_post Länge=%d",
+                "p12b run_id=%s: entscheidung=%s, final_post Länge=%d",
                 run_id,
-                len(output_json.get("optimierter_post", "")),
+                decision,
+                len(final_post),
             )
             return {
                 "run_id": run_id,
                 "status": "done",
-                "decision": "optimiert",
-                "final_post": output_json.get("optimierter_post", p12_output["post"]),
-                "begruendung": output_json.get("begruendung", ""),
+                "decision": decision,
+                "final_post": final_post,
+                # Live-Prompt liefert `gesamt_einschaetzung`; `begruendung` stammt
+                # aus dem Alt-Vertrag. Beide lesen, damit die Begründung nicht
+                # beim nächsten Prompt-Wechsel still verschwindet.
+                "begruendung": output_json.get("begruendung")
+                or output_json.get("gesamt_einschaetzung")
+                or "",
                 "content_metadata": {
                     "telegram_approval_hint": "Bitte gib diesen Post in der App frei, bevor er auf LinkedIn veröffentlicht wird.",
                 },
             }
 
-        # decision == "zurueck_an_p12" (und loop_iteration == 0)
+        # Ab hier ausdrücklich decision == "zurueck_an_p12" (und loop_iteration == 0)
         logger.info(
             "p12b run_id=%s: decision=zurueck_an_p12, loop_iteration=%d",
             run_id,

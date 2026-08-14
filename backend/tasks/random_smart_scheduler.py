@@ -100,9 +100,17 @@ def _send_opening_question(tenant_id: str, question_text: str) -> None:
                 chat_id = row[0]
 
         if chat_id is not None:
-            from api.telegram import _send_telegram_message
+            from api.telegram import _interview_cancel_keyboard, _send_telegram_message
 
-            _send_telegram_message(int(chat_id), question_text, tenant_id=tenant_id)
+            # C5: Diese Frage kommt unangekündigt und eröffnet eine Session, die
+            # danach jede Nachricht als Antwort schluckt (kein TTL). Sie braucht
+            # einen sichtbaren Ausgang.
+            _send_telegram_message(
+                int(chat_id),
+                question_text,
+                tenant_id=tenant_id,
+                reply_markup=_interview_cancel_keyboard(),
+            )
     except Exception as e:
         logger.warning(
             "_send_opening_question fehlgeschlagen fuer tenant %s: %s",

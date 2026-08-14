@@ -1,8 +1,15 @@
 """Embedding-Service für Phase 5 (Issue #140) — Unternehmensgedächtnis.
 
-Erzeugt 768-dim Embeddings via Requesty.ai-Router (model
-`vertex/text-embedding-004` EU-Region) und persistiert sie in der
-`memory_chunks`-Tabelle.
+Erzeugt 1536-dim Embeddings via Requesty.ai-Router und persistiert sie in der
+`memory_chunks`-Tabelle (Spalte ist `vector(1536)`, Migration 039).
+
+Requesty-Modell-IDs (03.08.2026 live verifiziert):
+- Die volle ID ist **Provider + Name + Region-Pin**, z. B.
+  `azure/openai/text-embedding-3-large@francecentral`. Fehlt der Provider-Prefix,
+  antwortet der Router 404; fehlt der Region-Pin, 403. Die nackte ID ist NICHT
+  äquivalent — genau daran scheiterte dieser Service wochenlang still.
+- `GET /v1/models` listet nicht alle nutzbaren Modelle und taugt daher nicht als
+  Beleg. Verbindlich ist nur der echte Call.
 
 Plus: leichter Klassifikator (werte/stories/konflikte) via
 LLMService.complete_json mit kleinem JSON-Schema.
@@ -35,7 +42,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
+from services.anweisungs_marker import SQL_OHNE_ANWEISUNGEN
 from services.llm import llm_service
+from services.soft_delete_filter import SQL_NICHT_GELOESCHT
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +53,30 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 EMBEDDING_MODELS: dict[str, dict] = {
-    "gemini-embedding-001-1536d": {
-        "provider": "requesty",  # geroutet via Requesty wie bisheriges Modell
-        "model_name": "openai/text-embedding-3-small",  # Requesty-Alias (768-dim erzwungen via dim param)
+    "text-embedding-3-large-1536d": {
+        "provider": "requesty",
+        "model_name": "azure/openai/text-embedding-3-large@francecentral",
+        # Nativ 3072-dim, per MRL auf 1536 gekürzt — der Parameter MUSS mitgesendet
+        # werden, sonst verwirft die Dimensionsprüfung unten jedes Ergebnis.
+        "dimensions": 1536,
         "dim": 1536,
         "active": True,
     },
+    # Vorgänger. Gemessen an deutschem Fachtext (8 Fragen, thematisch nahe
+    # Distraktoren) traf -small 7/8 bei mittlerem Abstand 0,144; -large trifft
+    # 8/8 bei 0,208. Bleibt als Rückfalloption und weil Altzeilen darauf zeigen.
+    "gemini-embedding-001-1536d": {
+        "provider": "requesty",
+        # Der Schlüsselname ist ein Etikettierfehler aus Migration 049: die Spalte
+        # wurde pauschal auf diesen Wert gesetzt, obwohl die Vektoren von
+        # text-embedding-3-small stammen. Name belassen, damit Altzeilen auflösen.
+        "model_name": "azure/openai/text-embedding-3-small@francecentral",
+        "dim": 1536,
+        "active": False,
+    },
 }
 
-ACTIVE_EMBEDDING_MODEL = "gemini-embedding-001-1536d"
+ACTIVE_EMBEDDING_MODEL = "text-embedding-3-large-1536d"
 
 # Legacy-Konstanten — bleiben für Rückwärtskompatibilität (bestehende Callers)
 EMBEDDING_DIM = 1536
@@ -119,6 +143,8 @@ async def embed(
         "Content-Type": "application/json",
     }
     payload = {"model": model_name, "input": text_input[:8000]}
+    if config.get("dimensions"):
+        payload["dimensions"] = config["dimensions"]
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(f"{base_url}/embeddings", json=payload, headers=headers)
@@ -368,13 +394,24 @@ async def search_similar(
     min_similarity: float = 0.0,
     classification: str | None = None,
     source_types: Sequence[str] | None = None,
+    include_instructions: bool = False,
 ) -> list[dict]:
-    """Semantische Suche im Tenant-Gedächtnis via cosine-Distance."""
+    """Semantische Suche im Tenant-Gedächtnis via cosine-Distance.
+
+    `include_instructions=False` (Default) blendet Chunks aus, die eine Anweisung tragen
+    („Ich will einen neuen Post machen") — sie sind Steuerung, kein Inhalt, und haben in
+    einem RAG-Kontext nichts verloren. Nur Ansichten, die den Rohbestand zeigen sollen,
+    setzen den Wert auf True.
+    """
     query_emb = await embed_text(query_text)
     if query_emb is None:
         return []
 
-    where_extra = ["embedding IS NOT NULL", "tenant_id = CAST(:tid AS uuid)"]
+    where_extra = [
+        "embedding IS NOT NULL",
+        "tenant_id = CAST(:tid AS uuid)",
+        SQL_NICHT_GELOESCHT,
+    ]
     params = {
         "tid": tenant_id,
         "qemb": _embedding_to_pg(query_emb),
@@ -386,6 +423,8 @@ async def search_similar(
     if source_types:
         params["src_list"] = list(source_types)
         where_extra.append("source_type = ANY(:src_list)")
+    if not include_instructions:
+        where_extra.append(SQL_OHNE_ANWEISUNGEN)
 
     where_sql = " AND ".join(where_extra)
     sql = text(

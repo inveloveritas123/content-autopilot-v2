@@ -171,6 +171,15 @@ p08_close = _p08_mod.p08_close
 # ---------------------------------------------------------------------------
 
 
+# Der Platzhalter-Satz, den p08_service tatsaechlich an .format() uebergibt.
+# Frueher in jedem Test wortgleich wiederholt; einmal hier reicht.
+_TEMPLATE = (
+    "mode={mode} topic={topic} voice_profile={voice_profile} "
+    "recent_messages={recent_messages} features_json={features_json} "
+    "question_index={question_index} max_questions={max_questions}"
+)
+
+
 def _make_llm_result(message, next_action="vertiefen", quality="gold"):
     """Build a fake PipelineLLMResult that call_pipeline_llm returns."""
     payload = json.dumps({"next_action": next_action, "message": message, "quality": quality})
@@ -215,19 +224,33 @@ def _make_db_session_row(
 
 
 class TestBoardCompliance:
-    def test_max_questions_targeted_is_board_compliant(self):
-        """MAX_QUESTIONS_TARGETED muss == 3 sein (Board 5.2: max 2–3 Rückfragen, Issue #17)."""
+    """Gesprächslänge — 04.08.2026 von 3 auf 5 gehoben.
+
+    Der Entwurf sagt „typisches Gespräch: 3-5 Nachrichten hin und her". Die alte
+    3 stammte aus Board 5.2 („max 2–3 Rückfragen") und hat, zusammen mit dem
+    `or`-Zähler, das Gespräch mitten in der dritten Frage beendet.
+    """
+
+    def test_max_questions_targeted_ist_fuenf(self):
         from services import p08_service as _p08_svc
 
         assert (
-            _p08_svc.MAX_QUESTIONS_TARGETED == 3
-        ), f"MAX_QUESTIONS_TARGETED ist {_p08_svc.MAX_QUESTIONS_TARGETED}, erwartet 3 (Board 5.2)"
+            _p08_svc.MAX_QUESTIONS_TARGETED == 5
+        ), f"MAX_QUESTIONS_TARGETED ist {_p08_svc.MAX_QUESTIONS_TARGETED}, erwartet 5"
 
-    def test_max_questions_random_smart_unchanged(self):
-        """MAX_QUESTIONS_RANDOM_SMART bleibt 3 (nicht von #17 betroffen)."""
+    def test_beide_modi_laufen_auf_derselben_zahl(self):
+        """Beide Modi laufen durch dieselbe p08_response — ein Auseinanderlaufen
+        wäre eine zweite, unbegründete Zahl an derselben Weiche."""
         from services import p08_service as _p08_svc
 
-        assert _p08_svc.MAX_QUESTIONS_RANDOM_SMART == 3
+        assert _p08_svc.MAX_QUESTIONS_RANDOM_SMART == _p08_svc.MAX_QUESTIONS_TARGETED == 5
+
+    def test_harte_obergrenze_liegt_ueber_der_gespraechslaenge(self):
+        """Die Kostenbremse darf die normale Gesprächslänge nicht beschneiden."""
+        from services import p08_service as _p08_svc
+
+        assert _p08_svc.MAX_QUESTIONS_HARD_CAP == 8
+        assert _p08_svc.MAX_QUESTIONS_HARD_CAP >= _p08_svc.MAX_QUESTIONS_TARGETED
 
 
 # ---------------------------------------------------------------------------
@@ -312,8 +335,11 @@ class TestP08Opener:
         mock_load_prompt.return_value = prompt
         mock_call_llm.return_value = _make_llm_result("Was war dein erster Schritt?")
 
+        # Reihenfolge wie im SELECT: title, hook_suggestion, angle, description.
+        # description bleibt None — damit prueft dieser Fall weiterhin den Rueckfall
+        # auf `title` (eine Idee ohne Beschreibung, z.B. aus der Recherche).
         idea_row = MagicMock()
-        idea_row.__getitem__ = lambda self, i: ("Mein Thema", None, "kategorie")[i]
+        idea_row.__getitem__ = lambda self, i: ("Mein Thema", None, "kategorie", None)[i]
         voice_row = MagicMock()
         voice_row.__getitem__ = lambda self, i: ("freundlich, direkt",)[i]
 
@@ -346,6 +372,72 @@ class TestP08Opener:
         kw = mock_call_llm.call_args.kwargs
         assert kw["prompt_key"] == "P08"
         assert kw["tenant_id"] == "t1"
+
+    @patch("services.p08_service.sync_session_factory")
+    @patch("services.p08_service.call_pipeline_llm")
+    @patch("services.p08_service._load_p08_prompt")
+    def test_opener_nimmt_description_statt_des_gekappten_titels(
+        self, mock_load_prompt, mock_call_llm, mock_db_factory
+    ):
+        """Der Opener muss den ganzen Text sehen, nicht die 80-Zeichen-Ueberschrift.
+
+        `_create_manual_idea` (p13_variants_task.py) schreibt denselben Text zweimal:
+        `title = idea_text[:80]` und `description = idea_text[:600]`. `hook_suggestion`
+        schreibt es NIE — fuer Chat-Ideen ist die Spalte immer NULL. Las der Opener nur
+        `hook_suggestion or title`, war `title` damit nicht der Rueckfall, sondern der
+        einzige Weg: das Modell sah 80 Zeichen und fragte nach dem abgeschnittenen Wort.
+        Live gemessen am 06.08.2026 — aus „…in ein Bus" wurde „In welchen Bus denn?".
+
+        Die Zusicherung sitzt bewusst auf Text HINTER Zeichen 80: `title` ist ein Praefix
+        von `description`, ein Test auf das Fehlen des Titel-Anfangs waere auch nach dem
+        Fix rot.
+
+        Rot wird dieser Test, sobald `p08_opener` `description` nicht mehr liest.
+        """
+        anfang = "Ich möchte einen Beitrag über unser neues Werkstatt-Netzwerk schreiben, das "
+        volltext = anfang + "Buchhaltung" + " komplett überfluessig macht. Bitte nicht angeberisch."
+        assert volltext[:80].endswith(
+            "Buch"
+        ), "Vorbedingung der Probe: der Schnitt bei 80 muss mitten im Wort liegen"
+
+        prompt = MagicMock()
+        prompt.system_prompt = "system"
+        prompt.user_prompt_template = (
+            "mode={mode} topic={topic} voice_profile={voice_profile} "
+            "recent_messages={recent_messages} features_json={features_json} "
+            "question_index={question_index} max_questions={max_questions}"
+        )
+        mock_load_prompt.return_value = prompt
+        mock_call_llm.return_value = _make_llm_result("Was war der ausloesende Moment?")
+
+        # Reihenfolge wie im SELECT: title, hook_suggestion, angle, description
+        idea_row = MagicMock()
+        idea_row.__getitem__ = lambda self, i: (volltext[:80], None, "manual", volltext)[i]
+
+        def make_session_ctx(execute_result):
+            ctx = MagicMock()
+            ctx.__enter__ = MagicMock(return_value=ctx)
+            ctx.__exit__ = MagicMock(return_value=False)
+            ctx.execute.return_value.fetchone.return_value = execute_result
+            return ctx
+
+        insert_ctx = MagicMock()
+        insert_ctx.__enter__ = MagicMock(return_value=insert_ctx)
+        insert_ctx.__exit__ = MagicMock(return_value=False)
+
+        mock_db_factory.side_effect = [
+            make_session_ctx(idea_row),
+            make_session_ctx(None),
+            insert_ctx,
+        ]
+
+        p08_opener(tenant_id="t1", mode="targeted", topic_idea_id="idea-uuid-123")
+
+        user_content = mock_call_llm.call_args.kwargs["user_content"]
+        assert (
+            "komplett überfluessig macht" in user_content
+        ), "Der Opener sieht nur die ersten 80 Zeichen — der Rest der Nachricht fehlt"
+        assert "Bitte nicht angeberisch" in user_content
 
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.call_pipeline_llm")
@@ -444,23 +536,33 @@ class TestP08Response:
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.call_pipeline_llm")
     @patch("services.p08_service._load_p08_prompt")
-    def test_response_closes_on_max_questions(
+    def test_zaehlergrenze_bietet_an_statt_zu_schliessen(
         self, mock_load_prompt, mock_call_llm, mock_db_factory
     ):
-        """When current_question_index >= max, session is closed without LLM call.
+        """DER Fehler vom 04.08.2026 — der Zähler darf nur noch anbieten.
 
-        #17: MAX_QUESTIONS_TARGETED is now 3 (Board 5.2). Test uses index=3 (>= 3) to trigger.
+        Vorher: `is_closed = … or current_idx + 1 >= max_q` schloss die Session,
+        WÄHREND dieselben Zeilen die frisch vom LLM erzeugte nächste Frage als
+        `response_message` zurückgaben. Louis bekam Frage 3, beantwortete sie
+        38 s später — und die Antwort wurde als neues Item verbucht, weil die
+        Session zu war (`routed_to = NULL`, 12:57:19 UTC).
+
+        Jetzt: Session bleibt `active`, der Text ist das feste Angebot, und der
+        LLM-Text wird gar nicht erst erzeugt.
         """
+        from services.p08_service import OFFER_MESSAGE, ResponseOutcome
+
         messages = [
             {
                 "bot": "Frage?",
                 "user_features_summary": None,
                 "category": "targeted",
                 "question_index": 1,
+                "next_action": "ask",
             }
         ]
         session_row = _make_db_session_row(
-            mode="targeted", messages=messages, current_question_index=3
+            mode="targeted", messages=messages, current_question_index=5
         )
 
         ctx = MagicMock()
@@ -472,17 +574,68 @@ class TestP08Response:
         update_ctx.__enter__ = MagicMock(return_value=update_ctx)
         update_ctx.__exit__ = MagicMock(return_value=False)
 
-        p10_ctx = MagicMock()
-        p10_ctx.__enter__ = MagicMock(return_value=p10_ctx)
-        p10_ctx.__exit__ = MagicMock(return_value=False)
-
-        mock_db_factory.side_effect = [ctx, update_ctx, p10_ctx]
+        mock_db_factory.side_effect = [ctx, update_ctx]
 
         result = p08_response(session_id="sess-max", features={"x": 1})
 
-        assert result.is_closed is True
-        assert result.next_action == "close"
+        assert result.outcome is ResponseOutcome.OFFER
+        assert result.is_closed is False, "Der Zähler darf niemals schließen"
+        assert result.message == OFFER_MESSAGE
         mock_call_llm.assert_not_called()
+
+        # Der geschriebene Status muss 'active' bleiben — sonst wäre die Session
+        # weg, obwohl der Nutzer noch bestätigen soll.
+        status_werte = [
+            call[0][1].get("status")
+            for call in update_ctx.execute.call_args_list
+            if len(call[0]) > 1 and isinstance(call[0][1], dict)
+        ]
+        assert status_werte == ["active"]
+
+    @patch("services.p08_service.sync_session_factory")
+    @patch("services.p08_service.call_pipeline_llm")
+    @patch("services.p08_service._load_p08_prompt")
+    def test_altbestand_index_drei_laeuft_weiter(
+        self, mock_load_prompt, mock_call_llm, mock_db_factory
+    ):
+        """Sessions, die unter MAX=3 auf Index 3 stehen, dürfen nicht sofort enden.
+
+        Mit MAX=5 ist 3 < 5 → das Gespräch geht normal weiter (LLM wird gefragt).
+        """
+        from services.p08_service import ResponseOutcome
+
+        prompt = MagicMock()
+        prompt.system_prompt = "system"
+        prompt.user_prompt_template = _TEMPLATE
+        mock_load_prompt.return_value = prompt
+        mock_call_llm.return_value = _make_llm_result("Und was kam dann?")
+
+        messages = [
+            {
+                "bot": "Frage?",
+                "user_features_summary": None,
+                "question_index": 1,
+                "next_action": "ask",
+            }
+        ]
+        session_row = _make_db_session_row(
+            mode="targeted", messages=messages, current_question_index=3
+        )
+
+        def make_ctx(fetchone_val=None):
+            ctx = MagicMock()
+            ctx.__enter__ = MagicMock(return_value=ctx)
+            ctx.__exit__ = MagicMock(return_value=False)
+            ctx.execute.return_value.fetchone.return_value = fetchone_val
+            return ctx
+
+        mock_db_factory.side_effect = [make_ctx(session_row), make_ctx(None), make_ctx(None)]
+
+        result = p08_response(session_id="sess-alt", features={"x": 1})
+
+        assert result.outcome is ResponseOutcome.ASK
+        assert result.message == "Und was kam dann?"
+        mock_call_llm.assert_called_once()
 
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.call_pipeline_llm")
@@ -658,9 +811,22 @@ class TestP08Response:
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.call_pipeline_llm")
     @patch("services.p08_service._load_p08_prompt")
-    def test_raw_transcript_never_in_prompt(self, mock_load_prompt, mock_call_llm, mock_db_factory):
-        """#19a Schicht-3-Wächter: raw_transcript darf NIE in den P08-Prompt gelangen."""
-        SECRET = "GEHEIMER_ROHTEXT_DER_NICHT_AN_DAS_LLM_GEHT"
+    def test_raw_transcript_erreicht_den_prompt_nur_gekapselt(
+        self, mock_load_prompt, mock_call_llm, mock_db_factory
+    ):
+        """Schicht 3 in der Fassung vom 04.08.2026: der Rohtext DIESER Session
+        darf in den Prompt — aber ausschließlich in `<user_input>`.
+
+        ⚠️ Dieser Test hieß bis zum 06.08.2026 `test_raw_transcript_never_in_prompt`
+        (#19a) und verlangte das Gegenteil. Überholt war er schon seit dem
+        Entscheid vom 04.08. (`_get_recent_messages`: „Schicht-3 wurde neu
+        gezogen, nicht gestrichen") — der Verlauf trug die Rohtexte längst.
+        Grün blieb er trotzdem, weil ausgerechnet die LAUFENDE Antwort das
+        Modell nie erreichte. Genau das hat Louis am 06.08. als „er versteht
+        meine Eingabe erst um +1 Antwort verzögert" gemeldet: der Test hat den
+        Fehler bewacht, statt ihn zu finden.
+        """
+        SECRET = "DER_ROHTEXT_DIESER_RUNDE"
         prompt = MagicMock()
         prompt.system_prompt = "system"
         prompt.user_prompt_template = (
@@ -693,7 +859,8 @@ class TestP08Response:
         p08_response(session_id="sess-1", features={"key": "value"}, raw_transcript=SECRET)
 
         user_content = mock_call_llm.call_args.kwargs["user_content"]
-        assert SECRET not in user_content
+        assert SECRET in user_content, "der Satz, auf den der Bot antworten soll, fehlte im Prompt"
+        assert f"<user_input>{SECRET}</user_input>" in user_content
 
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.call_pipeline_llm")
@@ -879,3 +1046,171 @@ class TestP08DbFailure:
         assert result.session_id == "sess-db-fail"
         mock_call_llm.assert_called_once()
         assert mock_call_llm.call_args.kwargs["prompt_key"] == "P08"
+
+
+class TestP08ResponseRespectsMidflightCancel:
+    """C5-Absicherung gegen das Rennen zwischen Abbruch und laufender Verarbeitung.
+
+    Der Statuscheck liegt am Anfang von `p08_response`, der Write am Ende —
+    dazwischen läuft ein LLM-Call (`pipeline_llm` erlaubt bis zu 3 Versuche à
+    ≥300s). Bricht der Nutzer in diesem Fenster ab (`status='expired'`), darf der
+    abschließende Write die Session NICHT zurück auf 'active' setzen (Abbruch
+    verpufft) und erst recht nicht auf 'closed': `tasks/session_post_task.py`
+    generiert bei 'closed' einen Post — aus den halben Antworten eines Gesprächs,
+    das der Nutzer abgebrochen hat.
+    """
+
+    def _ctx(self, fetchone_val=None, rowcount=1):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        ctx.execute.return_value.fetchone.return_value = fetchone_val
+        ctx.execute.return_value.rowcount = rowcount
+        return ctx
+
+    def _run(self, mock_load_prompt, mock_call_llm, mock_db_factory, rowcount):
+        prompt = MagicMock()
+        prompt.system_prompt = "system"
+        prompt.user_prompt_template = (
+            "mode={mode} topic={topic} voice_profile={voice_profile} "
+            "recent_messages={recent_messages} features_json={features_json} "
+            "question_index={question_index} max_questions={max_questions}"
+        )
+        mock_load_prompt.return_value = prompt
+        mock_call_llm.return_value = _make_llm_result("Und was kam dann?")
+        session_row = _make_db_session_row(messages=[])
+        contexts = [
+            self._ctx(session_row),
+            self._ctx(None, rowcount=rowcount),
+            self._ctx(None, rowcount=rowcount),
+            self._ctx(None, rowcount=rowcount),
+        ]
+        mock_db_factory.side_effect = list(contexts)
+        return contexts
+
+    @patch("services.p08_service.sync_session_factory")
+    @patch("services.p08_service.call_pipeline_llm")
+    @patch("services.p08_service._load_p08_prompt")
+    def test_final_update_only_touches_still_active_sessions(
+        self, mock_load_prompt, mock_call_llm, mock_db_factory
+    ):
+        contexts = self._run(mock_load_prompt, mock_call_llm, mock_db_factory, rowcount=1)
+        p08_response(session_id="sess-1", features={"key_insight": "x"})
+
+        update_sql = " ".join(
+            str(c.args[0])
+            for ctx in contexts
+            for c in ctx.execute.call_args_list
+            if "UPDATE bot_session" in str(c.args[0])
+        )
+        assert "status = 'active'" in update_sql, (
+            "Der abschließende Write hat keinen Status-Guard — ein Abbruch während "
+            "des LLM-Calls wird überschrieben"
+        )
+
+    @patch("services.p08_service.sync_session_factory")
+    @patch("services.p08_service.call_pipeline_llm")
+    @patch("services.p08_service._load_p08_prompt")
+    def test_cancelled_midflight_does_not_trigger_post_generation(
+        self, mock_load_prompt, mock_call_llm, mock_db_factory
+    ):
+        """0 betroffene Zeilen = die Session ist weg. Der Caller triggert die
+        Post-Generierung nur bei `is_closed and not was_already_closed`
+        (`tasks/telegram_task.py`) — also muss `was_already_closed` True sein."""
+        self._run(mock_load_prompt, mock_call_llm, mock_db_factory, rowcount=0)
+        result = p08_response(session_id="sess-1", features={"key_insight": "x"})
+
+        assert (
+            result.was_already_closed is True
+        ), "Abbruch während der Verarbeitung führt trotzdem zur Post-Generierung"
+        assert not result.message, (
+            "Nach dem Abbruch geht noch eine Folgefrage raus — der Nutzer hat gerade "
+            "'Gespräch abgebrochen' gelesen"
+        )
+
+
+# ---------------------------------------------------------------------------
+# erzeuge_bot_session — die eine Stelle, an der eine Session entsteht
+# ---------------------------------------------------------------------------
+
+
+class TestErzeugeBotSession:
+    """P14 schreibt dieselbe Zeile wie p08_opener, nicht eine zweite Form."""
+
+    def _insert_ctx(self):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        return ctx
+
+    @patch("services.p08_service.sync_session_factory")
+    def test_legt_aktive_session_an_und_gibt_die_id_zurueck(self, mock_factory):
+        ctx = self._insert_ctx()
+        mock_factory.return_value = ctx
+
+        session_id = _p08_mod.erzeuge_bot_session(
+            tenant_id="t1",
+            mode="targeted",
+            topic_idea_id=None,
+            frage="Worum ging es in dem Gespräch?",
+            category="targeted",
+        )
+
+        assert len(session_id) == 36
+        ctx.execute.assert_called_once()
+        ctx.commit.assert_called_once()
+        params = ctx.execute.call_args.args[1]
+        assert params["id"] == session_id
+        assert params["tid"] == "t1"
+        assert params["mode"] == "targeted"
+        assert params["topicid"] is None
+
+    @patch("services.p08_service.sync_session_factory")
+    def test_messages_null_hat_die_form_die_letzte_bot_aktion_erwartet(self, mock_factory):
+        """Spec §6: die Eroeffnungsfrage zaehlt als Frage 1 und ist ein ASK.
+
+        _letzte_bot_aktion liest messages[-1]["next_action"]; _load_active_session
+        leitet daraus awaiting_confirmation ab. Eine falsche Form hier laesst das
+        Folgegespraech ins Leere laufen.
+        """
+        ctx = self._insert_ctx()
+        mock_factory.return_value = ctx
+
+        _p08_mod.erzeuge_bot_session(
+            tenant_id="t1",
+            mode="targeted",
+            topic_idea_id=None,
+            frage="Worum ging es?",
+            category="targeted",
+        )
+
+        messages = json.loads(ctx.execute.call_args.args[1]["msgs"])
+        assert len(messages) == 1
+        assert messages[0] == {
+            "bot": "Worum ging es?",
+            "user_features_summary": None,
+            "category": "targeted",
+            "question_index": 1,
+            "next_action": "ask",
+        }
+        assert _p08_mod._letzte_bot_aktion(messages) == "ask"
+
+    @patch("services.p08_service.sync_session_factory")
+    def test_mode_ist_check_constraint_konform(self, mock_factory):
+        """ck_bot_session_mode erlaubt targeted|random_smart|onboarding
+        (Migration 056) — keine Migration noetig, aber auch kein vierter Wert."""
+        ctx = self._insert_ctx()
+        mock_factory.return_value = ctx
+
+        _p08_mod.erzeuge_bot_session(
+            tenant_id="t1",
+            mode="targeted",
+            topic_idea_id=None,
+            frage="Frage?",
+            category="targeted",
+        )
+        assert ctx.execute.call_args.args[1]["mode"] in (
+            "targeted",
+            "random_smart",
+            "onboarding",
+        )

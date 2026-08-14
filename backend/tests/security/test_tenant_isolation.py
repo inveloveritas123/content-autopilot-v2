@@ -101,6 +101,11 @@ def client_a():
 
     lc = types.ModuleType("logging_config")
     lc.setup_logging = lambda *a, **kw: None
+    # tasks/celery_app.py haertet das Logging beim IMPORT (Token-Leck 04.08.2026)
+    # und importiert dafuer diese beiden Namen. Ohne sie im Stub scheitert schon
+    # `from main import app` mit ImportError.
+    lc.quiet_noisy_loggers = lambda *a, **kw: None
+    lc.install_redaction = lambda *a, **kw: 0
     lc.tenant_id_var = MagicMock()
     lc.tenant_id_var.get = lambda: ""
     lc.tenant_id_var.set = lambda x: None
@@ -395,6 +400,9 @@ def client_b():
     ):
         lc = types.ModuleType("logging_config")
         lc.setup_logging = lambda *a, **kw: None
+        # siehe oben: Import-Zeit-Haertung in tasks/celery_app.py
+        lc.quiet_noisy_loggers = lambda *a, **kw: None
+        lc.install_redaction = lambda *a, **kw: 0
         lc.tenant_id_var = MagicMock()
         lc.tenant_id_var.get = lambda: ""
         lc.tenant_id_var.set = lambda x: None

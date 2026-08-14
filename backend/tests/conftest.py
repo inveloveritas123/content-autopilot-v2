@@ -83,6 +83,10 @@ if "celery" not in sys.modules:
             def decorator(fn):
                 fn.apply = _make_apply(fn)
                 fn.apply_async = lambda *a, **kw: types.SimpleNamespace(id="fake-task-id")
+                # Ohne dies ist max_retries/soft_time_limit/time_limit am echten Task
+                # unprüfbar — Tests koennten die Decorator-Kwargs aendern, ohne dass
+                # ein Test rot wird.
+                fn.celery_opts = kw
                 return fn
 
             if len(a) == 1 and callable(a[0]):
@@ -90,6 +94,7 @@ if "celery" not in sys.modules:
                 fn = a[0]
                 fn.apply = _make_apply(fn)
                 fn.apply_async = lambda *a, **kw: types.SimpleNamespace(id="fake-task-id")
+                fn.celery_opts = {}
                 return fn
             return decorator
 
@@ -98,20 +103,57 @@ if "celery" not in sys.modules:
     schedules_mod = _stub_module("celery.schedules")
     schedules_mod.crontab = lambda *a, **kw: None
 
+    # celery.exceptions — echte Klasse aus billiard (Celery-Abhaengigkeit, immer
+    # vorhanden), damit Tests dieselbe Exception-Klasse werfen koennen, die ein
+    # echter Worker beim Erreichen von soft_time_limit wirft.
+    exceptions_mod = _stub_module("celery.exceptions")
+    from billiard.exceptions import SoftTimeLimitExceeded as _SoftTimeLimitExceeded
+
+    exceptions_mod.SoftTimeLimitExceeded = _SoftTimeLimitExceeded
+
     signals_mod = _stub_module("celery.signals")
 
     class _FakeSignal:
+        # `receivers` macht die Verdrahtung pruefbar: ohne diese Liste laesst sich
+        # nicht testen, DASS ein Signal verbunden wurde — der Stub gaebe die
+        # Funktion nur unveraendert zurueck und ein vergessenes .connect() bliebe
+        # unsichtbar. Namensgleich mit dem echten celery.utils.dispatch.Signal.
+        def __init__(self):
+            self.receivers = []
+
         def connect(self, *a, **kw):
             def decorator(fn):
+                self.receivers.append(fn)
                 return fn
 
             if len(a) == 1 and callable(a[0]):
+                self.receivers.append(a[0])
                 return a[0]
             return decorator
 
     signals_mod.task_prerun = _FakeSignal()
     signals_mod.task_postrun = _FakeSignal()
     signals_mod.task_failure = _FakeSignal()
+    # setup_logging: Ein Empfaenger hier VERHINDERT Celerys eigene Konfiguration
+    # (celery/app/log.py: `if not receivers:`) und laesst Worker + Beat verstummen.
+    # Muss leer bleiben — Waechter in tests/test_logging_redaction.py.
+    signals_mod.setup_logging = _FakeSignal()
+    # after_setup_*: feuern NACH Celerys Konfiguration — dort haengen wir die
+    # Redaktion an die fertigen Handler.
+    signals_mod.after_setup_logger = _FakeSignal()
+    signals_mod.after_setup_task_logger = _FakeSignal()
+    # worker_process_init feuert IN jedem geforkten Kind, beat_init im Beat —
+    # dort war das Token-Leck sichtbar, obwohl der MainProcess gehaertet war.
+    signals_mod.worker_process_init = _FakeSignal()
+    signals_mod.beat_init = _FakeSignal()
+
+    # Submodule am Paket verankern. `import celery.signals` findet den Eintrag in
+    # sys.modules und kehrt zurueck, OHNE das Attribut am Paket zu setzen — das
+    # macht sonst nur der echte Import-Mechanismus. Ohne diese Zeilen scheitert
+    # `celery.signals.<x>` mit AttributeError, obwohl das Modul geladen ist.
+    celery_mod.signals = signals_mod
+    celery_mod.schedules = schedules_mod
+    celery_mod.exceptions = exceptions_mod
 
 
 # ---------------------------------------------------------------------------

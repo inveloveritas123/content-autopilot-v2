@@ -9,6 +9,8 @@ try {
 }
 
 export default function TenantSwitcher() {
+  // Hooks must run unconditionally (rules-of-hooks): compute state before the
+  // early return. On an empty TEST_TENANTS the find() is undefined → '' default.
   const currentKey = localStorage.getItem('apiKey') || ''
   const [selected, setSelected] = useState(
     TEST_TENANTS.find((t) => t.key === currentKey)?.name || ''

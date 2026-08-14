@@ -18,6 +18,7 @@ Abweichungen vom Spec: keine
 from __future__ import annotations  # Python 3.9-Kompatibilität: str | None Syntax
 
 import logging
+import math
 import os
 import time
 from dataclasses import dataclass, field
@@ -70,29 +71,46 @@ MODEL_PER_PROMPT: dict[str, str] = {
     "SENSITIVE_DETECT": "S2",
     "MD_CONVERT_P03": "S2",
     "LAYER1": "S2",  # Strukturierte Intent/Feature-Extraktion — schnelle JSON-Klassifikation, kein Frontier nötig (Issue #15)
+    "P14": "S2",  # Eingangs-Zug: Anweisung oder Inhalt? — dieselbe Gattung Aufgabe wie LAYER1
     "VOICE_FALLBACK": "S6",  # Voice-Fallback-Generierung aus Kontext+Avatar — analytisch, Frontier-Qualität, EU via Bedrock-Frankfurt (Issue #40)
     "P17": "S2",  # je-Transkript-Beobachter (Voice/Werte/Avatar-Drift-Extraktion) — Testmodus S2/EU; Decisions werden reviewt; via #72 anhebbar (Issue #41)
-    "ONBOARDING_VOICE": "S4",  # Onboarding-Stimmprofil — Mistral-Large; einmalig pro Setup (Issue #15-Ableger)
-    "ONBOARDING_EXTRACT": "S2",  # Antwort-Extraktion aus Dokument/Text — Mistral-Small; schnelle JSON-Klassifikation
 }
 
 # Per-Prompt max_tokens — übernommen aus den bisherigen Task-Konstanten.
 PROMPT_MAX_TOKENS: dict[str, int] = {
-    "P01": 8192,  # Unternehmerportrait-JSON — P03-Prompt spezifiziert max_tokens=8192
+    "P01": 16384,  # Unternehmerportrait-JSON — 8192 truncatete real (Hotpatch 2026-07-27, #62)
     "P02": 2000,  # Website-Analyse — kompakte JSON-Zusammenfassung (Issue #39)
-    "P03": 8192,  # Voice-Profil-JSON (12 Dimensionen) — P03-Prompt spezifiziert max_tokens=8192
-    "P04": 8192,  # Audience-Avatar-JSON — analog zu P01/P03
-    "P08": 512,  # Conversation turns — kurze JSON-Antworten (next_action/message/quality)
-    "P12": 2000,
-    "P12B": 2000,
+    "P03": 16384,  # Voice-Profil-JSON (12 Dimensionen) — 8192 truncatete real (Hotpatch 2026-07-27, #62)
+    "P04": 16384,  # Audience-Avatar-JSON — analog zu P01/P03
+    # ⚠️ Thinking-Modelle teilen sich max_tokens zwischen unsichtbarem Reasoning und der
+    # Antwort. In Produktion setzt PIPELINE_TIER_DEFAULT=S1 ALLE Prompts auf
+    # vertex/gemini-2.5-flash (Thinking, nicht die Lite-Variante) — ein Budget, das nur
+    # die sichtbare Antwort abdeckt, ist damit zu knapp und die Antwort bricht mitten im
+    # JSON ab. Beobachtet auf Server B am 2026-07-30: ein Layer1-Call mit 508
+    # Completion-Token bei 47 Zeichen sichtbarem Text, mitten im Feldnamen abgeschnitten.
+    #
+    # ⚠️ Diese Anhebung ist eine Wahrscheinlichkeitsverschiebung, KEINE Garantie:
+    # Gemini 2.5 Flash wählt sein Thinking-Budget dynamisch und nutzt mehr Platz, wenn
+    # mehr da ist. Ein Stichprobenvergleich (512: 1 Ausfall/10 Läufe, 2000: 0/15) ist
+    # statistisch NICHT signifikant (Fisher p≈0,4) — er widerlegt die Anhebung nicht,
+    # belegt sie aber auch nicht. Deterministisch wäre erst ein explizites
+    # thinking_budget bzw. eine finish_reason=="length"-Auswertung; beides fehlt heute
+    # (siehe finish_reason-Logging unten als Vorstufe). Der belastbare Teil dieses
+    # Commits ist der echte Retry in layer1_extraction, nicht diese Zahl.
+    #
+    # Kosten: Thinking-Token werden als Output-Token abgerechnet. Ein höherer Deckel
+    # kann die Kosten pro Call also erhöhen — dafür entfällt der Doppel-Call nach einer
+    # Trunkierung. Netto-Effekt über daily_cost_tenant beobachten.
+    "P08": 2000,  # Conversation turns — kurze JSON-Antworten (next_action/message/quality)
+    "P12": 8192,  # Post-Generierung aus Interview — 2000 truncatete real (#62)
+    "P12B": 8192,  # P12b Nachbearbeitung, gleiche Groessenordnung wie P12 (#62)
     "P12C": 1024,
     "SENSITIVE_DETECT": 512,
     "MD_CONVERT_P03": 2000,
-    "LAYER1": 512,  # Kompaktes JSON (5 Felder) — gleiche Größenordnung wie P08
-    "VOICE_FALLBACK": 8192,  # Fallback-Voice-Profil JSON — P03-strukturiert, gleiche Größe
+    "LAYER1": 2000,  # Kompaktes JSON (5 Felder) — Thinking-Headroom, siehe Kommentar bei P08
+    "P14": 2000,  # Eingangs-Zug: zwei Felder sichtbar, 2000 sind der Thinking-Headroom (wie LAYER1)
+    "VOICE_FALLBACK": 16384,  # Fallback-Voice-Profil JSON — P03-strukturiert, gleiche Größe
     "P17": 2000,  # Drift-Proposals (voice/values/avatar) als JSON
-    "ONBOARDING_VOICE": 4096,  # Brand-Voice-Profil JSON aus Onboarding-Antworten
-    "ONBOARDING_EXTRACT": 1024,  # Extrahierte Onboarding-Keys als kompaktes JSON
 }
 
 
@@ -403,11 +421,15 @@ def call_pipeline_llm(
     # 5. HTTP-Call mit Retry-Logik
     _trace_start = time.monotonic()
     last_error: Exception | None = None
+    # 300s war für 8192 Output-Tokens kalibriert (P03: 31K input + 8K output).
+    # Seit #62 gehen P01/P03/P04 bis 16384 — ein fixer 300s-Timeout würde eine
+    # lange Antwort mitten in der Generierung abbrechen statt sie (der Zweck
+    # der Token-Anhebung) vollständig durchlaufen zu lassen. Timeout skaliert
+    # daher proportional zum tatsächlich angeforderten max_tokens (Review #128).
+    request_timeout = max(300, math.ceil(max_tokens / 8192 * 300))
     for attempt in range(max_retries):
         try:
-            with httpx.Client(
-                timeout=300
-            ) as client:  # 300s für große Prompts (P03: 31K input + 8K output)
+            with httpx.Client(timeout=request_timeout) as client:
                 resp = client.post(
                     f"{base_url}/chat/completions",
                     json=request_body,
@@ -446,7 +468,7 @@ def call_pipeline_llm(
                 data = resp.json()
 
             # 6. Response parsen
-            result = _parse_response(data, model_id, tier)
+            result = _parse_response(data, model_id, tier, prompt_key)
             _record_trace_best_effort(
                 tenant_id=tenant_id,
                 prompt_key=prompt_key,
@@ -583,7 +605,9 @@ def _resolve_env_provider() -> tuple[str, str, bool]:
     return base_url, api_key, True  # Env-Provider: auto_cache standardmäßig aktiv
 
 
-def _parse_response(data: dict, model_id: str, tier: str) -> PipelineLLMResult:
+def _parse_response(
+    data: dict, model_id: str, tier: str, prompt_key: str = "?"
+) -> PipelineLLMResult:
     """Parst die OpenAI-shape Response und berechnet die Kosten.
 
     Liest usage-Felder aus der Router-Antwort (kompatibel mit Requesty
@@ -628,13 +652,32 @@ def _parse_response(data: dict, model_id: str, tier: str) -> PipelineLLMResult:
     # Kosten konservativ ohne Cache-Rabatt rechnen
     cost_usd = estimate_tier_cost(tier, input_tokens, output_tokens)
 
+    # finish_reason ist das EINZIGE deterministische Trunkierungs-Signal, das der Router
+    # liefert — "length" heißt: das Token-Budget war der Grund fuer das Ende, nicht das
+    # Modell. Ohne diesen Wert bleibt jede Trunkierungs-Diagnose ein Rueckschluss aus
+    # Adjazenz ("output-Zahl lag nah am Deckel"). Bei Thinking-Modellen ist das doppelt
+    # wichtig, weil die verbrauchten Token unsichtbar sind.
+    finish_reason = choices[0].get("finish_reason") if isinstance(choices[0], dict) else None
+    if finish_reason == "length":
+        logger.warning(
+            "call_pipeline_llm: ABGESCHNITTEN (finish_reason=length) — prompt=%s tier=%s "
+            "model=%s output=%d von max_tokens erreicht; sichtbarer Text=%d Zeichen",
+            prompt_key,
+            tier,
+            model_id,
+            output_tokens,
+            len(text),
+        )
+
     logger.info(
-        "call_pipeline_llm: done — tier=%s model=%s input=%d output=%d "
-        "cache_read=%d cost=%.6f USD",
+        "call_pipeline_llm: done — prompt=%s tier=%s model=%s input=%d output=%d "
+        "finish=%s cache_read=%d cost=%.6f USD",
+        prompt_key,
         tier,
         model_id,
         input_tokens,
         output_tokens,
+        finish_reason,
         cache_read,
         cost_usd,
     )

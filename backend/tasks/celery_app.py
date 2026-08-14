@@ -1,8 +1,15 @@
+import logging
 import os
 
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import task_prerun
+from celery.signals import (
+    after_setup_logger,
+    after_setup_task_logger,
+    beat_init,
+    task_prerun,
+    worker_process_init,
+)
 
 from config import settings
 
@@ -107,6 +114,19 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.drift_monitor_task.run_embedding_drift_monitor",
         "schedule": crontab(day_of_week=1, hour=3, minute=15),
     },
+    # Vektorlos-Wächter: täglich 03:45 — nach dem nightly-Backfill (03:15),
+    # damit gemeldet wird, was der Backfill NICHT reparieren konnte.
+    "embedding-health-daily": {
+        "task": "tasks.embedding_health_task.check_missing_embeddings",
+        "schedule": crontab(hour=3, minute=45),
+    },
+    # Bot-Sessions hatten kein TTL — eine unbeantwortete Session blieb fuer immer
+    # 'active' und verschluckte jede spaetere Nachricht als "Antwort" auf eine
+    # Frage von vorgestern. :45 ist frei (drift :00, memory :15, cost :30).
+    "expire-stale-bot-sessions-hourly": {
+        "task": "tasks.session_timeout_task.expire_stale_sessions",
+        "schedule": crontab(minute=45),
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -121,6 +141,72 @@ if os.environ.get("TELEGRAM_POLLING_ENABLED", "false").lower() in ("1", "true", 
         "task": "tasks.telegram_poll_task.poll_all_active_bots",
         "schedule": 5.0,
     }
+
+
+# ---------------------------------------------------------------------------
+# Logging — Celery konfiguriert selbst, wir haerten nur nach.
+#
+# Der Anlass: bis 04.08.2026 rief nur main.py logging_config.setup_logging() auf.
+# Der Worker lief auf Celerys Default: httpx auf INFO und OHNE den
+# SensitiveDataFilter — 2486 Zeilen Bot-Token im Klartext in einer Stunde
+# (`HTTP Request: GET https://api.telegram.org/file/bot<ID>:<TOKEN>/voice/…`).
+#
+# ⚠️ Der erste Anlauf hat dafuer das `setup_logging`-Signal verbunden. Das ist die
+# einzige Stelle, an der sich Celerys eigene Konfiguration VERHINDERN laesst
+# (celery/app/log.py: `if not receivers:`) — und genau deshalb war es falsch:
+# damit verstummten Worker und Beat vollstaendig. Am Artefakt gemessen schrieb
+# Beat vorher 979 „Sending due task"-Zeilen in 68 Minuten, danach null. Die
+# Betriebslogs sind aber genau das, woraus der 04.08.-Fehler ueberhaupt
+# diagnostiziert wurde. Kein Tausch, den man machen will.
+#
+# `after_setup_logger` / `after_setup_task_logger` feuern, NACHDEM Celery seine
+# Handler gesetzt hat. Beide Verteidigungslinien bleiben erhalten — httpx wird
+# stumm, und der Redaktionsfilter haengt an jedem Handler, den Celery angelegt
+# hat — ohne dass sich am gewohnten Logbild etwas aendert.
+#
+# `celery.task` traegt `propagate = 0` und eigene Handler, deshalb BEIDE Signale.
+#
+# ⚠️⚠️ Und deshalb NICHT NUR die Signale. Der zweite Anlauf hing allein an
+# `after_setup_logger` — im echten Worker kam die Haertung trotzdem nicht an:
+# ForkPoolWorker-2 loggte 90 Token-Zeilen in 3 Minuten, unredigiert. In einem
+# frisch gestarteten Prozess war derselbe Empfaenger nachweislich wirksam
+# (httpx 0 -> 30). Welche Stelle in Celerys Startreihenfolge das aushebelt, ist
+# nicht sicher bestimmt — also haengt die Haertung nicht mehr davon ab:
+#
+#   1. beim IMPORT dieses Moduls — laeuft im MainProcess, bevor der Pool forkt,
+#      und wird von jedem Kind geerbt. Das ist der Anker, der nicht ausfallen kann.
+#   2. `worker_process_init` — feuert IN jedem geforkten Kind, also genau dort,
+#      wo das Leck sichtbar war.
+#   3. `beat_init` — derselbe Schutz fuer den Beat-Prozess.
+#   4. `after_setup_logger` / `after_setup_task_logger` — haengt die Redaktion an
+#      die Handler, die Celery gerade angelegt hat.
+#
+# Vier Wege zum selben Zustand, alle idempotent. Und KEIN stilles `except: pass`
+# mehr: ein Fehler hier muss auffallen, sonst haelt man den Schutz fuer aktiv,
+# waehrend er fehlt.
+# ---------------------------------------------------------------------------
+def _haerte_logging(logger=None, **kwargs) -> None:
+    from logging_config import install_redaction, quiet_noisy_loggers
+
+    quiet_noisy_loggers()
+    bestueckt = install_redaction(logger)
+    # Einzeilige Selbstauskunft pro Prozess: beim naechsten Verdacht steht im Log,
+    # ob die Haertung lief — statt dass man es aus dem Ausbleiben von Lecks raet.
+    logging.getLogger(__name__).info(
+        "logging gehaertet: httpx=%s handler_mit_redaktion=%s",
+        logging.getLogger("httpx").level,
+        bestueckt,
+    )
+
+
+# 1. Import-Zeit: MainProcess, vor dem Fork. Der Anker.
+_haerte_logging()
+
+# 2.-4. Alle Stellen, an denen Celery Prozesse oder Logger neu aufsetzt.
+worker_process_init.connect(_haerte_logging)
+beat_init.connect(_haerte_logging)
+after_setup_logger.connect(_haerte_logging)
+after_setup_task_logger.connect(_haerte_logging)
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +240,8 @@ celery_app.conf.include = [
     "tasks.p12_task",
     "tasks.p12b_task",
     "tasks.p12c_task",
+    "tasks.session_post_task",
+    "tasks.session_timeout_task",
     "tasks.voice_drift_task",
     "tasks.model_check_task",
     "tasks.backtest_task",
@@ -170,7 +258,21 @@ celery_app.conf.include = [
     "tasks.cost_alert_task",
     "tasks.reembed_task",
     "tasks.drift_monitor_task",
+    "tasks.embedding_health_task",
     "tasks.values_backfill_task",
     "tasks.telegram_poll_task",
+    # Beide werden aus api/telegram.py per .delay() aus dem Button-Callback
+    # angestoßen (C7 „Idee ausarbeiten", C8 „Neue Ideen generieren"). Ohne
+    # Eintrag hier hängt die Registrierung im Worker davon ab, ob irgendein
+    # anderer Codepfad das Modul im selben Prozess schon importiert hat —
+    # sonst NotRegistered. Beide haben nur leichte Modul-Importe (sqlalchemy,
+    # models.base, celery_app), also kein Zirkel-Risiko beim Worker-Start.
+    "tasks.p13_variants_task",
+    "tasks.p09_chat_ideas_task",
+    # Gleicher Defekt, seit PR #135 live: „✏️ Nochmal anders" (cmd:regenerate)
+    # enqueued regenerate_post_from_feedback aus demselben Callback-Pfad. Ohne
+    # Eintrag verwirft der Worker die Nachricht als unregistered — der Tester liest
+    # „kommt gleich" und bekommt nie etwas. Auch hier nur leichte Modul-Importe.
+    "tasks.post_feedback_task",
     "api.wizard",
 ]

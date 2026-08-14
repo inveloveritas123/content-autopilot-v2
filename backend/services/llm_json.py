@@ -15,6 +15,13 @@ Verwendung:
 
 import json
 
+# strict=False erlaubt rohe Steuerzeichen (v.a. unescapte \n) innerhalb von
+# JSON-Strings. Modelle rutschen bei mehrabsätzigem Text (z.B. LinkedIn-Posts
+# im "post"-Feld) gelegentlich in echte Zeilenumbrüche statt \n-Escapes —
+# das ist technisch ungültiges JSON, das strict-Mode sonst hart ablehnt,
+# obwohl der Output inhaltlich vollständig und eindeutig ist (#62).
+_JSON_LOADS_KWARGS = {"strict": False}
+
 
 def parse_json_from_text(raw: str) -> dict:
     """Extrahiert ein JSON-Objekt aus einem LLM-Output-String.
@@ -38,7 +45,7 @@ def parse_json_from_text(raw: str) -> dict:
 
     # Strategie 1: direkter Parse
     try:
-        return json.loads(raw)
+        return json.loads(raw, **_JSON_LOADS_KWARGS)
     except json.JSONDecodeError:
         pass
 
@@ -50,7 +57,7 @@ def parse_json_from_text(raw: str) -> dict:
             if end != -1:
                 candidate = raw[start:end].strip()
                 try:
-                    return json.loads(candidate)
+                    return json.loads(candidate, **_JSON_LOADS_KWARGS)
                 except json.JSONDecodeError:
                     pass
 
@@ -58,7 +65,7 @@ def parse_json_from_text(raw: str) -> dict:
     extracted = _extract_first_json_object(raw)
     if extracted is not None:
         try:
-            return json.loads(extracted)
+            return json.loads(extracted, **_JSON_LOADS_KWARGS)
         except json.JSONDecodeError:
             pass
 

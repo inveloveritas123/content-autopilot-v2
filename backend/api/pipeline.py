@@ -386,6 +386,7 @@ async def retry_failed_transcriptions(
     queued = []
     for item in failed_items:
         item.status = "new"
+        item.transcription_attempts = 0
         try:
             transcribe_item.delay(str(item.id))
             queued.append(str(item.id))

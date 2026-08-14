@@ -38,7 +38,13 @@ PROMPT_PATHS: dict[str, str] = {
     "P03": "prompts/P03-voice-analyse.md",
     "P04": "prompts/P04-kundenavatar-vertiefung.md",
     "P07": "prompts/P07-themen-research.md",
-    "P08": "prompts/P08-fragen-konversation.md",
+    # "P08" ist hier bewusst NICHT registriert (06.08.2026). Der P08-Prompt lebt
+    # im Repo (backend/prompts/P08_conversation.md, geladen ueber
+    # services/repo_prompt.py). Die frueher hier eingetragene content-truth-Datei
+    # verlangte `{name}`, `{branche}`, `{standort}`, `{teamgroesse}`,
+    # `{du_oder_sie}`, `{signalwoerter}` — Platzhalter ohne Entsprechung im Code.
+    # Sie war damit strukturell nicht ladbar, und der Bot lief zwei Monate lang
+    # ueber den Rueckfall, ohne dass es jemandem auffiel. Die Datei ist entfernt.
     "P09": "prompts/P09-content-ideen.md",
     "P10": "prompts/P10-content-kern-aufbau.md",
     "P12": "prompts/P12-post-generierung.md",
@@ -178,19 +184,30 @@ def _extract_system_prompt(content: str) -> str:
 def _extract_user_prompt(content: str) -> str:
     """Extrahiert den User-Prompt: alles von ^## User-Prompt bis naechstes ^##.
 
-    Benoetigt eine EXAKT mit 'User-Prompt' (ohne weiteren Text auf derselben Zeile,
-    abgesehen von Leerzeichen) beginnende Ueberschrift. Varianten wie
-    '## User-Prompt: MODE OPENER' werden fuer den Extrakt NICHT verwendet;
-    sie gelten als Teil des System-Prompt-Blocks.
+    Akzeptiert dieselben Ueberschriften wie `_extract_system_prompt` — also auch
+    '## User-Prompt: MODE RESPONSE'.
 
-    Falls kein exaktes ^## User-Prompt existiert: leerer String.
+    ⚠️ Diese Toleranz ist der Fix eines stillen Totalausfalls (Befund 04.08.2026):
+    `_extract_system_prompt` suchte die Endmarke mit `^## User-Prompt\\b` und traf
+    '## User-Prompt: MODE OPENER'; diese Funktion verlangte `^## User-Prompt[ \\t]*$`,
+    exakt und ohne Zusatz — kein Treffer, leerer User-Prompt. Dieselbe Datei, zwei
+    Regexe mit verschiedener Strenge. Produktiv lief deshalb monatelang ein
+    789-Byte-Stummel statt des entworfenen 18-KB-Prompts.
+
+    Bei mehreren '## User-Prompt…'-Ueberschriften greift die ERSTE. Der Code ruft
+    genau EIN Template auf und uebergibt den Modus als Platzhalter — eine Datei mit
+    mehreren Modus-Abschnitten bekaeme also nur den ersten. Das ist Absicht: die
+    Prompt-Datei muss dem Vertrag des Codes folgen, nicht umgekehrt.
+
+    Falls kein ^## User-Prompt existiert: leerer String.
     """
-    # Nur exakten Match verwenden (kein Suffix ausser Whitespace)
-    user_m = re.search(r"^## User-Prompt[ \t]*$", content, re.MULTILINE)
+    user_m = re.search(r"^## User-Prompt\b", content, re.MULTILINE)
     if user_m is None:
         return ""
 
-    rest = content[user_m.end() :]
+    # Ab dem Zeilenende der Ueberschrift — sonst landete ': MODE RESPONSE' im Text.
+    zeilenende = content.find("\n", user_m.end())
+    rest = content[zeilenende + 1 :] if zeilenende != -1 else ""
     next_h = re.search(r"^## ", rest, re.MULTILINE)
     if next_h:
         block = rest[: next_h.start()].strip()

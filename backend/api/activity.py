@@ -70,7 +70,7 @@ async def get_pipeline_progress(
 
 STATUS_GROUP_MAP = {
     "success": ["transcribed", "analyzed", "content_ready", "approved"],
-    "error": ["needs_voicescriptor", "transcription_failed"],
+    "error": ["needs_voicescriptor", "transcription_failed", "transcription_abandoned"],
     "processing": ["transcribing", "analyzing", "generating"],
     "pending": ["new"],
 }
@@ -158,6 +158,8 @@ async def get_activity_log(
             status_msg = "Keine Untertitel verfuegbar (weder YT noch VoiceScriptor)"
         elif item.status == "transcription_failed":
             status_msg = "Transkription fehlgeschlagen"
+        elif item.status == "transcription_abandoned":
+            status_msg = "Nach drei Versuchen aufgegeben"
         else:
             status_msg = {
                 "transcribing": "Transkription laeuft...",
@@ -168,7 +170,11 @@ async def get_activity_log(
                 "approved": "Freigegeben",
             }.get(item.status, item.status)
 
-        is_error = item.status in ("needs_voicescriptor", "transcription_failed")
+        is_error = item.status in (
+            "needs_voicescriptor",
+            "transcription_failed",
+            "transcription_abandoned",
+        )
         is_processing = item.status in ("transcribing", "analyzing", "generating")
 
         log_entries.append(

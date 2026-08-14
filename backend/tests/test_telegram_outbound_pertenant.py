@@ -49,7 +49,7 @@ except ImportError:
 # Wichtig: NUR stubben wenn cryptography wirklich fehlt — andernfalls test_crypto.py
 # bekommt einen nicht-deterministischen Fake der seine Tests kaputtmacht.
 try:
-    import cryptography.fernet as _cf_real  # type: ignore[import]  # noqa: F401  (Availability-Check: Import-Erfolg entscheidet, ob gestubbt wird)
+    import cryptography.fernet as _cf_real  # type: ignore[import]  # noqa: F401
     # Echte cryptography verfügbar — kein Stub nötig
 except ImportError:
     _c = _ensure_stub("cryptography")
@@ -79,7 +79,9 @@ except ImportError:
     _cf.InvalidToken = _InvalidToken
 
 # config-Stub
+_created_config_stub = False
 if "config" not in sys.modules:
+    _created_config_stub = True
     _cfg = _ensure_stub("config")
     _cfg.settings = types.SimpleNamespace(
         telegram_bot_token="GLOBAL_ADMIN_TOKEN",
@@ -239,6 +241,16 @@ _at_spec.loader.exec_module(_at_mod)
 # Referenzen für Tests
 resolver = _ttr_mod
 tg = _at_mod
+
+# Restore config isolation: the SimpleNamespace stub above only needed to satisfy
+# `from config import settings` while exec'ing api/telegram.py and the service
+# modules loaded above (they've bound their references now). Leaving it in
+# sys.modules leaks a settings object missing most fields into later-collected
+# modules — e.g. test_telegram_bot_api is fixed to clean up too, and
+# test_throttle_adversarial patches config.settings.max_calls_per_tenant_per_hour,
+# which this stub lacks. Drop it so downstream re-imports the real config.
+if _created_config_stub:
+    sys.modules.pop("config", None)
 
 
 # ---------------------------------------------------------------------------
@@ -469,6 +481,46 @@ class TestSendTelegramMessagePerTenant:
 
         assert result is False
 
+    def test_logs_outbound_row_on_success(self):
+        """Erfolgreicher Send → telegram_message_log-Zeile (direction='out', send_status='sent').
+
+        Instrumentierungs-Lücke aus #119: erfolgreiche Sends waren unsichtbar, weil
+        NUR der Fehlerzweig eine 'out'-Zeile schrieb. Der DoD-Marker
+        „erster echter direction='out'" braucht die Erfolgs-Zeile.
+        """
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"ok": True}
+
+        db_mock = _make_db_mock()
+
+        with (
+            patch.object(
+                sys.modules["services.telegram_token_resolver"],
+                "get_tenant_bot_token",
+                return_value="987654:TENANT_TOKEN",
+            ),
+            patch.object(
+                sys.modules["services.telegram_token_resolver"],
+                "update_last_active",
+            ),
+            patch.object(tg, "sync_session_factory", return_value=db_mock),
+            patch("httpx.post", return_value=mock_response),
+        ):
+            result = tg._send_telegram_message(12345, "Test msg", tenant_id="tenant-abc")
+
+        assert result is True
+        insert_calls = [
+            c
+            for c in db_mock.execute.call_args_list
+            if "INSERT INTO telegram_message_log" in str(c.args[0])
+        ]
+        assert len(insert_calls) == 1, "erwartet: genau ein Outbound-Log-INSERT bei Erfolg"
+        sql = str(insert_calls[0].args[0])
+        assert "'out'" in sql
+        payload = insert_calls[0].args[1]["payload"]
+        assert '"send_status": "sent"' in payload
+
 
 # ===========================================================================
 # Tests: _send_admin_telegram_message
@@ -519,3 +571,182 @@ class TestSendAdminTelegramMessage:
             tg._send_admin_telegram_message(88888, "msg")
 
         mock_resolver.assert_not_called()
+
+
+# ===========================================================================
+# Tests: _draft_action_keyboard (Stufe 1: Approve/Regenerate/Reject-Buttons)
+# ===========================================================================
+
+
+class TestDraftActionKeyboard:
+    def test_keyboard_has_three_actions_scoped_to_content_id(self):
+        kb = tg._draft_action_keyboard("abc-123")
+        rows = kb["inline_keyboard"]
+        callbacks = [btn["callback_data"] for row in rows for btn in row]
+        assert "cmd:approve:abc-123" in callbacks
+        assert "cmd:regenerate:abc-123" in callbacks
+        assert "cmd:reject:abc-123" in callbacks
+        # Jeder Button trägt exakt die content_id → keine Verwechslung zwischen Drafts
+        assert all(cb.endswith(":abc-123") for cb in callbacks)
+
+
+# ===========================================================================
+# Tests: _approve_content_sync (Stufe 1: tenant-scoped + idempotent)
+# ===========================================================================
+
+
+class TestApproveContentSync:
+    def test_approves_draft_scoped_to_tenant(self):
+        db = _make_db_mock(row=("draft",))  # SELECT status → 'draft'
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            result = tg._approve_content_sync("cid-1", "tenant-a")
+        assert result == "approved"
+        # Genau ein UPDATE mit tenant-scope + telegram_button
+        upd = [c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])]
+        assert len(upd) == 1
+        assert "tenant_id = :tid" in str(upd[0].args[0])
+        assert upd[0].args[1]["tid"] == "tenant-a"
+        assert upd[0].args[1]["cid"] == "cid-1"
+        # Exakte mandatierte Feldwerte — Regression auf einen davon muss rot schlagen
+        assert "status = 'approved'" in str(upd[0].args[0])
+        assert "approval_method = 'telegram_button'" in str(upd[0].args[0])
+        assert "approved_by = 'telegram'" in str(upd[0].args[0])
+        assert "approved_at = now()" in str(upd[0].args[0])
+
+    def test_idempotent_when_already_approved(self):
+        db = _make_db_mock(row=("approved",))
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            result = tg._approve_content_sync("cid-1", "tenant-a")
+        assert result == "already"
+        assert not [
+            c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])
+        ]
+
+    def test_not_found_or_cross_tenant(self):
+        db = _make_db_mock(row=None)  # kein Row für (cid, tenant)
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            result = tg._approve_content_sync("cid-x", "tenant-b")
+        assert result == "not_found"
+        # Kein UPDATE — weder für ein nicht-existentes noch für ein fremdes Piece
+        assert not [
+            c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])
+        ]
+        # SELECT war tenant-scoped auf genau den übergebenen Tenant
+        sel = [c for c in db.execute.call_args_list if "SELECT status" in str(c.args[0])]
+        assert sel[0].args[1]["tid"] == "tenant-b"
+
+    def test_fail_open_on_db_error(self, caplog):
+        db = _make_db_mock(row=("draft",))
+        db.execute.side_effect = Exception("boom")
+        with (
+            patch.object(tg, "sync_session_factory", return_value=db),
+            caplog.at_level(logging.WARNING),
+        ):
+            result = tg._approve_content_sync("cid-1", "tenant-a")
+        assert result == "not_found"
+        assert not [
+            c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])
+        ]
+        log_text = "\n".join(r.getMessage() for r in caplog.records)
+        assert "boom" not in log_text, f"Exception-Message im Log gefunden: {log_text}"
+        assert "Exception" in log_text, f"Exception-Klassenname fehlt im Log: {log_text}"
+
+
+# ===========================================================================
+# Tests: _reject_content_sync (Stufe 1: tenant-scoped + idempotent)
+# ===========================================================================
+
+
+class TestRejectContentSync:
+    def test_rejects_draft_scoped_to_tenant(self):
+        db = _make_db_mock(row=("draft",))
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            assert tg._reject_content_sync("cid-1", "tenant-a") == "rejected"
+        upd = [c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])]
+        assert len(upd) == 1 and "status = 'rejected'" in str(upd[0].args[0])
+        assert "tenant_id = :tid" in str(upd[0].args[0])
+        assert upd[0].args[1]["tid"] == "tenant-a"
+        assert upd[0].args[1]["cid"] == "cid-1"
+
+    def test_idempotent_when_already_rejected(self):
+        db = _make_db_mock(row=("rejected",))
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            assert tg._reject_content_sync("cid-1", "tenant-a") == "already"
+        assert not [
+            c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])
+        ]
+
+    def test_not_found(self):
+        db = _make_db_mock(row=None)
+        with patch.object(tg, "sync_session_factory", return_value=db):
+            assert tg._reject_content_sync("cid-x", "tenant-a") == "not_found"
+        assert not [
+            c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])
+        ]
+        sel = [c for c in db.execute.call_args_list if "SELECT status" in str(c.args[0])]
+        assert sel[0].args[1]["tid"] == "tenant-a"
+
+    def test_fail_open_on_db_error(self, caplog):
+        db = _make_db_mock(row=("draft",))
+        db.execute.side_effect = Exception("boom")
+        with (
+            patch.object(tg, "sync_session_factory", return_value=db),
+            caplog.at_level(logging.WARNING),
+        ):
+            result = tg._reject_content_sync("cid-1", "tenant-a")
+        assert result == "not_found"
+        assert not [
+            c for c in db.execute.call_args_list if "UPDATE content_pieces" in str(c.args[0])
+        ]
+        log_text = "\n".join(r.getMessage() for r in caplog.records)
+        assert "boom" not in log_text, f"Exception-Message im Log gefunden: {log_text}"
+        assert "Exception" in log_text, f"Exception-Klassenname fehlt im Log: {log_text}"
+
+
+# ===========================================================================
+# Tests: _handle_callback_query — approve/reject/regenerate Dispatch (Stufe 1)
+# ===========================================================================
+
+
+class TestApproveRejectRegenerateCallbacks:
+    def _cq(self, data):
+        return {"id": "cq1", "data": data, "from": {"id": 5}, "message": {"chat": {"id": 99}}}
+
+    def test_approve_callback_calls_sync_and_confirms(self):
+        with (
+            patch.object(tg, "_approve_content_sync", return_value="approved") as appr,
+            patch.object(tg, "_send_telegram_message") as send,
+            patch("httpx.post"),
+        ):
+            tg._handle_callback_query(self._cq("cmd:approve:cid-1"), known_tenant_id="tenant-a")
+        appr.assert_called_once_with("cid-1", "tenant-a")  # tenant-scoped
+        assert send.called and "✅" in send.call_args.args[1]
+
+    def test_reject_callback_calls_sync(self):
+        with (
+            patch.object(tg, "_reject_content_sync", return_value="rejected") as rej,
+            patch.object(tg, "_send_telegram_message"),
+            patch("httpx.post"),
+        ):
+            tg._handle_callback_query(self._cq("cmd:reject:cid-1"), known_tenant_id="tenant-a")
+        rej.assert_called_once_with("cid-1", "tenant-a")
+
+    def test_regenerate_callback_enqueues_feedback_task(self):
+        fake_task = MagicMock()
+        with (
+            patch.dict(
+                sys.modules,
+                {"tasks.post_feedback_task": MagicMock(regenerate_post_from_feedback=fake_task)},
+            ),
+            patch.object(tg, "_send_telegram_message"),
+            patch("httpx.post"),
+        ):
+            tg._handle_callback_query(self._cq("cmd:regenerate:cid-1"), known_tenant_id="tenant-a")
+        assert fake_task.apply_async.called
+        args = (
+            fake_task.apply_async.call_args.kwargs.get("args")
+            or fake_task.apply_async.call_args.args[0]
+        )
+        assert (
+            args[0] == "cid-1" and args[1] == "tenant-a"
+        )  # (post_id, tenant_id, feedback, log_id)

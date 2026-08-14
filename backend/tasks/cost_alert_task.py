@@ -22,19 +22,33 @@ def check_cost_alerts():
         with sync_session_factory() as session:
             _check_cache_hit_rate(session)
             _check_runaway(session)
-    except Exception as exc:  # pragma: no cover — fail-open, DB down ist kein Crash
+    except Exception as exc:  # fail-open: DB down ist kein Crash
         logger.error("cost_alert_task: DB-Fehler beim Alert-Check: %s", exc)
+        # `status: ok` waere hier eine Falschmeldung. Bis zum 06.08.2026 stand
+        # genau das hier: die Abfrage unten fragte nach `tenants.is_active`, die
+        # Spalte heisst aber `enabled` — der erste Check warf, der zweite lief
+        # nie, und der Task meldete stuendlich Erfolg. Beide Waechter waren tot
+        # und nichts sagte es. Wer den Rueckgabewert liest, muss das sehen.
+        return {
+            "status": "error",
+            "reason": "alert_check_failed",
+            "exception": type(exc).__name__,
+            "checked_at": datetime.utcnow().isoformat(),
+        }
 
     return {"status": "ok", "checked_at": datetime.utcnow().isoformat()}
 
 
 def _get_active_tenant_ids(session) -> list:
-    """Liefert alle aktiven Tenant-IDs."""
-    rows = session.execute(
-        "SELECT id FROM tenants WHERE is_active = true"
-        if False  # pragma: no cover
-        else __import__("sqlalchemy").text("SELECT id FROM tenants WHERE is_active = true")
-    ).fetchall()
+    """Liefert alle aktiven Tenant-IDs.
+
+    ⚠️ Die Spalte heisst `enabled`, nicht `is_active` (siehe `models.tenant`:
+    `enabled` / `disabled_at` / `disabled_by` / `disabled_reason`). Der frühere
+    Name existierte in der Datenbank nie.
+    """
+    from sqlalchemy import text as _sql
+
+    rows = session.execute(_sql("SELECT id FROM tenants WHERE enabled = true")).fetchall()
     return [row[0] for row in rows]
 
 

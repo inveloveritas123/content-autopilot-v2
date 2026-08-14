@@ -161,8 +161,25 @@ async def _fetch_bot_row(db: AsyncSession, tenant_id: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
+class TelegramUnavailable(Exception):
+    """Telegram hat KEIN Urteil abgegeben — sagt nichts über die Gültigkeit des Tokens.
+
+    Streng zu trennen von einer echten Ablehnung: Wer beides gleich behandelt,
+    meldet bei einem Timeout „Token abgelehnt" und provoziert einen unnötigen,
+    irreversiblen Widerruf eines intakten Tokens.
+    """
+
+
 async def _telegram_get_me(token: str) -> dict | None:
-    """Call Telegram getMe with *token*. Returns the result dict on success, None on failure.
+    """Call Telegram getMe with *token*.
+
+    Returns the result dict on success, None when Telegram genuinely REJECTS the
+    token (4xx / ok=false).
+
+    Raises:
+        TelegramUnavailable: wenn kein Urteil vorliegt — Netzwerkfehler, nicht
+            parsebare Antwort oder 5xx. Der Aufrufer muss das als „später erneut
+            versuchen" behandeln, nicht als ungültigen Token.
 
     The token is NEVER included in log output.
     """
@@ -171,14 +188,19 @@ async def _telegram_get_me(token: str) -> dict | None:
         async with httpx.AsyncClient(timeout=8.0) as client:
             resp = await client.get(url)
     except Exception as exc:
-        # Network error — treat as rejection
         logger.warning("telegram getMe network error: %s", type(exc).__name__)
-        return None
+        raise TelegramUnavailable(type(exc).__name__) from exc
+
+    if resp.status_code >= 500:
+        # Telegram ist kaputt, nicht der Token.
+        logger.warning("telegram getMe upstream error (status=%s)", resp.status_code)
+        raise TelegramUnavailable(f"HTTP {resp.status_code}")
 
     try:
         data = resp.json()
-    except Exception:
-        return None
+    except Exception as exc:
+        logger.warning("telegram getMe unparsbare Antwort (status=%s)", resp.status_code)
+        raise TelegramUnavailable("invalid JSON") from exc
 
     if resp.status_code != 200 or not data.get("ok"):
         # Do NOT log the token or the full URL
@@ -262,7 +284,16 @@ async def register_telegram_bot(
         raise HTTPException(status_code=400, detail="Ungültiges Token-Format")
 
     # 2. Validate with Telegram
-    bot_info = await _telegram_get_me(raw_token)
+    try:
+        bot_info = await _telegram_get_me(raw_token)
+    except TelegramUnavailable as exc:
+        # Kein Urteil erhalten — der Token ist NICHT als ungültig erwiesen.
+        logger.warning("Telegram nicht erreichbar für tenant=%s: %s", tid, exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Telegram war nicht erreichbar — der Token wurde nicht geprüft. "
+            "Bitte erneut versuchen.",
+        ) from exc
     if bot_info is None:
         raise HTTPException(status_code=400, detail="Token von Telegram abgelehnt")
 

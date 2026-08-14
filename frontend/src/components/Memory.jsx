@@ -152,6 +152,9 @@ export default function Memory() {
           <div className="bg-white rounded-xl border border-surface-border p-3">
             <p className="text-xs text-ink-muted">Gesamt</p>
             <p className="text-2xl font-bold text-ink">{stats.total}</p>
+            {stats.soft_deleted > 0 && (
+              <p className="text-[10px] text-ink-muted">davon {stats.soft_deleted} gelöscht</p>
+            )}
           </div>
           <div className="bg-white rounded-xl border border-surface-border p-3">
             <p className="text-xs text-ink-muted">Embedded</p>

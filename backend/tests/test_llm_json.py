@@ -121,3 +121,17 @@ class TestParseJsonFromText:
         raw = "```json\n" "KEIN GUELTIGES JSON\n" "```\n\n" '{"fallback": true}'
         result = parse_json_from_text(raw)
         assert result == {"fallback": True}
+
+    # #62: Modelle rutschen bei mehrabsätzigem Text (z.B. LinkedIn-Posts) gelegentlich
+    # in echte Zeilenumbrueche statt \n-Escapes innerhalb von JSON-Strings — das
+    # lehnt json.loads im strict-Mode hart ab, obwohl der Output vollstaendig und
+    # eindeutig ist. Live in P12 beobachtet (#62 Schritt-0-E2E-Test).
+    def test_literal_newline_inside_string_does_not_raise(self):
+        raw = '```json\n{"post": "Erster Absatz.\n\nZweiter Absatz."}\n```'
+        result = parse_json_from_text(raw)
+        assert result["post"] == "Erster Absatz.\n\nZweiter Absatz."
+
+    def test_literal_newline_inside_string_brace_matching_path(self):
+        raw = 'Hier: {"post": "Zeile eins.\nZeile zwei."} Ende.'
+        result = parse_json_from_text(raw)
+        assert result["post"] == "Zeile eins.\nZeile zwei."

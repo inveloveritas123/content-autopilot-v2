@@ -314,7 +314,9 @@ async def create_tenant(req: CreateTenantRequest):
                 await db.rollback()
                 constraint = str(exc.orig) if exc.orig else str(exc)
                 if "uq_tenants_slug" not in constraint:
-                    logger.error("IntegrityError beim Tenant-Anlegen (non-slug): %s", constraint)
+                    logging.getLogger(__name__).error(
+                        "IntegrityError beim Tenant-Anlegen (non-slug): %s", constraint
+                    )
                     raise HTTPException(
                         status_code=409, detail="Tenant konnte nicht angelegt werden."
                     )

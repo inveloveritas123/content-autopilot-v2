@@ -26,6 +26,8 @@ from models.company_profile import (
     CompanyProfile,
     ProfileFieldProvenance,
 )
+from services.anweisungs_marker import SQL_OHNE_ANWEISUNGEN
+from services.soft_delete_filter import SQL_NICHT_GELOESCHT
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -88,12 +90,14 @@ def run_for_tenant(tenant_id: str, max_chunks: int = 30) -> dict:
 
     with sync_session_factory() as db:
         rows = db.execute(
-            text("""
+            text(f"""
                 SELECT id, content_text, source_type, created_at
                 FROM memory_chunks
                 WHERE tenant_id = :tid
                   AND content_text IS NOT NULL
                   AND char_length(content_text) >= 30
+                  AND {SQL_OHNE_ANWEISUNGEN}
+                  AND {SQL_NICHT_GELOESCHT}
                 ORDER BY created_at DESC
                 LIMIT :n
             """),

@@ -11,7 +11,7 @@ Datenfluss
 3. Manuelle Idee anlegen (sync-SQL-Spiegel von api/ideas.py:1294-1335):
    find-or-create Source type='manual' → Stub-SourceItem → content_ideas-INSERT.
    State-Marker chat_variant_choice_pending=true in source_context (JSONB, migrationsfrei).
-4. Varianten generieren: generate_variants.apply(args=[idea_id]).get() in-process.
+4. Varianten generieren: generate_variants via run_inline() in-process.
 5. Varianten in den Chat: hook→1, story→2, these→3 (Reihenfolge wie api/ideas.py:1386).
    Fehler / no_valid_variants → Marker entfernen + Notiz.
 
@@ -141,11 +141,18 @@ def _create_manual_idea(
     tenant_id: str,
     idea_text: str,
     log_id: str | None,
+    pending_choice: bool = True,
 ) -> str | None:
     """Legt eine manuelle Idee an (Spiegel von api/ideas.py:1294-1335).
 
     find-or-create Source type='manual' → Stub-SourceItem → content_ideas-INSERT.
     Gibt idea_id (str) oder None bei Fehler zurück.
+
+    pending_choice steuert den `chat_variant_choice_pending`-Marker. True für den
+    Varianten-Weg, wo der Nutzer noch 1/2/3 wählen muss. False für den direkten
+    Interview-Weg: dort gibt es keine Wahl, und ein stehengebliebener Marker
+    würde `_load_pending_idea` 24 h lang fündig werden lassen — die nächste kurze
+    Nachricht („ok", „ja") landete dann als Varianten-Wahl in Gate 2.
     """
     try:
         with sync_session_factory() as db:
@@ -160,36 +167,43 @@ def _create_manual_idea(
                 source_id = str(source_row[0])
             else:
                 source_id = str(uuid.uuid4())
+                # `sources` hat weder `title` noch `status` — der Name der Quelle steht
+                # in `name` (NOT NULL). language/is_active tragen Server-Defaults und
+                # bleiben deshalb weg; Python-seitige Modell-Defaults greifen bei
+                # Roh-SQL nicht. Vorbild: api/ideas.py:1300-1306.
                 db.execute(
                     text(
-                        "INSERT INTO sources (id, tenant_id, type, url, title, status) "
-                        "VALUES (:id, :tid, 'manual', 'manual://chat', 'Chat-Ideen', 'active')"
+                        "INSERT INTO sources (id, tenant_id, name, type, url) "
+                        "VALUES (:id, :tid, 'Chat-Ideen', 'manual', 'manual://chat')"
                     ),
                     {"id": source_id, "tid": tenant_id},
                 )
 
             # Stub-SourceItem (kein echtes Transkript — Muster api/ideas.py:1311-1320)
             item_id = str(uuid.uuid4())
+            # external_id ist NOT NULL ohne Default und trägt den Unique-Index
+            # (source_id, external_id). Die item_id selbst ist bereits eindeutig —
+            # ein konstanter Wert liesse die zweite Chat-Idee auflaufen.
             db.execute(
                 text(
                     "INSERT INTO source_items "
-                    "(id, source_id, tenant_id, title, status, content_type) "
-                    "VALUES (:id, :src, :tid, :title, 'analyzed', 'text')"
+                    "(id, source_id, tenant_id, external_id, title, status, content_type) "
+                    "VALUES (:id, :src, :tid, :ext, :title, 'analyzed', 'text')"
                 ),
                 {
                     "id": item_id,
                     "src": source_id,
                     "tid": tenant_id,
+                    "ext": item_id,
                     "title": idea_text[:80],
                 },
             )
 
             # content_ideas-INSERT mit State-Marker
             idea_id = str(uuid.uuid4())
-            source_context: dict = {
-                "source": "telegram_chat",
-                "chat_variant_choice_pending": True,
-            }
+            source_context: dict = {"source": "telegram_chat"}
+            if pending_choice:
+                source_context["chat_variant_choice_pending"] = True
             if log_id is not None:
                 source_context["source_log_id"] = str(log_id)
 
@@ -223,10 +237,13 @@ def _run_generate_variants(idea_id: str) -> list[dict]:
     Gibt leere Liste zurück bei Fehler oder keinen Varianten.
     Upsert in p12_variants_task ist idempotent → Race mit Pump unschädlich.
     """
+    # `timeout=120` stand hier bis 06.08.2026 und war wirkungslos — siehe
+    # services/celery_inline.py.
     try:
+        from services.celery_inline import run_inline
         from tasks.p12_variants_task import generate_variants
 
-        result = generate_variants.apply(args=[idea_id]).get(timeout=120)
+        result = run_inline(generate_variants, args=[idea_id])
         if not isinstance(result, dict) or result.get("status") not in ("ok", "already_exists"):
             logger.info(
                 "p13_task: generate_variants not ok: %s",
@@ -532,6 +549,105 @@ def _persist_choice(tenant_id: str, idea_id: str, variant: dict) -> bool:
         return False
 
 
+@celery_app.task(
+    name="tasks.p13_variants_task.start_targeted_session_task",
+    bind=True,
+    max_retries=1,
+)
+def start_targeted_session_task(self, tenant_id: str, idea_id: str) -> dict:
+    """Startet das targeted-Interview asynchron (Button „✍️ Idee ausarbeiten").
+
+    Warum als Task und nicht direkt: `_start_targeted_session` → `p08_opener` →
+    `call_pipeline_llm` ist ein LLM-Call (bis 3×300s). Der Button-Callback läuft im
+    Poller, der Bots und Updates SEQUENZIELL abarbeitet — ein synchroner Aufruf dort
+    blockiert die Zustellung für alle Tenants, nicht nur für den Klickenden.
+
+    Fail-open: kein Raise. Bei Fehlschlag bekommt der Nutzer eine ehrliche Absage,
+    sonst wartet er auf eine Frage, die nie kommt.
+    """
+    result = _start_targeted_session(tenant_id, idea_id)
+    if result is None:
+        # Erst die Idee von ihrer Ursprungsnachricht lösen, dann zum Wiederholen
+        # einladen — sonst ist die Einladung eine Falle (siehe _detach_source_log).
+        _detach_source_log(tenant_id, idea_id)
+        _send_start_failed_notice(tenant_id)
+        return {"status": "failed", "reason": "start_targeted_session_returned_none"}
+    return {"status": "ok", "session_id": result.get("session_id")}
+
+
+def _detach_source_log(tenant_id: str, idea_id: str) -> None:
+    """Löst eine Idee von ihrer Ursprungsnachricht (tenant-gescopet).
+
+    Scheitert der Interview-Start, lädt der Bot wörtlich zum erneuten Versuch ein
+    („versuch es gleich nochmal"). Bliebe `source_log_id` im source_context stehen,
+    fände `_idea_exists_for_log` beim zweiten Knopfdruck genau diese Idee und der
+    Bot antwortete „Daran arbeite ich schon" — auf eine Wiederholung, zu der er
+    selbst aufgefordert hat, während nichts läuft: keine Session, kein Task.
+    Der Knopf wäre für diese Nachricht dauerhaft tot.
+
+    Die Idee selbst bleibt bestehen; sie taucht weiter im Ideen-Menü auf. Gelöscht
+    wird nichts — nur der Idempotenz-Schlüssel freigegeben.
+
+    ⚠️ `source_log_id` trägt zwei Bedeutungen. Für den Button-Weg heißt er „zu dieser
+    Nachricht läuft ein Interview"; für `generate_variants_for_chat` heißt derselbe
+    Schlüssel „zu dieser Nachricht wurden schon Varianten erzeugt" (Idempotenz-Gate,
+    oben in dieser Datei). Wer hier freigibt, gibt beides frei. Praktisch folgenlos,
+    solange `generate_variants_for_chat` keinen erreichbaren Aufrufer hat (nur der
+    abgeschaltete LLM-Zweig rief ihn) — aber die Kopplung ist real und gehört
+    mitbedacht, falls der Varianten-Weg je wiederbelebt wird.
+    """
+    try:
+        with sync_session_factory() as db:
+            db.execute(
+                text(
+                    "UPDATE content_ideas "
+                    "SET source_context = source_context - 'source_log_id' "
+                    "WHERE id = :iid AND tenant_id = :tid"
+                ),
+                {"iid": idea_id, "tid": tenant_id},
+            )
+            db.commit()
+    except Exception as exc:
+        logger.warning("p13_task: detach source_log failed: %s", type(exc).__name__)
+
+
+def _send_start_failed_notice(tenant_id: str) -> None:
+    """Ehrliche Absage, wenn das Interview nicht starten konnte."""
+    try:
+        chat_id = _resolve_chat_id(tenant_id)
+        if chat_id is None:
+            return
+        from api.telegram import _send_telegram_message
+
+        _send_telegram_message(
+            chat_id,
+            "Das hat gerade nicht geklappt — versuch es gleich nochmal.",
+            tenant_id=tenant_id,
+        )
+    except Exception as exc:
+        logger.warning("p13_task: start-failed notice send failed: %s", type(exc).__name__)
+
+
+def _expire_session(session_id: str, tenant_id: str) -> None:
+    """Setzt eine gerade erst geöffnete Session auf 'expired' (tenant-gescopet).
+
+    'expired' und nicht 'closed': `tasks/session_post_task.py:200` überspringt alles
+    != 'closed', ein Post aus einer nie beantworteten Session entsteht so nicht.
+    """
+    try:
+        with sync_session_factory() as db:
+            db.execute(
+                text(
+                    "UPDATE bot_session SET status = 'expired', updated_at = NOW() "
+                    "WHERE id = CAST(:sid AS uuid) AND tenant_id = :tid AND status = 'active'"
+                ),
+                {"sid": str(session_id), "tid": tenant_id},
+            )
+            db.commit()
+    except Exception as exc:
+        logger.warning("p13_task: expire_session failed: %s", type(exc).__name__)
+
+
 def _start_targeted_session(tenant_id: str, idea_id: str) -> dict | None:
     """Startet p08_opener(mode='targeted', topic_idea_id=idea_id) + sendet die Frage.
 
@@ -544,16 +660,34 @@ def _start_targeted_session(tenant_id: str, idea_id: str) -> dict | None:
         opener = p08_opener(tenant_id, mode="targeted", topic_idea_id=idea_id)
         # Opener-Frage in den Chat senden (Muster random_smart_scheduler.py:104)
         chat_id = _resolve_chat_id(tenant_id)
+        sent = False
         if chat_id is not None:
             try:
-                from api.telegram import _send_telegram_message
+                from api.telegram import _interview_cancel_keyboard, _send_telegram_message
 
-                _send_telegram_message(chat_id, opener.question_text, tenant_id=tenant_id)
+                # C5: eröffnet eine Session, die danach jede Nachricht als Antwort
+                # schluckt (kein TTL) — sichtbarer Ausgang gehört an die Frage.
+                sent = _send_telegram_message(
+                    chat_id,
+                    opener.question_text,
+                    tenant_id=tenant_id,
+                    reply_markup=_interview_cancel_keyboard(),
+                )
             except Exception as exc:
                 logger.warning(
                     "p13_task: opener send failed (session created): %s",
                     type(exc).__name__,
                 )
+
+        if not sent:
+            # ⚠️ _send_telegram_message WIRFT NICHT, es gibt False zurück. Ohne diese
+            # Prüfung bliebe eine aktive Session zurück, deren Frage der Nutzer nie
+            # gesehen hat — ab dann schluckt sie jede seiner Nachrichten als Antwort
+            # auf eine unsichtbare Frage. Lieber zurückrollen und ehrlich scheitern.
+            logger.warning("p13_task: opener not delivered — rolling session back")
+            _expire_session(opener.session_id, tenant_id)
+            return None
+
         return {"session_id": opener.session_id, "question_text": opener.question_text}
     except Exception as exc:
         logger.warning("p13_task: start_targeted_session failed: %s", type(exc).__name__)

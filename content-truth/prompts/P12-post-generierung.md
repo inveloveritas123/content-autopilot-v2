@@ -226,12 +226,32 @@ Faustregel: Wenn du einen Satz streichen kannst ohne dass der Post schlechter wi
 8. **Voice-Check**: Klingt das nach der Person oder nach einem Content-Profi?
 9. **Formatierungs-Check**: Max. 3 Zeilen pro Absatz? Leerzeilen? Mobile-lesbar?
 
+## Kategorisierung (Pflicht)
+
+Ordne den Post genau EINER dieser vier Kategorien zu:
+
+- `news` — Branchen-News, Trends, Reaktionen auf aktuelle Entwicklungen
+- `persoenlich` — Geschichten, Werte, Konflikte, Vorher-Nachher
+- `trust` — Expertise, Fallbeispiele, Kundenstimmen, Belege
+- `praxis` — Tipps, How-to, Checklisten, konkrete Hilfe
+
+## Hook-Inspirationen (optional)
+
+Enthält der Kontext `hook_inspirations`, sind das Hooks, die beim Unternehmer in
+der Vergangenheit gut funktioniert haben. Du KANNST dich stilistisch davon
+anregen lassen, MUSST aber nicht — und übernimmst nie 1:1, nur Tonfall und
+Struktur. Hast du dich leiten lassen, trag die `id` in `inspired_by_hook_id`
+ein, sonst `null`.
+
 ## Output-Format
 
-Antworte mit einem JSON-Objekt:
+Antworte mit einem JSON-Objekt. Die fünf Pflichtfelder sind `post`,
+`alternative_opener`, `design_notizen`, `ki_signal_check` und
+`potenzielle_schwaechen`.
 
 {
   "post": "Der fertige Post als mehrzeiliger Text mit \\n\\n zwischen Absätzen",
+  "kategorie": "news | persoenlich | trust | praxis",
   "interner_titel": "Kurzer Arbeitstitel für interne Referenz",
   "verwendete_struktur": "Welche Benchmark-Struktur wurde genutzt",
   "opener_typ": "Szene / Zitat / Zahl / Beobachtung / Bekenntnis",
@@ -241,11 +261,7 @@ Antworte mit einem JSON-Objekt:
     "Alternative 3"
   ],
   "ending_typ": "trockenes_statement / organische_frage / konkretes_detail / pointe / rueckbezug",
-  "design_notizen": {
-    "voice_entscheidungen": "Welche Stimm-Merkmale wurden bewusst eingesetzt",
-    "zielgruppen_anpassungen": "Welche Begriffe/Formulierungen wurden für die Zielgruppe gewählt",
-    "weggelassen": "Was aus dem Post-Kern wurde NICHT verwendet und warum"
-  },
+  "design_notizen": "EIN Fließtext (kein Objekt): welche Stimm-Merkmale du bewusst eingesetzt hast, welche Begriffe du für die Zielgruppe gewählt hast, und was aus dem Post-Kern NICHT verwendet wurde und warum.",
   "ki_signal_check": {
     "geprueft": ["Liste der geprüften KI-Signale"],
     "risiko_verbleibend": "null / gering / mittel — wenn über gering: erklären"
@@ -253,12 +269,17 @@ Antworte mit einem JSON-Objekt:
   "potenzielle_schwaechen": [
     "Was könnte an dem Post nicht funktionieren? Selbst-kritische Einschätzung"
   ],
+  "inspired_by_hook_id": null,
   "_meta": {
     "laenge_zeichen": 0,
     "anzahl_absaetze": 0,
     "max_zeilen_pro_absatz": 0
   }
 }
+
+⚠️ `design_notizen` ist ein **String**, kein Objekt. Ein Objekt an dieser Stelle
+verletzt `backend/schemas/p12_output_schema.json` — die Prüfung ist fail-open
+und hat den Fehler zwei Tage lang nur als Warnung protokolliert.
 
 ## Qualitäts-Check vor dem Output
 
@@ -280,46 +301,53 @@ Erst wenn alle 10 Checks grün sind — Output.
 
 ---
 
+⚠️ **Der Abschnitt unten geht wörtlich an das Modell.** Er ist kein Entwurf und
+keine Beschreibung — was hier steht, liest das Modell genau so.
+
+`tasks/p12_task.py` ersetzt darin **`{context_json}`** durch den zusammengebauten
+Kontext (Kundenkontext, Voice-Profil, Avatar, die Antworten des Unternehmers,
+optional Werte und Hook-Inspirationen). Der Platzhalter muss **wörtlich und
+genau so** vorkommen: der Code benutzt `str.replace()`, und das übergeht einen
+fehlenden Platzhalter stillschweigend.
+
+Genau das ist bis zum 06.08.2026 passiert. Hier stand eine für Menschen
+geschriebene Feldliste (`{grundton.charakterisierung}`, `{die mit empfehlung
+"übernehmen"}` …). `{context_json}` kam darin nicht vor, also ersetzte der Code
+nichts — und **jeder Post entstand ohne einen einzigen Kunden-Datenpunkt**. Das
+Modell bekam ein leeres Gerüst und erfand Unternehmer, Zielgruppe und
+Geschichte. Sichtbar war das nur an einer Zahl, die niemand ansah: die
+Eingabegröße lag bei jedem Lauf bei exakt 3.957 Token, egal wie das Gespräch
+verlief.
+
+Die Feldliste von früher ist nicht verloren — sie beschrieb, was heute als JSON
+im Kontext steht, und lebt als Dokumentation in `## Was im Kontext steht` weiter.
+
 ## User-Prompt
 
 ```
-POST-KERN (aus P10):
-{haupt_post_kern als JSON}
-
-VOICE-PROFIL (P03, gekürzt auf relevante Felder):
-- Grundton: {grundton.charakterisierung}
-- Satzarchitektur: {satzarchitektur.laenge + verbindungen + fragmente}
-- Typische Satzanfänge: {satzarchitektur.typische_satzanfaenge}
-- Signalwörter: {wortschatz.signalwoerter}
-- Füllwörter (übernehmen): {die mit empfehlung "übernehmen"}
-- Verbotene Wörter: {wortschatz.verbotene_woerter}
-- Pointen-Stil: {erzaehlmuster.pointen_stil}
-- Perspektive: {erzaehlmuster.perspektive}
-- Verletzlichkeit-Level: {emotionaler_ausdruck.verletzlichkeit_level}
-- Humor-Typ: {emotionaler_ausdruck.humor_typ}
-- Persönlichkeits-Stance: {persoenlichkeits_stance}
-- Emotionaler Subtext: {emotionaler_subtext.subtext}
-- Überzeugungsstil (primär): {ueberzeugungsstil.primaer}
-- Zielgruppen-Sprachfilter: {zielgruppen_sprachfilter}
-- Vermeidungsprofil (nie_sagen + nie_tun): {vermeidungsprofil}
-- Referenz-Sätze (wortwörtlich — so klingt die Person): {referenz_saetze.original}
-- Adaptierte Beispiele (so klingt sie auf LinkedIn): {referenz_saetze.adaptiert}
-
-AVATAR (P04, gekürzt auf relevante Felder):
-- Identität: {identitaet.rolle_und_alltag}
-- Scroll-Stopper: {content_trigger.scroll_stopper}
-- Resonanz-Sätze: {content_trigger.resonanz_saetze}
-- Vertrauens-Trigger: {content_trigger.vertrauens_trigger}
-- Abstoß-Trigger: {content_trigger.abstoss_trigger}
-- Sprache der Zielgruppe: {sprache_der_zielgruppe}
-
-BRANCHEN-INTELLIGENZ (P05, nur relevante Benchmark-Struktur):
-{Die für den Post passende Benchmark-Struktur aus P05.content_strategie.benchmark_strukturen}
-
----
-
-Schreib den Post.
+Erstelle einen LinkedIn-Post für folgende Daten:
+{context_json}
 ```
+
+## Was im Kontext steht
+
+`{context_json}` ist ein JSON-Objekt mit diesen Schlüsseln (gebaut in
+`tasks/p12_task.py`, `context_payload`):
+
+| Schlüssel | Inhalt |
+|---|---|
+| `customer_context` | Kundenkontext aus P01/P17 — Firma, Rolle, Themen |
+| `voice_profile` | Voice-Profil aus P03: Grundton, Satzarchitektur, typische Satzanfänge, Signalwörter, verbotene Wörter, Pointen-Stil, Perspektive, Verletzlichkeit, Humor, Referenz-Sätze |
+| `audience_avatar` | Avatar aus P04: Identität, Scroll-Stopper, Resonanz-Sätze, Vertrauens- und Abstoß-Trigger, Sprache der Zielgruppe |
+| `answers` | **Die Antworten des Unternehmers aus dem Gespräch** — Frage als Schlüssel, Antwort als Wert. Das ist der Stoff, aus dem der Post entsteht. |
+| `idea_id` | Referenz auf die Idee, falls der Post aus einer gewählten Idee kommt |
+| `customer_values` | optional — Werte-Profil, falls vorhanden |
+| `hook_inspirations` | optional — Hooks, die beim Unternehmer bisher gut liefen |
+
+**Der Post entsteht aus `answers`.** Voice-Profil und Avatar bestimmen, wie er
+klingt und für wen — nicht, wovon er handelt. Steht in `answers` etwas über
+KI-Grundkenntnisse, handelt der Post davon, und nicht von einem Thema, das
+besser zum Profil passen würde.
 
 ---
 

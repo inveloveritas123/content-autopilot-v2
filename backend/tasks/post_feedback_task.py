@@ -266,7 +266,11 @@ def regenerate_post_from_feedback(
     except Exception as exc:
         logger.warning("post_feedback_task: quality-gate fail-open: %s", type(exc).__name__)
 
-    # 8. Neues Piece markieren (bot_session_id + Feedback-Metadaten)
+    # 8. Neues Piece markieren (bot_session_id + Feedback-Metadaten).
+    #    RETURNING id fängt die content_pieces.id des NEUEN (regenerierten) Piece
+    #    für das Action-Keyboard (Schritt 9) — p12_run_id is None / kein Treffer →
+    #    content_id bleibt None → Send ohne Keyboard. Muster: session_post_task.py.
+    content_id: str | None = None
     try:
         with sync_session_factory() as db:
             if p12_run_id:
@@ -279,13 +283,14 @@ def regenerate_post_from_feedback(
                         "feedback_source_log_id": str(log_id) if log_id else None,
                     }
                 )
-                db.execute(
+                _row = db.execute(
                     text(
                         "UPDATE content_pieces SET "
                         "content_text = :txt, "
                         "content_metadata = content_metadata || CAST(:meta AS jsonb) "
                         "WHERE tenant_id = :tid "
-                        "  AND content_metadata->>'p12_run_id' = :rid"
+                        "  AND content_metadata->>'p12_run_id' = :rid "
+                        "RETURNING id"
                     ),
                     {
                         "txt": final_post,
@@ -293,8 +298,9 @@ def regenerate_post_from_feedback(
                         "tid": tenant_id,
                         "rid": p12_run_id,
                     },
-                )
+                ).fetchone()
                 db.commit()
+                content_id = str(_row[0]) if _row else None
     except Exception as exc:
         logger.warning("post_feedback_task: piece marker update failed: %s", type(exc).__name__)
 
@@ -323,9 +329,16 @@ def regenerate_post_from_feedback(
         else:
             # W6: KI-Transparenz-Hinweis (EU-AI-Act Art. 50) abtrennbar unter den Post.
             from services.ai_disclosure import append_ai_notice
+            from api.telegram import _draft_action_keyboard
 
             _post_out = append_ai_notice(final_post[:_TELEGRAM_MAX_CHARS])
-            _send_telegram_message(chat_id, _post_out, tenant_id=tenant_id)
+            _markup = _draft_action_keyboard(content_id) if content_id else None
+            _send_telegram_message(
+                chat_id,
+                _post_out,
+                tenant_id=tenant_id,
+                reply_markup=_markup,
+            )
             sent_kind = "post"
     except Exception as exc:
         logger.warning("post_feedback_task: telegram send failed: %s", type(exc).__name__)
