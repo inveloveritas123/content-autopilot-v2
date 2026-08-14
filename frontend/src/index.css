@@ -1,17 +1,29 @@
+/* Type-Pairing (Redesign 2026-08-14, docs/SSOT-FRONTEND-REDESIGN-2026-08-14.md):
+   Fraunces (Display) + IBM Plex Sans (Body) + IBM Plex Mono (Zahlen/Code) statt
+   Inter — Inter war ein bestätigtes "sieht aus wie jede andere KI-App"-Signal.
+   @import muss vor den @tailwind-Direktiven stehen (CSS-Spec-Pflicht — der
+   Vorzustand hatte den Inter-Import DANACH, was PostCSS/Vite bereits vorher
+   als Fehler meldete; hier gleich mitkorrigiert). */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
 body {
   font-family:
-    'Inter',
+    'IBM Plex Sans',
     system-ui,
     -apple-system,
     sans-serif;
   background-color: #f8fafc;
   color: #1e293b;
+}
+
+h1,
+h2,
+h3 {
+  font-family: 'Fraunces', Georgia, serif;
 }
 
 /* Scrollbar */
@@ -29,19 +41,10 @@ body {
   background: #94a3b8;
 }
 
-/* Status badges */
-.status-new {
-  @apply bg-blue-100 text-blue-700;
-}
-.status-active {
-  @apply bg-amber-100 text-amber-700;
-}
-.status-done {
-  @apply bg-emerald-100 text-emerald-700;
-}
-.status-error {
-  @apply bg-red-100 text-red-700;
-}
+/* Status-Vokabular lebt jetzt als Tailwind-Token in tailwind.config.js
+   (status-neu/status-aktiv/status-fertig/status-fehler/status-archiviert) —
+   diese Klassen waren ungenutztes drittes paralleles Farbsystem (0 Aufrufer
+   im Frontend), entfernt statt migriert. */
 
 /* Toast-Animation (Sprint 3C QW2) */
 @keyframes toast-in {

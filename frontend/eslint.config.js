@@ -36,6 +36,25 @@ export default [
       // Das Pattern ist im gesamten Codebase konsistent eingesetzt.
       'no-empty': ['error', { allowEmptyCatch: true }],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
+      // Design-Token-Gate (Redesign 2026-08-14, Schicht 2 aus
+      // docs/SSOT-FRONTEND-REDESIGN-2026-08-14.md): Ohne erzwingenden Mechanismus
+      // verrottet ein Token-System nachweislich zurück (Vorzustand: 55/70 Dateien mit
+      // Hex-Werten trotz vorhandenem tailwind.config.js-System). Bewusst 'warn', nicht
+      // 'error' — der Bestand (Migrationswelle D6, noch offen) wird NICHT sofort
+      // scharf geschaltet, sonst bricht `--max-warnings` den ganzen Build an
+      // unmigrierten Altdateien. Auf 'error' heben, sobald D6 abgeschlossen ist.
+      // Baseline bei Einführung (2026-08-14): 143 Hex-Fundstellen, eingefroren in
+      // package.json `lint`-Script (--max-warnings 234 = 91 alte + 143 neue). Diese
+      // Zahl darf nur SINKEN (jede migrierte Komponente senkt sie), nie angehoben
+      // werden um grün zu wirken.
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: "Literal[value=/^#([0-9a-fA-F]{3}){1,2}$/]",
+          message:
+            'Kein Roh-Hex-Farbwert im Component-Code — Tier-2-Token aus tailwind.config.js nutzen (status-*, primary-*, accent-*, surface-*, ink-*). Siehe docs/SSOT-FRONTEND-REDESIGN-2026-08-14.md.',
+        },
+      ],
     },
   },
   {
