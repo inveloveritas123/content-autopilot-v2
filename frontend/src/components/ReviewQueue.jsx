@@ -42,11 +42,11 @@ function formatDate(iso) {
 function severityClasses(severity) {
   switch (severity) {
     case 'high':
-      return 'bg-red-100 text-red-700 border-red-200'
+      return 'bg-status-fehler-bg text-status-fehler-text border-status-fehler-border'
     case 'medium':
-      return 'bg-yellow-100 text-yellow-700 border-yellow-200'
+      return 'bg-status-aktiv-bg text-status-aktiv-text border-status-aktiv-border'
     default:
-      return 'bg-gray-100 text-gray-600 border-gray-200'
+      return 'bg-surface-border text-ink-light border-surface-border'
   }
 }
 
@@ -94,10 +94,10 @@ function QueueItemCard({ item, onRemoved }) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-surface-border overflow-hidden">
+    <div className="bg-surface-card rounded-xl border border-surface-border overflow-hidden">
       {/* Card header */}
       <div
-        className="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-gray-50 transition-colors"
+        className="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-surface-bg transition-colors"
         onClick={() => setExpanded((v) => !v)}
       >
         <div className="flex items-center gap-3 flex-wrap">
@@ -114,7 +114,7 @@ function QueueItemCard({ item, onRemoved }) {
           {categories.map((cat) => (
             <span
               key={cat}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[11px] border border-gray-200"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-border text-ink-light text-[11px] border border-surface-border"
             >
               <Tag className="w-2.5 h-2.5" />
               {categoryLabel(cat)}
@@ -136,7 +136,7 @@ function QueueItemCard({ item, onRemoved }) {
               <p className="text-xs font-semibold text-ink-muted uppercase tracking-wide mb-2">
                 Post-Text
               </p>
-              <p className="text-sm text-ink bg-gray-50 border border-gray-200 rounded-lg px-3 py-3 leading-relaxed whitespace-pre-wrap break-words">
+              <p className="text-sm text-ink bg-surface-bg border border-surface-border rounded-lg px-3 py-3 leading-relaxed whitespace-pre-wrap break-words">
                 {displayText}
               </p>
             </div>
@@ -158,7 +158,7 @@ function QueueItemCard({ item, onRemoved }) {
                   return (
                     <div key={idx} className="flex items-start gap-2 text-sm">
                       {phraseCategory && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[11px] border border-gray-200 shrink-0 mt-0.5">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-border text-ink-light text-[11px] border border-surface-border shrink-0 mt-0.5">
                           <Tag className="w-2.5 h-2.5" />
                           {categoryLabel(phraseCategory)}
                         </span>
@@ -180,14 +180,14 @@ function QueueItemCard({ item, onRemoved }) {
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="Interne Notiz zur Entscheidung..."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-y min-h-[70px]"
+              className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-y min-h-[70px]"
               disabled={submitting}
             />
           </div>
 
           {/* Error */}
           {submitError && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+            <div className="flex items-start gap-2 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               {submitError}
             </div>
@@ -198,7 +198,7 @@ function QueueItemCard({ item, onRemoved }) {
             <button
               onClick={() => handleDecide('approved')}
               disabled={submitting}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-medium transition-colors bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-medium transition-colors bg-surface-card text-status-fertig-text border-status-fertig-border hover:bg-status-fertig-bg disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {submitting ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -210,7 +210,7 @@ function QueueItemCard({ item, onRemoved }) {
             <button
               onClick={() => handleDecide('rejected')}
               disabled={submitting}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-medium transition-colors bg-white text-red-700 border-red-200 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg border text-sm font-medium transition-colors bg-surface-card text-status-fehler-text border-status-fehler-border hover:bg-status-fehler-bg disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {submitting ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -256,7 +256,7 @@ export default function ReviewQueue() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-ink flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5 text-red-600" />
+            <ShieldAlert className="w-5 h-5 text-status-fehler-text" />
             Review-Queue — Sensible Themen
           </h1>
           <p className="text-sm text-ink-light mt-0.5">
@@ -264,7 +264,7 @@ export default function ReviewQueue() {
           </p>
         </div>
         {!loading && !error && items.length > 0 && (
-          <span className="inline-flex items-center px-3 py-1 rounded-full bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
+          <span className="inline-flex items-center px-3 py-1 rounded-full bg-status-fehler-bg border border-status-fehler-border text-status-fehler-text text-xs font-medium">
             {items.length} ausstehend
           </span>
         )}
@@ -272,7 +272,7 @@ export default function ReviewQueue() {
 
       {/* Error */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
+        <div className="mb-4 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-sm text-status-fehler-text flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
           <button onClick={load} className="ml-auto text-xs underline hover:no-underline shrink-0">
@@ -292,7 +292,7 @@ export default function ReviewQueue() {
       {/* Empty state */}
       {!loading && !error && items.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-ink-muted">
-          <CheckCircle2 className="w-10 h-10 text-emerald-400 mb-3" />
+          <CheckCircle2 className="w-10 h-10 text-status-fertig-text mb-3" />
           <p className="text-sm font-medium">Keine ausstehenden Reviews</p>
           <p className="text-xs text-ink-light mt-1">
             Alle Posts freigegeben oder noch keine Einträge.

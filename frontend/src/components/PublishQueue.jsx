@@ -73,17 +73,17 @@ function PostQueueCard({ post, onPublished }) {
 
   return (
     <div
-      className={`bg-white rounded-xl border p-4 transition-all ${done ? 'opacity-50 border-gray-200' : isOverdue ? 'border-orange-300 bg-orange-50' : isToday ? 'border-teal-300' : 'border-surface-border'}`}
+      className={`bg-surface-card rounded-xl border p-4 transition-all ${done ? 'opacity-50 border-surface-border' : isOverdue ? 'border-status-aktiv-border bg-status-aktiv-bg' : isToday ? 'border-primary-300' : 'border-surface-border'}`}
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2 flex-wrap">
           <span
             className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
               isOverdue && !done
-                ? 'bg-orange-100 text-orange-700'
+                ? 'bg-status-aktiv-bg text-status-aktiv-text'
                 : isToday
-                  ? 'bg-teal-100 text-teal-700'
-                  : 'bg-gray-100 text-gray-600'
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'bg-surface-border text-ink-light'
             }`}
           >
             {isOverdue && !done ? '🔴 Überfällig' : isToday ? '🟢 Heute' : day}
@@ -98,7 +98,7 @@ function PostQueueCard({ post, onPublished }) {
             </span>
           )}
           {done && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-status-fertig-bg text-status-fertig-text">
               ✓ Gepostet
             </span>
           )}
@@ -108,7 +108,7 @@ function PostQueueCard({ post, onPublished }) {
             <button
               onClick={handleCopy}
               title="Kopieren für LinkedIn"
-              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${copied ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-gray-50 border-gray-200 text-ink-muted hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700'}`}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg border transition-colors ${copied ? 'bg-status-fertig-bg border-status-fertig-border text-status-fertig-text' : 'bg-surface-bg border-surface-border text-ink-muted hover:bg-status-neu-bg hover:border-status-neu-border hover:text-status-neu-text'}`}
             >
               {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
               {copied ? 'Kopiert!' : 'Kopieren'}
@@ -117,7 +117,7 @@ function PostQueueCard({ post, onPublished }) {
               onClick={handlePublish}
               disabled={publishing}
               title="Als veröffentlicht markieren"
-              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border bg-status-fertig-text border-status-fertig-text text-surface-card hover:bg-primary-700 disabled:opacity-50 transition-colors"
             >
               <CheckCircle2 className="w-3 h-3" />
               {publishing ? '...' : 'Gepostet ✓'}
@@ -200,7 +200,7 @@ export default function PublishQueue() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-ink flex items-center gap-2">
-            <Linkedin className="w-5 h-5 text-blue-600" />
+            <Linkedin className="w-5 h-5 text-status-neu-text" />
             Publishing Queue
           </h1>
           <p className="text-sm text-ink-light mt-0.5">
@@ -209,9 +209,9 @@ export default function PublishQueue() {
         </div>
         <div className="flex items-center gap-3">
           {publishedThisSession > 0 && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
-              <Flame className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="text-xs font-semibold text-emerald-700">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-status-fertig-bg border border-status-fertig-border rounded-lg">
+              <Flame className="w-3.5 h-3.5 text-status-fertig-text" />
+              <span className="text-xs font-semibold text-status-fertig-text">
                 {publishedThisSession} heute gepostet
               </span>
             </div>
@@ -219,7 +219,7 @@ export default function PublishQueue() {
           <select
             value={viewDays}
             onChange={(e) => setViewDays(Number(e.target.value))}
-            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+            className="text-xs border border-surface-border rounded-lg px-2.5 py-1.5 bg-surface-card focus:outline-none focus:ring-1 focus:ring-primary-400"
           >
             <option value={1}>Heute</option>
             <option value={3}>Nächste 3 Tage</option>
@@ -232,35 +232,35 @@ export default function PublishQueue() {
       {/* KPI Row */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div
-          className={`rounded-xl border p-4 ${overdueCount > 0 ? 'bg-orange-50 border-orange-200' : 'bg-white border-surface-border'}`}
+          className={`rounded-xl border p-4 ${overdueCount > 0 ? 'bg-status-aktiv-bg border-status-aktiv-border' : 'bg-surface-card border-surface-border'}`}
         >
           <p
-            className={`text-2xl font-bold tabular-nums ${overdueCount > 0 ? 'text-orange-700' : 'text-ink'}`}
+            className={`text-2xl font-bold tabular-nums ${overdueCount > 0 ? 'text-status-aktiv-text' : 'text-ink'}`}
           >
             {overdueCount}
           </p>
           <p className="text-xs text-ink-muted mt-0.5">Überfällig</p>
         </div>
         <div
-          className={`rounded-xl border p-4 ${todayCount > 0 ? 'bg-teal-50 border-teal-200' : 'bg-white border-surface-border'}`}
+          className={`rounded-xl border p-4 ${todayCount > 0 ? 'bg-primary-50 border-primary-200' : 'bg-surface-card border-surface-border'}`}
         >
           <p
-            className={`text-2xl font-bold tabular-nums ${todayCount > 0 ? 'text-teal-700' : 'text-ink'}`}
+            className={`text-2xl font-bold tabular-nums ${todayCount > 0 ? 'text-primary-700' : 'text-ink'}`}
           >
             {todayCount}
           </p>
           <p className="text-xs text-ink-muted mt-0.5">Heute geplant</p>
         </div>
-        <div className="rounded-xl border border-surface-border bg-white p-4">
+        <div className="rounded-xl border border-surface-border bg-surface-card p-4">
           <p className="text-2xl font-bold tabular-nums text-ink">{posts.length}</p>
           <p className="text-xs text-ink-muted mt-0.5">Gesamt eingeplant</p>
         </div>
       </div>
 
       {/* Approval requirement notice */}
-      <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
-        <span className="text-amber-600 text-sm shrink-0">!</span>
-        <p className="text-xs text-amber-800">
+      <div className="mb-4 p-3 bg-status-aktiv-bg border border-status-aktiv-border rounded-xl flex items-start gap-2">
+        <span className="text-status-aktiv-text text-sm shrink-0">!</span>
+        <p className="text-xs text-status-aktiv-text">
           <strong>Freigabe erforderlich:</strong> Posts müssen zuerst in der Freigabe-Ansicht
           genehmigt werden (status: freigegeben) bevor sie als veröffentlicht markiert werden
           können.
@@ -269,11 +269,11 @@ export default function PublishQueue() {
 
       {/* Workflow hint */}
       {(overdueCount > 0 || todayCount > 0) && (
-        <div className="mb-5 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
-          <Linkedin className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+        <div className="mb-5 p-4 bg-status-neu-bg border border-status-neu-border rounded-xl flex items-start gap-3">
+          <Linkedin className="w-5 h-5 text-status-neu-text shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-semibold text-blue-900">So funktioniert's:</p>
-            <ol className="text-xs text-blue-700 mt-1 space-y-0.5 list-decimal list-inside">
+            <p className="text-sm font-semibold text-status-neu-text">So funktioniert's:</p>
+            <ol className="text-xs text-status-neu-text mt-1 space-y-0.5 list-decimal list-inside">
               <li>„Kopieren" klicken → Post-Text ist in der Zwischenablage</li>
               <li>LinkedIn öffnen → neuen Post erstellen → einfügen → veröffentlichen</li>
               <li>Zurückkommen → „Gepostet ✓" klicken → Status wird aktualisiert</li>
@@ -282,7 +282,7 @@ export default function PublishQueue() {
               href="https://www.linkedin.com/feed/"
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 mt-2 text-xs font-semibold text-blue-700 hover:text-blue-900"
+              className="inline-flex items-center gap-1 mt-2 text-xs font-semibold text-status-neu-text hover:text-ink"
             >
               LinkedIn öffnen <ArrowUpRight className="w-3 h-3" />
             </a>
@@ -291,8 +291,8 @@ export default function PublishQueue() {
       )}
 
       {Object.keys(grouped).length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-xl border border-surface-border">
-          <CalendarDays className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+        <div className="text-center py-12 bg-surface-card rounded-xl border border-surface-border">
+          <CalendarDays className="w-10 h-10 text-ink-muted mx-auto mb-3" />
           <p className="text-sm text-ink-muted">Keine geplanten Posts in diesem Zeitraum.</p>
           <p className="text-xs text-ink-muted mt-1">
             Gehe zu „Posts" → „Auto-Einplanen" um Posts einzuplanen.
@@ -307,7 +307,7 @@ export default function PublishQueue() {
             return (
               <div key={day}>
                 <div className="flex items-center gap-2 mb-3">
-                  <h2 className={`text-sm font-bold ${isToday ? 'text-teal-700' : 'text-ink'}`}>
+                  <h2 className={`text-sm font-bold ${isToday ? 'text-primary-700' : 'text-ink'}`}>
                     {label}
                   </h2>
                   <span className="text-xs text-ink-muted">
@@ -318,7 +318,7 @@ export default function PublishQueue() {
                     })}
                   </span>
                   {allDone && (
-                    <span className="ml-auto text-[11px] font-semibold text-emerald-600">
+                    <span className="ml-auto text-[11px] font-semibold text-status-fertig-text">
                       ✓ Alle gepostet
                     </span>
                   )}

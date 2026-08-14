@@ -115,7 +115,7 @@ function FileList({ files, selectedPath, onSelect }) {
                     className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-start gap-2 min-h-[44px] ${
                       isSelected
                         ? 'bg-primary-50 text-primary-700 border-l-2 border-primary-700'
-                        : 'text-ink-light hover:bg-gray-50 hover:text-ink'
+                        : 'text-ink-light hover:bg-surface-bg hover:text-ink'
                     }`}
                   >
                     <div className="flex-1 min-w-0">
@@ -136,7 +136,7 @@ function FileList({ files, selectedPath, onSelect }) {
                         </Badge>
                         {warnBaseNewer && (
                           <span title="Base ist neuer als dein Overlay">
-                            <AlertTriangle className="w-3 h-3 text-amber-500" />
+                            <AlertTriangle className="w-3 h-3 text-status-aktiv-text" />
                           </span>
                         )}
                       </div>
@@ -162,15 +162,15 @@ function ValidationPanel({ result }) {
     <div
       className={`rounded-lg border p-3 text-sm ${
         ok
-          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-          : 'bg-amber-50 border-amber-200 text-amber-800'
+          ? 'bg-status-fertig-bg border-status-fertig-border text-status-fertig-text'
+          : 'bg-status-aktiv-bg border-status-aktiv-border text-status-aktiv-text'
       }`}
     >
       <div className="flex items-center gap-2 font-medium mb-1">
         {ok ? (
-          <CheckCircle className="w-4 h-4 text-emerald-600" />
+          <CheckCircle className="w-4 h-4 text-status-fertig-text" />
         ) : (
-          <XCircle className="w-4 h-4 text-amber-600" />
+          <XCircle className="w-4 h-4 text-status-aktiv-text" />
         )}
         {ok ? 'Validierung OK' : 'Validierung: Probleme gefunden'}
       </div>
@@ -223,7 +223,7 @@ function SectionPreview({ fileContent }) {
           {system_prompt != null && (
             <div>
               <p className="font-semibold text-ink mb-0.5">System-Prompt</p>
-              <pre className="bg-gray-50 rounded p-2 overflow-auto max-h-40 whitespace-pre-wrap break-words text-ink-muted">
+              <pre className="bg-surface-bg rounded p-2 overflow-auto max-h-40 whitespace-pre-wrap break-words text-ink-muted">
                 {system_prompt || '(leer)'}
               </pre>
             </div>
@@ -231,7 +231,7 @@ function SectionPreview({ fileContent }) {
           {user_prompt != null && (
             <div>
               <p className="font-semibold text-ink mb-0.5">User-Prompt</p>
-              <pre className="bg-gray-50 rounded p-2 overflow-auto max-h-40 whitespace-pre-wrap break-words text-ink-muted">
+              <pre className="bg-surface-bg rounded p-2 overflow-auto max-h-40 whitespace-pre-wrap break-words text-ink-muted">
                 {user_prompt || '(leer)'}
               </pre>
             </div>
@@ -404,13 +404,13 @@ export default function PromptStudio() {
         <p className="text-sm text-ink-muted mt-1">
           Prompts, Rules und Schemas durchsehen, bearbeiten und validieren — ohne Container-Rebuild.
           Änderungen landen im beschreibbaren Overlay (
-          <code className="text-xs bg-gray-100 px-1 rounded">data/prompts-custom/</code>).
+          <code className="text-xs bg-surface-border px-1 rounded">data/prompts-custom/</code>).
         </p>
       </div>
 
       {/* Fehler beim Laden der Liste */}
       {listError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 flex items-center gap-2">
+        <div className="bg-status-fehler-bg border border-status-fehler-border rounded-lg p-3 text-sm text-status-fehler-text flex items-center gap-2">
           <XCircle className="w-4 h-4 flex-shrink-0" />
           Fehler beim Laden: {listError}
           <Button variant="ghost" size="sm" onClick={loadFileList} className="ml-auto">
@@ -430,7 +430,7 @@ export default function PromptStudio() {
                 <CardTitle className="text-sm">Dateien</CardTitle>
                 <button
                   onClick={loadFileList}
-                  className="p-1 rounded hover:bg-gray-100 text-ink-muted hover:text-ink transition-colors"
+                  className="p-1 rounded hover:bg-surface-border text-ink-muted hover:text-ink transition-colors"
                   title="Liste neu laden"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${listLoading ? 'animate-spin' : ''}`} />
@@ -469,13 +469,13 @@ export default function PromptStudio() {
                   <Badge color={sourceBadgeColor(fileContent.source)}>{fileContent.source}</Badge>
                   {fileContent.prompt_key && <Badge color="blue">{fileContent.prompt_key}</Badge>}
                   {isBaseNewerThanOverlay(fileContent) && (
-                    <span className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                    <span className="flex items-center gap-1 text-xs text-status-aktiv-text bg-status-aktiv-bg border border-status-aktiv-border rounded-full px-2 py-0.5">
                       <AlertTriangle className="w-3 h-3" />
                       Base ist neuer als dein Overlay
                     </span>
                   )}
                   {dirty && (
-                    <span className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
+                    <span className="text-xs text-status-neu-text bg-status-neu-bg border border-status-neu-border rounded-full px-2 py-0.5">
                       Ungespeicherte Änderungen
                     </span>
                   )}
@@ -484,7 +484,7 @@ export default function PromptStudio() {
 
               {/* Lade-Fehler Editor */}
               {fileError && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                <div className="bg-status-fehler-bg border border-status-fehler-border rounded-lg p-3 text-sm text-status-fehler-text">
                   {fileError}
                 </div>
               )}

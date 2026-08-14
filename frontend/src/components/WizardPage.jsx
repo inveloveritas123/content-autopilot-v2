@@ -311,15 +311,15 @@ function getInlineHints(currentInput) {
 // Stepper (Desktop-Sidebar)
 // ---------------------------------------------------------------------------
 function PhaseIcon({ status }) {
-  if (status === 'done') return <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+  if (status === 'done') return <CheckCircle2 className="w-5 h-5 text-status-fertig-text shrink-0" />
   if (status === 'active')
     return <Circle className="w-5 h-5 text-primary-600 fill-primary-100 shrink-0" />
-  return <Circle className="w-5 h-5 text-gray-300 shrink-0" />
+  return <Circle className="w-5 h-5 text-ink-muted shrink-0" />
 }
 
 function PhaseStepper({ phases, currentPhase, progress, onPhaseClick }) {
   return (
-    <div className="w-56 shrink-0 pr-6 border-r border-gray-200">
+    <div className="w-56 shrink-0 pr-6 border-r border-surface-border">
       <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-4">Phasen</p>
       <div className="space-y-1">
         {phases.map((phase) => {
@@ -333,7 +333,7 @@ function PhaseStepper({ phases, currentPhase, progress, onPhaseClick }) {
               className={clsx(
                 'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors text-sm',
                 status === 'active' && 'bg-primary-50 text-primary-800 font-medium',
-                status === 'done' && 'text-emerald-700 hover:bg-emerald-50 cursor-pointer',
+                status === 'done' && 'text-status-fertig-text hover:bg-status-fertig-bg cursor-pointer',
                 status === 'pending' && 'text-ink-muted cursor-default'
               )}
             >
@@ -361,15 +361,15 @@ function HorizontalStepper({ phases, currentPhase, progress }) {
               className={clsx(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium',
                 status === 'active' && 'bg-primary-100 text-primary-800',
-                status === 'done' && 'bg-emerald-100 text-emerald-700',
-                status === 'pending' && 'bg-gray-100 text-gray-400'
+                status === 'done' && 'bg-status-fertig-bg text-status-fertig-text',
+                status === 'pending' && 'bg-surface-border text-ink-muted'
               )}
             >
               <PhaseIcon status={status} />
               <span className="hidden sm:inline">{phase.name}</span>
               <span className="sm:hidden">{idx + 1}</span>
             </div>
-            {idx < phases.length - 1 && <div className="w-4 h-px bg-gray-200 shrink-0" />}
+            {idx < phases.length - 1 && <div className="w-4 h-px bg-surface-border shrink-0" />}
           </div>
         )
       })}
@@ -412,9 +412,9 @@ function PipelineStatusBanner({ pipelineRunId, onDone }) {
     <div
       className={clsx(
         'mb-4 p-4 rounded-xl border flex items-center gap-3 text-sm',
-        isDone && 'bg-emerald-50 border-emerald-200 text-emerald-800',
-        isError && 'bg-red-50 border-red-200 text-red-700',
-        !isDone && !isError && 'bg-blue-50 border-blue-200 text-blue-800'
+        isDone && 'bg-status-fertig-bg border-status-fertig-border text-status-fertig-text',
+        isError && 'bg-status-fehler-bg border-status-fehler-border text-status-fehler-text',
+        !isDone && !isError && 'bg-status-neu-bg border-status-neu-border text-status-neu-text'
       )}
     >
       {isDone ? (
@@ -441,8 +441,8 @@ function PipelineStatusBanner({ pipelineRunId, onDone }) {
 function SavedToast({ visible }) {
   if (!visible) return null
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm px-5 py-3 rounded-xl shadow-xl flex items-center gap-2">
-      <BookmarkCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-ink text-surface-card text-sm px-5 py-3 rounded-xl shadow-xl flex items-center gap-2">
+      <BookmarkCheck className="w-4 h-4 text-status-fertig-text shrink-0" />
       Fortschritt gespeichert — du kannst jetzt schließen.
     </div>
   )
@@ -454,8 +454,8 @@ function SavedToast({ visible }) {
 function DoneView({ onGoToBrandVoice }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mb-5">
-        <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+      <div className="w-16 h-16 rounded-2xl bg-status-fertig-bg flex items-center justify-center mb-5">
+        <CheckCircle2 className="w-8 h-8 text-status-fertig-text" />
       </div>
       <h2 className="text-lg font-bold text-ink mb-2">Dein Brand Voice ist eingerichtet!</h2>
       <p className="text-sm text-ink-muted mb-6 max-w-sm">
@@ -725,7 +725,7 @@ export default function WizardPage() {
   // Mobile-Sperre
   // -------------------------------------------------------------------------
   const MobileBanner = (
-    <div className="md:hidden flex flex-col items-center justify-center min-h-screen px-6 text-center bg-gray-50">
+    <div className="md:hidden flex flex-col items-center justify-center min-h-screen px-6 text-center bg-surface-bg">
       <Mic2 className="w-10 h-10 text-primary-400 mb-4" />
       <h2 className="text-base font-bold text-ink mb-2">Bitte am Tablet oder Desktop fortfahren</h2>
       <p className="text-sm text-ink-muted">
@@ -764,8 +764,8 @@ export default function WizardPage() {
     return (
       <>
         <div className="hidden md:flex items-center justify-center min-h-screen">
-          <div className="bg-white rounded-xl border border-red-200 p-8 max-w-md text-center">
-            <p className="text-sm font-semibold text-red-700 mb-2">Fehler beim Starten</p>
+          <div className="bg-surface-card rounded-xl border border-status-fehler-border p-8 max-w-md text-center">
+            <p className="text-sm font-semibold text-status-fehler-text mb-2">Fehler beim Starten</p>
             <p className="text-xs text-ink-muted mb-4">{initError}</p>
             <Button variant="primary" size="sm" onClick={() => navigate('/brand-voice')}>
               Zurück zu Brand Voice
@@ -788,14 +788,14 @@ export default function WizardPage() {
       : null
     return (
       <>
-        <div className="hidden md:flex items-center justify-center min-h-screen bg-gray-50">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-lg p-8 max-w-md w-full text-center">
+        <div className="hidden md:flex items-center justify-center min-h-screen bg-surface-bg">
+          <div className="bg-surface-card rounded-xl border border-surface-border shadow-lg p-8 max-w-md w-full text-center">
             <div className="w-12 h-12 rounded-full bg-primary-50 flex items-center justify-center mx-auto mb-4">
               <BookmarkCheck className="w-6 h-6 text-primary-600" />
             </div>
             <h2 className="text-lg font-semibold text-ink mb-2">Offene Session gefunden</h2>
             {resumeModal.stale && (
-              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3">
+              <p className="text-xs text-status-aktiv-text bg-status-aktiv-bg border border-status-aktiv-border rounded px-3 py-2 mb-3">
                 ⚠️ Diese Session ist älter als 7 Tage — die Wizard-Fragen könnten sich geändert
                 haben. Neu starten empfohlen.
               </p>
@@ -828,7 +828,7 @@ export default function WizardPage() {
   if (done) {
     return (
       <>
-        <div className="hidden md:block min-h-screen bg-gray-50">
+        <div className="hidden md:block min-h-screen bg-surface-bg">
           <div className="max-w-2xl mx-auto py-16 px-6">
             {pipelineRunId && (
               <PipelineStatusBanner pipelineRunId={pipelineRunId} onDone={() => {}} />
@@ -850,9 +850,9 @@ export default function WizardPage() {
       {MobileBanner}
 
       {/* Desktop / Tablet Layout */}
-      <div className="hidden md:flex flex-col min-h-screen bg-gray-50">
+      <div className="hidden md:flex flex-col min-h-screen bg-surface-bg">
         {/* Top-Bar */}
-        <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200">
+        <div className="flex items-center justify-between px-6 py-4 bg-surface-card border-b border-surface-border">
           <div className="flex items-center gap-3">
             <Mic2 className="w-5 h-5 text-primary-600" />
             <h1 className="text-base font-bold text-ink">Brand Voice Onboarding</h1>
@@ -860,7 +860,7 @@ export default function WizardPage() {
           <button
             type="button"
             onClick={handleClose}
-            className="flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-100"
+            className="flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink transition-colors px-3 py-1.5 rounded-lg hover:bg-surface-border"
           >
             <X className="w-4 h-4" />
             Schließen

@@ -35,11 +35,11 @@ export default function CookieSetup({ open, onClose, onSaved }) {
     <Dialog open={open} onClose={onClose} title="YouTube Cookies einrichten" className="max-w-xl">
       <div className="space-y-4">
         {/* Why */}
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+        <div className="bg-status-aktiv-bg border border-status-aktiv-border rounded-lg p-3">
+          <p className="text-sm font-medium text-status-aktiv-text">
             Warum braucht der Autopilot Cookies?
           </p>
-          <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+          <p className="text-xs text-status-aktiv-text mt-1">
             YouTube blockiert automatische Transkript-Anfragen nach kurzer Zeit (Rate-Limit). Mit
             einem Cookie aus deinem Browser erkennt YouTube die Anfragen als eingeloggt und erlaubt
             deutlich mehr Zugriffe.
@@ -48,17 +48,17 @@ export default function CookieSetup({ open, onClose, onSaved }) {
 
         {/* Steps */}
         <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+          <h4 className="text-sm font-semibold text-ink">
             3 einfache Schritte:
           </h4>
 
           {/* Step 1 */}
           <div className="flex gap-3">
-            <span className="flex-shrink-0 w-6 h-6 bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded-full flex items-center justify-center text-xs font-bold">
+            <span className="flex-shrink-0 w-6 h-6 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center text-xs font-bold">
               1
             </span>
             <div>
-              <p className="text-sm text-gray-700 dark:text-gray-300">
+              <p className="text-sm text-ink-light">
                 Browser-Extension installieren:
               </p>
               <div className="flex gap-2 mt-1.5">
@@ -66,7 +66,7 @@ export default function CookieSetup({ open, onClose, onSaved }) {
                   href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  className="inline-flex items-center gap-1 text-xs bg-surface-card border border-surface-border rounded px-2.5 py-1.5 text-ink-light hover:bg-surface-bg"
                 >
                   Chrome: Get cookies.txt LOCALLY
                 </a>
@@ -74,7 +74,7 @@ export default function CookieSetup({ open, onClose, onSaved }) {
                   href="https://addons.mozilla.org/de/firefox/addon/cookies-txt/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2.5 py-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  className="inline-flex items-center gap-1 text-xs bg-surface-card border border-surface-border rounded px-2.5 py-1.5 text-ink-light hover:bg-surface-bg"
                 >
                   Firefox: cookies.txt
                 </a>
@@ -84,11 +84,11 @@ export default function CookieSetup({ open, onClose, onSaved }) {
 
           {/* Step 2 */}
           <div className="flex gap-3">
-            <span className="flex-shrink-0 w-6 h-6 bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded-full flex items-center justify-center text-xs font-bold">
+            <span className="flex-shrink-0 w-6 h-6 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center text-xs font-bold">
               2
             </span>
             <div>
-              <p className="text-sm text-gray-700 dark:text-gray-300">
+              <p className="text-sm text-ink-light">
                 Oeffne{' '}
                 <a
                   href="https://www.youtube.com"
@@ -105,11 +105,11 @@ export default function CookieSetup({ open, onClose, onSaved }) {
 
           {/* Step 3 */}
           <div className="flex gap-3">
-            <span className="flex-shrink-0 w-6 h-6 bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded-full flex items-center justify-center text-xs font-bold">
+            <span className="flex-shrink-0 w-6 h-6 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center text-xs font-bold">
               3
             </span>
             <div>
-              <p className="text-sm text-gray-700 dark:text-gray-300">
+              <p className="text-sm text-ink-light">
                 Oeffne die exportierte Datei mit einem Texteditor, kopiere den gesamten Inhalt und
                 fuege ihn hier ein:
               </p>
@@ -130,7 +130,7 @@ export default function CookieSetup({ open, onClose, onSaved }) {
         />
 
         {cookieText && (
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-ink-light">
             {cookieText.split('\n').filter((l) => l.trim() && !l.startsWith('#')).length}{' '}
             Cookie-Eintraege erkannt
           </p>
@@ -150,11 +150,11 @@ export default function CookieSetup({ open, onClose, onSaved }) {
         </div>
 
         {/* Alternative: SCP */}
-        <details className="text-xs text-gray-400">
-          <summary className="cursor-pointer hover:text-gray-600">
+        <details className="text-xs text-ink-muted">
+          <summary className="cursor-pointer hover:text-ink-light">
             Alternativ: Per Terminal hochladen
           </summary>
-          <div className="mt-2 bg-gray-50 dark:bg-gray-800 p-2 rounded font-mono select-all">
+          <div className="mt-2 bg-surface-bg p-2 rounded font-mono select-all">
             scp -P 10022 cookies.txt
             meister@152.53.142.163:/opt/content-autopilot-v2/data/youtube_cookies.txt
           </div>

@@ -41,15 +41,15 @@ function triggerLabel(obs) {
 function statusBadge(status) {
   switch (status) {
     case 'pending_review':
-      return 'bg-yellow-50 text-yellow-700 border-yellow-200'
+      return 'bg-status-aktiv-bg text-status-aktiv-text border-status-aktiv-border'
     case 'accepted':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      return 'bg-status-fertig-bg text-status-fertig-text border-status-fertig-border'
     case 'rejected':
-      return 'bg-red-50 text-red-700 border-red-200'
+      return 'bg-status-fehler-bg text-status-fehler-text border-status-fehler-border'
     case 'partial':
-      return 'bg-blue-50 text-blue-700 border-blue-200'
+      return 'bg-status-neu-bg text-status-neu-text border-status-neu-border'
     default:
-      return 'bg-gray-50 text-gray-600 border-gray-200'
+      return 'bg-surface-bg text-ink-light border-surface-border'
   }
 }
 
@@ -80,7 +80,7 @@ function ChangeItem({ change, decision, editedValue, onDecide, onEditChange }) {
   const { field_path, current_value, new_value, reason } = change
 
   return (
-    <div className="border border-surface-border rounded-xl p-4 bg-white">
+    <div className="border border-surface-border rounded-xl p-4 bg-surface-card">
       {/* Field label */}
       <p className="text-xs font-semibold text-ink-muted uppercase tracking-wide mb-3">
         {field_path}
@@ -90,14 +90,14 @@ function ChangeItem({ change, decision, editedValue, onDecide, onEditChange }) {
       <div className="flex flex-col md:flex-row gap-3 mb-3">
         <div className="flex-1 min-w-0">
           <p className="text-[11px] font-medium text-ink-muted mb-1">Alt</p>
-          <p className="text-sm text-ink bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 leading-relaxed break-words whitespace-pre-wrap">
+          <p className="text-sm text-ink bg-surface-bg border border-surface-border rounded-lg px-3 py-2 leading-relaxed break-words whitespace-pre-wrap">
             {displayValue(current_value)}
           </p>
         </div>
-        <div className="hidden md:flex items-center text-gray-400 text-sm shrink-0 pt-5">→</div>
+        <div className="hidden md:flex items-center text-ink-muted text-sm shrink-0 pt-5">→</div>
         <div className="flex-1 min-w-0">
           <p className="text-[11px] font-medium text-ink-muted mb-1">Neu</p>
-          <p className="text-sm text-ink bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 leading-relaxed break-words whitespace-pre-wrap">
+          <p className="text-sm text-ink bg-status-neu-bg border border-status-neu-border rounded-lg px-3 py-2 leading-relaxed break-words whitespace-pre-wrap">
             {displayValue(new_value)}
           </p>
         </div>
@@ -115,7 +115,7 @@ function ChangeItem({ change, decision, editedValue, onDecide, onEditChange }) {
         <div className="mb-3">
           <p className="text-xs font-medium text-ink mb-1">Angepasster Wert</p>
           <textarea
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-y min-h-[80px]"
+            className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-y min-h-[80px]"
             value={editedValue}
             onChange={(e) => onEditChange(e.target.value)}
           />
@@ -128,8 +128,8 @@ function ChangeItem({ change, decision, editedValue, onDecide, onEditChange }) {
           onClick={() => onDecide('accept')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
             decision === 'accept'
-              ? 'bg-emerald-600 text-white border-emerald-600'
-              : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'
+              ? 'bg-status-fertig-text text-surface-card border-status-fertig-text'
+              : 'bg-surface-card text-status-fertig-text border-status-fertig-border hover:bg-status-fertig-bg'
           }`}
         >
           <Check className="w-3.5 h-3.5" />
@@ -139,8 +139,8 @@ function ChangeItem({ change, decision, editedValue, onDecide, onEditChange }) {
           onClick={() => onDecide('reject')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
             decision === 'reject'
-              ? 'bg-red-600 text-white border-red-600'
-              : 'bg-white text-red-700 border-red-200 hover:bg-red-50'
+              ? 'bg-status-fehler-text text-surface-card border-status-fehler-text'
+              : 'bg-surface-card text-status-fehler-text border-status-fehler-border hover:bg-status-fehler-bg'
           }`}
         >
           <X className="w-3.5 h-3.5" />
@@ -150,8 +150,8 @@ function ChangeItem({ change, decision, editedValue, onDecide, onEditChange }) {
           onClick={() => onDecide('edit')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
             decision === 'edit'
-              ? 'bg-primary-600 text-white border-primary-600'
-              : 'bg-white text-primary-700 border-primary-200 hover:bg-primary-50'
+              ? 'bg-primary-600 text-surface-card border-primary-600'
+              : 'bg-surface-card text-primary-700 border-primary-200 hover:bg-primary-50'
           }`}
         >
           <Edit2 className="w-3.5 h-3.5" />
@@ -223,10 +223,10 @@ function ObservationCard({ obs, onDecided }) {
   const isPending = obs.status === 'pending_review'
 
   return (
-    <div className="bg-white rounded-xl border border-surface-border overflow-hidden">
+    <div className="bg-surface-card rounded-xl border border-surface-border overflow-hidden">
       {/* Card header */}
       <div
-        className="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-gray-50 transition-colors"
+        className="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-surface-bg transition-colors"
         onClick={() => setExpanded((v) => !v)}
       >
         <div className="flex items-center gap-3 flex-wrap">
@@ -268,7 +268,7 @@ function ObservationCard({ obs, onDecided }) {
 
           {/* Submit error */}
           {submitError && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+            <div className="flex items-start gap-2 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               {submitError}
             </div>
@@ -280,7 +280,7 @@ function ObservationCard({ obs, onDecided }) {
               <button
                 onClick={handleSubmit}
                 disabled={!allDecided || submitting}
-                className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-surface-card bg-primary-700 rounded-lg hover:bg-primary-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                 Übernehmen
@@ -332,7 +332,7 @@ export default function DriftReview() {
           </p>
         </div>
         {!loading && !error && pendingCount > 0 && (
-          <span className="inline-flex items-center px-3 py-1 rounded-full bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-medium">
+          <span className="inline-flex items-center px-3 py-1 rounded-full bg-status-aktiv-bg border border-status-aktiv-border text-status-aktiv-text text-xs font-medium">
             {pendingCount} ausstehend
           </span>
         )}
@@ -340,7 +340,7 @@ export default function DriftReview() {
 
       {/* Error */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
+        <div className="mb-4 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-sm text-status-fehler-text flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
           <button onClick={load} className="ml-auto text-xs underline hover:no-underline shrink-0">
@@ -360,7 +360,7 @@ export default function DriftReview() {
       {/* Empty state */}
       {!loading && !error && observations.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-ink-muted">
-          <CheckCircle2 className="w-10 h-10 text-emerald-400 mb-3" />
+          <CheckCircle2 className="w-10 h-10 text-status-fertig-text mb-3" />
           <p className="text-sm font-medium">Keine ausstehenden Voice-Anpassungen</p>
           <p className="text-xs text-ink-light mt-1">Alles erledigt.</p>
         </div>

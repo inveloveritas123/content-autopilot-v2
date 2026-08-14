@@ -21,9 +21,9 @@ import {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function scoreBannerClass(score) {
-  if (score >= 80) return 'bg-emerald-50 border-emerald-200 text-emerald-800'
-  if (score >= 60) return 'bg-yellow-50 border-yellow-200 text-yellow-800'
-  return 'bg-red-50 border-red-200 text-red-800'
+  if (score >= 80) return 'bg-status-fertig-bg border-status-fertig-border text-status-fertig-text'
+  if (score >= 60) return 'bg-status-aktiv-bg border-status-aktiv-border text-status-aktiv-text'
+  return 'bg-status-fehler-bg border-status-fehler-border text-status-fehler-text'
 }
 
 function truncateId(id, len = 20) {
@@ -38,7 +38,7 @@ function ModelList({ models, loading, error, onRefresh }) {
   const now = Date.now()
 
   return (
-    <div className="bg-white rounded-xl border border-surface-border overflow-hidden flex flex-col">
+    <div className="bg-surface-card rounded-xl border border-surface-border overflow-hidden flex flex-col">
       {/* Panel header */}
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-surface-border">
         <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
@@ -48,7 +48,7 @@ function ModelList({ models, loading, error, onRefresh }) {
         <button
           onClick={onRefresh}
           disabled={loading}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-surface-border hover:bg-gray-50 text-ink-muted transition-colors disabled:opacity-40"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-surface-border hover:bg-surface-bg text-ink-muted transition-colors disabled:opacity-40"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           Aktualisieren
@@ -65,7 +65,7 @@ function ModelList({ models, loading, error, onRefresh }) {
         )}
 
         {!loading && error && (
-          <div className="m-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-start gap-2">
+          <div className="m-4 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             {error}
           </div>
@@ -92,7 +92,7 @@ function ModelList({ models, loading, error, onRefresh }) {
                     </p>
                   </div>
                   {isNew && (
-                    <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[10px] font-medium text-blue-700">
+                    <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full bg-status-neu-bg border border-status-neu-border text-[10px] font-medium text-status-neu-text">
                       Neu
                     </span>
                   )}
@@ -163,13 +163,13 @@ function BacktestResults({ result, tenantId, adminToken, onReset }) {
             <li
               key={idx}
               className={`flex items-start gap-3 p-3 rounded-lg border text-xs ${
-                pass ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'
+                pass ? 'bg-status-fertig-bg border-status-fertig-border' : 'bg-status-fehler-bg border-status-fehler-border'
               }`}
             >
               {pass ? (
-                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <CheckCircle className="w-4 h-4 text-status-fertig-text shrink-0 mt-0.5" />
               ) : (
-                <XCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <XCircle className="w-4 h-4 text-status-fehler-text shrink-0 mt-0.5" />
               )}
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-ink truncate">{truncateId(p.post_id || p.id, 28)}</p>
@@ -182,7 +182,7 @@ function BacktestResults({ result, tenantId, adminToken, onReset }) {
                 {!pass && p.issues && p.issues.length > 0 && (
                   <ul className="mt-1 space-y-0.5">
                     {p.issues.map((issue, i) => (
-                      <li key={i} className="text-red-700">
+                      <li key={i} className="text-status-fehler-text">
                         {issue}
                       </li>
                     ))}
@@ -211,7 +211,7 @@ function BacktestResults({ result, tenantId, adminToken, onReset }) {
           </button>
         )}
         {notified && (
-          <span className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700">
+          <span className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-status-fertig-bg border border-status-fertig-border text-status-fertig-text">
             <CheckCircle className="w-3.5 h-3.5" />
             Benachrichtigung gesendet
           </span>
@@ -221,7 +221,7 @@ function BacktestResults({ result, tenantId, adminToken, onReset }) {
           <button
             onClick={handleApply}
             disabled={applying}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-status-fertig-border text-status-fertig-text hover:bg-status-fertig-bg disabled:opacity-40 transition-colors"
           >
             {applying ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -232,7 +232,7 @@ function BacktestResults({ result, tenantId, adminToken, onReset }) {
           </button>
         )}
         {applied && (
-          <span className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700">
+          <span className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-status-fertig-bg border border-status-fertig-border text-status-fertig-text">
             <CheckCircle className="w-3.5 h-3.5" />
             Modell-Konfiguration aktualisiert
           </span>
@@ -240,14 +240,14 @@ function BacktestResults({ result, tenantId, adminToken, onReset }) {
 
         <button
           onClick={onReset}
-          className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-gray-50 transition-colors"
+          className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg transition-colors"
         >
           Neuer Backtest
         </button>
       </div>
 
-      {notifyError && <p className="text-xs text-red-700 mt-1">{notifyError}</p>}
-      {applyError && <p className="text-xs text-red-700 mt-1">{applyError}</p>}
+      {notifyError && <p className="text-xs text-status-fehler-text mt-1">{notifyError}</p>}
+      {applyError && <p className="text-xs text-status-fehler-text mt-1">{applyError}</p>}
     </div>
   )
 }
@@ -340,7 +340,7 @@ function BacktestPanel({ models, adminToken }) {
   const totalCount = pollData?.total_count ?? postCount
 
   return (
-    <div className="bg-white rounded-xl border border-surface-border overflow-hidden flex flex-col">
+    <div className="bg-surface-card rounded-xl border border-surface-border overflow-hidden flex flex-col">
       {/* Panel header */}
       <div className="px-5 py-3.5 border-b border-surface-border">
         <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
@@ -360,7 +360,7 @@ function BacktestPanel({ models, adminToken }) {
                 type="text"
                 value={tenantId}
                 onChange={(e) => setTenantId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 placeholder="me"
               />
             </div>
@@ -372,7 +372,7 @@ function BacktestPanel({ models, adminToken }) {
                 <select
                   value={candidateModelId}
                   onChange={(e) => setCandidateModelId(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                  className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-surface-card"
                 >
                   <option value="">— Modell wählen —</option>
                   {models.map((m) => (
@@ -386,7 +386,7 @@ function BacktestPanel({ models, adminToken }) {
                   type="text"
                   value={candidateModelId}
                   onChange={(e) => setCandidateModelId(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="z.B. gpt-4o-mini"
                 />
               )}
@@ -401,7 +401,7 @@ function BacktestPanel({ models, adminToken }) {
                 min={1}
                 max={20}
                 onChange={(e) => setPostCount(Math.min(20, Math.max(1, Number(e.target.value))))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
 
@@ -409,7 +409,7 @@ function BacktestPanel({ models, adminToken }) {
             <button
               onClick={handleStart}
               disabled={starting || !candidateModelId.trim() || !tenantId.trim()}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-surface-card bg-primary-700 rounded-lg hover:bg-primary-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {starting ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -420,7 +420,7 @@ function BacktestPanel({ models, adminToken }) {
             </button>
 
             {startError && (
-              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+              <div className="flex items-start gap-2 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 {startError}
               </div>
@@ -442,13 +442,13 @@ function BacktestPanel({ models, adminToken }) {
         {/* Poll error */}
         {pollError && (
           <div className="space-y-3">
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+            <div className="flex items-start gap-2 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               {pollError}
             </div>
             <button
               onClick={handleReset}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg transition-colors"
             >
               Zurücksetzen
             </button>
@@ -511,7 +511,7 @@ export default function AdminModels() {
           }}
         />
         <button
-          className="w-full bg-gray-800 text-white rounded py-2 text-sm"
+          className="w-full bg-ink text-surface-card rounded py-2 text-sm"
           onClick={() => {
             localStorage.setItem('admin_token', tokenInput)
             setAdminToken(tokenInput)
@@ -519,11 +519,11 @@ export default function AdminModels() {
         >
           Anmelden
         </button>
-        <p className="mt-3 text-xs text-gray-500">
-          Admin-Token steht in <code className="bg-gray-100 px-1 rounded">.env</code> unter{' '}
-          <code className="bg-gray-100 px-1 rounded">ADMIN_TOKEN=...</code>.<br />
+        <p className="mt-3 text-xs text-ink-light">
+          Admin-Token steht in <code className="bg-surface-border px-1 rounded">.env</code> unter{' '}
+          <code className="bg-surface-border px-1 rounded">ADMIN_TOKEN=...</code>.<br />
           Standard (falls nicht gesetzt):{' '}
-          <code className="bg-gray-100 px-1 rounded">admin_backtest_2026</code>
+          <code className="bg-surface-border px-1 rounded">admin_backtest_2026</code>
         </p>
       </div>
     )

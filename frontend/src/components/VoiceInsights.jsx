@@ -31,19 +31,19 @@ class InsightsErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <div className="flex flex-col items-center justify-center py-20 gap-4 text-center px-4">
-          <AlertCircle className="w-8 h-8 text-red-400" />
-          <p className="text-sm font-semibold text-red-700">Unerwarteter Fehler</p>
+          <AlertCircle className="w-8 h-8 text-status-fehler-text" />
+          <p className="text-sm font-semibold text-status-fehler-text">Unerwarteter Fehler</p>
           <p className="text-xs text-ink-muted max-w-sm">{this.state.message}</p>
           <div className="flex gap-3">
             <button
               onClick={() => this.setState({ hasError: false })}
-              className="px-3 py-1.5 text-xs bg-gray-100 rounded-lg hover:bg-gray-200 text-ink"
+              className="px-3 py-1.5 text-xs bg-surface-border rounded-lg hover:bg-surface-border text-ink"
             >
               Erneut versuchen
             </button>
             <Link
               to="/brand-voice"
-              className="px-3 py-1.5 text-xs bg-primary-700 text-white rounded-lg hover:bg-primary-800"
+              className="px-3 py-1.5 text-xs bg-primary-700 text-surface-card rounded-lg hover:bg-primary-800"
             >
               Zur Brand Voice
             </Link>
@@ -199,15 +199,15 @@ const SOURCE_LABELS = {
 function sourceBadgeClass(source) {
   switch (source) {
     case 'wizard':
-      return 'bg-blue-50 text-blue-700 border-blue-200'
+      return 'bg-status-neu-bg text-status-neu-text border-status-neu-border'
     case 'manual_edit':
-      return 'bg-violet-50 text-violet-700 border-violet-200'
+      return 'bg-accent-50 text-accent-700 border-accent-200'
     case 'drift_update':
-      return 'bg-amber-50 text-amber-700 border-amber-200'
+      return 'bg-status-aktiv-bg text-status-aktiv-text border-status-aktiv-border'
     case 'md_upload':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      return 'bg-status-fertig-bg text-status-fertig-text border-status-fertig-border'
     default:
-      return 'bg-gray-50 text-gray-600 border-gray-200'
+      return 'bg-surface-bg text-ink-light border-surface-border'
   }
 }
 
@@ -231,7 +231,7 @@ function TagCloud({ tags, isVerboten }) {
           key={i}
           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
             isVerboten
-              ? 'bg-red-50 text-red-700 border-red-200'
+              ? 'bg-status-fehler-bg text-status-fehler-text border-status-fehler-border'
               : 'bg-primary-50 text-primary-700 border-primary-100'
           }`}
         >
@@ -255,7 +255,7 @@ function QuoteBlock({ quotes }) {
       {quotes.map((q, i) => (
         <div
           key={i}
-          className="flex items-start gap-2 bg-gray-50 rounded-lg p-3 border border-gray-100"
+          className="flex items-start gap-2 bg-surface-bg rounded-lg p-3 border border-surface-border"
         >
           <Quote className="w-4 h-4 text-primary-400 shrink-0 mt-0.5" />
           <p className="text-sm text-ink leading-relaxed">{q}</p>
@@ -277,7 +277,7 @@ function FieldValue({ fieldPath, value }) {
   }
   if (typeof value === 'object' && value !== null) {
     return (
-      <pre className="text-xs text-ink leading-relaxed mt-1 bg-gray-50 rounded-lg p-3 border border-gray-100 overflow-x-auto whitespace-pre-wrap">
+      <pre className="text-xs text-ink leading-relaxed mt-1 bg-surface-bg rounded-lg p-3 border border-surface-border overflow-x-auto whitespace-pre-wrap">
         {JSON.stringify(value, null, 2)}
       </pre>
     )
@@ -340,14 +340,14 @@ function EditFieldModal({ open, onClose, profileType, fieldPath, currentValue, o
       <div className="space-y-4">
         <div>
           <p className="text-xs font-medium text-ink-muted mb-1">Aktueller Wert</p>
-          <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-ink-muted leading-relaxed overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap select-none">
+          <pre className="bg-surface-bg border border-surface-border rounded-lg p-3 text-xs text-ink-muted leading-relaxed overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap select-none">
             {readonlyText || '—'}
           </pre>
         </div>
         <div>
           <p className="text-xs font-medium text-ink mb-1">Neuer Wert</p>
           <textarea
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-y min-h-[100px]"
+            className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-y min-h-[100px]"
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
@@ -358,7 +358,7 @@ function EditFieldModal({ open, onClose, profileType, fieldPath, currentValue, o
           )}
         </div>
         {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-start gap-2">
+          <div className="p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             {error}
           </div>
@@ -366,14 +366,14 @@ function EditFieldModal({ open, onClose, profileType, fieldPath, currentValue, o
         <div className="flex justify-end gap-2 pt-1">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm text-ink-light border border-gray-200 rounded-lg hover:bg-gray-50"
+            className="px-4 py-2 text-sm text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg"
           >
             Abbrechen
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-5 py-2 text-sm font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-5 py-2 text-sm font-medium text-surface-card bg-primary-700 rounded-lg hover:bg-primary-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             Speichern
@@ -390,7 +390,7 @@ function FieldBlock({ profileType, fieldPath, value, editable, highlighted, onEd
   return (
     <div
       className={`rounded-xl border p-4 transition-colors ${
-        highlighted ? 'bg-amber-50 border-amber-200' : 'bg-white border-surface-border'
+        highlighted ? 'bg-status-aktiv-bg border-status-aktiv-border' : 'bg-surface-card border-surface-border'
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -472,7 +472,7 @@ function ProfilePanel({ profileType, payload, comparePayload, compareMode, onFie
 function VersionsSidebar({ history, compareVersion, onCompare, onReset, collapsed, onToggle }) {
   return (
     <div className={`shrink-0 transition-all duration-200 ${collapsed ? 'w-10' : 'w-48'}`}>
-      <div className="sticky top-0 bg-white border border-surface-border rounded-xl overflow-hidden">
+      <div className="sticky top-0 bg-surface-card border border-surface-border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-3 py-2.5 border-b border-surface-border">
           {!collapsed && <span className="text-xs font-semibold text-ink">Versionen</span>}
           <button
@@ -508,8 +508,8 @@ function VersionsSidebar({ history, compareVersion, onCompare, onReset, collapse
                 <button
                   key={entry.version}
                   onClick={() => onCompare(entry.version)}
-                  className={`w-full text-left px-3 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors ${
-                    compareVersion === entry.version ? 'bg-amber-50' : ''
+                  className={`w-full text-left px-3 py-2.5 border-b border-surface-border last:border-0 hover:bg-surface-bg transition-colors ${
+                    compareVersion === entry.version ? 'bg-status-aktiv-bg' : ''
                   }`}
                 >
                   <p className="text-xs font-medium text-ink">v{entry.version}</p>
@@ -637,7 +637,7 @@ function VoiceInsights() {
 
       {/* Source-Hinweis bei md_upload */}
       {activeProfiles.voice_profile?.source === 'md_upload' && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-sm text-blue-700">
+        <div className="bg-status-neu-bg border border-status-neu-border rounded-xl p-4 mb-4 text-sm text-status-neu-text">
           Diese Stimme entwickelt sich automatisch durch deine Posts und Antworten weiter. Letzte
           Aktualisierung: {formatDate(activeProfiles.voice_profile?.updated_at)}
         </div>
@@ -645,14 +645,14 @@ function VoiceInsights() {
 
       {/* Vergleichs-Modus Banner */}
       {compareVersion !== null && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-center justify-between text-sm text-amber-700">
+        <div className="bg-status-aktiv-bg border border-status-aktiv-border rounded-xl p-3 mb-4 flex items-center justify-between text-sm text-status-aktiv-text">
           <span>
             Vergleichsansicht: Version {compareVersion} — Gelb markierte Felder weichen von der
             aktuellen Version ab.
           </span>
           <button
             onClick={() => setCompareVersion(null)}
-            className="flex items-center gap-1.5 text-xs font-medium text-amber-700 underline hover:no-underline ml-4 shrink-0"
+            className="flex items-center gap-1.5 text-xs font-medium text-status-aktiv-text underline hover:no-underline ml-4 shrink-0"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Zurück zur aktuellen Version
@@ -662,7 +662,7 @@ function VoiceInsights() {
 
       {/* Fehler */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
+        <div className="mb-4 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-sm text-status-fehler-text flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
         </div>
@@ -686,7 +686,7 @@ function VoiceInsights() {
           </p>
           <Link
             to="/brand-voice/wizard"
-            className="mt-2 px-4 py-2 text-sm font-semibold bg-primary-700 text-white rounded-xl hover:bg-primary-800 flex items-center gap-2"
+            className="mt-2 px-4 py-2 text-sm font-semibold bg-primary-700 text-surface-card rounded-xl hover:bg-primary-800 flex items-center gap-2"
           >
             <ChevronRight className="w-4 h-4" />
             Wizard starten
@@ -710,7 +710,7 @@ function VoiceInsights() {
                   className={`px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
                     activeTab === tab.key
                       ? 'text-primary-700 border-primary-700 bg-primary-50'
-                      : 'text-ink-muted border-transparent hover:text-ink hover:bg-gray-50'
+                      : 'text-ink-muted border-transparent hover:text-ink hover:bg-surface-bg'
                   }`}
                 >
                   {tab.label}
