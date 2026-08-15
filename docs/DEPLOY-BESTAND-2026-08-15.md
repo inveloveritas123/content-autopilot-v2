@@ -167,6 +167,37 @@ Zeile 57:    github.event.workflow_run.head_branch == 'main'
 Es gibt bereits `workflow_dispatch: {}` — **ein manueller Start ist also schon
 heute vorgesehen.**
 
+#### ⚠️ Nachtrag 15.08. (nach Owner-Entscheid, Abschnitt 2.2 korrigiert)
+
+**Für Weg A sind vermutlich GAR KEINE Workflow-Änderungen nötig.** Die oben
+genannten zwei Zeilen betreffen ausschließlich den *automatischen* Trigger.
+Beim manuellen Start über `workflow_dispatch` mit Branch-Auswahl greift eine
+andere Kette [gemessen, `.github/workflows/deploy.yml` Zeilen 53–107]:
+
+1. Die `if`-Bedingung des Gate-Jobs ist über den ersten Zweig bereits erfüllt:
+   `github.event_name == 'workflow_dispatch' || (…head_branch == 'main')`
+   → der `main`-Teil wird bei manuellem Start gar nicht ausgewertet.
+2. `SHA` fällt zurück auf `github.sha` = **HEAD des gewählten Branches**
+   (`${{ github.event.workflow_run.head_sha || github.sha }}`).
+3. Der Gate sucht Tests/Lint **allein über `head_sha`**, ohne Branch-Bezug:
+   `runs?head_sha=${SHA}&status=completed`
+4. Der Deploy-Job checkt exakt diese SHA aus (`ref: needs.gate.outputs.sha`).
+
+**Voraussetzung, die erfüllt ist** [gemessen]: Beide Pflicht-Workflows laufen
+auf `push: branches: ["**"]` — also auch auf dem Highlander-Branch. Der Gate
+findet ihre Ergebnisse.
+
+→ **Praktisch heißt das:** Highlander pushen, warten bis Tests + Lint für dessen
+HEAD-SHA grün sind, dann „Deploy (Server B)" manuell mit Branch
+`integration/highlander-2026-08-14` starten. Kein Workflow-Patch, keine
+Änderung an einer Datei, die auf `main` zurückgemergt werden müsste.
+
+⚠️ **Noch nicht verifiziert:** ob die GitHub-Oberfläche den Branch zur Auswahl
+anbietet — `workflow_dispatch` listet nur Branches, in denen die Workflow-Datei
+**bereits existiert**. Da `deploy.yml` aus `main` stammt und der Highlander ein
+Fast-Forward darauf ist, ist die Datei dort vorhanden. **[NICHT MESSBAR]** ohne
+Push.
+
 ### 2.3 Bewertung des Owner-Vorschlags
 
 > *„highlander branch auf GitHub anlegen und von dort deployen"*
@@ -450,14 +481,38 @@ nacktes `alembic upgrade`. ⚠️ Der Deploy-Workflow ruft aktuell **nacktes
 
 ---
 
-## 9. Offene Entscheidungen für den Owner
+## 9. Entscheidungen
 
-1. **Weg A oder B** aus 7.1 (Empfehlung: A)
-2. **Auth-Fix mit deployen?** (Empfehlung: ja)
-3. **Schema-Drift 057/058 reparieren** — wann, und mit welcher Freigabe?
+### 9.1 Getroffen — Owner, 15.08.2026
+
+**1. Weg A** (aus 7.1): Highlander als eigener Branch nach `origin`,
+Deploy-Start manuell via `workflow_dispatch`. `main` wird **nicht** gepusht und
+bleibt Rückfallebene. Weg B (Fast-Forward auf `main`) wurde ausdrücklich
+verworfen, obwohl technisch konfliktfrei möglich — die Rückfallebene wiegt
+schwerer als die Ersparnis.
+
+**2. Auth-Fix wird mitdeployt**: `zukunftsbund-user-login-defekt` (3 Commits)
+kommt vor dem Deploy in den Highlander.
+
+**Trockentest dazu** [gemessen]: `git merge-tree` gegen die Merge-Base zeigt
+**keine Konfliktmarker**; die Merge-Base *ist* der Highlander-HEAD, der Merge
+ist also ein sauberer Fast-Forward. Risikolos.
+
+### 9.2 Offen — bewusst nach dem Deploy
+
+3. **Schema-Drift 057/058 reparieren** — wann, mit welcher Freigabe?
+   (Getrennt vom Deploy, damit Fehler zuordenbar bleiben.)
 4. **Wer bekommt einen Benutzer?** (Robert / Louis / Eric, Rolle, Agentur)
-5. **Tägliches Backup aktivieren?** Cron fehlt (6.) — eine Zeile
-6. **MCP-Server reparieren?** Eigener Vorgang, unabhängig vom Deploy
+   — fachliche Entscheidung, blockiert den Deploy nicht, aber ohne sie ist der
+   Login nicht testbar (s. 4.).
+5. **Tägliches Backup aktivieren?** Cron fehlt (6.) — eine Zeile.
+6. **MCP-Server reparieren?** Eigener Vorgang, unabhängig vom Deploy.
+
+### 9.3 Noch ausstehend: die Push-Freigabe selbst
+
+Die Wegentscheidung ist getroffen, die **Ansage zum Push aber noch nicht
+erteilt**. Bis dahin gilt Phase 1: gemessen und vorbereitet wird, gepusht
+nicht.
 
 ---
 
