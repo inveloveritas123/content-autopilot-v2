@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { clsx } from 'clsx'
+import { CloseButton } from './CloseButton'
 
 export function Dialog({ open, onClose, title, children, className }) {
   useEffect(() => {
@@ -29,12 +30,7 @@ export function Dialog({ open, onClose, title, children, className }) {
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-surface-border">
           <h2 className="text-lg font-semibold text-ink">{title}</h2>
-          <button
-            onClick={onClose}
-            className="text-ink-muted hover:text-ink-light text-xl"
-          >
-            &times;
-          </button>
+          <CloseButton onClick={onClose} />
         </div>
         <div className="px-6 py-4">{children}</div>
       </div>
