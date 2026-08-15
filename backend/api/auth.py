@@ -171,15 +171,29 @@ async def _accessible_tenants(db: AsyncSession, user: User) -> list[dict]:
 
     role='owner'   → alle Tenants der eigenen Agentur.
     sonst          → nur explizit über user_tenant zugewiesene Tenants.
+
+    Agenturzugehörigkeit eines Tenants (2026-08-15): Sie wird über
+    `user_tenant` → `users.agency_id` bestimmt, NICHT über `tenants.agentur_id`.
+    Diese Spalte stammt aus Migration 057 (Issue #26, _meta-Rehydration für
+    Celery-Tasks), trägt den server_default 'zb' und wird beim Anlegen eines
+    Tenants nirgends gesetzt — sie ist kein Fremdschlüssel auf `agencies.slug`.
+    Der frühere Vergleich `t.agentur_id = (SELECT slug FROM agencies …)` traf
+    deshalb nur zu, wenn eine Agentur zufällig den Slug 'zb' hatte; sonst blieb
+    die Liste leer und der eingeloggte Nutzer sah „Kein Zugang eingerichtet".
     """
     from sqlalchemy import text
 
     if user.role == "owner":
+        # Agenturweit: jeder Tenant, der IRGENDEINEM Nutzer der eigenen Agentur
+        # zugewiesen ist. Stützt sich ausschließlich auf echte Fremdschlüssel
+        # (user_tenant.tenant_id → tenants.id, users.agency_id → agencies.id).
         rows = (
             await db.execute(
                 text(
-                    "SELECT t.id, t.name, t.api_key FROM tenants t "
-                    "WHERE t.agentur_id = (SELECT slug FROM agencies WHERE id = :aid) "
+                    "SELECT DISTINCT t.id, t.name, t.api_key FROM tenants t "
+                    "JOIN user_tenant ut ON ut.tenant_id = t.id "
+                    "JOIN users u ON u.id = ut.user_id "
+                    "WHERE u.agency_id = :aid "
                     "ORDER BY t.name"
                 ),
                 {"aid": user.agency_id},

@@ -187,6 +187,13 @@ async def user_may_access_tenant(db, user, tenant_id: str) -> bool:
     - role 'owner': darf jeden Tenant der EIGENEN Agentur (agency-weiter Scope).
     - sonst: nur Tenants, die in user_tenant explizit zugewiesen sind. Ist der
       Eintrag scope='agency', gilt er ebenfalls agency-weit.
+
+    Agenturzugehörigkeit eines Tenants (2026-08-15): über `user_tenant` →
+    `users.agency_id`, NICHT über `tenants.agentur_id`. Begründung siehe
+    api/auth.py::_accessible_tenants — die Spalte ist ein _meta-Feld aus
+    Migration 057 mit server_default 'zb' und kein Fremdschlüssel auf
+    `agencies.slug`. Beide Stellen müssen dieselbe Regel verwenden, sonst sieht
+    ein Owner Tenants in der Liste, die ihm die Rechteprüfung dann verweigert.
     """
     from sqlalchemy import text
 
@@ -195,8 +202,11 @@ async def user_may_access_tenant(db, user, tenant_id: str) -> bool:
             await db.execute(
                 text(
                     "SELECT 1 FROM tenants t "
+                    "JOIN user_tenant ut ON ut.tenant_id = t.id "
+                    "JOIN users u ON u.id = ut.user_id "
                     "WHERE t.id = CAST(:tid AS uuid) "
-                    "  AND t.agentur_id = (SELECT slug FROM agencies WHERE id = :aid)"
+                    "  AND u.agency_id = :aid "
+                    "LIMIT 1"
                 ),
                 {"tid": tenant_id, "aid": user.agency_id},
             )
