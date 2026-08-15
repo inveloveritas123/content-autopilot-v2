@@ -3,7 +3,8 @@
  * Im Dashboard sichtbar; jeder Befund zeigt 3 Hook-Vorschläge mit "Als Idee".
  */
 import { useState, useEffect } from 'react'
-import { Sparkles, ExternalLink, X, Plus } from 'lucide-react'
+import { Sparkles, ExternalLink, Plus } from 'lucide-react'
+import { CloseButton } from './ui/CloseButton'
 import { listResearchFindings, dismissResearchFinding, markFindingAsIdea } from '../api'
 
 // 6 Kategorien, 5 Status-Tokens — keine 1:1-Bedeutung, Zuordnung nach Farbcharakter
@@ -124,13 +125,7 @@ export default function ResearchFindings({ limit = 8 }) {
                   <p className="text-xs text-ink-muted mt-1 line-clamp-2">{f.summary}</p>
                 )}
               </div>
-              <button
-                onClick={() => handleDismiss(f.id)}
-                className="p-1 rounded text-ink-muted hover:bg-surface-bg"
-                title="Verwerfen"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+              <CloseButton onClick={() => handleDismiss(f.id)} size="sm" label="Verwerfen" />
             </div>
 
             {f.hooks && f.hooks.length > 0 && (

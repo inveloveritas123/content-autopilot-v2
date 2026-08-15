@@ -1,6 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useId } from 'react'
 import { clsx } from 'clsx'
 import { CloseButton } from './CloseButton'
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 const maxWidths = {
   sm: 'max-w-sm',
@@ -21,6 +24,9 @@ export function Dialog({
   closeOnBackdrop = true,
   closeOnEscape = true,
 }) {
+  const panelRef = useRef(null)
+  const titleId = useId()
+
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden'
@@ -41,6 +47,34 @@ export function Dialog({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [open, closeOnEscape, onClose])
 
+  // Fokus-Falle: Tab zyklt innerhalb des Panels, verlässt es nicht (WCAG 2.4.3,
+  // BFSG/EN 301 549 relevant für Publikumsdienste ab 2025).
+  useEffect(() => {
+    if (!open) return
+    const panel = panelRef.current
+    if (!panel) return
+
+    const focusables = panel.querySelectorAll(FOCUSABLE_SELECTOR)
+    ;(focusables[0] || panel).focus()
+
+    const handleKeyDown = (e) => {
+      if (e.key !== 'Tab') return
+      const nodes = panel.querySelectorAll(FOCUSABLE_SELECTOR)
+      if (nodes.length === 0) return
+      const first = nodes[0]
+      const last = nodes[nodes.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [open])
+
   if (!open) return null
 
   return (
@@ -51,6 +85,11 @@ export function Dialog({
         onClick={closeOnBackdrop ? onClose : undefined}
       />
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
+        tabIndex={-1}
         className={clsx(
           // rounded-card: Dialog ist ein Card-artiger Container (großflächige
           // Modal-Fläche), kein interaktives Steuerelement.
@@ -61,7 +100,10 @@ export function Dialog({
       >
         {title && (
           <div className="flex items-center justify-between px-6 py-4 border-b border-surface-border">
-            <h2 className="flex items-center gap-2 text-lg font-semibold text-ink">
+            <h2
+              id={titleId}
+              className="flex items-center gap-2 text-lg font-semibold text-ink"
+            >
               {TitleIcon && <TitleIcon className="w-5 h-5 text-primary-600 shrink-0" />}
               {title}
             </h2>

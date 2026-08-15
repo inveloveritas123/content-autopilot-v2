@@ -941,9 +941,7 @@ function BenchmarkResult({ result, onClose }) {
             <span className="text-ink-muted font-mono">{result.model_used}</span>
           )}
         </div>
-        <button onClick={onClose} className="text-ink-muted hover:text-ink shrink-0">
-          <X className="w-3 h-3" />
-        </button>
+        <CloseButton onClick={onClose} size="sm" />
       </div>
       {result.error ? (
         <p className={isBudget ? 'text-status-aktiv-text' : 'text-status-fehler-text'}>

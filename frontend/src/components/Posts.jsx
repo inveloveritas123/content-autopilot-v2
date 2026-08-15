@@ -2082,12 +2082,7 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
               Veröffentlicht
             </span>
           )}
-          <button
-            onClick={onClose}
-            className="p-1.5 text-ink-muted hover:text-ink rounded-lg hover:bg-surface-bg"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <CloseButton onClick={onClose} />
         </div>
       </div>
 
@@ -3247,12 +3242,7 @@ function LeaderboardModal({ posts, onClose, onCommit }) {
             Sortiert nach KI-Qualitätsscore · Beste zuerst
           </p>
         </div>
-        <button
-          onClick={onClose}
-          className="p-2 text-ink-muted hover:text-ink-light rounded-lg hover:bg-surface-bg"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        <CloseButton onClick={onClose} size="lg" />
       </div>
 
       {/* Grade distribution bar */}
