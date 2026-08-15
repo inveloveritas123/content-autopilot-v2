@@ -1,3 +1,4 @@
+# AUDITED-2026-08-15 (zukunftsbund-user-login-defekt): Tiefen-Audit, Datei vollständig gelesen.
 """Passwortlose Auth: Magic-Link + signierte Session (W3, 2026-07-21).
 
 Design (aus Scope-Call Louis + Compendium/Leitivo-Portierung):

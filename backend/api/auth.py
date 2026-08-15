@@ -1,3 +1,4 @@
+# AUDITED-2026-08-15 (zukunftsbund-user-login-defekt): Tiefen-Audit, Datei vollständig gelesen.
 """Auth-API: E-Mail+Passwort-Login + Session (W3, 2026-07-21; Passwort statt
 Magic-Link auf Owner-Entscheid 2026-08-13: "Magic Link ist relativ nervig,
 jeder nimmt doch Passwort-Manager oder?").
