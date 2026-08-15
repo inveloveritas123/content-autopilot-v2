@@ -237,7 +237,7 @@ function TodayBrief({ brief, navigate }) {
         : 'bg-status-fehler-border'
 
   return (
-    <div className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-xl border border-primary-200 p-5 mb-5">
+    <div className="bg-white rounded-xl border border-surface-border p-5 mb-5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-primary-600" />
@@ -267,7 +267,7 @@ function TodayBrief({ brief, navigate }) {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {/* Optimal post time */}
-        <div className="bg-white rounded-lg p-3 border border-white/80 shadow-sm">
+        <div className="bg-surface-bg rounded-lg p-3 border border-surface-border">
           <p className="text-[10px] font-semibold text-ink-muted uppercase tracking-wide mb-1.5 flex items-center gap-1">
             <Clock className="w-3 h-3" /> Optimale Zeit
           </p>
@@ -284,7 +284,7 @@ function TodayBrief({ brief, navigate }) {
         </div>
 
         {/* Pillar gap */}
-        <div className="bg-white rounded-lg p-3 border border-white/80 shadow-sm">
+        <div className="bg-surface-bg rounded-lg p-3 border border-surface-border">
           <p className="text-[10px] font-semibold text-ink-muted uppercase tracking-wide mb-1.5 flex items-center gap-1">
             <Target className="w-3 h-3" /> Pillar-Lücke
           </p>
@@ -297,7 +297,7 @@ function TodayBrief({ brief, navigate }) {
         </div>
 
         {/* Queue status + recommended action */}
-        <div className="bg-white rounded-lg p-3 border border-white/80 shadow-sm">
+        <div className="bg-surface-bg rounded-lg p-3 border border-surface-border">
           <p className="text-[10px] font-semibold text-ink-muted uppercase tracking-wide mb-1.5 flex items-center gap-1">
             <Zap className="w-3 h-3" /> Empfehlung
           </p>
