@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import { useToast } from './ui/Toast'
+import { Button } from './ui/Button'
 import {
   Lightbulb,
   MessageCircleQuestion,
@@ -921,9 +922,9 @@ export default function Ideas() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-ink">Content-Ideen</h1>
+      <div className="flex items-start justify-between gap-4 mb-5 flex-wrap">
+        <div className="shrink-0">
+          <h1 className="text-xl font-bold text-ink whitespace-nowrap">Content-Ideen</h1>
           <p className="text-sm text-ink-light mt-0.5">
             {ideasTotal > 0 ? (
               <>
@@ -935,13 +936,15 @@ export default function Ideas() {
             Beantworte die Fragen und lass daraus Posts erstellen.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Eine Primäraktion (Neue Ideen), Rest einheitlich als Secondary —
+              Owner-Entscheid 2026-08-15, analog Posts.jsx-Toolbar. */}
           {selectedIds.size > 0 && (
             <>
               <button
                 onClick={handleBulkQuickGenerate}
                 disabled={quickGenerating}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-accent-500 border border-accent-600 rounded-lg hover:bg-accent-600 disabled:opacity-50 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-surface-card text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg disabled:opacity-50 transition-colors"
                 title="Posts direkt generieren ohne Q&A (max. 20)"
               >
                 <Sparkles className="w-3.5 h-3.5" />
@@ -977,7 +980,7 @@ export default function Ideas() {
             }}
             disabled={batchGenerating}
             title="Generiert Ideen für alle content_ready Items ohne Ideen"
-            className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-status-fertig-text bg-status-fertig-bg border border-status-fertig-border rounded-lg hover:bg-status-fertig-border disabled:opacity-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-surface-card text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg disabled:opacity-50 transition-colors"
           >
             {batchGenerating ? '⏳' : '🚀'} Alle generieren
           </button>
@@ -1005,10 +1008,7 @@ export default function Ideas() {
             }}
             disabled={batchGenerating}
             title="Löscht generische Ideen und generiert neue mit deinem Branchenprofil — behebt CIO/Enterprise-Themen für Handwerker"
-            // bewusst behalten: eigene Farbe fuer diese Sonderaktion, um sie visuell von
-            // den anderen 4 Header-Buttons (fehler/fertig/primary) abzuheben — kein
-            // Status, sondern eine gesonderte "KI-Neugenerierung mit Profil"-Aktion.
-            className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-surface-card text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg disabled:opacity-50 transition-colors"
           >
             🎯 Mit Profil neu
           </button>
@@ -1017,51 +1017,51 @@ export default function Ideas() {
               setShowManualIdea(true)
               setManualMsg(null)
             }}
-            className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-status-fertig-text bg-status-fertig-bg border border-status-fertig-border rounded-lg hover:bg-status-fertig-border transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-surface-card text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg transition-colors"
             title="Eigene Idee ohne LLM eintragen"
           >
             <Plus className="w-3.5 h-3.5" /> Manuelle Idee
           </button>
-          <button
-            onClick={openGeneratePanel}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-700 rounded-lg hover:bg-primary-800 transition-colors"
-          >
+          <Button variant="primary" size="sm" onClick={openGeneratePanel}>
             <Plus className="w-4 h-4" /> Neue Ideen
-          </button>
-          <div className="flex items-center gap-1 bg-surface-bg rounded-lg p-1">
-            {filters.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setFilter(f.value)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  filter === f.value
-                    ? 'bg-white text-ink shadow-sm'
-                    : 'text-ink-light hover:text-ink'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1 bg-surface-bg rounded-lg p-1">
-            {[
-              { v: 0, l: 'Alle' },
-              { v: 5, l: '5+' },
-              { v: 7, l: '7+' },
-              { v: 9, l: '9+' },
-            ].map((s) => (
-              <button
-                key={s.v}
-                onClick={() => setMinScore(s.v)}
-                className={`px-2 py-1 text-xs font-medium rounded-md transition-colors ${
-                  minScore === s.v ? 'bg-white text-ink shadow-sm' : 'text-ink-light hover:text-ink'
-                }`}
-              >
-                {s.l}
-              </button>
-            ))}
-          </div>
-          {/* Angle filter + select-all-by-angle */}
+          </Button>
+        </div>
+      </div>
+      <div className="flex items-center justify-end gap-2 mb-5 flex-wrap">
+        <div className="flex items-center gap-1 bg-surface-bg rounded-lg p-1">
+          {filters.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                filter === f.value
+                  ? 'bg-white text-ink shadow-sm'
+                  : 'text-ink-light hover:text-ink'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1 bg-surface-bg rounded-lg p-1">
+          {[
+            { v: 0, l: 'Alle' },
+            { v: 5, l: '5+' },
+            { v: 7, l: '7+' },
+            { v: 9, l: '9+' },
+          ].map((s) => (
+            <button
+              key={s.v}
+              onClick={() => setMinScore(s.v)}
+              className={`px-2 py-1 text-xs font-medium rounded-md transition-colors ${
+                minScore === s.v ? 'bg-white text-ink shadow-sm' : 'text-ink-light hover:text-ink'
+              }`}
+            >
+              {s.l}
+            </button>
+          ))}
+        </div>
+        {/* Angle filter + select-all-by-angle */}
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
@@ -1157,9 +1157,9 @@ export default function Ideas() {
             </button>
           </div>
         </div>
-      </div>
       <div className="mt-2">
         <TimeFilter
+
           value={timeFilter}
           onChange={setTimeFilter}
           count={ideasTotal}

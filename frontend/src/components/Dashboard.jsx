@@ -108,6 +108,7 @@ function KpiCard({ icon: Icon, label, value, sub, color, onClick }) {
     blue: 'bg-status-neu-bg',
     purple: 'bg-purple-50',
     red: 'bg-status-fehler-bg',
+    neutral: 'bg-surface-bg',
   }
   const textMap = {
     teal: 'text-primary-700',
@@ -116,6 +117,7 @@ function KpiCard({ icon: Icon, label, value, sub, color, onClick }) {
     blue: 'text-status-neu-text',
     purple: 'text-purple-700',
     red: 'text-status-fehler-text',
+    neutral: 'text-ink-muted',
   }
   return (
     <div
@@ -1171,7 +1173,7 @@ export default function Dashboard() {
           icon={AlertCircle}
           label="Fehler"
           value={pipeline.transcription_failed || 0}
-          color="red"
+          color={pipeline.transcription_failed > 0 ? 'red' : 'neutral'}
           onClick={() => navigate('/pipeline')}
         />
       </div>

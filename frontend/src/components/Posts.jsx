@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, Component } from 'react'
 import { flushSync } from 'react-dom'
 import { useToast } from './ui/Toast'
+import { Button } from './ui/Button'
 import {
   FileText,
   Check,
@@ -3761,51 +3762,48 @@ export default function Posts() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-ink">LinkedIn-Posts</h1>
+      <div className="flex items-start justify-between gap-4 mb-5 flex-wrap">
+        <div className="shrink-0">
+          <h1 className="text-xl font-bold text-ink whitespace-nowrap">LinkedIn-Posts</h1>
           <p className="text-sm text-ink-light mt-0.5">
             Bearbeite, gib frei oder tracke deine Posts.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* bewusst behalten: die folgenden Feature-Toggle-Buttons (Serie/Post erstellen/
-              Triage-Modus/Beste Zeiten/Duplikate) brauchen gleichzeitig sichtbare,
-              voneinander unterscheidbare Identitätsfarben (kein Status). primary/accent
-              sind an anderer Stelle bereits fest belegt; indigo/rose/violet stimmen mit
-              den gleichnamigen Panels weiter unten und den Buttons aus Teil 2 (Zeile
-              ~1929) überein — Analogie zu PILLAR_CONFIG, Zeile ~108. Focus-Triage/
-              Auto-Einplanen nutzen status-fertig (Freigabe-Erfolgs-Aktion), Leaderboard/
-              Hook-Bibliothek nutzen accent (= amber, 1:1 identisch). */}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Eine Primäraktion (Post erstellen), Rest einheitlich als Secondary mit
+              Icon+Text unterschieden statt über Farbe — Owner-Entscheid 2026-08-15
+              (9 Identitätsfarben nebeneinander erzeugten "Regenbogen ohne
+              Hierarchie"). Aktive Toggle-Zustände heben sich per bg-primary-50 ab. */}
           <button
             onClick={() => {
               setShowSeriesBuilder(!showSeriesBuilder)
               setSeriesResult(null)
               setShowQuickCreate(false)
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border rounded-lg transition-colors ${showSeriesBuilder ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${showSeriesBuilder ? 'bg-primary-50 text-primary-700 border-primary-200' : 'bg-surface-card text-ink-light border-surface-border hover:bg-surface-bg'}`}
             title="3-teilige LinkedIn-Serie generieren"
           >
             🔗 Serie erstellen
           </button>
-          <button
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => {
               setShowQuickCreate(!showQuickCreate)
               setQcResult(null)
               setShowSeriesBuilder(false)
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border rounded-lg transition-colors ${showQuickCreate ? 'bg-rose-600 text-white border-rose-600' : 'bg-rose-600 text-white border-rose-600 hover:bg-rose-700'}`}
             title="AI Post aus Thema generieren"
           >
             ✏️ Post erstellen
-          </button>
+          </Button>
           <button
             onClick={() => {
               setTriageMode(!triageMode)
               setTriageApprove(new Set())
               setTriageReject(new Set())
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border rounded-lg transition-colors ${triageMode ? 'bg-violet-700 text-white border-violet-700' : 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${triageMode ? 'bg-primary-50 text-primary-700 border-primary-200' : 'bg-surface-card text-ink-light border-surface-border hover:bg-surface-bg'}`}
             title="Schnell-Review für Draft-Posts"
           >
             <Zap className="w-3.5 h-3.5" />
@@ -3813,14 +3811,14 @@ export default function Posts() {
           </button>
           <button
             onClick={() => setShowFocusTriage(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-status-fertig-text text-white border border-status-fertig-text rounded-lg hover:opacity-90 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-surface-card text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg transition-colors"
             title="Keyboard-gesteuerter Einzel-Post-Review"
           >
             ⚡ Focus-Triage
           </button>
           <button
             onClick={() => setShowLeaderboard(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-accent-500 text-white border border-accent-500 rounded-lg hover:bg-accent-600 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-surface-card text-ink-light border border-surface-border rounded-lg hover:bg-surface-bg transition-colors"
             title="Alle Entwürfe nach Qualitätsscore sortieren und Top-N freigeben"
           >
             🏆 Leaderboard
@@ -3836,7 +3834,7 @@ export default function Posts() {
               setExporting(false)
             }}
             disabled={exporting}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-ink-light bg-surface-bg border border-surface-border rounded-lg hover:bg-surface-border disabled:opacity-60 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-ink-light bg-surface-card border border-surface-border rounded-lg hover:bg-surface-bg disabled:opacity-60 transition-colors"
             title="Posts als CSV exportieren"
           >
             <Download className="w-3.5 h-3.5" />
@@ -3871,7 +3869,7 @@ export default function Posts() {
               setAutoScheduling(false)
             }}
             disabled={autoScheduling}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-status-fertig-text bg-status-fertig-bg border border-status-fertig-border rounded-lg hover:opacity-90 disabled:opacity-60 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-ink-light bg-surface-card border border-surface-border rounded-lg hover:bg-surface-bg disabled:opacity-60 transition-colors"
             title="Alle freigegebenen Posts automatisch auf beste Posting-Zeiten einplanen"
           >
             📅 {autoScheduling ? 'Plane ein...' : 'Auto-Einplanen'}
@@ -3884,7 +3882,7 @@ export default function Posts() {
               }
               setShowBestTimes(!showBestTimes)
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${showBestTimes ? 'text-primary-700 bg-primary-50 border-primary-200' : 'text-primary-700 bg-primary-50 border-primary-200 hover:bg-primary-100'}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${showBestTimes ? 'bg-primary-50 text-primary-700 border-primary-200' : 'bg-surface-card text-ink-light border-surface-border hover:bg-surface-bg'}`}
           >
             ⏰ Beste Zeiten
           </button>
@@ -3896,7 +3894,7 @@ export default function Posts() {
               }
               setShowHooks(!showHooks)
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-accent-700 bg-accent-50 border border-accent-200 rounded-lg hover:bg-accent-100"
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors ${showHooks ? 'bg-primary-50 text-primary-700 border-primary-200' : 'bg-surface-card text-ink-light border-surface-border hover:bg-surface-bg'}`}
           >
             ✍️ Hook-Bibliothek
           </button>
@@ -3915,26 +3913,28 @@ export default function Posts() {
           >
             ?
           </button>
-          <div className="flex items-center gap-1 bg-surface-bg rounded-lg p-1">
-            {filters.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setFilter(f.value)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  filter === f.value
-                    ? 'bg-white text-ink shadow-sm'
-                    : 'text-ink-light hover:text-ink'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
+        </div>
+      </div>
+      <div className="flex items-center justify-end mb-5">
+        <div className="flex items-center gap-1 bg-surface-bg rounded-lg p-1">
+          {filters.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                filter === f.value
+                  ? 'bg-white text-ink shadow-sm'
+                  : 'text-ink-light hover:text-ink'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Search + Angle Filter */}
-      <div className="flex items-center gap-3 mb-5">
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
           <input
