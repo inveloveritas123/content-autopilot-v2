@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useRef, Component } from 'react'
 import { flushSync } from 'react-dom'
 import { useToast } from './ui/Toast'
 import { Button } from './ui/Button'
+import { Dialog } from './ui/Dialog'
+import { CloseButton } from './ui/CloseButton'
 import {
   FileText,
   Check,
@@ -2673,18 +2675,18 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
         )}
 
       {/* Carousel Slide Preview */}
-      {carouselPreview && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => {
-            setCarouselPreview(null)
-            setSelectedCarouselTemplate(null)
-          }}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
+      <Dialog
+        open={!!carouselPreview}
+        onClose={() => {
+          setCarouselPreview(null)
+          setSelectedCarouselTemplate(null)
+        }}
+        maxWidth="xl"
+        contentClassName="p-0 flex flex-col max-h-[90vh]"
+        className="max-h-[90vh]"
+      >
+        {carouselPreview && (
+          <>
             <div className="p-5 border-b border-surface-border flex items-center justify-between flex-shrink-0">
               <div>
                 <h3 className="font-semibold text-ink">📄 Karussell-Vorschau</h3>
@@ -2692,15 +2694,12 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                   {carouselPreview.slide_count} Slides · {carouselPreview.title}
                 </p>
               </div>
-              <button
+              <CloseButton
                 onClick={() => {
                   setCarouselPreview(null)
                   setSelectedCarouselTemplate(null)
                 }}
-                className="p-2 text-ink-muted hover:text-ink rounded-lg hover:bg-surface-bg text-xl"
-              >
-                ×
-              </button>
+              />
             </div>
 
             {/* Template Selector */}
@@ -2810,9 +2809,9 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                 📥 PDF herunterladen
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Dialog>
 
       {/* Performance Modal */}
       {showPerf && (
@@ -2951,9 +2950,18 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
   const qs = current ? postScore(current.content_text || '') : null
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
-        {/* Header */}
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="xl"
+      closeOnEscape={false}
+      contentClassName="p-0 flex flex-col max-h-[90vh]"
+      className="max-h-[90vh]"
+    >
+      <>
+        {/* Header — eigenes ESC-/Pfeiltasten-Handling oben im Keyboard-Listener,
+            Dialog übernimmt daher NICHT selbst ESC (closeOnEscape=false), sonst
+            würde onClose doppelt ausgelöst. */}
         <div className="px-6 py-4 border-b border-surface-border flex items-center gap-3 shrink-0">
           <div className="flex-1">
             <div className="flex items-center gap-3">
@@ -2971,12 +2979,7 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
               />
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-ink-muted hover:text-ink-light hover:bg-surface-bg"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <CloseButton onClick={onClose} />
         </div>
 
         {/* Keyboard hints */}
@@ -3174,8 +3177,8 @@ function FocusTriageModal({ posts, onClose, onCommit }) {
             </button>
           </div>
         )}
-      </div>
-    </div>
+      </>
+    </Dialog>
   )
 }
 
@@ -3714,53 +3717,37 @@ export default function Posts() {
         />
       )}
       {/* Keyboard Shortcuts Modal */}
-      {showShortcuts && (
-        <div
-          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-          onClick={() => setShowShortcuts(false)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-ink text-sm flex items-center gap-2">
-                ⌨️ Tastenkürzel
-              </h3>
-              <button
-                onClick={() => setShowShortcuts(false)}
-                className="text-ink-muted hover:text-ink text-lg leading-none"
-              >
-                ×
-              </button>
+      <Dialog
+        open={showShortcuts}
+        onClose={() => setShowShortcuts(false)}
+        title="⌨️ Tastenkürzel"
+        maxWidth="sm"
+      >
+        <div className="space-y-1 text-xs">
+          {[
+            ['j / k', 'Nächster / Vorheriger Post'],
+            ['a', 'Post freigeben (approve)'],
+            ['r', 'Post verwerfen (reject)'],
+            ['c', 'Post-Text in Zwischenablage kopieren'],
+            ['Enter / o', 'Post öffnen / schließen'],
+            ['Esc', 'Auswahl aufheben / Modal schließen'],
+            ['?', 'Diese Hilfe ein-/ausblenden'],
+          ].map(([key, desc]) => (
+            <div
+              key={key}
+              className="flex items-center justify-between py-1.5 border-b border-surface-border"
+            >
+              <span className="text-ink-muted">{desc}</span>
+              <kbd className="px-2 py-0.5 bg-surface-bg border border-surface-border rounded text-[10px] font-mono font-semibold text-ink shrink-0 ml-3">
+                {key}
+              </kbd>
             </div>
-            <div className="space-y-1 text-xs">
-              {[
-                ['j / k', 'Nächster / Vorheriger Post'],
-                ['a', 'Post freigeben (approve)'],
-                ['r', 'Post verwerfen (reject)'],
-                ['c', 'Post-Text in Zwischenablage kopieren'],
-                ['Enter / o', 'Post öffnen / schließen'],
-                ['Esc', 'Auswahl aufheben / Modal schließen'],
-                ['?', 'Diese Hilfe ein-/ausblenden'],
-              ].map(([key, desc]) => (
-                <div
-                  key={key}
-                  className="flex items-center justify-between py-1.5 border-b border-surface-border"
-                >
-                  <span className="text-ink-muted">{desc}</span>
-                  <kbd className="px-2 py-0.5 bg-surface-bg border border-surface-border rounded text-[10px] font-mono font-semibold text-ink shrink-0 ml-3">
-                    {key}
-                  </kbd>
-                </div>
-              ))}
-            </div>
-            <p className="mt-3 text-[10px] text-ink-muted">
-              Shortcuts funktionieren wenn kein Textfeld fokussiert ist.
-            </p>
-          </div>
+          ))}
         </div>
-      )}
+        <p className="mt-3 text-[10px] text-ink-muted">
+          Shortcuts funktionieren wenn kein Textfeld fokussiert ist.
+        </p>
+      </Dialog>
 
       <div className="flex items-start justify-between gap-4 mb-5 flex-wrap">
         <div className="shrink-0">

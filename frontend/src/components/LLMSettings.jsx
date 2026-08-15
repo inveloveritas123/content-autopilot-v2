@@ -1,5 +1,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import { useToast } from './ui/Toast'
+import { Dialog } from './ui/Dialog'
+import { CloseButton } from './ui/CloseButton'
 import {
   Cpu,
   Plus,
@@ -14,6 +16,7 @@ import {
   Pencil,
   Check,
   X,
+  ArrowLeft,
   FlaskConical,
   RotateCcw,
 } from 'lucide-react'
@@ -1349,29 +1352,26 @@ function AddProviderModal({ onClose, onSave }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 overflow-hidden">
-        {/* Header */}
+    <Dialog open onClose={onClose} maxWidth="lg" contentClassName="p-0">
+      <>
+        {/* Header — eigener Header statt Standard-title-Slot: bedingter
+            Zurück-Button vor dem Titel im step='form'-Zustand. */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
           <div className="flex items-center gap-2">
             {step === 'form' && (
               <button
                 onClick={() => setStep('select')}
                 className="mr-1 p-1 rounded-md hover:bg-surface-bg text-ink-muted hover:text-ink"
+                aria-label="Zurück"
               >
-                <X className="w-4 h-4 rotate-180" style={{ transform: 'rotate(180deg)' }} />
+                <ArrowLeft className="w-4 h-4" />
               </button>
             )}
             <h3 className="text-sm font-semibold text-ink">
               {step === 'select' ? 'Provider hinzufuegen' : `${selectedType?.label} einrichten`}
             </h3>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md hover:bg-surface-bg text-ink-muted"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <CloseButton onClick={onClose} />
         </div>
 
         {/* Body */}
@@ -1639,8 +1639,8 @@ function AddProviderModal({ onClose, onSave }) {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </>
+    </Dialog>
   )
 }
 
