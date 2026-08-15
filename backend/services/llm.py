@@ -381,9 +381,17 @@ class LLMService:
                 json=request_body,
                 headers=headers,
             )
-            # 401 from DB provider → fall back to env config (expired key)
-            if resp.status_code == 401 and provider:
-                logger.warning("DB provider returned 401, falling back to env LiteLLM config")
+            # 401/403 from DB provider → fall back to env config.
+            #
+            # 403 belongs here alongside 401 (incident 2026-08-03): the key encrypted
+            # in `llm_providers` was stale against LITELLM_API_KEY and had no model
+            # approved. The router answers that with 403, not 401 — so this fallback
+            # never fired and the whole prompt pipeline stalled silently.
+            if resp.status_code in (401, 403) and provider:
+                logger.warning(
+                    "DB provider returned HTTP %d, falling back to env LiteLLM config",
+                    resp.status_code,
+                )
                 env_base = self._litellm_base_url or "https://router.requesty.ai/v1"
                 env_key = self._litellm_api_key or ""
                 env_headers = {"Content-Type": "application/json"}
