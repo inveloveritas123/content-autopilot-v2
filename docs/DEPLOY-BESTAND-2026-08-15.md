@@ -552,6 +552,86 @@ Highlander fehlen — die verhindern den Rückfall.
 
 ⛔ **Owner-Entscheidung nötig**, weil das den Deploy-Umfang erweitert.
 
+### 7a.2b PR #147 geprüft — zur Hälfte im Highlander, zur Hälfte nicht
+
+Auf Owner-Nachfrage nachgemessen. Der PR macht **zwei unabhängige Dinge**, und
+sie stehen im Highlander unterschiedlich da.
+
+#### Teil 1 — 403-Fallback: **FEHLT im Highlander**
+
+**Befund** [gemessen]:
+```
+Highlander  backend/services/pipeline_llm.py:440   if resp.status_code == 401:
+PR #147     backend/services/pipeline_llm.py:441   if resp.status_code in (401, 403):
+
+Highlander  backend/services/llm.py:385            if resp.status_code == 401 and provider:
+PR #147     backend/services/llm.py:436            if resp.status_code in (401, 403) and provider:
+```
+
+Der Highlander behandelt an **beiden** Stellen nur `401`. Ein `403` löst den
+Rückfall auf die funktionierende Env-Config **nicht** aus.
+
+**Warum das hier konkret zählt** [gemessen gegen die Prod-DB]:
+```
+llm_providers Zeilen: 3   (alle is_active=true, alle "Requesty.ai")
+  ältester Eintrag: 2026-04-12
+```
+`get_active_provider()` liest den in `llm_providers` verschlüsselten Key und hat
+**Vorrang vor `LITELLM_API_KEY`**. Dieser DB-Key wird laut PR-Beschreibung beim
+Erst-Start einmalig geseedet und **danach nie aktualisiert**. Auf Prod liegen
+drei aktive Einträge, der älteste vom 12.04. — genau die Konstellation, die der
+PR beschreibt.
+
+**Schadensszenario:** Nach einer Key-Rotation in der `.env` driftet der DB-Key
+still ab. Der Router antwortet mit `403` (nicht `401`), der Selbstheilungspfad
+greift nicht, und die Post-Generierung bricht ab — für den Nutzer sichtbar als
+„Das hat gerade nicht geklappt". Transkription und Embeddings laufen über den
+Env-Pfad weiter und melden Erfolg, die Fassade bleibt also intakt.
+
+⚠️ Der PR nennt das als reproduzierten Vorfall (Eric, 03.08.2026, A/B gegen den
+Router: gleiches Modell, DB-Key 403, Env-Key 200).
+
+**[NICHT MESSBAR]** ohne Eingriff: ob die drei DB-Keys *aktuell* gültig sind.
+Das zu prüfen hieße, einen echten LLM-Call abzusetzen — ein Zustandseingriff,
+der in Phase 1 nicht erlaubt ist. Die Struktur des Risikos ist aber belegt.
+
+#### Teil 2 — P08-Prompt-Stub: **im Highlander bereits gelöst**, sogar besser
+
+Der PR repariert als Nebenbefund, dass `_load_p08_prompt` den kompletten Prompt
+verwarf, wenn das User-Template fehlte (P08 lief auf einem ~400-Zeichen-Stub).
+
+Der Highlander hat denselben Bereich **unabhängig und gründlicher** umgebaut
+[gemessen]:
+- `backend/services/p08_service.py:193` lädt über `lade_repo_prompt()` aus
+  `backend/prompts/` statt aus `content-truth`, **mit Platzhalter-Probe**
+- `backend/services/prompt_loader.py:204` — `_extract_user_prompt` matcht
+  `^## User-Prompt\b` und akzeptiert damit ausdrücklich
+  `## User-Prompt: MODE RESPONSE` **mit Suffix**
+
+Der Docstring dort dokumentiert denselben Vorfall (Befund 04.08.2026,
+„monatelang ein 789-Byte-Stummel statt des entworfenen 18-KB-Prompts") und
+nennt die Ursache präzise: zwei Regexe verschiedener Strenge auf derselben
+Datei.
+
+Verifiziert an der realen Datei: `backend/prompts/P08_conversation.md` hat
+`## System-Prompt` (Zeile 1) und `## User-Prompt: MODE RESPONSE` (Zeile 43) —
+der Suffix-Fall, den der Highlander jetzt korrekt trifft.
+
+→ **Teil 2 braucht es nicht mehr.** Ein Übernehmen des ganzen PR würde hier
+gegen den neueren, besseren Stand arbeiten.
+
+#### Empfehlung zu #147
+
+**Nicht den ganzen PR übernehmen** — nur den 403-Teil. Das sind zwei
+Bedingungen (`== 401` → `in (401, 403)`) plus die zugehörige Fehlerprotokollierung.
+
+⚠️ Der PR ändert auch `CLAUDE.md` (+28 Zeilen zur Key-Quelle je Codepfad) und
+`.gitignore`. Beides ist harmlos, aber Teil des Pakets.
+
+⛔ **Owner-Entscheidung**, weil es den Deploy-Umfang erweitert — und weil ein
+Teilübernehmen mehr ist als ein Merge und deshalb einen eigenen Arbeitsschritt
+braucht.
+
 ### 7a.3 Was das für die Wegwahl A/B bedeutet
 
 Die ursprüngliche Sorge bei Weg B war „Louis' laufende PRs müssten rebasen".
