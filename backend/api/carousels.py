@@ -88,7 +88,7 @@ async def list_templates(
 ):
     result = await db.execute(
         select(CarouselTemplate)
-        .where((CarouselTemplate.tenant_id == tenant.id) | (CarouselTemplate.tenant_id is None))
+        .where((CarouselTemplate.tenant_id == tenant.id) | (CarouselTemplate.tenant_id.is_(None)))
         .order_by(CarouselTemplate.is_default.desc())
     )
     templates = result.scalars().all()

@@ -79,7 +79,7 @@ def analyze_item(item_id: str):
                     session.execute(
                         select(Campaign).where(
                             Campaign.tenant_id == item.tenant_id,
-                            Campaign.is_active is True,
+                            Campaign.is_active.is_(True),
                         )
                     )
                     .scalars()

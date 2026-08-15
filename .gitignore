@@ -8,6 +8,7 @@ data/
 *.egg-info/
 .venv/
 venv/
+.ci-venv/
 celerybeat-schedule*
 *.wal
 *.shm

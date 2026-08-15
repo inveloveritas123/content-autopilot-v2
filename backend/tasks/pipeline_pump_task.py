@@ -130,8 +130,8 @@ def pump_pipeline():
                     .where(
                         SourceItem.status == "transcribed",
                         SourceItem.transcript_text.isnot(None),
-                        Source.is_active is True,
-                        SourceItem.is_archived is False,
+                        Source.is_active.is_(True),
+                        SourceItem.is_archived.is_(False),
                     )
                     .order_by(SourceItem.created_at.asc())
                     .limit(ANALYZE_LIMIT)
@@ -168,8 +168,8 @@ def pump_pipeline():
                     .where(
                         SourceItem.status == "analyzed",
                         SourceItem.analysis.isnot(None),
-                        Source.is_active is True,
-                        SourceItem.is_archived is False,
+                        Source.is_active.is_(True),
+                        SourceItem.is_archived.is_(False),
                     )
                     .order_by(SourceItem.created_at.asc())
                     .limit(GENERATE_LIMIT)
@@ -208,8 +208,8 @@ def pump_pipeline():
                     .where(
                         SourceItem.status == "content_ready",
                         SourceItem.analysis.isnot(None),
-                        Source.is_active is True,
-                        SourceItem.is_archived is False,
+                        Source.is_active.is_(True),
+                        SourceItem.is_archived.is_(False),
                         SourceItem.id.not_in(ids_with_ideas) if ids_with_ideas else True,
                     )
                     .order_by(SourceItem.created_at.asc())

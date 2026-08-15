@@ -106,7 +106,7 @@ async def get_dashboard(
         (
             await db.execute(
                 select(Source)
-                .where(Source.tenant_id == tenant.id, Source.is_active is True)
+                .where(Source.tenant_id == tenant.id, Source.is_active.is_(True))
                 .order_by(Source.last_checked_at.desc())
             )
         )
