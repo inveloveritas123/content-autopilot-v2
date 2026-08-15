@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { UserCog, RefreshCw, AlertCircle, Loader2, UserPlus, Check, Building2 } from 'lucide-react'
+import { Dialog } from '../ui/Dialog'
 import {
   adminListAccounts,
   adminListAgencies,
@@ -38,54 +39,55 @@ function CreateAgencyDialog({ onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-surface-border flex items-center gap-3">
-          <Building2 className="w-5 h-5 text-primary-600 shrink-0" />
-          <h2 className="text-sm font-semibold text-ink">Neue Agentur anlegen</h2>
+    <Dialog
+      open
+      onClose={() => onClose(false)}
+      title="Neue Agentur anlegen"
+      titleIcon={Building2}
+      maxWidth="md"
+      closeOnBackdrop={false}
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="block text-xs font-medium text-ink mb-1.5">Name</label>
+          <input
+            type="text"
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="z. B. Zukunftsbund"
+            className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
         </div>
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-ink mb-1.5">Name</label>
-            <input
-              type="text"
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="z. B. Zukunftsbund"
-              className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
+        <div>
+          <label className="block text-xs font-medium text-ink mb-1.5">Slug</label>
+          <input
+            type="text"
+            value={slug}
+            onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+            placeholder="z-b-zukunftsbund"
+            className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+        {error && (
+          <div className="flex items-start gap-2 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            {error}
           </div>
-          <div>
-            <label className="block text-xs font-medium text-ink mb-1.5">Slug</label>
-            <input
-              type="text"
-              value={slug}
-              onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
-              placeholder="z-b-zukunftsbund"
-              className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm text-ink font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
-          {error && (
-            <div className="flex items-start gap-2 p-3 bg-status-fehler-bg border border-status-fehler-border rounded-lg text-xs text-status-fehler-text">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              {error}
-            </div>
+        )}
+        <button
+          onClick={handleCreate}
+          disabled={loading || !name.trim() || !slug.trim()}
+          className="w-full flex items-center justify-center gap-2 py-2 px-4 text-sm font-medium rounded-lg bg-primary-700 text-white hover:bg-primary-800 disabled:opacity-50 transition-colors"
+        >
+          {loading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Building2 className="w-4 h-4" />
           )}
-          <button
-            onClick={handleCreate}
-            disabled={loading || !name.trim() || !slug.trim()}
-            className="w-full flex items-center justify-center gap-2 py-2 px-4 text-sm font-medium rounded-lg bg-primary-700 text-white hover:bg-primary-800 disabled:opacity-50 transition-colors"
-          >
-            {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Building2 className="w-4 h-4" />
-            )}
-            Agentur anlegen
-          </button>
-        </div>
-        <div className="px-5 pb-4 flex justify-end">
+          Agentur anlegen
+        </button>
+        <div className="flex justify-end">
           <button
             onClick={() => onClose(false)}
             className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg transition-colors"
@@ -94,7 +96,7 @@ function CreateAgencyDialog({ onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -146,16 +148,17 @@ function AccountDialog({ editUser, agencies, tenants, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-        <div className="px-5 py-4 border-b border-surface-border flex items-center gap-3">
-          <UserCog className="w-5 h-5 text-primary-600 shrink-0" />
-          <h2 className="text-sm font-semibold text-ink">
-            {isEdit ? `Account bearbeiten — ${editUser.email}` : 'Neuen Login-Account anlegen'}
-          </h2>
-        </div>
-
-        <div className="p-5 space-y-4 overflow-y-auto">
+    <Dialog
+      open
+      onClose={() => onClose(false)}
+      title={isEdit ? `Account bearbeiten — ${editUser.email}` : 'Neuen Login-Account anlegen'}
+      titleIcon={UserCog}
+      maxWidth="lg"
+      closeOnBackdrop={false}
+      contentClassName="p-5 space-y-4"
+    >
+      <>
+        <div className="space-y-4">
           {!isEdit && (
             <div>
               <label className="block text-xs font-medium text-ink mb-1.5">E-Mail</label>
@@ -269,7 +272,7 @@ function AccountDialog({ editUser, agencies, tenants, onClose }) {
           )}
         </div>
 
-        <div className="px-5 py-4 border-t border-surface-border flex justify-end gap-2">
+        <div className="pt-4 mt-4 border-t border-surface-border flex justify-end gap-2">
           <button
             onClick={() => onClose(false)}
             className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg transition-colors"
@@ -285,8 +288,8 @@ function AccountDialog({ editUser, agencies, tenants, onClose }) {
             {isEdit ? 'Speichern' : 'Account anlegen'}
           </button>
         </div>
-      </div>
-    </div>
+      </>
+    </Dialog>
   )
 }
 
@@ -351,33 +354,34 @@ export default function AccountManagement() {
         />
       )}
 
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-5">
-            <p className="text-sm text-ink mb-4">
-              Account <strong>{deleteTarget.email}</strong> wirklich löschen? Das kann nicht
-              rückgängig gemacht werden.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg"
-              >
-                Abbrechen
-              </button>
-              <button
-                onClick={() => handleDelete(deleteTarget)}
-                // rot bewusst behalten: kräftiger Destruktiv-Button-Ton, status-fehler-*-
-                // Tokens sind für Badges/Borders auf hellem Grund gedacht, nicht kräftig
-                // genug als Volltonfläche für einen Löschen-Button.
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700"
-              >
-                Löschen
-              </button>
-            </div>
-          </div>
+      <Dialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        maxWidth="sm"
+        closeOnBackdrop={false}
+      >
+        <p className="text-sm text-ink mb-4">
+          Account <strong>{deleteTarget?.email}</strong> wirklich löschen? Das kann nicht
+          rückgängig gemacht werden.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => setDeleteTarget(null)}
+            className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg"
+          >
+            Abbrechen
+          </button>
+          <button
+            onClick={() => handleDelete(deleteTarget)}
+            // rot bewusst behalten: kräftiger Destruktiv-Button-Ton, status-fehler-*-
+            // Tokens sind für Badges/Borders auf hellem Grund gedacht, nicht kräftig
+            // genug als Volltonfläche für einen Löschen-Button.
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700"
+          >
+            Löschen
+          </button>
         </div>
-      )}
+      </Dialog>
 
       {/* bewusst behalten: bg-slate-800, bg-slate-700, text-slate-400, text-slate-300,
           text-slate-500 = dunkle Admin-Seitenkörper-Oberfläche (Tabelle, Buttons) —

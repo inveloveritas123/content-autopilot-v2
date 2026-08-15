@@ -17,6 +17,8 @@ import {
   adminCreateUser,
   setApiKey,
 } from '../../api'
+import { Dialog } from '../ui/Dialog'
+import { CloseButton } from '../ui/CloseButton'
 
 // localStorage-Key für den aktiven X-API-Key (gleicher Key wie main.jsx/tenant-init nutzt)
 const API_KEY_STORAGE = 'apiKey'
@@ -87,17 +89,25 @@ function NewKeyDialog({ userId, userName, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
-        {/* Header */}
+    <Dialog
+      open
+      onClose={() => onClose(false)}
+      maxWidth="md"
+      closeOnBackdrop={false}
+      contentClassName="p-0"
+    >
+      <>
+        {/* Header — bewusst eigenes accent-Design statt Standard-Dialog-Header:
+            hebt die einmalige Sichtbarkeit des Klartext-Keys visuell hervor. */}
         <div className="px-5 py-4 bg-accent-50 border-b border-accent-200 flex items-center gap-3">
           <Key className="w-5 h-5 text-accent-600 shrink-0" />
-          <div>
+          <div className="flex-1">
             <h2 className="text-sm font-semibold text-accent-900">
               Neuer API-Key — einmalig sichtbar
             </h2>
             <p className="text-xs text-accent-700 mt-0.5">Nutzer: {userName}</p>
           </div>
+          <CloseButton onClick={() => onClose(false)} />
         </div>
 
         <div className="p-5 space-y-4">
@@ -151,8 +161,8 @@ function NewKeyDialog({ userId, userName, onClose }) {
             Schließen
           </button>
         </div>
-      </div>
-    </div>
+      </>
+    </Dialog>
   )
 }
 
@@ -179,14 +189,16 @@ function SetKeyDialog({ userId, userName, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-surface-border">
-          <h2 className="text-sm font-semibold text-ink">API-Key setzen</h2>
-          <p className="text-xs text-ink-muted mt-0.5">Nutzer: {userName}</p>
-        </div>
-
-        <div className="p-5 space-y-4">
+    <Dialog
+      open
+      onClose={onClose}
+      title="API-Key setzen"
+      maxWidth="md"
+      closeOnBackdrop={false}
+    >
+      <>
+        <p className="text-xs text-ink-muted -mt-2 mb-4">Nutzer: {userName}</p>
+        <div className="space-y-4">
           {!masked ? (
             <>
               <div>
@@ -232,7 +244,7 @@ function SetKeyDialog({ userId, userName, onClose }) {
           )}
         </div>
 
-        <div className="px-5 pb-4 flex justify-end">
+        <div className="pt-4 mt-4 border-t border-surface-border flex justify-end">
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg transition-colors"
@@ -240,8 +252,8 @@ function SetKeyDialog({ userId, userName, onClose }) {
             Schließen
           </button>
         </div>
-      </div>
-    </div>
+      </>
+    </Dialog>
   )
 }
 
@@ -278,15 +290,16 @@ function CreateUserDialog({ onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-surface-border flex items-center gap-3">
-          <UserPlus className="w-5 h-5 text-primary-600 shrink-0" />
-          <h2 className="text-sm font-semibold text-ink">Neuen Benutzer anlegen</h2>
-        </div>
-
-        <div className="p-5 space-y-4">
+    <Dialog
+      open
+      onClose={() => onClose(false)}
+      title="Neuen Benutzer anlegen"
+      titleIcon={UserPlus}
+      maxWidth="md"
+      closeOnBackdrop={false}
+    >
+      <>
+        <div className="space-y-4">
           {/* Phase 1: Name eingeben */}
           {!newKey && (
             <>
@@ -369,7 +382,7 @@ function CreateUserDialog({ onClose }) {
         </div>
 
         {!newKey && (
-          <div className="px-5 pb-4 flex justify-end">
+          <div className="pt-4 mt-4 border-t border-surface-border flex justify-end">
             <button
               onClick={() => onClose(false)}
               className="px-4 py-2 text-sm font-medium rounded-lg border border-surface-border text-ink-muted hover:bg-surface-bg transition-colors"
@@ -378,8 +391,8 @@ function CreateUserDialog({ onClose }) {
             </button>
           </div>
         )}
-      </div>
-    </div>
+      </>
+    </Dialog>
   )
 }
 
