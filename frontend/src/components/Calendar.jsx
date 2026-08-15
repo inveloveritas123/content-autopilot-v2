@@ -1,5 +1,6 @@
 // AUDITED-2026-08-14 (D6): Tiefen-Audit, Datei vollstaendig gelesen.
 import { useState, useEffect } from 'react'
+import { Dialog } from './ui/Dialog'
 import {
   ChevronLeft,
   ChevronRight,
@@ -145,19 +146,16 @@ function ScheduleModal({ selectedDate, posts, onClose, onScheduled }) {
   })
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="p-5 border-b border-surface-border flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-ink">Post einplanen</h3>
-            <p className="text-xs text-ink-muted mt-0.5">{dateLabel}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-ink-light hover:text-ink-light rounded-lg hover:bg-surface-bg text-xl"
-          >
-            ×
-          </button>
+    <Dialog
+      open
+      onClose={onClose}
+      title="Post einplanen"
+      maxWidth="md"
+      contentClassName="p-0"
+    >
+      <>
+        <div className="px-5 pt-1 pb-3 border-b border-surface-border -mt-2">
+          <p className="text-xs text-ink-muted">{dateLabel}</p>
         </div>
 
         {/* Existing posts on this day */}
@@ -260,8 +258,8 @@ function ScheduleModal({ selectedDate, posts, onClose, onScheduled }) {
             Einplanen
           </button>
         </div>
-      </div>
-    </div>
+      </>
+    </Dialog>
   )
 }
 
@@ -471,16 +469,14 @@ export default function Calendar() {
       </div>
 
       {/* Post detail modal */}
-      {selectedPost && (
-        <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
-          onClick={() => setSelectedPost(null)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="font-semibold text-ink mb-3">Geplanter Post</h3>
+      <Dialog
+        open={!!selectedPost}
+        onClose={() => setSelectedPost(null)}
+        title="Geplanter Post"
+        maxWidth="sm"
+      >
+        {selectedPost && (
+          <>
             <div className="space-y-2 mb-4">
               <div className="flex justify-between text-sm">
                 <span className="text-ink-muted">Datum</span>
@@ -533,9 +529,9 @@ export default function Calendar() {
                 </button>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Dialog>
 
       {/* Schedule new post modal */}
       {selectedDay && (

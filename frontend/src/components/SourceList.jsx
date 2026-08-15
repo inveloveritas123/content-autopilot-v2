@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useToast } from './ui/Toast'
+import { Dialog } from './ui/Dialog'
+import { CloseButton } from './ui/CloseButton'
 import {
   Radio,
   Rss,
@@ -941,15 +943,15 @@ function SourceItemsModal({ sourceId, sourceName, onClose }) {
   const currentPage = Math.floor(offset / LIMIT) + 1
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="xl"
+      contentClassName="p-0 flex flex-col max-h-[80vh]"
+      className="max-h-[80vh]"
     >
-      <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
+      <>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border shrink-0">
           <div>
             <h3 className="font-semibold text-ink text-sm">{sourceName}</h3>
             <p className="text-xs text-ink-muted mt-0.5">{total} Items in der Pipeline</p>
@@ -970,22 +972,7 @@ function SourceItemsModal({ sourceId, sourceName, onClose }) {
               <option value="content_ready">Fertig</option>
               <option value="transcription_failed">Fehler</option>
             </select>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-bg text-ink-muted">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
+            <CloseButton onClick={onClose} />
           </div>
         </div>
 
@@ -1046,7 +1033,7 @@ function SourceItemsModal({ sourceId, sourceName, onClose }) {
         </div>
 
         {pages > 1 && (
-          <div className="flex items-center justify-between px-5 py-3 border-t border-surface-border">
+          <div className="flex items-center justify-between px-5 py-3 border-t border-surface-border shrink-0">
             <span className="text-xs text-ink-muted">
               Seite {currentPage} / {pages}
             </span>
@@ -1068,8 +1055,8 @@ function SourceItemsModal({ sourceId, sourceName, onClose }) {
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </>
+    </Dialog>
   )
 }
 

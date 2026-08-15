@@ -22,6 +22,8 @@ import {
   getBrandVoiceStatus,
   runVoiceCompare,
 } from '../api'
+import { Dialog } from './ui/Dialog'
+import { CloseButton } from './ui/CloseButton'
 
 const VOICE_DIMENSIONS = [
   {
@@ -289,9 +291,10 @@ function WizardModal({ onClose, onApply }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-        {/* Header */}
+    <Dialog open onClose={onClose} maxWidth="lg" closeOnBackdrop={false} contentClassName="p-0">
+      <>
+        {/* Header — bewusst eigen statt Standard-Dialog-Header: Progress-Bar
+            muss zwischen Header und Content sitzen. */}
         <div className="p-6 border-b border-surface-border flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold text-ink">Stimm-Profil Schnell-Setup</h2>
@@ -299,12 +302,7 @@ function WizardModal({ onClose, onApply }) {
               Schritt {step} von 3 — 3 Fragen, fertig in 60 Sekunden
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-ink-light hover:text-ink-light rounded-lg hover:bg-surface-bg"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <CloseButton onClick={onClose} />
         </div>
 
         {/* Progress bar */}
@@ -429,8 +427,8 @@ function WizardModal({ onClose, onApply }) {
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </>
+    </Dialog>
   )
 }
 

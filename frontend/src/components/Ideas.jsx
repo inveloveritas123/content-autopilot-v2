@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import { useToast } from './ui/Toast'
 import { Button } from './ui/Button'
+import { Dialog } from './ui/Dialog'
 import {
   Lightbulb,
   MessageCircleQuestion,
@@ -1548,23 +1549,13 @@ export default function Ideas() {
       )}
 
       {/* Manual Idea Modal */}
-      {showManualIdea && (
-        <div
-          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowManualIdea(false)
-          }}
-        >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-ink">Manuelle Idee erstellen</h2>
-              <button
-                onClick={() => setShowManualIdea(false)}
-                className="text-ink-muted hover:text-ink-light text-lg font-bold"
-              >
-                ✕
-              </button>
-            </div>
+      <Dialog
+        open={showManualIdea}
+        onClose={() => setShowManualIdea(false)}
+        title="Manuelle Idee erstellen"
+        maxWidth="lg"
+      >
+        <div className="space-y-4">
             <p className="text-xs text-ink-muted">
               Trage eine eigene Idee ein — ohne LLM-Budget. Sobald Budget verfügbar, kannst du
               Quick-Generate nutzen.
@@ -1649,9 +1640,8 @@ export default function Ideas() {
                 {manualSaving ? '⏳ Speichern...' : '✓ Idee erstellen'}
               </button>
             </div>
-          </div>
         </div>
-      )}
+      </Dialog>
     </div>
   )
 }
