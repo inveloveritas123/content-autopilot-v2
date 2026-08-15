@@ -469,6 +469,124 @@ nacktes `alembic upgrade`. ⚠️ Der Deploy-Workflow ruft aktuell **nacktes
 
 ---
 
+## 7a. Nachtrag 15.08.: Die offenen PRs — und ein Bug, der im Highlander steckt
+
+Erhoben auf Owner-Nachfrage („schau dir die PRs an"). **19 offene PRs**
+[gemessen] `gh pr list --limit 60` (eine frühere Zählung mit 10 war durch das
+Default-Limit abgeschnitten).
+
+### 7a.1 Aufteilung
+
+| Gruppe | Anzahl | Bewertung |
+|---|---|---|
+| Dependabot | 13 | Routine, deploy-irrelevant |
+| Menschlich (LH141LH / inveloveritas123) | 6 | **relevant** |
+
+**Die 6 menschlichen PRs gegen den Highlander geprüft** [gemessen]
+`git merge-base --is-ancestor`:
+
+| PR | Branch | Im Highlander? |
+|---|---|---|
+| #108 `_meta`-Rehydration | `arch/26-meta` | **enthalten** |
+| #109 LLM fail-closed | `arch/106-llm-failclosed` | **enthalten** |
+| #148 SQL-Filter | `fix/sqlalchemy-identitaetsvergleiche` | **NICHT enthalten** |
+| #147 403-Provider | `fix/provider-key-drift-p08-prompt` | **NICHT enthalten** |
+| #112 voice_drift EU | `arch/111-voicedrift-eu` | **NICHT enthalten** |
+| #116 voice_drift EU (knecht) | `knecht/fix-111-voice-drift-eu` | **NICHT enthalten** |
+
+→ #108/#109 können nach dem Deploy geschlossen werden (Inhalt ist drin).
+→ #112/#116 sind zwei Varianten derselben Sache (Issue #111), beide seit
+**Juni** unbewegt.
+
+### 7a.2 ⚠️ PR #148 deckt einen Bug auf, der im Highlander aktiv ist
+
+**Das ist der wichtigste Fund dieses Nachtrags.** Der Highlander enthält den
+Fehler, den PR #148 behebt — ungefixt.
+
+**Befund** [gemessen] `grep` gegen den Highlander:
+```python
+backend/tasks/monitor_task.py:23    .where(Source.is_active is True)
+backend/api/dashboard.py:109        .where(…, Source.is_active is True)
+backend/api/items.py:68/70          .where(SourceItem.is_archived is True/False)
++ 17 weitere in api/sources.py, api/pipeline.py, tasks/pipeline_pump_task.py,
+  tasks/generate_task.py                       → zusammen 21 Stellen
+```
+
+`Source.is_active is True` ist ein **Python-Identitätsvergleich**, kein
+SQLAlchemy-Ausdruck. Er ergibt immer `False`, und SQLAlchemy kompiliert das zu
+`WHERE false`.
+
+**Beweis** [gemessen, echtes SQLAlchemy im Prod-Backend-Container]:
+```
+Python-Auswertung von 'S.is_active is True': False
+
+KAPUTT  (wie im Highlander):  SELECT s.id FROM s WHERE false
+KORREKT (wie in PR #148):     SELECT s.id FROM s WHERE s.is_active IS true
+```
+
+**Schadensszenario — nicht theoretisch:** Betroffen ist unter anderem
+`monitor_all_sources()` [Datei] `backend/tasks/monitor_task.py:23`, der Task,
+der auf Prod laut Beat-Log **im Minutentakt läuft**. Er lädt „alle aktiven
+Quellen" und bekommt **immer eine leere Liste**. Dasselbe gilt für den
+Pipeline-Pump (`pipeline_pump_task.py`, 3× betroffen), der Items zur Analyse
+zieht, und für die Dashboard-Zählung aktiver Quellen.
+
+Die Pipeline *läuft* also, verarbeitet aber nichts — ohne Fehlermeldung. Ein
+stiller Totalausfall der Quellen-Überwachung sieht in den Logs wie
+Normalbetrieb aus, und genau so sah er bei meiner Messung aus (Abschnitt 1.3:
+„Beat sendet alle 5 s …" — er sendet, aber der Task findet nichts).
+
+⚠️ **Ob das auf dem laufenden Prod-Stand ebenfalls zutrifft, habe ich NICHT
+gemessen** — der Server hat keinen Git-Checkout (1.4), ich müsste die
+Dateien einzeln lesen. **[NICHT MESSBAR]** ohne weiteren Messgang. Da der
+Prod-Stand vom 13.08. stammt und PR #148 vom 04.08. nie gemerged wurde, ist
+es aber **wahrscheinlich**.
+
+**Norm/Regel:** Hauskonvention — ein Deploy darf keinen bekannten, gefixten
+Bug erneut ausliefern.
+
+**Empfehlung:** PR #148 vor dem Deploy in den Highlander übernehmen, so wie
+der Auth-Fix. Er bringt zusätzlich 302 Zeilen Test mit
+(`test_query_filter_invariants.py`, `test_monitor_task_query.py`), die im
+Highlander fehlen — die verhindern den Rückfall.
+
+⛔ **Owner-Entscheidung nötig**, weil das den Deploy-Umfang erweitert.
+
+### 7a.3 Was das für die Wegwahl A/B bedeutet
+
+Die ursprüngliche Sorge bei Weg B war „Louis' laufende PRs müssten rebasen".
+Diese Sorge ist **schwächer als angenommen** [gemessen]:
+
+- **13 der 19** sind Dependabot — die rebasen sich selbst.
+- Von den 6 menschlichen sind **2 bereits im Highlander** (nur noch zu
+  schließen).
+- Die restlichen 4 sind seit **04.08. bzw. Juni** unbewegt — keiner davon
+  wirkt wie aktive Arbeit, an der jemand gerade sitzt.
+- Letzte menschliche Aktivität auf `main`: **07.08.**, also über eine Woche her.
+
+→ **Das Rebase-Argument gegen Weg B trägt kaum noch.** Was gegen B bleibt, ist
+allein der fehlende Handschalter (Auto-Deploy von 62 Commits) und der
+Force-Push auf einen geteilten Default-Branch im Rückwegfall.
+
+### 7a.4 Rückweg bei Weg B — gemessen
+
+| Prüfung | Ergebnis |
+|---|---|
+| `main` branch-protected? | **nein** (HTTP 404 auf die Protection-API) |
+| Eigene Rechte | `push: true`, `admin: false` |
+| Merge wäre echter FF? | **ja** — Merge-Base = `origin/main` = `aaefc30` |
+
+**Der Rückweg ist eine einzige SHA:** `git push --force-with-lease origin
+aaefc30:main`. Weil der Merge ein Fast-Forward wäre, entsteht kein
+Merge-Commit und keine Vermischung — `main` wird nur weitergeschoben.
+
+⚠️ **Aber Git allein reicht nicht:** Ein Revert auf `main` löst einen neuen
+Deploy aus, die **Migrationen 064/065 bleiben jedoch angewandt**. Der
+tatsächliche Rückweg bleibt der Incus-Snapshot (Code + DB in einem) — bei
+Weg A und B gleichermaßen.
+
+---
+
 ## 8. Was ich nicht weiß
 
 - **Was die 62 Commits fachlich ändern** — nur aus Migrationen abgeleitet (5.)
