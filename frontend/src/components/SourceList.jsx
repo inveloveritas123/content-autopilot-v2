@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useToast } from './ui/Toast'
 import { Dialog } from './ui/Dialog'
 import { CloseButton } from './ui/CloseButton'
+import { Badge } from './ui/Badge'
 import {
   Radio,
   Rss,
@@ -368,11 +369,9 @@ function SourceCard({
               {analyzing ? '...' : analyzeResult || `Analyse (${transcribedCount})`}
             </button>
           )}
-          <span
-            className={`ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${source.is_active ? 'bg-status-fertig-bg text-status-fertig-text' : 'bg-surface-border text-ink-muted'}`}
-          >
+          <Badge color={source.is_active ? 'fertig' : 'archiviert'} size="sm" className="ml-auto">
             {source.is_active ? 'Aktiv' : 'Pausiert'}
-          </span>
+          </Badge>
         </div>
       </div>
     </div>

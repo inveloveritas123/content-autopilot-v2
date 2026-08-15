@@ -13,6 +13,20 @@ const colors = {
   archiviert: 'bg-status-archiviert-bg text-status-archiviert-text',
 }
 
+const borderColors = {
+  neu: 'border-status-neu-border',
+  aktiv: 'border-status-aktiv-border',
+  fertig: 'border-status-fertig-border',
+  fehler: 'border-status-fehler-border',
+  archiviert: 'border-status-archiviert-border',
+}
+
+const sizes = {
+  xs: 'px-1.5 py-0.5 text-[10px]',
+  sm: 'px-2 py-0.5 text-[11px]',
+  md: 'px-2.5 py-0.5 text-xs',
+}
+
 // Rückwärtskompatible Aliase: einige Feature-Komponenten (außerhalb des
 // Migrations-Scopes dieser Welle, z.B. PromptStudio.jsx, ContentCalendar.jsx)
 // übergeben noch alte Rohfarbnamen als `color`-Prop. Bis diese in Welle D6
@@ -52,7 +66,7 @@ const statusColors = {
   scheduled: 'aktiv',
 }
 
-export function Badge({ color, status, className, children }) {
+export function Badge({ color, status, className, children, border = false, size = 'md' }) {
   const resolvedColor =
     (colors[color] && color) ||
     legacyColorAliases[color] ||
@@ -61,8 +75,11 @@ export function Badge({ color, status, className, children }) {
   return (
     <span
       className={clsx(
-        'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
+        'inline-flex items-center gap-1 rounded-full font-medium',
+        sizes[size] || sizes.md,
         colors[resolvedColor],
+        border && 'border',
+        border && (borderColors[resolvedColor] || borderColors.archiviert),
         className
       )}
     >

@@ -10,6 +10,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { getDriftObservations, decideDriftObservation } from '../api'
+import { Badge } from './ui/Badge'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -38,18 +39,18 @@ function triggerLabel(obs) {
   return 'nach 10 Posts'
 }
 
-function statusBadge(status) {
+function statusBadgeColor(status) {
   switch (status) {
     case 'pending_review':
-      return 'bg-status-aktiv-bg text-status-aktiv-text border-status-aktiv-border'
+      return 'aktiv'
     case 'accepted':
-      return 'bg-status-fertig-bg text-status-fertig-text border-status-fertig-border'
+      return 'fertig'
     case 'rejected':
-      return 'bg-status-fehler-bg text-status-fehler-text border-status-fehler-border'
+      return 'fehler'
     case 'partial':
-      return 'bg-status-neu-bg text-status-neu-text border-status-neu-border'
+      return 'neu'
     default:
-      return 'bg-surface-bg text-ink-light border-surface-border'
+      return 'archiviert'
   }
 }
 
@@ -232,11 +233,9 @@ function ObservationCard({ obs, onDecided }) {
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-sm text-ink-muted">{formatDate(obs.created_at)}</span>
           <span className="text-xs text-ink-muted">{triggerLabel(obs)}</span>
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-medium ${statusBadge(obs.status)}`}
-          >
+          <Badge color={statusBadgeColor(obs.status)} border size="sm">
             {statusLabel(obs.status)}
-          </span>
+          </Badge>
           {changes.length > 0 && (
             <span className="text-xs text-ink-muted">
               {changes.length} {changes.length === 1 ? 'Änderung' : 'Änderungen'}
@@ -332,9 +331,9 @@ export default function DriftReview() {
           </p>
         </div>
         {!loading && !error && pendingCount > 0 && (
-          <span className="inline-flex items-center px-3 py-1 rounded-full bg-status-aktiv-bg border border-status-aktiv-border text-status-aktiv-text text-xs font-medium">
+          <Badge color="aktiv" border className="px-3 py-1">
             {pendingCount} ausstehend
-          </span>
+          </Badge>
         )}
       </div>
 

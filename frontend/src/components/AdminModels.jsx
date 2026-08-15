@@ -10,6 +10,7 @@ import {
   Loader2,
   AlertCircle,
 } from 'lucide-react'
+import { Badge } from './ui/Badge'
 import {
   listAdminModels,
   startBacktest,
@@ -92,9 +93,9 @@ function ModelList({ models, loading, error, onRefresh }) {
                     </p>
                   </div>
                   {isNew && (
-                    <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full bg-status-neu-bg border border-status-neu-border text-[10px] font-medium text-status-neu-text">
+                    <Badge color="neu" border size="xs" className="shrink-0">
                       Neu
-                    </span>
+                    </Badge>
                   )}
                 </li>
               )

@@ -18,6 +18,7 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { Dialog } from './ui/Dialog'
+import { Badge } from './ui/Badge'
 import {
   getBrandVoiceStatus,
   uploadBrandVoiceFile,
@@ -636,14 +637,16 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
                       { label: 'Kundenkontext', v: customer_context },
                       { label: 'Avatar', v: audience_avatar },
                     ].map(({ label, v }) => (
-                      <span
+                      <Badge
                         key={label}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-status-fertig-bg text-status-fertig-text text-[11px] font-medium border border-status-fertig-border"
+                        color="fertig"
+                        border
+                        size="sm"
                       >
                         <CheckCircle2 className="w-3 h-3" />
                         {label}
                         {v?.version && <span className="opacity-60">v{v.version}</span>}
-                      </span>
+                      </Badge>
                     ))}
                   </div>
                 </>

@@ -12,6 +12,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { getReviewQueue, decideReviewQueueItem } from '../api'
+import { Badge } from './ui/Badge'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -39,14 +40,14 @@ function formatDate(iso) {
   }
 }
 
-function severityClasses(severity) {
+function severityColor(severity) {
   switch (severity) {
     case 'high':
-      return 'bg-status-fehler-bg text-status-fehler-text border-status-fehler-border'
+      return 'fehler'
     case 'medium':
-      return 'bg-status-aktiv-bg text-status-aktiv-text border-status-aktiv-border'
+      return 'aktiv'
     default:
-      return 'bg-surface-border text-ink-light border-surface-border'
+      return 'archiviert'
   }
 }
 
@@ -104,21 +105,16 @@ function QueueItemCard({ item, onRemoved }) {
           <span className="text-sm text-ink-muted">{formatDate(item.created_at)}</span>
 
           {/* Severity badge */}
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-medium ${severityClasses(severity)}`}
-          >
+          <Badge color={severityColor(severity)} border size="sm">
             {severityLabel(severity)}
-          </span>
+          </Badge>
 
           {/* Category tags */}
           {categories.map((cat) => (
-            <span
-              key={cat}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-border text-ink-light text-[11px] border border-surface-border"
-            >
+            <Badge key={cat} color="archiviert" border size="sm">
               <Tag className="w-2.5 h-2.5" />
               {categoryLabel(cat)}
-            </span>
+            </Badge>
           ))}
         </div>
 
@@ -158,10 +154,10 @@ function QueueItemCard({ item, onRemoved }) {
                   return (
                     <div key={idx} className="flex items-start gap-2 text-sm">
                       {phraseCategory && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-border text-ink-light text-[11px] border border-surface-border shrink-0 mt-0.5">
+                        <Badge color="archiviert" border size="sm" className="shrink-0 mt-0.5">
                           <Tag className="w-2.5 h-2.5" />
                           {categoryLabel(phraseCategory)}
-                        </span>
+                        </Badge>
                       )}
                       <span className="text-ink leading-relaxed">{phraseText}</span>
                     </div>
@@ -264,9 +260,9 @@ export default function ReviewQueue() {
           </p>
         </div>
         {!loading && !error && items.length > 0 && (
-          <span className="inline-flex items-center px-3 py-1 rounded-full bg-status-fehler-bg border border-status-fehler-border text-status-fehler-text text-xs font-medium">
+          <Badge color="fehler" border className="px-3 py-1">
             {items.length} ausstehend
-          </span>
+          </Badge>
         )}
       </div>
 
