@@ -1,3 +1,4 @@
+# AUDITED-2026-08-15 (zubu-louis-immer-eine-antwort): Tiefen-Audit, Datei vollstaendig gelesen.
 """
 Cron-Task: findet Einträge in telegram_message_log mit routed_to='reviewer_queue'
 und created_at > 24h → sendet Zusammenfassung per Telegram oder Email.

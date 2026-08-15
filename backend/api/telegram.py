@@ -1,3 +1,4 @@
+# AUDITED-PARTIAL-2026-08-15 (zubu-louis-immer-eine-antwort): nur die Kernpfade geprueft.
 """
 Telegram Webhook Receiver + One-Time-Token Auth Flow (Issue #61).
 

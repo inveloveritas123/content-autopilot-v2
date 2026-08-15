@@ -1,3 +1,4 @@
+# SCREENED-2026-08-15: strukturell durchgesehen, keine Befunde.
 """Celery-Task + plain callable: pollt alle aktiven Telegram-Bots.
 
 Öffentliche Schnittstelle:
