@@ -29,6 +29,7 @@ from sqlalchemy.orm import sessionmaker
 from config import settings
 from models.base import sync_session_factory
 from services.anweisungs_marker import MARKER_PATCH_JSON
+from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
 from services.voice_transcription import (
     TranscriptionError,
     TranscriptionResult,
@@ -48,6 +49,13 @@ TELEGRAM_API_BASE = "https://api.telegram.org"
 def _load_log_row(log_id: str) -> dict | None:
     """Lädt eine telegram_message_log-Zeile als Dict."""
     with sync_session_factory() as db:
+        # RLS-Bypass statt Tenant-Kontext: die tenant_id steht hier erst NACH
+        # diesem SELECT fest (sie ist Teil der Zeile, nicht Funktionsparameter).
+        # Ohne Bypass liefert `telegram_message_log` unter FORCE ROW LEVEL
+        # SECURITY 0 Zeilen — der Task meldet "log_not_found" für eine real
+        # existierende Zeile, und process_telegram_update bricht sofort ab,
+        # bevor irgendein Tenant-Kontext ermittelt werden könnte.
+        set_rls_bypass_sync(db, True)
         row = db.execute(
             text(
                 "SELECT id, tenant_id, message_type, original_payload, "
@@ -70,6 +78,13 @@ def _load_log_row(log_id: str) -> dict | None:
 
 def _update_log_transcript(log_id: str, transcript: str, model: str, confidence: float) -> None:
     with sync_session_factory() as db:
+        # RLS-Bypass statt Tenant-Kontext: die Funktion bekommt nur log_id, keine
+        # tenant_id im Scope. Ohne Bypass matcht die FORCE-ROW-LEVEL-SECURITY-Policy
+        # auf `telegram_message_log` kein Update (0 rows affected) — das Transkript
+        # würde nie gespeichert, und der Nutzer bekäme trotz erfolgreicher
+        # Transkription nie eine Quittung, weil der folgende Chunk-Speicherpfad auf
+        # einem leeren Transkript-Feld weiterläuft.
+        set_rls_bypass_sync(db, True)
         db.execute(
             text(
                 "UPDATE telegram_message_log "
@@ -99,6 +114,13 @@ def _load_active_session(tenant_id: str) -> object | None:
     gestellte Frage klassifizieren kann statt blind zu raten.
     """
     with sync_session_factory() as db:
+        # tenant_id ist Funktionsparameter, die Abfrage betrifft ausschliesslich
+        # diesen Tenant → enger Tenant-Kontext statt Bypass. Ohne ihn liefert
+        # `bot_session` unter FORCE ROW LEVEL SECURITY 0 Zeilen: eine aktive
+        # Session würde als "keine Session" erscheinen, und jede laufende
+        # Interview-Antwort des Nutzers verirrt sich statt beim p08-Routing
+        # anzukommen.
+        set_rls_tenant_sync(db, tenant_id)
         row = db.execute(
             text(
                 "SELECT id, status, messages FROM bot_session "
@@ -284,6 +306,13 @@ def _verwerfe_session(session_id: str) -> None:
     """
     try:
         with sync_session_factory() as db:
+            # RLS-Bypass statt Tenant-Kontext: die Funktion bekommt nur session_id,
+            # keine tenant_id im Scope. Ohne Bypass matcht die FORCE-RLS-Policy auf
+            # `bot_session` kein Update — die Rollback-Session bliebe 'active' und
+            # UNSICHTBAR stehen (siehe Docstring oben), jede weitere Nachricht des
+            # Nutzers würde dann faelschlich als Antwort auf eine nie gestellte
+            # Frage geroutet.
+            set_rls_bypass_sync(db, True)
             db.execute(
                 text(
                     "UPDATE bot_session SET status = 'expired', updated_at = NOW() "
@@ -331,6 +360,14 @@ def _markiere_chunk_als_anweisung(tenant_id: str, log_id: str) -> bool:
     """
     try:
         with sync_session_factory() as db:
+            # tenant_id ist Funktionsparameter, das UPDATE ist per WHERE ohnehin
+            # auf diesen Tenant eingeschraenkt → enger Tenant-Kontext statt Bypass.
+            # Ohne ihn matcht die FORCE-RLS-Policy auf `memory_chunks` kein Update:
+            # der Chunk bliebe unmarkiert, und `search_similar`/`p06_profile_
+            # extractor_task`/`memory_picker` wuerden ihn wie normalen Inhalt statt
+            # wie eine Steuer-Anweisung behandeln — fail-open zwar (kein Absturz),
+            # aber Spec §7 waere lautlos verletzt.
+            set_rls_tenant_sync(db, tenant_id)
             db.execute(
                 text(
                     "UPDATE memory_chunks "
@@ -489,6 +526,13 @@ def _resolve_last_post(tenant_id: str) -> object | None:
     """
     try:
         with sync_session_factory() as db:
+            # tenant_id ist Funktionsparameter, die Abfrage ist bereits per WHERE
+            # auf diesen Tenant eingeschraenkt → enger Tenant-Kontext statt Bypass.
+            # Ohne ihn liefert `content_pieces` unter FORCE ROW LEVEL SECURITY
+            # 0 Zeilen: der 48h-Feedback-Pfad (#37) faende nie einen letzten Post,
+            # und jede Sprachfeedback-Nachricht ohne aktive Session liefe ins Leere
+            # statt beim Post-Regenerierungspfad anzukommen.
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 text(
                     "SELECT id, content_text, content_metadata->>'bot_session_id' AS bot_session_id "
@@ -576,6 +620,14 @@ def _route_inbound_message(
         # #56/#18 Schicht A — Idempotenz-Guard: bereits geroutete Log-Zeile überspringen
         if log_id is not None:
             with sync_session_factory() as db:
+                # tenant_id ist Funktionsparameter von _route_inbound_message; die
+                # abgefragte log_id gehoert nachweislich zu diesem Tenant (Aufrufer
+                # laedt sie zuvor tenant-gescopet) → enger Tenant-Kontext statt
+                # Bypass. Ohne ihn liefert `telegram_message_log` unter FORCE ROW
+                # LEVEL SECURITY 0 Zeilen: der Idempotenz-Guard saehe nie ein
+                # bereits gesetztes routed_to und wuerde bei jedem Celery-Retry
+                # denselben p08-Call ein zweites Mal ausloesen.
+                set_rls_tenant_sync(db, tenant_id)
                 guard_row = db.execute(
                     text("SELECT routed_to FROM telegram_message_log WHERE id = :id"),
                     {"id": log_id},
