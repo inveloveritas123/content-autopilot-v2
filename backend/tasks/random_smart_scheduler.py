@@ -7,7 +7,7 @@ import logging
 from datetime import UTC, datetime
 
 from models.base import sync_session_factory
-from services.rls import set_rls_bypass_sync
+from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -90,6 +90,11 @@ def _send_opening_question(tenant_id: str, question_text: str) -> None:
 
         chat_id = None
         with sync_session_factory() as s:
+            # ⛔ `tenant_telegram_link` trägt FORCE ROW LEVEL SECURITY (058).
+            # Ohne Kontext 0 Zeilen → chat_id bleibt None → die proaktive
+            # Frage wird nie gestellt, ohne dass etwas rot wird. Dieselbe
+            # Stelle macht es `p07_research_task.py:245` bereits richtig.
+            set_rls_tenant_sync(s, tenant_id)
             row = s.execute(
                 text(
                     "SELECT telegram_chat_id FROM tenant_telegram_link "
@@ -157,6 +162,12 @@ def check_random_smart_triggers():
 
         # Check no active random_smart session already running
         with sync_session_factory() as s:
+            # ⛔ `bot_session` traegt FORCE ROW LEVEL SECURITY. Ohne Kontext
+            # liefert dieser Check 0 Zeilen — er meldet also IMMER "keine
+            # aktive Session", auch wenn eine laeuft. Folge: der Cron eroeffnet
+            # eine zweite Session ueber der ersten, und der Nutzer bekommt eine
+            # neue Frage, waehrend er noch die alte beantwortet.
+            set_rls_tenant_sync(s, tenant_id)
             active = s.execute(
                 text(
                     "SELECT id FROM bot_session WHERE tenant_id = :tid AND mode = 'random_smart' AND status = 'active'"

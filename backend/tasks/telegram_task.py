@@ -445,6 +445,20 @@ def _resolve_chat_id(tenant_id: str) -> int | None:
     """
     try:
         with sync_session_factory() as db:
+            # ⛔ `tenant_telegram_link` trägt seit Migration 058 FORCE ROW LEVEL
+            # SECURITY. Ohne Kontext liefert dieses SELECT 0 Zeilen, die
+            # Funktion gibt fail-open `None` zurück — und das ist von „kein Chat
+            # verknüpft" nicht zu unterscheiden.
+            #
+            # Wirkung: JEDE Nachricht, die den Chat über diesen Weg auflösen
+            # muss, verschwindet. Gemessen am 17.08.2026 über alle Tenants:
+            # 79 eingehende Nachrichten, 0 ausgehende. Louis meldete es für
+            # Eric/Chris („die andere Instanz bekommt nichts") — betroffen
+            # waren aber ALLE, auch sein eigener Tenant. Dass Louis trotzdem
+            # Antworten sah, lag daran, dass die Payload-Chat-ID meist direkt
+            # vorliegt; dieser Rückfallweg greift überall dort, wo sie fehlt
+            # (Cron-Ansagen, Session-Timeout, Kostenhinweise, P13/P14-Notizen).
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 text(
                     "SELECT telegram_chat_id FROM tenant_telegram_link "
