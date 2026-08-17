@@ -726,7 +726,7 @@ export default function Pipeline() {
             <div className={`border rounded-lg p-3 flex items-center justify-between ${bg}`}>
               <div>
                 <p
-                  className={`text-sm font-medium ${isError ? 'text-status-fehler-text dark:text-status-fehler-text' : isWarning ? 'text-accent-800 dark:text-accent-200' : 'text-ink-light dark:text-ink-light'}`}
+                  className={`text-sm font-medium ${isError ? 'text-status-fehler-text dark:text-status-fehler-text' : isWarning ? 'text-accent-800 dark:text-accent-200' : 'text-ink-light dark:text-ink-muted'}`}
                 >
                   {cookieStatus.message}
                 </p>
@@ -937,7 +937,7 @@ export default function Pipeline() {
         <CardContent className="p-0">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-surface-border dark:border-surface-border text-left text-sm text-ink-light dark:text-ink-light">
+              <tr className="border-b border-surface-border dark:border-surface-border text-left text-sm text-ink-light dark:text-ink-muted">
                 <th className="px-3 py-3 w-8">
                   <input
                     type="checkbox"
@@ -1025,7 +1025,7 @@ export default function Pipeline() {
                         (item.keywords || []).slice(0, 3).map((k, i) => (
                           <span
                             key={i}
-                            className="text-[10px] bg-surface-bg dark:bg-surface-card text-ink-light dark:text-ink-light px-1.5 py-0.5 rounded"
+                            className="text-[10px] bg-surface-bg dark:bg-surface-card text-ink-light dark:text-ink-muted px-1.5 py-0.5 rounded"
                           >
                             {k}
                           </span>
@@ -1267,7 +1267,7 @@ export default function Pipeline() {
                       <h4 className="text-sm font-semibold text-ink dark:text-ink-muted mb-1">
                         Summary
                       </h4>
-                      <p className="text-sm text-ink-light dark:text-ink-light">
+                      <p className="text-sm text-ink-light dark:text-ink-muted">
                         {detail.analysis.summary}
                       </p>
                     </div>
@@ -1275,7 +1275,7 @@ export default function Pipeline() {
                       <h4 className="text-sm font-semibold text-ink dark:text-ink-muted mb-1">
                         Kernaussagen
                       </h4>
-                      <ul className="list-disc list-inside text-sm text-ink-light dark:text-ink-light space-y-1">
+                      <ul className="list-disc list-inside text-sm text-ink-light dark:text-ink-muted space-y-1">
                         {(detail.analysis.key_points || []).map((kp, i) => (
                           <li key={i}>{kp}</li>
                         ))}
@@ -1308,7 +1308,7 @@ export default function Pipeline() {
                         <h4 className="text-sm font-semibold text-ink dark:text-ink-muted mb-1">
                           Content-Winkel
                         </h4>
-                        <ul className="list-disc list-inside text-sm text-ink-light dark:text-ink-light space-y-1">
+                        <ul className="list-disc list-inside text-sm text-ink-light dark:text-ink-muted space-y-1">
                           {detail.analysis.content_angles.map((a, i) => (
                             <li key={i}>{a}</li>
                           ))}

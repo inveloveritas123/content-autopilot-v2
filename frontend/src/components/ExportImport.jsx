@@ -112,7 +112,7 @@ export default function ExportImport() {
           <CardTitle>Daten exportieren</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-ink-light dark:text-ink-light">
+          <p className="text-sm text-ink-light dark:text-ink-muted">
             Exportiert alle Tenant-Daten (Quellen, Items, Content, Einstellungen). Die Datei kann
             als Backup oder zur Migration genutzt werden.
           </p>
@@ -148,7 +148,7 @@ export default function ExportImport() {
                     <p className="text-sm font-medium text-ink dark:text-ink-muted">
                       {opt.label}
                     </p>
-                    <p className="text-xs text-ink-light dark:text-ink-light">{opt.desc}</p>
+                    <p className="text-xs text-ink-light dark:text-ink-muted">{opt.desc}</p>
                   </div>
                 </label>
               ))}
@@ -166,7 +166,7 @@ export default function ExportImport() {
               {exporting ? 'Exportiere...' : 'Daten exportieren'}
             </Button>
             {exporting && (
-              <span className="text-sm text-ink-light dark:text-ink-light animate-pulse">
+              <span className="text-sm text-ink-light dark:text-ink-muted animate-pulse">
                 Download wird vorbereitet...
               </span>
             )}
@@ -180,7 +180,7 @@ export default function ExportImport() {
           <CardTitle>Daten importieren</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-ink-light dark:text-ink-light">
+          <p className="text-sm text-ink-light dark:text-ink-muted">
             Importiert Tenant-Daten aus einer zuvor exportierten ZIP-Datei. Maximale Dateigröße: 100
             MB.
           </p>
@@ -246,10 +246,10 @@ export default function ExportImport() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <p className="text-ink-light dark:text-ink-light text-sm">
+                    <p className="text-ink-light dark:text-ink-muted text-sm">
                       ZIP-Datei hier ablegen oder klicken
                     </p>
-                    <p className="text-xs text-ink-light dark:text-ink-light">max. 100 MB</p>
+                    <p className="text-xs text-ink-light dark:text-ink-muted">max. 100 MB</p>
                   </div>
                 )}
               </div>
@@ -340,7 +340,7 @@ export default function ExportImport() {
               <p className="text-sm font-medium text-ink dark:text-ink-muted">
                 Was wird importiert:
               </p>
-              <ul className="text-sm text-ink-light dark:text-ink-light space-y-1">
+              <ul className="text-sm text-ink-light dark:text-ink-muted space-y-1">
                 {Object.entries(dryRunResult.preview).map(([key, val]) => (
                   <li key={key} className="flex justify-between">
                     <span>{key}</span>

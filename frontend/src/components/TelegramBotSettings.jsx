@@ -68,7 +68,7 @@ function OnlineIndicator({ online, lastActiveAt }) {
       {online ? (
         <span className="text-status-fertig-text dark:text-status-fertig-text font-medium">online</span>
       ) : (
-        <span className="text-ink-light dark:text-ink-light">
+        <span className="text-ink-light dark:text-ink-muted">
           offline{relTime ? ` · zuletzt aktiv ${relTime}` : ''}
         </span>
       )}
@@ -138,7 +138,7 @@ export default function TelegramBotSettings() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-ink-light dark:text-ink-light animate-pulse">Lade Status…</p>
+          <p className="text-sm text-ink-light dark:text-ink-muted animate-pulse">Lade Status…</p>
         </CardContent>
       </Card>
     )
@@ -182,7 +182,7 @@ export default function TelegramBotSettings() {
                     ? 'bg-status-fertig-bg text-status-fertig-text dark:bg-status-fertig-bg/30 dark:text-status-fertig-text'
                     : data.status === 'error'
                       ? 'bg-status-fehler-bg text-status-fehler-text dark:bg-status-fehler-bg/30 dark:text-status-fehler-text'
-                      : 'bg-surface-bg text-ink-light dark:bg-surface-card dark:text-ink-light'
+                      : 'bg-surface-bg text-ink-light dark:bg-surface-card dark:text-ink-muted'
                 }`}
               >
                 {data.status === 'active'
@@ -201,7 +201,7 @@ export default function TelegramBotSettings() {
           {!configured ? (
             /* ── Not configured: connect form ──────────────────────────────── */
             <>
-              <p className="text-sm text-ink-light dark:text-ink-light">
+              <p className="text-sm text-ink-light dark:text-ink-muted">
                 Verbinde einen eigenen Telegram-Bot mit diesem Projekt. Der Bot-Token bleibt
                 verschlüsselt gespeichert und wird nie wieder angezeigt.
               </p>
@@ -277,7 +277,7 @@ export default function TelegramBotSettings() {
                     </p>
                   )}
                   {data?.bot_id && (
-                    <p className="text-xs text-ink-light dark:text-ink-light font-mono">
+                    <p className="text-xs text-ink-light dark:text-ink-muted font-mono">
                       Bot-ID: {data.bot_id}
                     </p>
                   )}
@@ -299,7 +299,7 @@ export default function TelegramBotSettings() {
 
               {/* Validation timestamp */}
               {data?.validated_at && (
-                <p className="text-xs text-ink-light dark:text-ink-light">
+                <p className="text-xs text-ink-light dark:text-ink-muted">
                   Token validiert:{' '}
                   {relativeTime(data.validated_at) ??
                     new Date(data.validated_at).toLocaleString('de-DE')}
@@ -507,7 +507,7 @@ function TelegramUsersPanel({ tenantConfigured }) {
           )}
 
           {/* Rate limit info */}
-          <div className="text-xs text-ink-light dark:text-ink-light bg-surface-bg dark:bg-surface-card/50 rounded-lg px-3 py-2">
+          <div className="text-xs text-ink-light dark:text-ink-muted bg-surface-bg dark:bg-surface-card/50 rounded-lg px-3 py-2">
             Rate-Limit: max. 20 Nachrichten pro 10 Minuten pro Nutzer
           </div>
 
@@ -516,7 +516,7 @@ function TelegramUsersPanel({ tenantConfigured }) {
           {error && <p className="text-sm text-status-fehler-text dark:text-status-fehler-text">Fehler: {error}</p>}
 
           {!loading && !error && users.length === 0 && (
-            <p className="text-sm text-ink-light dark:text-ink-light">
+            <p className="text-sm text-ink-light dark:text-ink-muted">
               Noch keine verbundenen Nutzer. Nutze <code className="font-mono text-xs">/start</code>{' '}
               im Telegram-Bot oder füge eine User-ID manuell hinzu.
             </p>
@@ -544,7 +544,7 @@ function TelegramUsersPanel({ tenantConfigured }) {
                         </span>
                         {statusBadge(user.status)}
                       </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-ink-light dark:text-ink-light flex-wrap">
+                      <div className="flex items-center gap-3 mt-1 text-xs text-ink-light dark:text-ink-muted flex-wrap">
                         <span className="font-mono">ID: {user.telegram_user_id}</span>
                         {user.linked_at && <span>Verbunden {relativeTime(user.linked_at)}</span>}
                         {user.last_active && <span>Aktiv {relativeTime(user.last_active)}</span>}
@@ -552,7 +552,7 @@ function TelegramUsersPanel({ tenantConfigured }) {
                     </div>
 
                     {/* Stats */}
-                    <div className="flex items-center gap-4 text-xs text-ink-light dark:text-ink-light shrink-0">
+                    <div className="flex items-center gap-4 text-xs text-ink-light dark:text-ink-muted shrink-0">
                       <div className="text-center">
                         <div className="font-semibold text-ink dark:text-ink-muted">
                           {user.total_messages}
