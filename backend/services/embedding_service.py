@@ -101,6 +101,142 @@ class EmbeddingError(Exception):
     """Wrapper für Embedding-Provider-Fehler."""
 
 
+#: Preis pro 1000 Tokens für das aktive Embedding-Modell (text-embedding-3-large).
+#: Konservativ gerundet — der Cap soll eher zu früh als zu spät greifen.
+_EMBEDDING_USD_PRO_1K = 0.00013
+
+#: Grobschätzung Zeichen → Tokens. Ein echter Tokenizer wäre genauer, aber er
+#: kostet pro Aufruf Zeit und Speicher — für eine Kostenbuchung im
+#: Zehntausendstel-Cent-Bereich ist das die falsche Investition.
+_ZEICHEN_PRO_TOKEN = 4
+
+
+class EmbeddingBudgetExceeded(RuntimeError):
+    """Tagesbudget erschöpft — der Embedding-Aufruf wird abgelehnt."""
+
+
+def _embedding_kosten(text_input: str) -> float:
+    tokens = max(1, len(text_input) // _ZEICHEN_PRO_TOKEN)
+    return tokens * _EMBEDDING_USD_PRO_1K / 1000
+
+
+def _pruefe_embedding_budget() -> None:
+    """Lehnt den Aufruf ab, wenn das Tagesbudget des Tenants erschöpft ist.
+
+    ⛔ WARUM DIESER PFAD EINEN EIGENEN CHECK BRAUCHT:
+    `services/llm.py` prüft und bucht, `call_pipeline_llm` bucht — Embeddings
+    taten weder das eine noch das andere. Sie liefen vollständig am
+    Kostendeckel vorbei. Ein Reembed-Lauf über 5000 Chunks konnte also
+    unbegrenzt laufen, während jeder LLM-Call korrekt gedeckelt war.
+
+    ⛔ BEWUSST OHNE ADVISORY LOCK — anders als `llm.py`:
+    Dort serialisiert ein Lock pro Tenant und Tag die Cap-Prüfung, damit zwei
+    Worker nicht beide an denselben 4,90 USD vorbeirutschen (#131). Für
+    Embeddings wäre das unverhältnismäßig: ein Lauf macht Tausende Aufrufe,
+    das wären Tausende Locks, von denen jeder ALLE Tenants dieses Tages
+    gegeneinander serialisiert — für einen Gesamtbetrag von rund 16 Cent.
+    Die Race-Condition kostet hier im schlimmsten Fall wenige Embeddings
+    Überschreitung; der Lock kostet den Durchsatz jedes Backfills.
+    ⛔ Diese Abwägung gilt NUR, weil Embeddings drei Größenordnungen unter
+    einem teuren LLM-Call liegen. Ändert sich das Preismodell, ist sie neu zu
+    treffen.
+
+    Fail-open bei DB-Fehlern: Ein defekter Kostenprüfer darf den Betrieb nicht
+    anhalten — aber er wird geloggt. Ein stiller Ausfall des Deckels wäre
+    genau der Zustand, den diese Funktion beendet.
+    """
+    try:
+        from datetime import UTC as _UTC
+        from datetime import datetime as _dt
+
+        from sqlalchemy import text as _t
+
+        from models.base import sync_session_factory
+        from services.llm import _tenant_id_ctx
+        from services.provider_resolver import _DAILY_CAP_USD
+        from services.rls import set_rls_tenant_sync
+
+        tid = _tenant_id_ctx.get()
+        if not tid:
+            # Kein Tenant-Kontext → kein Tenant-Cap prüfbar. Das ist KEIN
+            # stiller Freifahrtschein: es wird geloggt, damit die Lücke
+            # sichtbar bleibt (dieselbe Klasse wie der RLS-Wächter).
+            logger.warning(
+                "embed: kein Tenant-Kontext gesetzt — Kostendeckel wird UEBERSPRUNGEN. "
+                "Aufrufer sollte set_llm_tenant(tenant_id) vor asyncio.run() setzen."
+            )
+            return
+
+        heute = _dt.now(_UTC).date()
+        with sync_session_factory() as s:
+            set_rls_tenant_sync(s, tid)
+            row = s.execute(
+                _t(
+                    "SELECT COALESCE(cost_usd, 0) FROM daily_cost_tenant "
+                    "WHERE tenant_id = CAST(:tid AS uuid) AND date = :d"
+                ),
+                {"tid": str(tid), "d": heute},
+            ).fetchone()
+        # ⛔ Die Auswertung gehoert IN den try-Block: `_DAILY_CAP_USD` wird hier
+        # lokal importiert und waere ausserhalb nicht gebunden (NameError).
+        # Der EmbeddingBudgetExceeded-Zweig unten faengt die eigene Ausnahme
+        # ab und reicht sie durch, statt sie als "Pruefung fehlgeschlagen" zu
+        # verschlucken — sonst waere der Deckel wirkungslos.
+        if row and float(row[0]) >= _DAILY_CAP_USD:
+            raise EmbeddingBudgetExceeded(
+                f"Tagesbudget erschoepft ({float(row[0]):.4f} >= "
+                f"{_DAILY_CAP_USD:.2f} USD) — Embedding abgelehnt."
+            )
+    except EmbeddingBudgetExceeded:
+        raise
+    except Exception as exc:
+        logger.warning("embed: Budgetpruefung fehlgeschlagen (%s)", type(exc).__name__)
+        return
+
+
+def _buche_embedding_kosten(text_input: str) -> None:
+    """Bucht die Kosten EINES Embeddings auf `daily_cost_tenant`.
+
+    Additiver UPSERT wie in `services/pipeline_llm._erfasse_kosten` — dieselbe
+    Zeile (tenant_id, date), beide Wege addieren korrekt aufeinander, weil sie
+    sich nie denselben Aufruf teilen.
+
+    Fail-open mit Log: Ein fehlgeschlagener Kosten-Write darf ein bereits
+    bezahltes Embedding nicht nachträglich zum Fehler machen.
+    """
+    try:
+        from datetime import UTC as _UTC
+        from datetime import datetime as _dt
+
+        from sqlalchemy import text as _t
+
+        from models.base import sync_session_factory
+        from services.llm import _tenant_id_ctx
+        from services.rls import set_rls_tenant_sync
+
+        tid = _tenant_id_ctx.get()
+        if not tid:
+            return
+        kosten = _embedding_kosten(text_input)
+        if kosten <= 0:
+            return
+        with sync_session_factory() as s:
+            set_rls_tenant_sync(s, tid)
+            s.execute(
+                _t(
+                    "INSERT INTO daily_cost_tenant (tenant_id, date, cost_usd, call_count) "
+                    "VALUES (CAST(:tid AS uuid), :d, :c, 1) "
+                    "ON CONFLICT (tenant_id, date) DO UPDATE SET "
+                    "  cost_usd = COALESCE(daily_cost_tenant.cost_usd, 0) + EXCLUDED.cost_usd, "
+                    "  call_count = COALESCE(daily_cost_tenant.call_count, 0) + 1"
+                ),
+                {"tid": str(tid), "d": _dt.now(_UTC).date(), "c": kosten},
+            )
+            s.commit()
+    except Exception as exc:
+        logger.warning("embed: Kostenbuchung fehlgeschlagen (%s)", type(exc).__name__)
+
+
 async def embed(
     text_input: str,
     model_id: str | None = None,
@@ -131,6 +267,14 @@ async def embed(
 
     if not text_input or not text_input.strip():
         return None, resolved_model_id
+
+    # ⛔ Kostendeckel VOR dem Aufruf — nicht danach.
+    # Embeddings liefen bisher komplett am Cap vorbei: `services/llm.py` prüft
+    # und bucht, `call_pipeline_llm` bucht, aber dieser Pfad tat weder das eine
+    # noch das andere. Gemessen: ein Embedding kostet ~0,0000325 USD und ist
+    # damit TEURER als ein günstiger LLM-Call (~0,0000108 USD) — die Annahme
+    # „Embeddings sind vernachlässigbar" trägt nicht.
+    _pruefe_embedding_budget()
 
     base_url = (settings.litellm_base_url or "").rstrip("/")
     api_key = settings.litellm_api_key or ""
@@ -170,6 +314,10 @@ async def embed(
                 resolved_model_id,
             )
             return None, resolved_model_id
+        # Kosten erst NACH dem Erfolg buchen. Die übrigen return-Wege dieser
+        # Funktion sind allesamt Fehlerfälle (leere Antwort, falsche Dimension,
+        # HTTP-Fehler) — dort ist nichts zu bezahlen und nichts zu buchen.
+        _buche_embedding_kosten(text_input)
         return [float(x) for x in emb], resolved_model_id
     except (httpx.TimeoutException, httpx.RequestError) as exc:
         logger.warning("embed: Network-Error: %s", exc)
