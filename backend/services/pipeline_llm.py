@@ -8,8 +8,27 @@ Policy:
 - Calls gehen IMMER über den Requesty/LiteLLM-Router (LITELLM_BASE_URL).
   Kein Router = RuntimeError (kein stiller Fallback auf Direkt-SDK).
 - Modell-Auflösung über Tier-Namen, NIE über Modell-String-Literale.
-- DB-Writes (daily_cost_tenant, llm_call_log) bleiben in den Tasks —
-  dieser Seam schreibt KEINE Kosten in die DB (kein Doppelbuchungs-Risiko).
+- Kosten nach `daily_cost_tenant` schreibt AUSSCHLIESSLICH dieser Seam
+  (`_erfasse_kosten`, am Ende jedes `call_pipeline_llm`). Tasks tun das NICHT
+  mehr selbst — sonst zählt es doppelt.
+
+  ⛔ Bis zum 17.08.2026 stand hier das Gegenteil: „DB-Writes bleiben in den
+  Tasks — dieser Seam schreibt KEINE Kosten in die DB". Gemessen hielten sich
+  daran 6 von 19 Aufrufern; die übrigen 13 schrieben gar nichts, darunter der
+  komplette Bot-Pfad. `daily_cost_tenant` bildete die realen Kosten damit
+  nicht ab — und der Tages-Kostendeckel in `services/llm.py` liest genau
+  diese Tabelle, griff für jene Pfade also nie. Ein Vertrag, den zwei Drittel
+  der Aufrufer nicht einhalten, ist kein Vertrag: deshalb EIN Ort statt 13
+  Kopien (Owner-Entscheid 17.08.2026).
+
+- Pre-Call-Cap-Checks (`CostCapMiddleware.check_and_record` mit
+  `estimated_cost`, ohne `actual_cost_usd`) bleiben in den Tasks. Sie
+  SCHREIBEN keine Ist-Kosten und sind deshalb kein Doppelzähler.
+- `llm_call_log` bleibt unverändert Sache der Tasks.
+- Der `llm_service`-Pfad (`services/llm.py`) hat seine eigene, davon
+  unabhängige Kostenerfassung. Beide Wege addieren auf dieselbe Zeile
+  (tenant_id, date) — das ist korrekt, weil sie sich nie denselben Call
+  teilen.
 
 Umgesetzt: 2026-06-11 (P5-anthropic-provider.md)
 Abweichungen vom Spec: keine
