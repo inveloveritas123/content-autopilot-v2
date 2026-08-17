@@ -180,6 +180,61 @@ _PLATZHALTER_PROBE = {
 _P08_DATEI = "P08_conversation.md"
 
 
+def _lade_voice_profil(tenant_id: str) -> str:
+    """Das aktive Voice-Profil des Tenants als Text für den P08-Prompt.
+
+    ⛔ Bis zum 17.08.2026 stand an den beiden Aufrufstellen
+    `SELECT voice_profile FROM brand_voice`. Diese Tabelle EXISTIERT NICHT —
+    weder in einer Migration noch in der Live-Datenbank (dort gibt es nur
+    `tenant_voice_profile`, `voice_drift_observation`, `voice_feedback`).
+    Beide Abfragen liefen also seit jeher in einen ProgrammingError, der vom
+    umgebenden `except Exception: pass` verschluckt wurde. Ergebnis:
+    `voice_profile` war IMMER der leere String, und der Bot führte jedes
+    Gespräch ohne die Stimme des Kunden — ohne dass es je aufgefallen wäre.
+    Das ist der Kern des Produktversprechens („Post in seiner eigenen
+    Stimme"), still ausgefallen durch ein fail-open.
+
+    Kanonisches Zugriffsmuster übernommen aus `tasks/generate_task.py:222-229`
+    und `tasks/backtest_task.py:127`: aktive Version, höchste Versionsnummer.
+
+    Fail-open bleibt erhalten (ein fehlendes Profil darf das Gespräch nicht
+    verhindern) — aber es wird jetzt geloggt statt geschluckt.
+    """
+    try:
+        with sync_session_factory() as s:
+            set_rls_tenant_sync(s, tenant_id)
+            row = s.execute(
+                text(
+                    "SELECT payload FROM tenant_voice_profile "
+                    "WHERE tenant_id = :tid AND is_active = true "
+                    "ORDER BY version DESC LIMIT 1"
+                ),
+                {"tid": str(tenant_id)},
+            ).fetchone()
+    except Exception as exc:
+        logger.warning("[P08] Voice-Profil nicht ladbar (%s)", type(exc).__name__)
+        return ""
+
+    if not row or not row[0]:
+        logger.info("[P08] Kein aktives Voice-Profil für tenant=%s", tenant_id)
+        return ""
+
+    payload = row[0]
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except Exception:
+            # Schon Text — dann ist er das Profil.
+            return payload
+
+    if isinstance(payload, dict):
+        # Der Prompt erwartet Fliesstext, nicht die Datenstruktur. JSON ist
+        # hier der ehrlichste Kompromiss: vollstaendig und stabil lesbar,
+        # statt willkuerlich einzelne Felder auszuwaehlen.
+        return json.dumps(payload, ensure_ascii=False)
+    return str(payload)
+
+
 def _load_p08_prompt():
     """Laedt den P08-Prompt aus backend/prompts/, sonst den eingebauten Notnagel.
 
@@ -651,17 +706,7 @@ def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> O
         topic = category
 
     # 2. Load voice profile (fail-open)
-    voice_profile = ""
-    try:
-        with sync_session_factory() as s:
-            row = s.execute(
-                text("SELECT voice_profile FROM brand_voice WHERE tenant_id = :tid LIMIT 1"),
-                {"tid": tenant_id},
-            ).fetchone()
-            if row:
-                voice_profile = row[0] or ""
-    except Exception:
-        pass
+    voice_profile = _lade_voice_profil(tenant_id)
 
     # 3. Load prompt, build user_content
     prompt = _load_p08_prompt()
@@ -921,17 +966,7 @@ def p08_response(
     # der Satz, auf den es antworten soll.
     recent_messages = _get_recent_messages(messages_list, aktuelle_antwort=raw_transcript)
 
-    voice_profile = ""
-    try:
-        with sync_session_factory() as s:
-            vrow = s.execute(
-                text("SELECT voice_profile FROM brand_voice WHERE tenant_id = :tid LIMIT 1"),
-                {"tid": tenant_id},
-            ).fetchone()
-            if vrow:
-                voice_profile = vrow[0] or ""
-    except Exception:
-        pass
+    voice_profile = _lade_voice_profil(tenant_id)
 
     prompt = _load_p08_prompt()
     # Extract topic from first message category if available
