@@ -1266,6 +1266,36 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
     routing_info = _route_inbound_message(tenant_id, transcript, log_id=log_id)
     if routing_info:
         result_dict.update(routing_info)
+
+    # ⛔ Das Auffangnetz, das der Text-Pfad hat und dem Voice-Pfad fehlte.
+    # Louis am 15.08.2026: „Sprachnachrichten haben das Auffangnetz nicht, das
+    # Textnachrichten haben. Du siehst ‚Gespeichert', aber wenn danach im
+    # Hintergrund etwas schiefgeht, hörst du nichts mehr."
+    #
+    # Genau das war der Zustand: Die Quittung („🎤 Gespeichert: …") ging oben
+    # raus, DANN lief das Routing — und wenn dessen Ziel nicht selbst antwortet
+    # (etwa `reviewer_queue`), endete die Nachricht stumm. Der Nutzer hielt die
+    # Quittung für die Antwort, obwohl seine eigentliche Absicht nie beantwortet
+    # wurde.
+    #
+    # Die Quittung oben ersetzt das NICHT: sie bestätigt den EMPFANG, nicht die
+    # Bearbeitung. Deshalb hier dieselbe Prüfung wie im Text-Pfad.
+    if chat_id_voice and channel == "telegram" and routing_info:
+        nachfass = _antwort_fuer_ziel(routing_info.get("routed_to"))
+        if not nachfass and _braucht_sichtbare_quittung(routing_info):
+            # Kein Ziel hat geantwortet und es gibt keinen eigenen Text →
+            # sagen, dass es beim Merken bleibt. Bewusst anders formuliert als
+            # die Empfangsquittung oben, sonst liest es sich wie ein Doppel.
+            nachfass = "📝 Ich hab's mir gemerkt — daraus kann später ein Post werden."
+        if nachfass:
+            try:
+                from api.telegram import _send_telegram_message
+
+                _send_telegram_message(chat_id_voice, nachfass, tenant_id=tenant_id)
+                result_dict["voice_followup_sent"] = True
+            except Exception as exc:
+                logger.warning("voice followup send failed: %s", type(exc).__name__)
+
     return result_dict
 
 
@@ -1295,6 +1325,45 @@ _FOTO_FEHLERTEXTE = {
         "Das ist ein Fehler auf meiner Seite — probier es bitte gleich nochmal."
     ),
 }
+
+
+#: Antworten für die zwei Ziele, die `layer2_routing` seit jeher vergibt, für
+#: die aber nie ein Text existierte: `help_response` (Frage an den Bot) und
+#: `close_friendly` (Smalltalk).
+#:
+#: ⛔ Warum das eine Lücke war und keine Kleinigkeit: Beide Ziele standen NICHT
+#: in `_ZIELE_MIT_EIGENER_ANTWORT`. Der Nutzer bekam auf „Was kannst du
+#: eigentlich?" also „✅ Gespeichert im Gedächtnis." — eine Frage wurde als
+#: Notiz abgelegt. Louis am 15.08.2026: „Zwei Antworttypen sind angelegt, aber
+#: nie fertig gebaut […] Ausgerechnet in den beiden menschlichsten Fällen
+#: schweigt er."
+#:
+#: Die Texte sind bewusst kurz und führen weiter, statt nur zu quittieren: Wer
+#: fragt, will etwas wissen; wer Smalltalk macht, will nicht abgefertigt werden.
+_ZIEL_ANTWORTEN = {
+    "help_response": (
+        "Klar — kurz, was ich kann:\n\n"
+        "🎙 Sprachnachricht oder Text schicken → ich mache daraus einen "
+        "LinkedIn-Post in deiner Stimme.\n"
+        "📸 Foto schicken → ich lese Text darauf und merke mir den Inhalt.\n"
+        "💡 »Gib mir Ideen« → ich schlage Themen vor, du wählst.\n\n"
+        "Mit /help siehst du alles im Detail."
+    ),
+    "close_friendly": (
+        "🙂 Alles klar. Wenn dir was einfällt, das einen Post wert ist — "
+        "einfach reinsprechen oder tippen."
+    ),
+}
+
+
+def _antwort_fuer_ziel(routed_to: str | None) -> str | None:
+    """Die passende Antwort für ein Routing-Ziel, oder None.
+
+    None heißt bewusst „ich habe nichts Besseres" — der Aufrufer fällt dann in
+    die generische Gedächtnis-Quittung. Das ist der richtige Rückfall: eine
+    Antwort, die nicht ganz passt, ist besser als Schweigen.
+    """
+    return _ZIEL_ANTWORTEN.get(routed_to or "")
 
 
 def _foto_quittung(result: dict, caption: str | None) -> str:
@@ -1556,6 +1625,22 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
             )
         except Exception:
             pass  # fail-open: Beobachtung ist Kür, kein Blocker
+
+    # F4a: Die zwei „menschlichen" Ziele zuerst — sie haben eine EIGENE Antwort,
+    # die besser passt als die generische Gedächtnis-Quittung.
+    if channel == "telegram" and chat_id and routing_info:
+        eigene_antwort = _antwort_fuer_ziel(routing_info.get("routed_to"))
+        if eigene_antwort:
+            try:
+                from api.telegram import _send_telegram_message
+
+                _send_telegram_message(chat_id, eigene_antwort, tenant_id=tenant_id)
+                result_dict["direct_reply_sent"] = True
+                return result_dict
+            except Exception as exc:
+                logger.warning("direct reply send failed: %s", type(exc).__name__)
+                # Kein return: fällt bewusst in die Gedächtnis-Quittung unten
+                # durch. Lieber eine unpassende Antwort als gar keine.
 
     # F4: kein Routing-Gate hat gegriffen (routing_info is None) ODER das Ziel
     # antwortet nicht selbst (truthy Dict, aber nicht in _ZIELE_MIT_EIGENER_ANTWORT)
