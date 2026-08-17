@@ -25,10 +25,21 @@ logger = logging.getLogger(__name__)
 def analyze_item(item_id: str):
     """Analyze a transcribed item — then auto-chain to ideation."""
     with sync_session_factory() as session:
+        # Der Task bekommt nur die item_id — die tenant_id steht erst NACH dem
+        # Laden zur Verfuegung. `source_items` traegt seit Migration 058 FORCE
+        # ROW LEVEL SECURITY: ohne Kontext liefert session.get() None, und der
+        # Task meldet "not found" fuer ein real existierendes Item. Der
+        # RLS-Waechter hat genau das am 17.08. gemeldet (generate_task.py:28).
+        # Deshalb Bypass NUR fuer den PK-Read, danach sofort eng.
+        from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
+
+        set_rls_bypass_sync(session, True)
         item = session.get(SourceItem, item_id)
         if not item:
             logger.error(f"Item {item_id} not found")
             return
+        set_rls_bypass_sync(session, False)
+        set_rls_tenant_sync(session, str(item.tenant_id))
 
         # RSS items often have no full transcript — use title as minimal content
         if not item.transcript_text:
@@ -176,11 +187,19 @@ def generate_content(self, item_id: str):
 
     # tenant_id + Slot-Acquire in einer kurzen Session.
     with sync_session_factory() as _bh_session:
+        # ⛔ Der Kontext stand hier schon — aber NACH dem session.get(). Genau
+        # das ist zu spaet: der PK-Read selbst laeuft dann ohne Kontext und
+        # liefert unter FORCE RLS None. Der Waechter meldete es am 17.08.
+        # (generate_task.py:179). Bypass NUR fuer den Read, danach eng.
+        from services.rls import set_rls_bypass_sync
+
+        set_rls_bypass_sync(_bh_session, True)
         item = _bh_session.get(SourceItem, item_id)
         if not item or not item.analysis:
             logger.error(f"Item {item_id} not found or not analyzed")
             return
         _bulk_tenant = str(item.tenant_id)
+        set_rls_bypass_sync(_bh_session, False)
         set_rls_tenant_sync(_bh_session, _bulk_tenant)
         if not _acquire(_bh_session, _bulk_tenant):
             logger.info(
@@ -203,13 +222,25 @@ def generate_content(self, item_id: str):
 def _generate_content_inner(item_id: str):
     """Eigentliche Generierung (vom Bulkhead-Wrapper umschlossen)."""
     with sync_session_factory() as session:
+        # Wie in analyze_item: nur item_id im Scope, tenant_id erst nach dem
+        # Laden. Bypass NUR fuer den PK-Read, danach eng.
+        from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
+
+        set_rls_bypass_sync(session, True)
         item = session.get(SourceItem, item_id)
         if not item or not item.analysis:
             logger.error(f"Item {item_id} not found or not analyzed")
             return
+        set_rls_bypass_sync(session, False)
+        _gen_tenant = str(item.tenant_id)
+        set_rls_tenant_sync(session, _gen_tenant)
 
         item.status = "generating"
         session.commit()
+        # ⛔ SET LOCAL verfaellt beim Commit — ohne Erneuerung liefe der
+        # gesamte Rest dieser Funktion (Voice-Profil-Lookup auf
+        # tenant_voice_profile, Content-Persistierung) ohne Kontext.
+        set_rls_tenant_sync(session, _gen_tenant)
 
         tenant = session.get(Tenant, item.tenant_id)
         tenant_settings = (tenant.settings or {}) if tenant else {}
