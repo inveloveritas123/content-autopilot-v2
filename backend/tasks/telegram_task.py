@@ -1269,19 +1269,128 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
     return result_dict
 
 
+#: Was der Nutzer bei einem Foto-Fehler liest. Bewusst nach URSACHE getrennt:
+#: „Es hat nicht geklappt" ist für ihn wertlos, wenn er nicht weiß, ob er etwas
+#: tun kann. Jeder Text sagt, was passiert ist UND was der nächste Schritt ist.
+#: Keine technischen Begriffe — der Empfänger ist Unternehmer, nicht Betreiber.
+_FOTO_FEHLERTEXTE = {
+    "no_photo_array": (
+        "📸 Da war kein Bild dabei — schick es bitte nochmal als Foto."
+    ),
+    "no_file_id": (
+        "📸 Das Bild konnte ich nicht öffnen. Versuch es bitte nochmal — "
+        "am besten als normales Foto, nicht als Datei."
+    ),
+    "download_failed": (
+        "📸 Ich konnte das Bild nicht von Telegram laden. "
+        "Das liegt meist an der Verbindung — schick es gleich nochmal."
+    ),
+    "pipeline": (
+        "📸 Das Bild ist angekommen, aber ich konnte nichts daraus lesen. "
+        "Wenn Text drauf ist: ein schärferes oder geraderes Foto hilft oft. "
+        "Sonst schreib mir einfach dazu, worum es geht."
+    ),
+    "store_failed": (
+        "📸 Das Bild kam an, aber ich konnte es nicht speichern. "
+        "Das ist ein Fehler auf meiner Seite — probier es bitte gleich nochmal."
+    ),
+}
+
+
+def _foto_quittung(result: dict, caption: str | None) -> str:
+    """Die Erfolgsmeldung — sagt, WAS aus dem Bild geworden ist.
+
+    Drei ehrlich unterschiedene Fälle, weil „Gespeichert" allein die Frage
+    offenlässt, ob der Bot überhaupt etwas erkannt hat:
+
+    1. Text erkannt  → Auszug zeigen. Der Nutzer sieht sofort, ob die
+       Erkennung getroffen hat, und kann korrigieren statt zu rätseln.
+    2. Nur Bildbeschreibung → das sagen. Kein Text drauf ist kein Fehler.
+    3. Weder noch → NICHT als Erfolg verkaufen. Das Bild liegt zwar im
+       Gedächtnis, aber ohne verwertbaren Inhalt — und der Nutzer erfährt,
+       dass eine Bildunterschrift jetzt hilft.
+
+    ⛔ Fall 3 ist der Grund, warum diese Funktion existiert und nicht ein
+    fester String: Ein „✅ Gespeichert" auf ein Bild, aus dem nichts gelesen
+    werden konnte, ist genau die Sorte freundlicher Falschauskunft, die Louis'
+    ursprüngliche Beschwerde ausgelöst hat.
+    """
+    ocr_chars = int(result.get("ocr_chars") or 0)
+    text_inhalt = (result.get("content_text") or "").strip()
+    hat_beschreibung = bool(result.get("description"))
+
+    if ocr_chars > 0 and text_inhalt:
+        return f"📸 Text aus dem Bild gespeichert: {_quittungs_zitat(text_inhalt)}"
+    if hat_beschreibung:
+        return "📸 Bild gespeichert — ich habe beschrieben, was darauf zu sehen ist."
+    if caption:
+        return (
+            "📸 Bild gespeichert. Lesbaren Text habe ich darauf nicht gefunden — "
+            "deine Bildunterschrift habe ich dazugelegt."
+        )
+    return (
+        "📸 Bild gespeichert. Lesbaren Text habe ich darauf nicht gefunden — "
+        "schreib mir kurz dazu, worum es geht, dann kann ich mehr damit anfangen."
+    )
+
+
+def _sende_foto_fehler(tenant_id: str, payload: dict, schluessel: str) -> None:
+    """Sagt dem Nutzer, dass sein Foto NICHT angekommen ist.
+
+    ⛔ Warum es diese Funktion gibt: `_process_photo` hatte SECHS Ausgänge und
+    keiner davon sprach mit dem Nutzer — vier Fehlerpfade und der Erfolgsfall
+    endeten stumm. Aus Louis' Sicht (15.08./17.08.2026) war das die
+    auffälligste Lücke überhaupt: „Fotos bekommen bis heute überhaupt keine
+    Rückmeldung, weder bei Erfolg noch bei Fehler."
+
+    Ein Foto, das ohne Antwort verschwindet, ist für den Nutzer nicht von
+    einem kaputten Bot zu unterscheiden — genau dasselbe Muster, das beim
+    Text-Pfad zum „Auffangnetz" geführt hat.
+
+    Fail-open: Ein Zustellfehler darf den Task nicht zum Absturz bringen. Aber
+    er wird geloggt — ein stiller Ausfall der Fehlermeldung wäre die zweite
+    Ebene desselben Problems.
+    """
+    if (payload.get("_channel") or "telegram") != "telegram":
+        # Inline-Keyboards und dieser Textstil sind Telegram-spezifisch; der
+        # WhatsApp-Adapter hat eigene Quittungswege.
+        return
+    chat_id = (payload.get("chat") or {}).get("id") or _resolve_chat_id(tenant_id)
+    if not chat_id:
+        logger.warning("foto-fehlermeldung: kein chat auffindbar (tenant=%s)", tenant_id)
+        return
+    try:
+        from api.telegram import _send_telegram_message
+
+        _send_telegram_message(
+            chat_id,
+            _FOTO_FEHLERTEXTE.get(schluessel, _FOTO_FEHLERTEXTE["pipeline"]),
+            tenant_id=tenant_id,
+        )
+    except Exception as exc:
+        logger.warning("foto-fehlermeldung nicht zugestellt: %s", type(exc).__name__)
+
+
 def _process_photo(log_id: str, tenant_id: str, payload: dict) -> dict:
-    """Photo-Pipeline (Welle 4): getFile → OCR (+Vision-Stub) → memory_chunk."""
+    """Photo-Pipeline (Welle 4): getFile → OCR (+Vision-Stub) → memory_chunk.
+
+    ⛔ JEDER Ausgang spricht mit dem Nutzer — Erfolg wie Fehler. Vor dem
+    17.08.2026 endeten alle sechs stumm; siehe `_sende_foto_fehler`.
+    """
     photos = payload.get("photo") or []
     if not photos:
+        _sende_foto_fehler(tenant_id, payload, "no_photo_array")
         return {"status": "skipped", "reason": "no_photo_array"}
     # Telegram liefert Liste verschiedener Auflösungen — nimm die größte
     best = max(photos, key=lambda p: p.get("file_size") or 0)
     file_id = best.get("file_id")
     if not file_id:
+        _sende_foto_fehler(tenant_id, payload, "no_file_id")
         return {"status": "error", "reason": "no_file_id"}
 
     image_bytes = _telegram_get_file(file_id, tenant_id)
     if not image_bytes:
+        _sende_foto_fehler(tenant_id, payload, "download_failed")
         return {"status": "error", "reason": "download_failed"}
 
     from services.photo_pipeline import PhotoProcessingError, process_photo
@@ -1291,9 +1400,11 @@ def _process_photo(log_id: str, tenant_id: str, payload: dict) -> dict:
         result = asyncio.run(process_photo(image_bytes, hint=caption))
     except PhotoProcessingError as exc:
         logger.warning("photo pipeline fail: %s", exc)
+        _sende_foto_fehler(tenant_id, payload, "pipeline")
         return {"status": "error", "reason": str(exc)[:120]}
     except Exception as exc:
         logger.warning("photo pipeline unexpected: %s", exc)
+        _sende_foto_fehler(tenant_id, payload, "pipeline")
         return {"status": "error", "reason": "pipeline_exception"}
 
     content_text = result["content_text"]
@@ -1320,7 +1431,26 @@ def _process_photo(log_id: str, tenant_id: str, payload: dict) -> dict:
         )
     except Exception as exc:
         logger.warning("store_photo_chunk failed: %s", exc)
+        _sende_foto_fehler(tenant_id, payload, "store_failed")
         return {"status": "error", "reason": str(exc)[:120]}
+
+    # Erfolgs-Quittung — der Nutzer soll SEHEN, was angekommen ist, nicht nur
+    # dass irgendetwas ankam. Vorbild ist die Voice-Quittung
+    # („🎤 Gespeichert: …"), inklusive `_quittungs_zitat`: der Auszug endet an
+    # einer Wortgrenze und nennt den tatsächlichen Umfang, statt mitten im Wort
+    # abzuschneiden (live-Vorfall vom 06.08.2026, siehe dort).
+    if channel == "telegram":
+        quittung = _foto_quittung(result, caption)
+        chat_id_foto = (payload.get("chat") or {}).get("id") or _resolve_chat_id(tenant_id)
+        if chat_id_foto:
+            try:
+                from api.telegram import _send_telegram_message
+
+                _send_telegram_message(chat_id_foto, quittung, tenant_id=tenant_id)
+            except Exception as exc:
+                logger.warning("photo confirmation send failed: %s", type(exc).__name__)
+        else:
+            logger.warning("foto-quittung: kein chat auffindbar (tenant=%s)", tenant_id)
 
     return {
         "status": "ok",
