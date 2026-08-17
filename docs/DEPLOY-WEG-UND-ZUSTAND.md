@@ -1,7 +1,94 @@
 # Deploy-Weg & Zustand — content-autopilot.zukunftsbund.de
 
 **Stand:** 2026-08-15 · Welle `zubu-deploy-bestand`
+Ergänzt 2026-08-15 · Welle `zubu-visual-sweep-deploy-klaeren` (Abschnitt 0)
 Alle Angaben gemessen, nicht aus Dokumentation übernommen.
+
+---
+
+## 0. ⛔⛔ BRANCH-TOPOLOGIE IST KEIN DEPLOY-NACHWEIS
+
+**Lies das, bevor du behauptest, etwas sei „nicht live".**
+
+`git merge-base --is-ancestor <branch> <integrationsbranch>` beantwortet die
+Frage **nicht**. Es beantwortet eine andere Frage, die hier bedeutungslos ist.
+
+**Warum:** Deployt wird per **rsync-Tarball** (Abschnitt 2, Schritt 1) mit
+`tar czf --exclude=.git`. Auf dem Live-Server liegt deshalb **kein Git-Repo**:
+
+```bash
+ssh … 'cd /opt/content-autopilot-v2 && git log --oneline -1'
+# → fatal: not a git repository (or any of the parent directories): .git
+```
+
+Ein Stand kann also vollständig live sein, ohne je Vorfahre eines
+Integrationsbranches zu werden. Beides ist gleichzeitig wahr und kein
+Widerspruch.
+
+### Der einzig gültige Beleg: der Asset-Hash
+
+```bash
+curl -s https://content-autopilot.zukunftsbund.de/ | grep -o 'assets/[^"]*\.js'
+# → assets/index-CPSv3zBW.js
+```
+
+Dann den Inhalt gegen eine **Code-Signatur** prüfen, die es nur im fraglichen
+Stand gibt (nicht gegen den Dateinamen — der sagt nur „irgendetwas hat sich
+geändert"):
+
+```bash
+curl -s https://content-autopilot.zukunftsbund.de/assets/index-<hash>.js \
+  > /tmp/live-bundle.js
+grep -c 'aria-modal' /tmp/live-bundle.js
+```
+
+⛔ **Positivkontrolle Pflicht.** „0 Treffer" auf einer leeren oder
+fehlgeschlagenen Antwort ist kein Befund, sondern ein Messfehler. Immer
+zusätzlich auf einen String prüfen, der da sein **muss** (`useState`,
+`Dashboard`) — kommt der auch nicht vor, hast du nichts gemessen.
+
+⛔ **Signatur sorgfältig wählen.** Generische Strings wie `aria-modal` stehen
+auch in React-interner Attributliste. Den **Kontext** ansehen
+(`grep -o '.\{160\}<signatur>.\{160\}'`), nicht nur zählen.
+
+### ⛔ Der Vorfall, der diesen Abschnitt ausgelöst hat (2026-08-15)
+
+Der **Hub selbst** stellte diese Fehldiagnose. Gemessen wurde:
+
+```
+git merge-base --is-ancestor zubu-design-politur-work \
+                             integration/highlander-2026-08-14   → rc=1
+git grep -c aria-modal integration/highlander-2026-08-14 …       → 0
+```
+
+Schluss daraus: *„Die Design-Politur ist NICHT live."* Daraufhin wurde eine
+Deploy-Welle für einen bereits ausgelieferten Stand aufgesetzt.
+
+**Tatsächlich war alles live** — seit demselben Tag, 15:41 Uhr. Das Bundle
+`index-CPSv3zBW.js` enthielt den Politur-Code wörtlich
+(`role:"dialog","aria-modal":"true"` mit Fokus-Falle `ref:m`,
+`border-status-neu-border` 11×), und `/opt/content-autopilot-v2` trug den
+Politur-Quellcode inklusive `ui/CloseButton.jsx` (Dateien 14:49, Build 15:41).
+
+Die Rechnung war **korrekt**, der Gegenstand **falsch**. Ein unnötiger
+Eingriff in ein Live-Kundensystem wurde nur dadurch vermieden, dass zuerst
+gemessen und erst danach gehandelt wurde.
+
+**Zweite Lehre:** Die Meldung *„FERTIG — bereit zum Deploy"* (15:35) las sich
+wie ein offener Übergabepunkt. Der Deploy lief **sechs Minuten später**. Nicht
+die Übergabe hatte eine Lücke, sondern ihre Protokollierung. Wer deployt,
+schreibt es hierher.
+
+### ⚠️ Werkzeuge, die bei dieser Messung versagt haben
+
+| Werkzeug | Verhalten | Konsequenz |
+|---|---|---|
+| `orko_url_holen.sh` | rc=2, 0 Bytes | unbrauchbar, still fehlgeschlagen |
+| `WebFetch` | konvertiert zu Markdown | **verliert `<script>`-Tags** → Hash unsichtbar |
+| **`curl -s <domain>`** | liefert rohes HTML (500 B) | ✅ **der Weg** |
+
+Das `index.html` ist 500 Bytes groß und der Hash steht im Klartext darin —
+es braucht weder Headless-Chrome noch DevTools-MCP.
 
 ---
 
@@ -131,12 +218,20 @@ sudo docker inspect content-autopilot-v2-nginx-v2-1 \
 `deploy/live-20260815` = Highlander `5970f69` + Auth-Fix (3 Commits)
 + PR #148 (WHERE-false) + 403-Teil aus PR #147.
 
+⚠️ **Nachtrag 15.08. abends:** Diese Zeile beschreibt nur den Backend-Stand
+vom Nachmittag. **Das Frontend wurde danach erneut deployt** — die
+Design-Politur (`zubu-design-politur-work`, 8 Commits), Build 15:41,
+Bundle `index-CPSv3zBW.js`. Dieser Stand ist in **keinem** Branch als
+Vorfahre nachweisbar; er kam per Tarball. Siehe Abschnitt 0.
+
 ### Dienste
+Stand 2026-08-15 abends (nachgemessen):
+
 | Container | Status |
 |---|---|
 | nginx-v2, backend-v2, celery-worker-v2, celery-beat-v2, redis-v2 | healthy |
 | traefik | läuft (80/443, Let's Encrypt) |
-| **mcp-server-v2** | ⛔ **Restart-Schleife** |
+| **mcp-server-v2** | ✅ **healthy** (war nachmittags Restart-Schleife) |
 
 ### Datenbank
 - `content_autopilot_v2`, **Alembic `065 (head)`** (von 063 hochgezogen)
@@ -199,9 +294,31 @@ ein Redesign überhaupt erst zentral steuerbar.
 
 | Punkt | Schwere |
 |---|---|
-| `mcp-server-v2` Restart-Schleife (`No module named 'mcp.server.fastmcp'`) | in Arbeit |
+| ~~`mcp-server-v2` Restart-Schleife~~ → **erledigt**, siehe unten | ✅ |
 | Kein Runner auf dem Live-Server → Deploys bleiben manuell | Entscheidung offen |
 | RLS auf Tabelle `tenants` selbst fehlt (Rest von 058 aktiv) | niedrig |
 | `llm.py:247` — `json.loads()` auf LLM-Output (Gate G18) | niedrig |
 | Kein automatisches Backup (kein Cron) | mittel |
 | `/ideas` & Co. optisch schwach — Token-Sweep ≠ Redesign (Abschnitt 6) | Owner-Entscheid |
+
+### ✅ Erledigt seit dieser Fassung
+
+**`mcp-server-v2` Restart-Schleife — behoben.** Gemessen 2026-08-15 abends
+(Welle `zubu-visual-sweep-deploy-klaeren`):
+
+```
+content-autopilot-v2-mcp-server-v2-1    Up 9 hours (healthy)
+```
+
+Alle sechs Container `healthy`, `traefik` läuft. Die oben in der Tabelle
+gestrichene Zeile stammte aus der Momentaufnahme des Deploys vom Nachmittag.
+
+**Die Design-Politur ist ausgeliefert** (Bundle `index-CPSv3zBW.js`,
+Build 15:41): 15 Modals auf `ui/Dialog.jsx`, `role="dialog"`/`aria-modal`
+plus Fokus-Falle (BFSG-relevant), gemeinsamer `ui/CloseButton.jsx`,
+`Badge.jsx` um `border`/`size` erweitert. Vollständiger Nachweis in
+Abschnitt 0.
+
+⛔ **Nicht als Branch-Merge vorhanden** — der Stand liegt auf
+`zubu-design-politur-work` und wurde per Tarball deployt. Genau hierauf
+zielt der Merksatz in Abschnitt 0.
