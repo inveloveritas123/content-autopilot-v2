@@ -285,6 +285,67 @@ def estimate_tier_cost(tier: str, input_tokens: int, output_tokens: int) -> floa
 # ---------------------------------------------------------------------------
 
 
+def _erfasse_kosten(tenant_id: str | None, cost_usd: float) -> None:
+    """Schreibt die Kosten EINES Pipeline-Calls nach `daily_cost_tenant`.
+
+    ⛔ Warum das hier steht und nicht (mehr) in den Tasks: Der Modulkopf sagte
+    „DB-Writes bleiben in den Tasks" — gemessen am 17.08.2026 hielten sich
+    daran nur 6 von 19 Aufrufern. Die anderen 13 (darunter der komplette
+    Bot-Pfad: p08_service, p14_entry_service, p12/p12b/p12c, beide
+    p17-Observer, voice_drift, p02, p03_voice_fallback, md_converter,
+    rag_rerank, sensitive_detector) schrieben gar nichts. Folge:
+    `daily_cost_tenant` bildete die realen Kosten nicht ab, und der Tages-Cap
+    in `services/llm.py` (der genau diese Tabelle liest) griff für sie nie.
+
+    Ein Vertrag, den zwei Drittel der Aufrufer nicht einhalten, ist kein
+    Vertrag. Deshalb: EIN Ort statt 13 Kopien (Owner-Entscheid 17.08.2026).
+
+    ⛔ Doppelzählung ist ausgeschlossen — aber nicht durch Absprache, sondern
+    durch Bauart: die 6 korrekten Tasks schreiben über
+    `CostCapMiddleware.check_and_record`, die auf DERSELBEN Zeile
+    (tenant_id, date) arbeitet. Beide Wege addieren auf `cost_usd`. Damit ein
+    Task nicht doppelt zählt, ist sein eigener Aufruf zu entfernen — das ist
+    in dieser Welle für die betroffenen Tasks geschehen (siehe Commit).
+
+    Fail-open und bewusst so: ein fehlgeschlagener Kosten-Write darf einen
+    bereits bezahlten LLM-Call nicht nachträglich zum Fehler machen. Aber er
+    wird GELOGGT — ein stiller Ausfall der Kostenerfassung ist genau der
+    Zustand, den diese Funktion beendet.
+    """
+    if not tenant_id or cost_usd <= 0:
+        return
+    try:
+        from datetime import date as _date
+
+        from sqlalchemy import text as _t
+
+        from models.base import sync_session_factory
+        from services.rls import set_rls_tenant_sync
+
+        with sync_session_factory() as s:
+            # `daily_cost_tenant` trägt seit Migration 058 FORCE ROW LEVEL
+            # SECURITY — ohne Kontext liefe der UPSERT ins Leere.
+            set_rls_tenant_sync(s, tenant_id)
+            s.execute(
+                _t(
+                    "INSERT INTO daily_cost_tenant (tenant_id, date, cost_usd, call_count) "
+                    "VALUES (CAST(:tid AS uuid), :d, :cost, 1) "
+                    "ON CONFLICT (tenant_id, date) DO UPDATE SET "
+                    "  cost_usd = COALESCE(daily_cost_tenant.cost_usd, 0) + EXCLUDED.cost_usd, "
+                    "  call_count = COALESCE(daily_cost_tenant.call_count, 0) + 1"
+                ),
+                {"tid": str(tenant_id), "d": _date.today(), "cost": cost_usd},
+            )
+            s.commit()
+    except Exception as exc:
+        logger.warning(
+            "call_pipeline_llm: Kosten-Erfassung fehlgeschlagen (tenant=%s, %.6f USD): %s",
+            tenant_id,
+            cost_usd,
+            type(exc).__name__,
+        )
+
+
 @dataclass
 class PipelineLLMResult:
     """Ergebnis eines synchronen Pipeline-LLM-Calls.
@@ -706,6 +767,8 @@ def _parse_response(
         cache_read,
         cost_usd,
     )
+
+    _erfasse_kosten(tenant_id, cost_usd)
 
     return PipelineLLMResult(
         text=text,

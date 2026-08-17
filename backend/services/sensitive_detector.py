@@ -379,7 +379,7 @@ def _pattern_check(text: str) -> tuple[list[str], list[FlaggedPhrase], float]:
     return list(found_categories), found_phrases, confidence
 
 
-def _llm_check(text: str) -> tuple[list[str], list[FlaggedPhrase], float]:
+def _llm_check(text: str, tenant_id: str = "") -> tuple[list[str], list[FlaggedPhrase], float]:
     """Schicht B: LLM-Klassifikator via Router (nur bei Schicht-A-Trigger)."""
     from services.pipeline_llm import call_pipeline_llm
 
@@ -407,7 +407,7 @@ Post:
             prompt_key="SENSITIVE_DETECT",
             system_prompt=system_prompt,
             user_content=user_prompt,
-            tenant_id="",
+            tenant_id=tenant_id,
         )
         raw = result.text.strip()
         # Strip markdown code block if present
@@ -433,7 +433,9 @@ def _compute_severity(categories: list[str], confidence: float) -> str:
     return "low"
 
 
-def detect_sensitive_topics(post_text: str, use_llm: bool = True) -> SensitiveResult:
+def detect_sensitive_topics(
+    post_text: str, use_llm: bool = True, tenant_id: str = ""
+) -> SensitiveResult:
     """
     Haupteinstiegspunkt. Gibt SensitiveResult zurück.
 
@@ -454,7 +456,7 @@ def detect_sensitive_topics(post_text: str, use_llm: bool = True) -> SensitiveRe
 
     if use_llm:
         try:
-            categories_b, phrases_b, confidence_b = _llm_check(post_text)
+            categories_b, phrases_b, confidence_b = _llm_check(post_text, tenant_id)
             if categories_b:
                 # Merge: LLM overrides confidence, union of categories
                 categories = list(set(categories_a) | set(categories_b))

@@ -589,7 +589,7 @@ def _run_p12_p12b_pipeline(tenant_id, idea_id, answers_list, voice_payload, avat
     sensitive_result = None
     flagged = False
     try:
-        sensitive_result = detect_sensitive_topics(final_post, use_llm=True)
+        sensitive_result = detect_sensitive_topics(final_post, use_llm=True, tenant_id=tenant_id)
         flagged = sensitive_result.is_sensitive
     except Exception as _det_exc:
         logger.warning("[SensitiveDetector] Error: %s", _det_exc)
