@@ -29,3 +29,12 @@ eval_results/
 *.key
 WERKBANK-GATE-REPORT.md
 frontend/.env.local
+
+# Git-Worktrees dieses Repos (liegen bewusst im Repo-Verzeichnis, gehoeren
+# aber nie in die Historie). Ohne diesen Eintrag meldet jeder Statuscheck
+# sie als uncommittete Aenderung — und orko_push.sh blockt daraufhin den
+# Push mit "da arbeitet gerade jemand", obwohl niemand arbeitet.
+_worktrees/
+
+# Playwright-Report: generierter Testbericht, kein Quellcode.
+frontend/playwright-report/
