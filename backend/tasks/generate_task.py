@@ -39,7 +39,8 @@ def analyze_item(item_id: str):
             logger.error(f"Item {item_id} not found")
             return
         set_rls_bypass_sync(session, False)
-        set_rls_tenant_sync(session, str(item.tenant_id))
+        _an_tenant = str(item.tenant_id)
+        set_rls_tenant_sync(session, _an_tenant)
 
         # RSS items often have no full transcript — use title as minimal content
         if not item.transcript_text:
@@ -49,12 +50,21 @@ def analyze_item(item_id: str):
                 )
                 item.transcript_text = item.title
                 session.commit()
+                # ⛔ SET LOCAL verfaellt beim Commit — ohne Erneuerung liefe der
+                # Rest ohne Kontext und jedes UPDATE traefe 0 Zeilen.
+                set_rls_tenant_sync(session, _an_tenant)
             else:
                 logger.error(f"Item {item_id} has no transcript and no title fallback")
                 return
 
         item.status = "analyzing"
         session.commit()
+        # ⛔ Kontext nach dem Commit erneuern. Ohne diese Zeile scheiterte der
+        # gesamte Rest der Analyse: "UPDATE statement on table 'source_items'
+        # expected to update 1 row(s); 0 were matched", danach
+        # PendingRollbackError fuer jeden weiteren Zugriff. Real aufgetreten
+        # am 17.08. nach meinem eigenen Fix — 66 Fehler in 4 Minuten.
+        set_rls_tenant_sync(session, _an_tenant)
 
         # Source-Typ ermitteln für kontextabhängige Analyse
         source = session.get(Source, item.source_id) if item.source_id else None
