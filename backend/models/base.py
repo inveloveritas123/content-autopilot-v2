@@ -52,6 +52,23 @@ def _get_sync_engine():
     global _sync_engine
     if _sync_engine is None:
         _sync_engine = create_engine(settings.sync_database_url, echo=False)
+        # ⛔ RLS-Wächter genau hier und nur hier: das ist die EINE Stelle, an
+        # der jede Sync-Engine entsteht. Er repariert nichts — er macht
+        # sichtbar, wenn eine Abfrage auf eine RLS-Tabelle ohne Tenant-Kontext
+        # läuft und deshalb 0 Zeilen liefert (bzw. ein INSERT hart scheitert).
+        # Ohne ihn ist dieser Zustand von einem korrekten Leerbefund nicht zu
+        # unterscheiden — genau daran ist am 17.08.2026 der Telegram-Empfang
+        # ausgefallen. Details: services/rls_guard.py.
+        #
+        # Fail-open beim Einhängen selbst: fehlt das Modul oder wirft es, darf
+        # die Anwendung nicht starten-unfähig werden. Ein Wächter ist eine
+        # Zusatzsicherung, keine Startbedingung.
+        try:
+            from services.rls_guard import aktiviere_rls_waechter
+
+            aktiviere_rls_waechter(_sync_engine)
+        except Exception:  # pragma: no cover
+            pass
     return _sync_engine
 
 

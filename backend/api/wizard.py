@@ -954,6 +954,7 @@ async def wizard_finalize(
 from sqlalchemy import text as sa_text
 
 from models.base import sync_session_factory
+from services.rls import set_rls_bypass_sync
 from tasks.celery_app import celery_app
 
 
@@ -961,6 +962,10 @@ from tasks.celery_app import celery_app
 def cleanup_abandoned_sessions():
     """Wizard-Sessions, die seit 7 Tagen nicht aktualisiert wurden, auf abandoned setzen."""
     with sync_session_factory() as session:
+        # RLS-BYPASS (Fall B): Celery-Beat-Cron ueber wizard_session ALLER Tenants —
+        # es gibt keinen einzelnen Tenant-Scope. Ohne Bypass sieht die Session bei
+        # FORCE ROW LEVEL SECURITY 0 Zeilen, das UPDATE traefe nie eine Session.
+        set_rls_bypass_sync(session, True)
         result = session.execute(
             sa_text(
                 "UPDATE wizard_session "

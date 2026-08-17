@@ -20,6 +20,7 @@ from config import settings
 from dependencies import get_db, get_tenant
 from models.base import sync_session_factory
 from services.ai_disclosure import chat_ai_hinweis_block
+from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,12 @@ def _send_telegram_message(
             # best-effort: Fehlversuch in telegram_message_log persistieren (Tabelle aus Migration 019)
             try:
                 with sync_session_factory() as db:
+                    # `telegram_message_log` traegt FORCE ROW LEVEL SECURITY — ohne
+                    # Kontext scheitert der INSERT hart ("violates row-level security
+                    # policy") und dieser Fehlversuch wird nie persistiert. tenant_id
+                    # ist hier bereits bekannt (Funktionsparameter), alle Statements
+                    # im Block betreffen nur diesen einen Tenant → Tenant-Kontext.
+                    set_rls_tenant_sync(db, tenant_id)
                     db.execute(
                         text(
                             "INSERT INTO telegram_message_log "
@@ -190,6 +197,12 @@ def _send_telegram_message(
         # Nur Metadaten (kein Nachrichtentext) — Datenschutz-Invariante wie im Fehlerzweig.
         try:
             with sync_session_factory() as db:
+                # `telegram_message_log` traegt FORCE ROW LEVEL SECURITY — ohne
+                # Kontext scheitert der INSERT hart ("violates row-level security
+                # policy") und der erfolgreiche Send wird nie geloggt. tenant_id
+                # ist hier bereits bekannt (Funktionsparameter), alle Statements
+                # im Block betreffen nur diesen einen Tenant → Tenant-Kontext.
+                set_rls_tenant_sync(db, tenant_id)
                 db.execute(
                     text(
                         "INSERT INTO telegram_message_log "
@@ -297,6 +310,12 @@ def _approve_content_sync(content_id: str, tenant_id: str) -> str:
     """
     try:
         with sync_session_factory() as db:
+            # `content_pieces` traegt FORCE ROW LEVEL SECURITY — ohne Kontext
+            # liefert das SELECT 0 Zeilen (sieht wie "not_found" aus, obwohl das
+            # Piece existiert) und das UPDATE aendert nichts. tenant_id ist hier
+            # bereits bekannt (Funktionsparameter), alle Statements im Block
+            # betreffen nur diesen einen Tenant → Tenant-Kontext.
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 text("SELECT status FROM content_pieces WHERE id = :cid AND tenant_id = :tid"),
                 {"cid": content_id, "tid": tenant_id},
@@ -330,6 +349,12 @@ def _reject_content_sync(content_id: str, tenant_id: str) -> str:
     """
     try:
         with sync_session_factory() as db:
+            # `content_pieces` traegt FORCE ROW LEVEL SECURITY — ohne Kontext
+            # liefert das SELECT 0 Zeilen (sieht wie "not_found" aus, obwohl das
+            # Piece existiert) und das UPDATE aendert nichts. tenant_id ist hier
+            # bereits bekannt (Funktionsparameter), alle Statements im Block
+            # betreffen nur diesen einen Tenant → Tenant-Kontext.
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 text("SELECT status FROM content_pieces WHERE id = :cid AND tenant_id = :tid"),
                 {"cid": content_id, "tid": tenant_id},
@@ -430,6 +455,12 @@ def _handle_start_command(message: dict, token: str, expected_tenant_id: str | N
     user_id: int = message.get("from", {}).get("id", 0)
 
     with sync_session_factory() as db:
+        # `tenant_telegram_link` traegt FORCE ROW LEVEL SECURITY. An dieser Stelle
+        # ist die tenant_id per Definition NOCH UNBEKANNT — sie wird erst durch
+        # diesen Token-Lookup ermittelt (tenant-uebergreifende Abfrage) → Bypass,
+        # NICHT Tenant-Kontext. Ohne Bypass liefert das SELECT 0 Zeilen und jeder
+        # Verbindungs-Link waere ungueltig, obwohl der Token stimmt.
+        set_rls_bypass_sync(db, True)
         row = db.execute(
             text(
                 "SELECT tenant_id, linked_at FROM tenant_telegram_link "
@@ -447,6 +478,12 @@ def _handle_start_command(message: dict, token: str, expected_tenant_id: str | N
             return
 
         tenant_id, linked_at = row[0], row[1]
+
+        # tenant_id ist jetzt bekannt — Bypass so eng wie moeglich halten: zurueck
+        # auf Tenant-Kontext, bevor irgendein weiteres Statement in diesem Block
+        # laeuft (DELETE/INSERT auf tenant_telegram_link, SELECT auf tenants).
+        set_rls_bypass_sync(db, False)
+        set_rls_tenant_sync(db, tenant_id)
 
         if expected_tenant_id is not None and str(tenant_id) != str(expected_tenant_id):
             logger.warning(
@@ -530,6 +567,12 @@ def _store_and_dispatch(tenant_id: str, message: dict, message_type: str) -> Non
     if update_id is not None:
         try:
             with sync_session_factory() as db:
+                # `telegram_message_log` traegt FORCE ROW LEVEL SECURITY — ohne
+                # Kontext liefert das SELECT 0 Zeilen, der Dedup-Check faellt
+                # immer negativ aus (kein Fehler, aber wirkungslos). tenant_id ist
+                # hier bereits bekannt (Funktionsparameter), alle Statements im
+                # Block betreffen nur diesen einen Tenant → Tenant-Kontext.
+                set_rls_tenant_sync(db, tenant_id)
                 dup_row = db.execute(
                     text(
                         "SELECT 1 FROM telegram_message_log "
@@ -567,6 +610,12 @@ def _store_and_dispatch(tenant_id: str, message: dict, message_type: str) -> Non
 
     log_id = None
     with sync_session_factory() as db:
+        # `telegram_message_log` traegt FORCE ROW LEVEL SECURITY — ohne Kontext
+        # scheitert dieser INSERT hart ("violates row-level security policy")
+        # und keine eingehende Nachricht wird je gespeichert. tenant_id ist hier
+        # bereits bekannt (Funktionsparameter), alle Statements im Block
+        # betreffen nur diesen einen Tenant → Tenant-Kontext.
+        set_rls_tenant_sync(db, tenant_id)
         result = db.execute(
             text(
                 "INSERT INTO telegram_message_log "
@@ -696,6 +745,14 @@ async def telegram_webhook(
         # Quick check if user is linked — if yes, let _try_memory_command handle it
         try:
             with sync_session_factory() as db:
+                # `tenant_telegram_link` traegt FORCE ROW LEVEL SECURITY. Die
+                # tenant_id ist an dieser Stelle NOCH UNBEKANNT — der Lookup laeuft
+                # ausschliesslich ueber telegram_user_id, tenant-uebergreifend
+                # (genau der Zweck dieser Abfrage: herausfinden, ob/zu welchem
+                # Tenant der User gehoert) → Bypass, NICHT Tenant-Kontext. Ohne
+                # Bypass liefert das SELECT immer 0 Zeilen und jeder bereits
+                # verbundene User saehe faelschlich den "nicht verbunden"-Text.
+                set_rls_bypass_sync(db, True)
                 linked = db.execute(
                     text(
                         "SELECT 1 FROM tenant_telegram_link "
@@ -728,6 +785,13 @@ async def telegram_webhook(
     link_status = None
     try:
         with sync_session_factory() as db:
+            # `tenant_telegram_link` traegt FORCE ROW LEVEL SECURITY. Die tenant_id
+            # ist an dieser Stelle NOCH UNBEKANNT — sie wird erst durch DIESE
+            # Abfrage ermittelt (Aufloesung telegram_user_id → tenant_id, per
+            # Definition tenant-uebergreifend) → Bypass, NICHT Tenant-Kontext.
+            # Ohne Bypass liefert das SELECT 0 Zeilen und JEDE eingehende
+            # Nachricht landet im "Unbekannter User"-Zweig, egal ob verbunden.
+            set_rls_bypass_sync(db, True)
             row = db.execute(
                 text(
                     "SELECT tenant_id, status FROM tenant_telegram_link "
@@ -998,6 +1062,12 @@ def _load_message_text(tenant_id: str, log_id: str) -> str:
     """
     try:
         with sync_session_factory() as db:
+            # `telegram_message_log` traegt FORCE ROW LEVEL SECURITY — ohne
+            # Kontext liefert das SELECT 0 Zeilen und jede Nachricht erscheint als
+            # "unbekannt", obwohl sie existiert. tenant_id ist hier bereits
+            # bekannt (Funktionsparameter), alle Statements im Block betreffen
+            # nur diesen einen Tenant → Tenant-Kontext.
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 text(
                     "SELECT transcript_text, original_payload FROM telegram_message_log "
@@ -1055,6 +1125,12 @@ def _idea_exists_for_log(tenant_id: str, log_id: str) -> bool | None:
     """
     try:
         with sync_session_factory() as db:
+            # `content_ideas` traegt FORCE ROW LEVEL SECURITY — ohne Kontext
+            # liefert das SELECT 0 Zeilen und der Doppeldruck-Schutz erkennt
+            # niemals eine bereits laufende Idee. tenant_id ist hier bereits
+            # bekannt (Funktionsparameter), alle Statements im Block betreffen
+            # nur diesen einen Tenant → Tenant-Kontext.
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 text(
                     "SELECT 1 FROM content_ideas WHERE tenant_id = :tid "
@@ -1163,6 +1239,14 @@ def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = N
     else:
         try:
             with sync_session_factory() as db:
+                # `tenant_telegram_link` traegt FORCE ROW LEVEL SECURITY. Die
+                # tenant_id ist an dieser Stelle NOCH UNBEKANNT — sie wird erst
+                # durch DIESE Abfrage ermittelt (telegram_user_id → tenant_id,
+                # per Definition tenant-uebergreifend) → Bypass, NICHT
+                # Tenant-Kontext. Ohne Bypass liefert das SELECT 0 Zeilen und
+                # jeder Button-Klick eines Webhook-Users (kein known_tenant_id)
+                # laeuft ins Leere.
+                set_rls_bypass_sync(db, True)
                 link_row = db.execute(
                     text(
                         "SELECT tenant_id FROM tenant_telegram_link "
@@ -1267,6 +1351,12 @@ def _send_ki_profil(tenant_id: str, chat_id: int) -> None:
         from sqlalchemy import text as _text
 
         with sync_session_factory() as db:
+            # `tenant_voice_profile` traegt FORCE ROW LEVEL SECURITY — ohne
+            # Kontext liefert das SELECT 0 Zeilen und der Bot zeigt faelschlich
+            # "KI-Profil noch leer", obwohl ein Profil existiert. tenant_id ist
+            # hier bereits bekannt (Funktionsparameter), alle Statements im
+            # Block betreffen nur diesen einen Tenant → Tenant-Kontext.
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 _text(
                     "SELECT payload FROM tenant_voice_profile "
@@ -1321,6 +1411,13 @@ def _send_brainstorming_menu(tenant_id: str, chat_id: int) -> None:
         from sqlalchemy import text as _text
 
         with sync_session_factory() as db:
+            # `content_ideas` traegt FORCE ROW LEVEL SECURITY — ohne Kontext
+            # liefert das SELECT 0 Zeilen und das Brainstorming-Menue zeigt
+            # faelschlich "Noch keine Ideen im Pool", obwohl welche existieren.
+            # tenant_id ist hier bereits bekannt (Funktionsparameter), alle
+            # Statements im Block betreffen nur diesen einen Tenant →
+            # Tenant-Kontext.
+            set_rls_tenant_sync(db, tenant_id)
             rows = db.execute(
                 _text(
                     "SELECT id, title, hook_suggestion FROM content_ideas "
@@ -1408,6 +1505,12 @@ def _brainstorming_pick_idea(tenant_id: str, chat_id: int, idea_id: str) -> None
         from sqlalchemy import text as _text
 
         with sync_session_factory() as db:
+            # `content_ideas` traegt FORCE ROW LEVEL SECURITY — ohne Kontext
+            # liefert das SELECT 0 Zeilen und der Button meldet faelschlich
+            # "Idee nicht gefunden", obwohl sie existiert. tenant_id ist hier
+            # bereits bekannt (Funktionsparameter), alle Statements im Block
+            # betreffen nur diesen einen Tenant → Tenant-Kontext.
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 _text(
                     "SELECT title, hook_suggestion FROM content_ideas "
@@ -1512,6 +1615,14 @@ def _cancel_active_session(
     cancelled_idea_ids: list[str] = []
     try:
         with sync_session_factory() as db:
+            # `bot_session` traegt FORCE ROW LEVEL SECURITY — ohne Kontext
+            # aendert das UPDATE 0 Zeilen und der Abbruch-Button meldet
+            # faelschlich "kein Gespraech aktiv", waehrend die Session
+            # tatsaechlich weiterlaeuft und Nachrichten weiter verschluckt.
+            # tenant_id ist hier bereits bekannt (Funktionsparameter), alle
+            # Statements im Block betreffen nur diesen einen Tenant →
+            # Tenant-Kontext.
+            set_rls_tenant_sync(db, tenant_id)
             rows = db.execute(
                 text(
                     "UPDATE bot_session SET status = 'expired', updated_at = NOW() "

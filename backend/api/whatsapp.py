@@ -34,6 +34,7 @@ from sqlalchemy import text
 
 from config import settings
 from models.base import sync_session_factory
+from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -93,6 +94,11 @@ def _resolve_tenant_for_wa_user(wa_user_id: str) -> str | None:
     Bei Drift/leerer Tabelle: None.
     """
     with sync_session_factory() as db:
+        # RLS-BYPASS (Fall B): tenant_id ist hier per Definition noch UNBEKANNT — sie
+        # wird erst durch diese Query ermittelt (WA-User-ID -> Tenant-Aufloesung).
+        # Ohne Bypass sieht die Session bei FORCE ROW LEVEL SECURITY 0 Zeilen in
+        # tenant_telegram_link, der Tenant kann nie aufgeloest werden.
+        set_rls_bypass_sync(db, True)
         try:
             row = db.execute(
                 text(
@@ -116,6 +122,11 @@ def _store_wa_message(tenant_id: str, message: dict, message_type: str) -> str |
     """
     payload_with_channel = {**message, "_channel": "whatsapp"}
     with sync_session_factory() as db:
+        # RLS-TENANT (Fall A): tenant_id ist bereits bekannt (Funktionsparameter) und
+        # der INSERT betrifft ausschliesslich diesen einen Tenant. Ohne gesetzten
+        # Kontext scheitert der INSERT hart an der FORCE-RLS-Policy von
+        # telegram_message_log ("new row violates row-level security policy").
+        set_rls_tenant_sync(db, tenant_id)
         result = db.execute(
             text(
                 "INSERT INTO telegram_message_log "
