@@ -15,6 +15,7 @@ from sqlalchemy import text
 
 from models.base import sync_session_factory
 from services.crypto import decrypt_secret
+from services.rls import set_rls_tenant_sync
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,13 @@ def get_tenant_bot_token(tenant_id: str) -> str | None:
         return None
     try:
         with sync_session_factory() as db:
+            # ⛔ Ohne diesen Kontext liefert die Abfrage seit Migration 058
+            # (FORCE ROW LEVEL SECURITY auf tenant_bot_config) 0 Zeilen — und
+            # weil die Funktion fail-safe auf None geht, sieht das exakt aus wie
+            # "kein Bot konfiguriert". Wirkung: JEDE ausgehende Telegram-Nachricht
+            # scheitert lautlos. Der Poller kann Nachrichten dann zwar empfangen,
+            # aber der Bot antwortet nie — genau das Bild, das Louis meldete.
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 text(
                     "SELECT telegram_bot_token_encrypted "
@@ -83,6 +91,11 @@ def update_last_active(tenant_id: str) -> None:
     """
     try:
         with sync_session_factory() as db:
+            # Wie in `get_tenant_bot_token`: ohne Tenant-Kontext traefe das
+            # UPDATE unter FORCE ROW LEVEL SECURITY 0 Zeilen. Fail-open
+            # verschluckt das — der Zeitstempel bliebe fuer immer stehen und
+            # jede Aktivitaetsanzeige waere falsch.
+            set_rls_tenant_sync(db, tenant_id)
             db.execute(
                 text(
                     "UPDATE tenant_bot_config "
