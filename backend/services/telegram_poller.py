@@ -1,3 +1,4 @@
+# SCREENED-2026-08-15: strukturell durchgesehen, keine Befunde.
 """Telegram Long-Polling core (per-Tenant-Poller, dep-light).
 
 Stellt zwei öffentliche Callables bereit:

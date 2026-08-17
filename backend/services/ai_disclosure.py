@@ -1,3 +1,4 @@
+# AUDITED-2026-08-15 (zubu-louis-immer-eine-antwort): Tiefen-Audit, Datei vollstaendig gelesen.
 """KI-Kennzeichnung — EU-AI-Act Art. 50 Transparenz (W6, 2026-07-21).
 
 Art. 50 verlangt, dass KI-generierte Inhalte als solche erkennbar sind. Für den

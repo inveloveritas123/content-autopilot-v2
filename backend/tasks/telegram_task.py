@@ -1,3 +1,4 @@
+# AUDITED-PARTIAL-2026-08-15 (zubu-louis-immer-eine-antwort): nur die Kernpfade geprueft.
 """Telegram-Update-Verarbeitung (Phase 5 Welle 3, Issue #140).
 
 Wird von api.telegram._store_and_dispatch() per Celery enqueued.

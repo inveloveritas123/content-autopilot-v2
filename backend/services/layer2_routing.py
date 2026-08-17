@@ -1,3 +1,4 @@
+# AUDITED-PARTIAL-2026-08-15 (zubu-louis-immer-eine-antwort): nur die Kernpfade geprueft.
 """
 Schicht-2 Routing — deterministisches Intent-zu-Pipeline-Mapping.
 KEIN LLM in dieser Schicht. Pure Python if-elif Logic.

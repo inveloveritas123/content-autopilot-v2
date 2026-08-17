@@ -1,3 +1,4 @@
+# AUDITED-2026-08-15 (zubu-louis-immer-eine-antwort): Tiefen-Audit, Datei vollstaendig gelesen.
 """Deterministische Keyword-Heuristik für Chat-Intents (Issue #36 — P09/P13).
 
 Dep-frei: nur ``re`` + stdlib. Kein sqlalchemy, kein LLM, kein datetime.UTC.
