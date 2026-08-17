@@ -196,25 +196,6 @@ async def _run_cost_check(tenant_id: str, estimated_cost: float) -> None:
         await engine.dispose()
 
 
-async def _record_actual_cost(tenant_id: str, actual_cost: float) -> None:
-    """Schreibt die tatsächlichen Kosten nach erfolgreichem Anthropic-Call."""
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-    from sqlalchemy.orm import sessionmaker as async_sm
-
-    from config import settings
-    from services.cost_cap import CostCapMiddleware
-    from services.rls import tenant_session
-
-    engine = create_async_engine(settings.database_url, pool_pre_ping=True)
-    AsyncSessionLocal = async_sm(engine, class_=AsyncSession, expire_on_commit=False)
-    try:
-        async with tenant_session(AsyncSessionLocal, tenant_id) as session:
-            mw = CostCapMiddleware(session)
-            await mw.check_and_record(tenant_id, 0.0, actual_cost_usd=actual_cost)
-    finally:
-        await engine.dispose()
-
-
 def _insert_reviewer_queue(tenant_id: str, p12_output: dict) -> None:
     """Versucht einen Loop-Break-Eintrag in telegram_message_log zu schreiben."""
     try:
@@ -470,16 +451,6 @@ def run_p12b(
                 "final_post": p12_output["post"],
                 "reason": "loop_limit_reached",
             }
-
-        # ------------------------------------------------------------------
-        # Actual-Cost aufzeichnen
-        # ------------------------------------------------------------------
-        try:
-            asyncio.run(_record_actual_cost(tenant_id, actual_cost))
-        except Exception as cost_err:
-            logger.warning(
-                "p12b run_id=%s: actual-cost recording fehlgeschlagen: %s", run_id, cost_err
-            )
 
         # ------------------------------------------------------------------
         # 11. Audit-Update und Return

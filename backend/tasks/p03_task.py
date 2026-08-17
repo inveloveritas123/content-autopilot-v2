@@ -488,34 +488,6 @@ def run_p03(
                 session.rollback()
                 raise
 
-        # 8. Actual-Cost in daily_cost_tenant schreiben
-        try:
-            import asyncio as _asyncio2
-
-            from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-            from sqlalchemy.orm import sessionmaker as _sm2
-
-            from config import settings as _s2
-            from services.cost_cap import CostCapMiddleware
-            from services.rls import tenant_session
-
-            async def _p03_record_cost():
-                _engine = create_async_engine(_s2.database_url, pool_pre_ping=True)
-                _Session = _sm2(_engine, class_=AsyncSession, expire_on_commit=False)
-                try:
-                    async with tenant_session(_Session, tenant_id) as _sess:
-                        await CostCapMiddleware(_sess).check_and_record(
-                            tenant_id, 0.0, actual_cost_usd=actual_cost
-                        )
-                finally:
-                    await _engine.dispose()
-
-            _asyncio2.run(_p03_record_cost())
-        except Exception as cost_err:
-            logger.warning(
-                "P03 run_id=%s: actual-cost recording fehlgeschlagen: %s", run_id, cost_err
-            )
-
         logger.info(
             "P03 done tenant=%s run_id=%s voice_profile_id=%s cost=%.6f USD duration=%dms",
             tenant_id,
