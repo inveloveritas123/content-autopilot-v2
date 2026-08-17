@@ -110,6 +110,13 @@ def monitor_all_sources():
 
                 source.last_checked_at = datetime.utcnow()
                 session.commit()
+                # ⛔ `SET LOCAL` gilt nur bis zum Transaktionsende — der Commit
+                # oben verwirft den Bypass. Ohne diese Zeile sieht die NAECHSTE
+                # Schleifeniteration keine Zeilen mehr, und das UPDATE auf
+                # `sources` trifft 0 Zeilen (StaleDataError, danach
+                # PendingRollbackError fuer alle weiteren Quellen). Belegt am
+                # 2026-08-17 im Testsystem-Log.
+                set_rls_bypass_sync(session, True)
 
                 # Auto-process if enabled
                 if source.auto_process and new_items:
