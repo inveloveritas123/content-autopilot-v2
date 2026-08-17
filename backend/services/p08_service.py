@@ -228,9 +228,28 @@ def _lade_voice_profil(tenant_id: str) -> str:
             return payload
 
     if isinstance(payload, dict):
-        # Der Prompt erwartet Fliesstext, nicht die Datenstruktur. JSON ist
-        # hier der ehrlichste Kompromiss: vollstaendig und stabil lesbar,
-        # statt willkuerlich einzelne Felder auszuwaehlen.
+        # ⛔ Hier stand zunächst `json.dumps(payload)`. Besser ist der bereits
+        # vorhandene Formatierer: `services/brand_voice.format_voice_for_prompt`
+        # macht aus dem Profil lesbaren Fließtext („Tonalitaet: …",
+        # „Typische Redewendungen: …", „VERMEIDE: …") statt roher JSON-Struktur,
+        # beherrscht BEIDE Schema-Varianten (englische v1-Keys und deutsche
+        # P03/Wizard-Keys) und kürzt Listen sinnvoll.
+        #
+        # Übernommen aus dem parallel entstandenen `zubu-voice-profil-fix`
+        # (2cab37c) — dort war diese Wahl von Anfang an richtig. Ein Prompt
+        # liest Fließtext besser als serialisiertes JSON, und die Dopplung
+        # eines Formatierers wäre genau die Art Duplikat, die später
+        # auseinanderdriftet.
+        try:
+            from services.brand_voice import format_voice_for_prompt
+
+            formatiert = format_voice_for_prompt(payload)
+            if formatiert:
+                return formatiert
+        except Exception as exc:
+            logger.warning("[P08] Voice-Formatierung fehlgeschlagen (%s)", type(exc).__name__)
+        # Fällt der Formatierer aus, ist rohes JSON immer noch besser als nichts —
+        # das Profil erreicht den Prompt, nur weniger elegant.
         return json.dumps(payload, ensure_ascii=False)
     return str(payload)
 

@@ -31,6 +31,7 @@ DEFAULT_BATCH_LIMIT = 100
 async def _backfill_async(limit: int) -> dict:
     """Eine Backfill-Runde — async damit embedding_service genutzt werden kann."""
     from services.embedding_service import _embedding_to_pg, classify_chunk, embed_text
+    from services.llm import set_llm_tenant
 
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     SessionMaker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -48,7 +49,7 @@ async def _backfill_async(limit: int) -> dict:
             rows = (
                 await db.execute(
                     text(
-                        "SELECT id, content_text, classification "
+                        "SELECT id, tenant_id, content_text, classification "
                         "FROM memory_chunks "
                         f"WHERE embedding IS NULL AND {SQL_NICHT_GELOESCHT} "
                         "ORDER BY created_at DESC "
@@ -63,6 +64,14 @@ async def _backfill_async(limit: int) -> dict:
                 content = r.content_text or ""
                 if not content.strip():
                     continue
+
+                # ⛔ Der Batch spannt MEHRERE Tenants (bypass_rls_session oben).
+                # Kosten-Cap und Throttle in services/llm.py haengen an der
+                # ContextVar aus set_llm_tenant und werden bei None KOMPLETT
+                # uebersprungen — deshalb pro Zeile neu setzen, nicht einmal
+                # am Anfang. `classify_chunk` unten ist ein echter LLM-Call.
+                # Uebernommen aus zubu-voice-profil-fix (2cab37c).
+                set_llm_tenant(str(r.tenant_id))
 
                 emb = await embed_text(content)
                 cls = r.classification
