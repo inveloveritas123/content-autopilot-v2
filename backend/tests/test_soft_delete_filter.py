@@ -15,6 +15,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from services.soft_delete_filter import SQL_NICHT_GELOESCHT
 
 
@@ -211,15 +213,113 @@ class TestMemoryBackfillFiltertBeidePaesse:
         ):
             asyncio.run(_backfill_async(limit=10))
 
-        # Seit dem origin/main-Delta (RLS-Tenant-Isolation, Migration 058) setzt
-        # bypass_rls_session() zusätzlich eine `SELECT set_config(...)`-Query, um
-        # den auditierbaren Cross-Tenant-Bypass zu aktivieren -- eine dritte,
-        # zusätzliche Query, kein entfernter Filter. Die beiden fachlichen SELECTs
-        # bleiben unverändert bei 2 und tragen weiterhin SQL_NICHT_GELOESCHT.
-        fach_queries = [q for q in fake_db.queries if not q.startswith("SELECT set_config")]
-        assert len(fake_db.queries) == 3
-        assert len(fach_queries) == 2
-        assert all(SQL_NICHT_GELOESCHT in q for q in fach_queries)
+        assert len(fake_db.queries) == 2
+        assert all(SQL_NICHT_GELOESCHT in q for q in fake_db.queries)
+
+
+class _FakeBackfillRow:
+    def __init__(self, id_, tenant_id, content_text, classification=None):
+        self.id = id_
+        self.tenant_id = tenant_id
+        self.content_text = content_text
+        self.classification = classification
+
+
+class _FakeBackfillResultWithRows:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def fetchall(self):
+        return self._rows
+
+
+class _FakeBackfillDbWithRows:
+    """Erster SELECT liefert eine Row mit tenant_id, alle weiteren Aufrufe leer.
+
+    Bildet den echten Ablauf nach: Pass 1 (embedding IS NULL) trifft eine Zeile,
+    Pass 2 (Bonus-Klassifikation) danach nichts mehr.
+    """
+
+    def __init__(self, first_rows):
+        self._first_rows = first_rows
+        self._call_count = 0
+        self.queries = []
+
+    async def execute(self, sql, params=None):
+        self.queries.append(str(sql))
+        self._call_count += 1
+        if self._call_count == 1:
+            return _FakeBackfillResultWithRows(self._first_rows)
+        return _FakeBackfillResultWithRows([])
+
+    async def commit(self):
+        pass
+
+
+class TestMemoryBackfillSetztLlmTenantProRow:
+    """Beweis fuer Befund 2: set_llm_tenant fehlte komplett — Kosten-Cap UND
+    Throttle wurden fuer den Klassifikations-Call in memory_backfill_task
+    stillschweigend uebersprungen (services/llm.py: `if tid_ctx:`-Block).
+    Der Batch liest chunks ueber ALLE Tenants hinweg, deshalb muss
+    set_llm_tenant PRO ROW mit der jeweiligen tenant_id gesetzt werden.
+    """
+
+    def test_set_llm_tenant_called_with_row_tenant_id(self):
+        from tasks.memory_backfill_task import _backfill_async
+
+        row = _FakeBackfillRow(
+            id_="chunk-1", tenant_id="tenant-xyz", content_text="Ein Text ueber Werte."
+        )
+        fake_db = _FakeBackfillDbWithRows([row])
+        fake_engine = MagicMock()
+        fake_engine.dispose = AsyncMock()
+
+        fake_set_llm_tenant = MagicMock()
+
+        with (
+            patch("tasks.memory_backfill_task.create_async_engine", return_value=fake_engine),
+            patch(
+                "tasks.memory_backfill_task.sessionmaker",
+                return_value=lambda: _FakeSessionCtx(fake_db),
+            ),
+            patch("services.llm.set_llm_tenant", fake_set_llm_tenant),
+            patch("services.embedding_service.embed_text", AsyncMock(return_value=[0.1])),
+            patch("services.embedding_service.classify_chunk", AsyncMock(return_value="werte")),
+        ):
+            asyncio.run(_backfill_async(limit=10))
+
+        fake_set_llm_tenant.assert_called_once_with("tenant-xyz")
+
+    def test_without_fix_tenant_id_missing_from_select_would_crash(self):
+        """Positivkontrolle: dreht man den SELECT-Fix zurueck (Row ohne tenant_id-
+        Attribut), crasht der Zugriff `r.tenant_id` — zeigt, dass der Test echt
+        auf die SELECT-Spalte prueft und nicht zufaellig gruen ist.
+        """
+        from tasks.memory_backfill_task import _backfill_async
+
+        class _RowOhneTenantId:
+            def __init__(self, id_, content_text, classification=None):
+                self.id = id_
+                self.content_text = content_text
+                self.classification = classification
+
+        row = _RowOhneTenantId(id_="chunk-1", content_text="Ein Text ueber Werte.")
+        fake_db = _FakeBackfillDbWithRows([row])
+        fake_engine = MagicMock()
+        fake_engine.dispose = AsyncMock()
+
+        with (
+            patch("tasks.memory_backfill_task.create_async_engine", return_value=fake_engine),
+            patch(
+                "tasks.memory_backfill_task.sessionmaker",
+                return_value=lambda: _FakeSessionCtx(fake_db),
+            ),
+            patch("services.llm.set_llm_tenant", MagicMock()),
+            patch("services.embedding_service.embed_text", AsyncMock(return_value=[0.1])),
+            patch("services.embedding_service.classify_chunk", AsyncMock(return_value="werte")),
+        ):
+            with pytest.raises(AttributeError):
+                asyncio.run(_backfill_async(limit=10))
 
 
 class _FakeSimpleDb:
@@ -338,12 +438,7 @@ _KONSTANTE_VERWENDUNG_RE = re.compile(r"\bSQL_NICHT_GELOESCHT\b")
 _READER_FILES = {
     "api/memory.py": (5, 4),
     "api/memory_viz.py": (7, 4),
-    # 2/2 statt 1/1 seit Highlander-Integration 2026-08-14: _lexical_search()
-    # (Hybrid-Retrieval-Zweig, Zeile ~460) fehlte SQL_NICHT_GELOESCHT komplett
-    # -- gelöschte memory_chunks kamen über die Volltextsuche zurück (DSGVO-
-    # Recht-auf-Vergessen-Lücke). Gefixt, nicht blind nachgezogen: siehe
-    # services/embedding_service.py::_lexical_search.
-    "services/embedding_service.py": (2, 2),
+    "services/embedding_service.py": (1, 1),
     "tasks/p06_profile_extractor_task.py": (1, 1),
     "tasks/values_backfill_task.py": (1, 1),
     "tasks/memory_backfill_task.py": (2, 2),

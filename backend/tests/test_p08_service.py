@@ -954,14 +954,23 @@ class TestP08Close:
 
 
 class TestP08OpenerVoiceProfile:
+    """Beweis fuer den Fix: das aktive Profil aus tenant_voice_profile.payload
+    (JSONB, is_active=true) erreicht tatsaechlich den Prompt — vorher zeigte die
+    Query auf die nicht existente Tabelle `brand_voice` und schluckte die
+    Exception fail-open, sodass voice_profile IMMER "" war.
+    """
+
     @patch("services.p08_service.sync_session_factory")
     @patch("services.p08_service.call_pipeline_llm")
     @patch("services.p08_service._load_p08_prompt")
     def test_opener_voice_profile_loaded_from_db(
         self, mock_load_prompt, mock_call_llm, mock_db_factory
     ):
-        """Voice profile from brand_voice table is passed to LLM prompt."""
-        VOICE = "analytisch, praezise, direkt"
+        """Aktives Voice-Profil (tenant_voice_profile.payload) landet im LLM-Prompt."""
+        PROFILE_PAYLOAD = {
+            "tone": "analytisch, praezise, direkt",
+            "vocabulary_level": "gehoben",
+        }
 
         prompt = MagicMock()
         prompt.system_prompt = "sys"
@@ -974,7 +983,7 @@ class TestP08OpenerVoiceProfile:
         mock_call_llm.return_value = _make_llm_result("Wie begann alles?")
 
         voice_row = MagicMock()
-        voice_row.__getitem__ = lambda self, i: (VOICE,)[i]
+        voice_row.__getitem__ = lambda self, i: (PROFILE_PAYLOAD,)[i]
 
         def make_ctx(fetchone_val=None):
             ctx = MagicMock()
@@ -987,14 +996,62 @@ class TestP08OpenerVoiceProfile:
         insert_ctx.__enter__ = MagicMock(return_value=insert_ctx)
         insert_ctx.__exit__ = MagicMock(return_value=False)
 
-        mock_db_factory.side_effect = [make_ctx(voice_row), insert_ctx]
+        voice_ctx = make_ctx(voice_row)
+        mock_db_factory.side_effect = [voice_ctx, insert_ctx]
+
+        with patch("services.p08_service._select_random_category", return_value="erster_fehler"):
+            p08_opener(tenant_id="t2", mode="random_smart")
+
+        # Die Query muss gegen die echte, versionierte Tabelle mit is_active-Filter
+        # gehen — sonst koennte LIMIT 1 eine verworfene/alte Version treffen.
+        executed_sql = str(voice_ctx.execute.call_args[0][0])
+        assert "tenant_voice_profile" in executed_sql
+        assert "is_active" in executed_sql
+
+        kw = mock_call_llm.call_args.kwargs
+        user_content = kw["user_content"]
+        assert "analytisch, praezise, direkt" in user_content
+        assert "gehoben" in user_content
+
+    @patch("services.p08_service.sync_session_factory")
+    @patch("services.p08_service.call_pipeline_llm")
+    @patch("services.p08_service._load_p08_prompt")
+    def test_opener_voice_profile_absent_falls_back_to_empty(
+        self, mock_load_prompt, mock_call_llm, mock_db_factory
+    ):
+        """Positivkontrolle: ohne aktives Profil (fetchone=None) bleibt
+        voice_profile leer statt zu crashen — Verhalten des fail-open-Zweigs.
+        """
+        prompt = MagicMock()
+        prompt.system_prompt = "sys"
+        prompt.user_prompt_template = (
+            "voice={voice_profile} mode={mode} topic={topic} "
+            "recent_messages={recent_messages} features_json={features_json} "
+            "question_index={question_index} max_questions={max_questions}"
+        )
+        mock_load_prompt.return_value = prompt
+        mock_call_llm.return_value = _make_llm_result("Wie begann alles?")
+
+        def make_ctx(fetchone_val=None):
+            ctx = MagicMock()
+            ctx.__enter__ = MagicMock(return_value=ctx)
+            ctx.__exit__ = MagicMock(return_value=False)
+            ctx.execute.return_value.fetchone.return_value = fetchone_val
+            return ctx
+
+        insert_ctx = MagicMock()
+        insert_ctx.__enter__ = MagicMock(return_value=insert_ctx)
+        insert_ctx.__exit__ = MagicMock(return_value=False)
+
+        mock_db_factory.side_effect = [make_ctx(None), insert_ctx]
 
         with patch("services.p08_service._select_random_category", return_value="erster_fehler"):
             p08_opener(tenant_id="t2", mode="random_smart")
 
         kw = mock_call_llm.call_args.kwargs
         user_content = kw["user_content"]
-        assert VOICE in user_content
+        assert "voice=" in user_content
+        assert "analytisch" not in user_content
 
 
 class TestP08DbFailure:
