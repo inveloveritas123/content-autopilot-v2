@@ -124,6 +124,12 @@ def pump_pipeline():
                 total_reset += result.rowcount
         if total_reset:
             session.commit()
+            # ⛔ Der Commit verwirft den per SET LOCAL gesetzten Bypass. Danach
+            # folgen in DIESEM with-Block noch saemtliche Pump-Abschnitte
+            # (transcribed → analyze, analyzed → ideas, content_ready → …), die
+            # sonst alle 0 Zeilen finden: der Pump waere ab hier wirkungslos,
+            # ohne dass irgendetwas rot wird.
+            set_rls_bypass_sync(session, True)
             stats["stuck_reset"] = total_reset
 
         # ── 1. transcribed → analyze ──────────────────────────────────────────

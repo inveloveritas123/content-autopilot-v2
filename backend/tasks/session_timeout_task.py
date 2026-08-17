@@ -17,7 +17,7 @@ import logging
 from sqlalchemy import text
 
 from models.base import sync_session_factory
-from services.rls import set_rls_bypass_sync
+from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -109,6 +109,12 @@ def expire_stale_sessions() -> dict:
         neuer_status = "closed" if hat_material else "expired"
         try:
             with sync_session_factory() as db:
+                # ⛔ NEUE Session pro Sitzung — der Bypass der Lese-Session oben
+                # gilt hier NICHT. Ohne Kontext traefe das UPDATE 0 Zeilen, die
+                # Session bliebe fuer immer 'active' — und eine haengende
+                # bot_session schaltet ausgerechnet die Rueckfrage-Knoepfe ab
+                # (telegram_task.py:178). Genau das Symptom, das Louis meldete.
+                set_rls_tenant_sync(db, tenant_id)
                 res = db.execute(
                     text(
                         "UPDATE bot_session SET status = :st, updated_at = NOW() "

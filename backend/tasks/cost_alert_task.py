@@ -83,6 +83,12 @@ def _insert_throttle_event(
             },
         )
         session.commit()
+        # ⛔ Der Commit beendet die Transaktion und verwirft damit den per
+        # SET LOCAL gesetzten Bypass. Ohne diese Zeile laufen die restlichen
+        # Iterationen von _check_cache_hit_rate/_check_runaway ohne Bypass und
+        # sehen 0 Zeilen — der zweite und jeder weitere Tenant bliebe
+        # unbeobachtet. Der Fix sitzt hier, damit beide Aufrufer ihn bekommen.
+        set_rls_bypass_sync(session, True)
     except Exception as exc:  # pragma: no cover — Audit-Insert darf Alert nicht blockieren
         logger.error("cost_alert_task: throttle_events INSERT fehlgeschlagen: %s", exc)
 

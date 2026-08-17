@@ -26,7 +26,7 @@ import logging
 from sqlalchemy import text
 
 from models.base import sync_session_factory
-from services.rls import set_rls_bypass_sync
+from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -208,6 +208,13 @@ def purge_expired() -> dict:
 
         try:
             with sync_session_factory() as db:
+                # ⛔ NEUE Session pro Loeschauftrag — der Bypass der Lese-Session
+                # oben gilt hier NICHT. Alle Statements sind auf diesen einen
+                # Tenant gescopet (WHERE tenant_id = :tid), also der enge Weg.
+                # Ohne Kontext traefen die DELETEs 0 Zeilen und der Auftrag
+                # wuerde als erledigt markiert, OHNE dass Daten geloescht sind:
+                # ein stiller Verstoss gegen DSGVO Art. 17 mit gruener Bilanz.
+                set_rls_tenant_sync(db, tenant_id)
                 for table, stmt in _HARD_DELETE_TABLES.items():
                     if affected.get(table, 0) > 0:
                         res = db.execute(

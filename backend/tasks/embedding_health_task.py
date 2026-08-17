@@ -130,5 +130,10 @@ def _insert_throttle_event(session, alarm: dict) -> None:
             },
         )
         session.commit()
+        # ⛔ Der Commit beendet die Transaktion und verwirft damit den per
+        # SET LOCAL gesetzten Bypass. Ohne diese Zeile laeuft die NAECHSTE
+        # Alarm-Iteration ohne Bypass und sieht 0 Zeilen. Der Fix sitzt hier
+        # in der Hilfsfunktion, damit jeder Aufrufer ihn bekommt.
+        set_rls_bypass_sync(session, True)
     except Exception as exc:  # pragma: no cover
         logger.error("embedding_health_task: throttle_events INSERT fehlgeschlagen: %s", exc)
