@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import text
 
 from models.base import sync_session_factory
+from services.rls import set_rls_tenant_sync
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ def pause_random_smart(tenant_id: str, days: int = 90) -> None:
     """Pause Random-Smart-Modus für einen Tenant für `days` Tage."""
     pause_until = datetime.now(UTC) + timedelta(days=days)
     with sync_session_factory() as s:
+        set_rls_tenant_sync(s, tenant_id)
         s.execute(
             text(
                 "INSERT INTO tenant_bot_config (id, tenant_id, random_smart_paused_until) "
@@ -37,6 +39,7 @@ def pause_random_smart(tenant_id: str, days: int = 90) -> None:
 def resume_random_smart(tenant_id: str) -> None:
     """Entferne Pause für Random-Smart-Modus eines Tenants."""
     with sync_session_factory() as s:
+        set_rls_tenant_sync(s, tenant_id)
         s.execute(
             text(
                 "INSERT INTO tenant_bot_config (id, tenant_id, random_smart_paused_until) "
@@ -52,6 +55,7 @@ def set_schedule_2_weeks(tenant_id: str) -> None:
     """Setze Cron-Schedule auf 2x pro Monat (1. und 15.)."""
     cron = "0 9 1,15 * *"
     with sync_session_factory() as s:
+        set_rls_tenant_sync(s, tenant_id)
         s.execute(
             text(
                 "INSERT INTO tenant_bot_config (id, tenant_id, random_smart_schedule_cron) "
@@ -67,6 +71,7 @@ def get_bot_config(tenant_id: str) -> dict:
     """Lade Bot-Konfiguration für einen Tenant. Gibt Defaults zurück wenn kein Eintrag existiert."""
     try:
         with sync_session_factory() as s:
+            set_rls_tenant_sync(s, tenant_id)
             row = s.execute(
                 text(
                     "SELECT random_smart_enabled, random_smart_schedule_cron, "

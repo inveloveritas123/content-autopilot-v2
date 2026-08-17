@@ -23,6 +23,7 @@ import logging
 from sqlalchemy import text
 
 from config import settings
+from services.rls import set_rls_tenant_sync
 
 logger = logging.getLogger(__name__)
 
@@ -194,4 +195,5 @@ def check_and_record_throttle_async_compatible(
     from models.base import sync_session_factory
 
     with sync_session_factory() as session:
+        set_rls_tenant_sync(session, tenant_id)
         return check_and_record_throttle(session, tenant_id, task_name)

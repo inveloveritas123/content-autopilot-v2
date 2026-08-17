@@ -12,6 +12,7 @@ from sqlalchemy import select
 from config import settings as _app_settings
 from models.base import sync_session_factory
 from models.llm_provider import LLMProvider
+from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
 
 # Local decrypt — mirrors api/llm_settings.py without importing the FastAPI module
 _key_material = hashlib.sha256(
@@ -37,6 +38,10 @@ def get_active_provider(tenant_id=None, task: str = "all") -> dict | None:
     Returns dict with: base_url, api_key, model_name, provider_id
     """
     with sync_session_factory() as session:
+        if tenant_id:
+            set_rls_tenant_sync(session, tenant_id)
+        else:
+            set_rls_bypass_sync(session, True)
         # Try task-specific provider first
         query = select(LLMProvider).where(
             LLMProvider.is_active.is_(True),
@@ -191,6 +196,9 @@ def track_cost(
                     tenant_id = str(t.id)
             except Exception:
                 pass
+
+        if tenant_id:
+            set_rls_tenant_sync(session, tenant_id)
 
         # Log the call
         if tenant_id:

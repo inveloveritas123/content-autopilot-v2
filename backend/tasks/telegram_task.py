@@ -731,6 +731,9 @@ def _route_inbound_message(
                 decision.payload["session_id"],
                 decision.payload["features"],
                 raw_transcript=text_content,
+                # Ohne diesen Hinweis findet p08_response die Session unter RLS
+                # nicht und antwortet faelschlich "Session beendet.".
+                tenant_id_hint=tenant_id,
             )
             routing_info["p08_next_action"] = result.next_action
 

@@ -20,6 +20,7 @@ from sqlalchemy import text
 from models.base import sync_session_factory
 from services.pipeline_llm import call_pipeline_llm
 from services.repo_prompt import lade_repo_prompt
+from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
 
 logger = logging.getLogger(__name__)
 
@@ -393,6 +394,7 @@ def _select_random_category(tenant_id: str) -> str:
     """Select a category not used in the last 28 days for this tenant."""
     try:
         with sync_session_factory() as s:
+            set_rls_tenant_sync(s, tenant_id)
             rows = s.execute(
                 text(
                     "SELECT messages FROM bot_session "
@@ -530,6 +532,7 @@ def _close_session_db(session_id: str, tenant_id: str) -> None:
     _route_inbound_message), nicht über einen content_ideas-Platzhalter.
     """
     with sync_session_factory() as s:
+        set_rls_tenant_sync(s, tenant_id)
         s.execute(
             # `AND status = 'active'` : eine zwischenzeitlich abgebrochene ('expired')
             # Session darf nicht nachträglich auf 'closed' gehoben werden — 'closed'
@@ -575,6 +578,7 @@ def erzeuge_bot_session(
         }
     ]
     with sync_session_factory() as s:
+        set_rls_tenant_sync(s, tenant_id)
         s.execute(
             text(
                 "INSERT INTO bot_session "
@@ -608,6 +612,11 @@ def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> O
         if topic_idea_id:
             try:
                 with sync_session_factory() as s:
+                    # ⛔ `content_ideas` traegt seit Migration 058 FORCE ROW
+                    # LEVEL SECURITY — ohne Kontext faende der Opener die Idee
+                    # nicht und stellte die Eroeffnungsfrage zu "Dein Thema"
+                    # statt zum tatsaechlichen Inhalt.
+                    set_rls_tenant_sync(s, tenant_id)
                     # Bug-Fix #36/§2.3: ursprünglich las der SELECT nicht-existente
                     # Spalten topic_keyword + category (kein ORM-Feld, keine Migration).
                     # Jetzt: title, hook_suggestion, angle, description — alle verifiziert
@@ -694,6 +703,7 @@ def p08_opener(tenant_id: str, mode: str, topic_idea_id: str | None = None) -> O
 
 
 def _persistiere_runde(
+    tenant_id: str | None,
     session_id: str,
     messages_list: list,
     features: dict,
@@ -726,6 +736,12 @@ def _persistiere_runde(
         }
     )
     with sync_session_factory() as s:
+        # ⛔ Ohne Kontext traefe dieses UPDATE unter FORCE ROW LEVEL SECURITY
+        # 0 Zeilen. Die Funktion deutet rowcount==0 als "Session lebte nicht
+        # mehr" und gibt False zurueck — der Aufrufer bricht das Gespraech dann
+        # mit "abgebrochen waehrend der Verarbeitung" ab. JEDE Gespraechsrunde
+        # waere so gestorben, obwohl die Session voellig in Ordnung ist.
+        set_rls_tenant_sync(s, tenant_id)
         res = s.execute(
             text(
                 "UPDATE bot_session SET messages = CAST(:msgs AS jsonb), current_question_index = :idx, "
@@ -762,7 +778,10 @@ def _abgebrochen_waehrend_verarbeitung(session_id: str, quality: str) -> Respons
 
 
 def p08_response(
-    session_id: str, features: dict, raw_transcript: str | None = None
+    session_id: str,
+    features: dict,
+    raw_transcript: str | None = None,
+    tenant_id_hint: str | None = None,
 ) -> ResponseResult:
     """Eine Runde des Gesprächs — Rückfrage, Angebot oder Abschluss.
 
@@ -776,6 +795,14 @@ def p08_response(
     """
     # 1. Load session from DB
     with sync_session_factory() as s:
+        # ⛔ `bot_session` traegt seit Migration 058 FORCE ROW LEVEL SECURITY.
+        # Ohne Kontext liefert dieses SELECT 0 Zeilen — und der Code unten
+        # deutet "keine Zeile" als "Session bereits geschlossen" und antwortet
+        # "Session beendet.". JEDE Gespraechsrunde waere damit tot, ohne dass
+        # irgendetwas rot wird. Deshalb der Hinweis vom Aufrufer, der die
+        # tenant_id ohnehin kennt; fehlt er, wird eng auf None gesetzt
+        # (fail-closed) statt still zu bypassen.
+        set_rls_tenant_sync(s, tenant_id_hint)
         row = s.execute(
             text(
                 "SELECT tenant_id, mode, messages, current_question_index, status "
@@ -815,6 +842,7 @@ def p08_response(
 
         if antwort == "zustimmung":
             lebt = _persistiere_runde(
+                tenant_id,
                 session_id,
                 messages_list,
                 features,
@@ -837,6 +865,7 @@ def p08_response(
 
         if antwort == "ablehnung":
             lebt = _persistiere_runde(
+                tenant_id,
                 session_id,
                 messages_list,
                 features,
@@ -864,6 +893,7 @@ def p08_response(
     #    Zustand, das LLM lieferte den Text, und beides passte nicht zusammen.
     if current_idx >= frage_grenze:
         lebt = _persistiere_runde(
+            tenant_id,
             session_id,
             messages_list,
             features,
@@ -960,6 +990,7 @@ def p08_response(
     neuer_status = "closed" if outcome is ResponseOutcome.CLOSED else "active"
 
     lebt = _persistiere_runde(
+        tenant_id,
         session_id,
         messages_list,
         features,
@@ -994,6 +1025,13 @@ def p08_close(session_id: str, final_message: str = "") -> None:
     """Explicitly close a session."""
     try:
         with sync_session_factory() as s:
+            # Dieses SELECT dient allein dazu, die tenant_id herauszufinden —
+            # sie kann hier also noch nicht als Kontext dienen. `bot_session`
+            # traegt seit Migration 058 FORCE ROW LEVEL SECURITY, deshalb ein
+            # eng begrenzter Bypass NUR fuer diesen einen Lookup. Ohne ihn
+            # bliebe tenant_id "unknown" und der nachfolgende
+            # `_close_session_db` liefe ins Leere.
+            set_rls_bypass_sync(s, True)
             row = s.execute(
                 text("SELECT tenant_id FROM bot_session WHERE id = :id"),
                 {"id": session_id},
