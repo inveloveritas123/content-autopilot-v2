@@ -26,6 +26,7 @@ import logging
 from sqlalchemy import text
 
 from models.base import sync_session_factory
+from services.rls import set_rls_bypass_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -179,6 +180,13 @@ def purge_expired() -> dict:
     purged_total: dict[str, int] = {table: 0 for table in _HARD_DELETE_TABLES}
 
     with sync_session_factory() as db:
+        # Cross-Tenant-Cron: holt faellige Loeschauftraege ALLER Tenants.
+        # deletion_requests traegt seit Migration 058 FORCE ROW LEVEL SECURITY —
+        # ohne Bypass findet der Purge keinen einzigen Auftrag mehr.
+        # ⛔ Das waere ein DSGVO-Befund, kein Schoenheitsfehler: Art. 17
+        # (Recht auf Loeschung) wuerde still nicht mehr vollzogen, waehrend der
+        # Cron gruen durchlaeuft und "0 verarbeitet" meldet.
+        set_rls_bypass_sync(db, True)
         rows = db.execute(
             text("""
             SELECT id, tenant_id, mode, affected_records

@@ -4,6 +4,7 @@ import logging
 import uuid as _uuid
 from datetime import datetime, timedelta
 
+from services.rls import set_rls_bypass_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,12 @@ def check_cost_alerts():
         from models.base import sync_session_factory
 
         with sync_session_factory() as session:
+            # Cross-Tenant-Cron: beide Checks aggregieren ueber llm_call_logs
+            # ALLER Tenants und schreiben throttle_events. Beide Tabellen tragen
+            # seit Migration 058 FORCE ROW LEVEL SECURITY — ohne Bypass laesen
+            # die Aggregationen 0 Zeilen und der Alarm feuert nie, obwohl Kosten
+            # aus dem Ruder laufen. Stiller Ausfall der Kostenueberwachung.
+            set_rls_bypass_sync(session, True)
             _check_cache_hit_rate(session)
             _check_runaway(session)
     except Exception as exc:  # fail-open: DB down ist kein Crash

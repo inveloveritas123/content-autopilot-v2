@@ -23,6 +23,7 @@ from models.content_idea import ContentIdea
 from models.idea_variant import IdeaVariant
 from models.source import Source
 from models.source_item import SourceItem
+from services.rls import set_rls_bypass_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,12 @@ def pump_pipeline():
         pass
 
     with sync_session_factory() as session:
+        # Cross-Tenant-Cron: verarbeitet haengengebliebene Items ALLER Tenants. Die gelesene Tabelle
+        # traegt seit Migration 058 FORCE ROW LEVEL SECURITY — ohne Bypass liefert
+        # die Abfrage 0 Zeilen und der Cron laeuft still ins Leere, ununterscheidbar
+        # von "nichts zu tun".
+        set_rls_bypass_sync(session, True)
+
         # ── 0. Stuck item recovery — items in transitional state >30 min ──────
         stuck_cutoff = datetime.utcnow() - timedelta(minutes=30)
         stuck_resets = {

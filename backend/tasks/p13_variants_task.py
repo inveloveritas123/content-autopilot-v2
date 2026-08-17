@@ -33,6 +33,7 @@ import uuid
 from sqlalchemy import text
 
 from models.base import sync_session_factory
+from services.rls import set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -94,7 +95,7 @@ def generate_variants_for_chat(
         return {"status": "error", "reason": "idea_creation_failed"}
 
     # 4. Varianten generieren (in-process, Muster api/ideas.py:504)
-    variants = _run_generate_variants(idea_id)
+    variants = _run_generate_variants(tenant_id, idea_id)
     if not variants:
         # Marker entfernen + freundliche Notiz
         _clear_pending_marker(tenant_id, idea_id)
@@ -231,7 +232,7 @@ def _create_manual_idea(
         return None
 
 
-def _run_generate_variants(idea_id: str) -> list[dict]:
+def _run_generate_variants(tenant_id: str, idea_id: str) -> list[dict]:
     """Ruft generate_variants in-process auf und lädt die Varianten (hook/story/these).
 
     Gibt leere Liste zurück bei Fehler oder keinen Varianten.
@@ -255,17 +256,20 @@ def _run_generate_variants(idea_id: str) -> list[dict]:
         return []
 
     # Varianten laden (Reihenfolge hook→story→these wie api/ideas.py:1386-1387)
-    return _load_variants(idea_id)
+    return _load_variants(tenant_id, idea_id)
 
 
-def _load_variants(idea_id: str) -> list[dict]:
+def _load_variants(tenant_id: str, idea_id: str) -> list[dict]:
     """Lädt Varianten in Reihenfolge hook(1) → story(2) → these(3).
 
-    Tenant-scope nicht nötig hier (idea_id ist eindeutig + kein
-    Cross-Tenant-Risiko bei internem Helfer).
+    Seit Migration 058 traegt `idea_variants` FORCE ROW LEVEL SECURITY: der
+    frueher hier stehende Satz "Tenant-scope nicht noetig" gilt nicht mehr —
+    ohne gesetzten Tenant-Kontext liefert die Abfrage 0 Zeilen, und der Nutzer
+    bekaeme auf seine Anfrage stumm keine Varianten.
     """
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             rows = db.execute(
                 text(
                     "SELECT id, variant_type, hook_text, body_outline "
@@ -395,7 +399,7 @@ def _try_p13_variant_choice(tenant_id: str, text: str) -> bool | dict:
         return False
 
     # Gewählte Variante laden
-    variant = _get_variant_by_choice(pending_idea["idea_id"], choice)
+    variant = _get_variant_by_choice(tenant_id, pending_idea["idea_id"], choice)
     if variant is None:
         return False
 
@@ -469,14 +473,21 @@ def _load_pending_idea(tenant_id: str) -> dict | None:
         return None
 
 
-def _get_variant_by_choice(idea_id: str, choice: int) -> dict | None:
-    """Lädt die Variante (1=hook, 2=story, 3=these) für eine Idee."""
+def _get_variant_by_choice(tenant_id: str, idea_id: str, choice: int) -> dict | None:
+    """Lädt die Variante (1=hook, 2=story, 3=these) für eine Idee.
+
+    `tenant_id` wird seit dem RLS-Scharfschalten (Migration 058) benötigt:
+    `idea_variants` trägt FORCE ROW LEVEL SECURITY, und ohne gesetzten
+    Tenant-Kontext liefert die Abfrage 0 Zeilen — der Nutzer bekäme auf seine
+    Variantenwahl stumm keine Antwort.
+    """
     type_map = {1: "hook", 2: "story", 3: "these"}
     variant_type = type_map.get(choice)
     if variant_type is None:
         return None
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 text(
                     "SELECT id, variant_type, hook_text, body_outline "

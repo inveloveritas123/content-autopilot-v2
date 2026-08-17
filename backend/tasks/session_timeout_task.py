@@ -17,6 +17,7 @@ import logging
 from sqlalchemy import text
 
 from models.base import sync_session_factory
+from services.rls import set_rls_bypass_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,12 @@ def expire_stale_sessions() -> dict:
     """Beendet `active` Bot-Sessions ohne Regung seit 24 Stunden."""
     try:
         with sync_session_factory() as db:
+            # Cross-Tenant-Cron: verarbeitet abgelaufene Bot-Sessions ALLER Tenants. Die gelesene
+            # Tabelle traegt seit Migration 058 FORCE ROW LEVEL SECURITY — ohne Bypass liefert
+            # die Abfrage 0 Zeilen und der Cron laeuft still ins Leere, ununterscheidbar
+            # von "nichts zu tun".
+            set_rls_bypass_sync(db, True)
+
             rows = db.execute(
                 text(
                     "SELECT id, tenant_id, messages FROM bot_session "

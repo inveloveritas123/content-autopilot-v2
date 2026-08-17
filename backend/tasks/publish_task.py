@@ -8,6 +8,7 @@ from sqlalchemy import select
 from models.base import sync_session_factory
 from models.content_piece import ContentPiece
 from models.scheduled_post import ScheduledPost
+from services.rls import set_rls_bypass_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,12 @@ logger = logging.getLogger(__name__)
 def publish_scheduled_posts():
     """Check for posts due to be published and publish them."""
     with sync_session_factory() as session:
+        # Cross-Tenant-Cron: verarbeitet faellige Posts ALLER Tenants. Die gelesene Tabelle
+        # traegt seit Migration 058 FORCE ROW LEVEL SECURITY — ohne Bypass liefert
+        # die Abfrage 0 Zeilen und der Cron laeuft still ins Leere, ununterscheidbar
+        # von "nichts zu tun".
+        set_rls_bypass_sync(session, True)
+
         now = datetime.utcnow()
         result = session.execute(
             select(ScheduledPost).where(

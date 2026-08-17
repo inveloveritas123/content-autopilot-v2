@@ -7,6 +7,7 @@ import logging
 from datetime import UTC, datetime
 
 from models.base import sync_session_factory
+from services.rls import set_rls_bypass_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -125,6 +126,12 @@ def check_random_smart_triggers():
     from sqlalchemy import text
 
     with sync_session_factory() as session:
+        # Cross-Tenant-Cron: verarbeitet Random-Smart-Trigger ALLER Tenants. Die gelesene Tabelle
+        # traegt seit Migration 058 FORCE ROW LEVEL SECURITY — ohne Bypass liefert
+        # die Abfrage 0 Zeilen und der Cron laeuft still ins Leere, ununterscheidbar
+        # von "nichts zu tun".
+        set_rls_bypass_sync(session, True)
+
         rows = session.execute(
             text(
                 "SELECT tenant_id, random_smart_schedule_cron, random_smart_paused_until, tenant_timezone "

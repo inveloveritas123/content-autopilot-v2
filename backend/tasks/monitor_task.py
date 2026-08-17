@@ -9,6 +9,7 @@ from models.base import sync_session_factory
 from models.source import Source
 from models.source_item import SourceItem
 from services.source_adapters import check_source_for_new_items
+from services.rls import set_rls_bypass_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,12 @@ logger = logging.getLogger(__name__)
 def monitor_all_sources():
     """Check sources that are DUE for polling based on their individual interval."""
     with sync_session_factory() as session:
+        # Cross-Tenant-Cron: pollt die aktiven Quellen ALLER Tenants. `sources`
+        # und `source_items` tragen seit Migration 058 FORCE ROW LEVEL SECURITY
+        # — ohne Bypass findet der Monitor keine einzige Quelle mehr und es
+        # werden nie wieder neue Items eingesammelt. Stiller Totalausfall der
+        # Quellenueberwachung, ununterscheidbar von "keine aktiven Quellen".
+        set_rls_bypass_sync(session, True)
         now = datetime.utcnow()
         all_sources = (
             session.execute(select(Source).where(Source.is_active.is_(True))).scalars().all()

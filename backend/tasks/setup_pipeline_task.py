@@ -22,6 +22,7 @@ import uuid
 from sqlalchemy import text
 
 from models.base import sync_session_factory
+from services.rls import set_rls_bypass_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -399,6 +400,12 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
 def resume_paused_pipelines():
     """Täglich: alle paused_for_cost Pipelines prüfen und neu starten."""
     with sync_session_factory() as session:
+        # Cross-Tenant-Cron: verarbeitet pausierte Pipelines ALLER Tenants. Die gelesene Tabelle
+        # traegt seit Migration 058 FORCE ROW LEVEL SECURITY — ohne Bypass liefert
+        # die Abfrage 0 Zeilen und der Cron laeuft still ins Leere, ununterscheidbar
+        # von "nichts zu tun".
+        set_rls_bypass_sync(session, True)
+
         rows = session.execute(
             text(
                 "SELECT tenant_id FROM setup_pipeline_run "

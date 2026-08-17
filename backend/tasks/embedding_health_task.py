@@ -17,6 +17,7 @@ import logging
 import uuid as _uuid
 from datetime import datetime
 
+from services.rls import set_rls_bypass_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,12 @@ def check_missing_embeddings() -> dict:
         from models.base import sync_session_factory
 
         with sync_session_factory() as session:
+            # Cross-Tenant-Health-Check: aggregiert memory_chunks per
+            # GROUP BY tenant_id ueber den gesamten Bestand (RLS-Tabelle seit
+            # 058). Ohne Bypass liefert die Aggregation 0 Zeilen — der Check
+            # meldet dauerhaft "alles gesund", auch wenn kein einziger Chunk
+            # einen Vektor hat.
+            set_rls_bypass_sync(session, True)
             alarme = _pruefe_vektorlose_chunks(session)
             for a in alarme:
                 logger.warning(
