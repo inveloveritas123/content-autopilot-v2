@@ -504,7 +504,19 @@ def run_values_backfill_sync(tenant_id: str) -> dict:
     from sqlalchemy.orm import sessionmaker
 
     from config import settings
-    from services.llm import llm_service
+    from services.llm import llm_service, set_llm_tenant
+
+    # ⛔ MUSS vor asyncio.run() stehen (so verlangt es der Docstring von
+    # set_llm_tenant — die ContextVar wird sonst nicht in den Loop vererbt).
+    # Ohne diese Zeile bleibt `tid_ctx` in services/llm.py None, und dort
+    # haengen ZWEI Schutzmechanismen an genau dieser Pruefung:
+    #   - der Tages-Kostendeckel (llm.py:274/297: `if tid_ctx:`)
+    #   - die Drosselung (llm.py:323: `if _tid_for_throttle:`)
+    # Beide werden bei None nicht etwa falsch berechnet, sondern KOMPLETT
+    # uebersprungen. Dieser Task ruft das LLM in einer Schleife ueber alle
+    # Memory-Chunks eines Tenants auf — er konnte also unbegrenzt Kosten
+    # erzeugen, waehrend jeder andere Pfad korrekt gedeckelt war.
+    set_llm_tenant(tenant_id)
 
     async def _run():
         engine = create_async_engine(settings.database_url, pool_pre_ping=True)
