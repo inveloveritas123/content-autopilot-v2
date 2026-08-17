@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """
 Schicht-1 Extraktions-Service — Intent + Feature-Extraktion aus Telegram-Nachrichten.
 Sicherheitskritisch: Injection-Schutz via Pattern-Check vor LLM-Call.
@@ -252,6 +253,13 @@ def extract_intent_features(
 
         cap_usd = float(os.environ.get("COST_CAP_USD_PER_DAY", "5.0"))
         with sync_session_factory() as _cap_session:
+            # daily_cost_tenant traegt seit Migration 058 FORCE ROW LEVEL SECURITY.
+            # tenant_id ist Funktionsparameter (ein Tenant pro Aufruf) — enger
+            # Tenant-Kontext statt Bypass. Ohne ihn liefert SELECT 0 Zeilen und
+            # der Cost-Cap-Check haelt den Kunden faelschlich fuer "noch unter Cap".
+            from services.rls import set_rls_tenant_sync
+
+            set_rls_tenant_sync(_cap_session, tenant_id)
             row = _cap_session.execute(
                 _text(
                     "SELECT cost_usd FROM daily_cost_tenant"

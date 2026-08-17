@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """
 Voice-Drift-Detector (Issue #76).
 
@@ -18,6 +19,7 @@ from sqlalchemy import text
 
 from models.base import sync_session_factory
 from services.prompt_loader import get_default_prompt_loader
+from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -254,6 +256,8 @@ def run_voice_drift(
         # 4. Letzte 10 freigegebene Posts laden
         # ------------------------------------------------------------------
         with sync_session_factory() as session:
+            # tenant-gescopet: tenant_id ist Funktionsparameter.
+            set_rls_tenant_sync(session, tenant_id)
             post_rows = session.execute(
                 text(
                     "SELECT id, content_text FROM content_pieces "

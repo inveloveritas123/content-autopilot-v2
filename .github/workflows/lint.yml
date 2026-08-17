@@ -46,6 +46,18 @@ jobs:
       - name: Prettier check
         run: npm run format:check
 
+  backend-rls-context-gate:
+    name: Backend — G-RLS-KONTEXT (RLS-Blindstellen-Gate)
+    runs-on: [self-hosted, kolonie]
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: RLS-Kontext-Gate (statisch, keine Abhaengigkeiten)
+        run: python3 scripts/check_rls_context_gate.py
+
   yaml-json-hygiene:
     name: YAML/JSON Hygiene + Secrets-Detection
     runs-on: [self-hosted, kolonie]

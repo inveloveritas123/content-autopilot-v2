@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """
 P12-Task — Voice-basierter LinkedIn-Post-Generator.
 
@@ -37,6 +38,7 @@ from sqlalchemy import text
 
 from models.base import sync_session_factory
 from services.llm_json import parse_json_from_text as _parse_json_from_text
+from services.rls import set_rls_tenant_sync
 from services.pipeline_llm import (
     PROMPT_MAX_TOKENS,
     call_pipeline_llm,
@@ -281,6 +283,7 @@ def run_p12(
     # 1. Setup-Pipeline-Run anlegen
     # ------------------------------------------------------------------
     with sync_session_factory() as session:
+        set_rls_tenant_sync(session, tenant_id)
         try:
             session.execute(
                 text(
@@ -326,6 +329,7 @@ def run_p12(
                 tenant_id,
             )
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 session.execute(
                     text(
                         "UPDATE setup_pipeline_run SET status='paused_for_cost', "
@@ -373,6 +377,7 @@ def run_p12(
         hook_inspirations: list[dict] = []
         try:
             with sync_session_factory() as _hook_db:
+                set_rls_tenant_sync(_hook_db, tenant_id)
                 _hook_rows = _hook_db.execute(
                     text(
                         "SELECT id, hook_text, hook_type, performance_score "
@@ -514,6 +519,7 @@ def run_p12(
 
         content_piece_id = str(uuid.uuid4())
         with sync_session_factory() as session:
+            set_rls_tenant_sync(session, tenant_id)
             try:
                 session.execute(
                     text(
@@ -576,6 +582,7 @@ def run_p12(
         # ------------------------------------------------------------------
         duration_ms = int((time.monotonic() - t_start) * 1000)
         with sync_session_factory() as session:
+            set_rls_tenant_sync(session, tenant_id)
             try:
                 session.execute(
                     text(
@@ -633,6 +640,7 @@ def run_p12(
         )
         try:
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 session.execute(
                     text(
                         "UPDATE setup_pipeline_run SET "
@@ -657,6 +665,7 @@ def run_p12(
 
         try:
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 session.execute(
                     text(
                         "UPDATE setup_pipeline_run SET "

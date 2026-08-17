@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 import asyncio
 import json as _json
 import logging
@@ -176,6 +177,9 @@ def analyze_item(item_id: str):
 
     # Return actual item status from DB (not hardcoded "analyzed")
     with sync_session_factory() as session:
+        from services.rls import set_rls_tenant_sync
+
+        set_rls_tenant_sync(session, _an_tenant)
         final_item = session.get(SourceItem, item_id)
         actual_status = final_item.status if final_item else "unknown"
     return {"item_id": item_id, "status": actual_status}
@@ -355,6 +359,9 @@ def _generate_content_inner(item_id: str):
             session.commit()
 
     with sync_session_factory() as session:
+        from services.rls import set_rls_tenant_sync
+
+        set_rls_tenant_sync(session, _gen_tenant)
         final_item = session.get(SourceItem, item_id)
         actual_status = final_item.status if final_item else "unknown"
     return {"item_id": item_id, "status": actual_status}

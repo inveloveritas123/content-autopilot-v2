@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 from __future__ import annotations
 
 import asyncio
@@ -270,6 +271,17 @@ class LLMService:
             today = datetime.now(UTC).date()
             tid_ctx = _tenant_id_ctx.get()
             with sync_session_factory() as _s:
+                # daily_cost_tenant traegt seit Migration 058 FORCE ROW LEVEL
+                # SECURITY. Dieser Block liest bewusst CROSS-TENANT (Global-Cap:
+                # SUM(cost_usd) ueber ALLE Tenants, Zeile ~284) — Bypass ist hier
+                # kein Notbehelf, sondern die einzig korrekte Wahl. Der
+                # anschliessende Per-Tenant-Read (WHERE tenant_id = :tid) bleibt
+                # trotz Bypass korrekt gescopet, weil das explizite WHERE die
+                # Filterung uebernimmt — Bypass hebt nur die RLS-Policy auf, nicht
+                # die SQL-Bedingung.
+                from services.rls import set_rls_bypass_sync
+
+                set_rls_bypass_sync(_s, True)
                 # Advisory lock: per-tenant-per-day to serialise cap reads (#131)
                 if tid_ctx:
                     lock_key = f"llm-cap:{tid_ctx}:{today}"
@@ -322,6 +334,13 @@ class LLMService:
             _tid_for_throttle = tid_ctx  # already read above
             if _tid_for_throttle:
                 with sync_session_factory() as _ts:
+                    # throttle_events + llm_call_logs (in check_and_record_throttle)
+                    # tragen seit Migration 058 FORCE ROW LEVEL SECURITY.
+                    # _tid_for_throttle ist hier bereits auf einen Tenant geprueft
+                    # (if-Guard) — enger Tenant-Kontext statt Bypass.
+                    from services.rls import set_rls_tenant_sync
+
+                    set_rls_tenant_sync(_ts, _tid_for_throttle)
                     _allowed, _tc, _gc = check_and_record_throttle(_ts, _tid_for_throttle, purpose)
                 if not _allowed:
                     raise RateLimitExceededError(

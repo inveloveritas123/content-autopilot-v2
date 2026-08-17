@@ -59,7 +59,17 @@ if "sqlalchemy.orm" not in sys.modules:
 if "sqlalchemy.ext" not in sys.modules:
     _stub_mod("sqlalchemy.ext")
 if "sqlalchemy.ext.asyncio" not in sys.modules:
-    _stub_mod("sqlalchemy.ext.asyncio")
+    _sqa = _stub_mod("sqlalchemy.ext.asyncio")
+    # services.rls (seit RLS-Fix-Welle 2026-08-17 von layer1_extraction importiert)
+    # braucht AsyncSession als Typ-Annotation.
+    _sqa.AsyncSession = MagicMock
+
+# services.rls (seit RLS-Fix-Welle 2026-08-17 von layer1_extraction importiert —
+# set_rls_tenant_sync fuer den Cost-Cap-Check unter FORCE ROW LEVEL SECURITY)
+if "services.rls" not in sys.modules:
+    _rls = _stub_mod("services.rls")
+    _rls.set_rls_tenant_sync = MagicMock()
+    _rls.set_rls_bypass_sync = MagicMock()
 
 # services.llm (imported by services/__init__.py — uses str|None syntax)
 if "services.llm" not in sys.modules:
@@ -527,10 +537,17 @@ class TestLayer1Extraction:
 
         # Mindestens eine Query muss ausgefuehrt worden sein
         assert len(captured_queries) >= 1, "Keine DB-Query ausgefuehrt — Cost-Cap-Pfad inert?"
-        sql_text, params = captured_queries[0]
-        assert (
-            "daily_cost_tenant" in sql_text
-        ), f"Erwarte 'daily_cost_tenant' in Query, bekam: {sql_text!r}"
+        # Die erste Query ist seit der RLS-Fix-Welle (2026-08-17) der
+        # set_rls_tenant_sync-Kontext-Setter (SELECT set_config(...)) — die
+        # eigentliche Cost-Cap-Query steht danach. Wir suchen deshalb gezielt
+        # nach der Query, die die Tabelle referenziert, statt Index 0 anzunehmen.
+        cost_cap_queries = [
+            (q, p) for q, p in captured_queries if "daily_cost_tenant" in q
+        ]
+        assert cost_cap_queries, (
+            f"Keine Query referenziert 'daily_cost_tenant', gesehen: {captured_queries!r}"
+        )
+        sql_text, params = cost_cap_queries[0]
         assert (
             "cost_tracking" not in sql_text
         ), f"Query darf nicht 'cost_tracking' enthalten (nicht migriert): {sql_text!r}"

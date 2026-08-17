@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """
 Backtest-Task: Wiederholt die Post-Generierung für die letzten N freigegebenen Posts
 eines Tenants mit einem neuen Modell und speichert die Vergleichsdaten.
@@ -9,6 +10,7 @@ import logging
 from sqlalchemy import text
 
 from models.base import sync_session_factory
+from services.rls import set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,7 @@ def run_backtest(
     results = []
 
     with sync_session_factory() as db:
+        set_rls_tenant_sync(db, tenant_id)
         # Update status to running
         db.execute(
             text("UPDATE backtest_runs SET status = 'running', started_at = NOW() WHERE id = :id"),
@@ -50,6 +53,7 @@ def run_backtest(
 
         # Persist intermediate result
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             existing = db.execute(
                 text("SELECT results FROM backtest_runs WHERE id = :id"), {"id": backtest_run_id}
             ).fetchone()
@@ -66,6 +70,7 @@ def run_backtest(
     score_pct = round(passed / len(results) * 100) if results else 0
 
     with sync_session_factory() as db:
+        set_rls_tenant_sync(db, tenant_id)
         db.execute(
             text("""UPDATE backtest_runs
                     SET status = 'completed', finished_at = NOW(),
@@ -88,6 +93,7 @@ def _backtest_single_post(backtest_run_id, tenant_id, post_id, current_model, ca
     from api.ideas import _run_p12_p12b_pipeline
 
     with sync_session_factory() as db:
+        set_rls_tenant_sync(db, tenant_id)
         # Load post + metadata
         post_row = db.execute(
             text("""SELECT cp.content_text, cp.content_metadata, cp.idea_id

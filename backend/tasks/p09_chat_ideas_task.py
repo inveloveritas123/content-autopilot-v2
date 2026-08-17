@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """P09-Task: Top-5 bestehende Content-Ideen in den Chat liefern (Issue #36 S2).
 
 Wird von tasks.telegram_task._route_inbound_message per Celery enqueued,
@@ -33,6 +34,7 @@ import os
 from sqlalchemy import text
 
 from models.base import sync_session_factory
+from services.rls import set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -100,6 +102,8 @@ def _load_top_ideas(tenant_id: str, topic_kw: str | None, limit: int) -> list[di
     """
     try:
         with sync_session_factory() as db:
+            # tenant-gescopet: tenant_id ist Funktionsparameter.
+            set_rls_tenant_sync(db, tenant_id)
             params: dict = {"tid": tenant_id, "limit": limit}
             if topic_kw:
                 params["kw"] = f"%{topic_kw}%"
@@ -147,6 +151,8 @@ def _check_cost_cap(tenant_id: str) -> bool:
         from datetime import date
 
         with sync_session_factory() as db:
+            # tenant-gescopet: tenant_id ist Funktionsparameter.
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 text(
                     "SELECT cost_usd FROM daily_cost_tenant "
@@ -214,6 +220,8 @@ def _find_best_source_item(tenant_id: str) -> str | None:
     """
     try:
         with sync_session_factory() as db:
+            # tenant-gescopet: tenant_id ist Funktionsparameter.
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 text(
                     "SELECT si.id FROM source_items si "

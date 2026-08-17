@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 # AUDITED-PARTIAL-2026-08-15 (zubu-louis-immer-eine-antwort): nur die Kernpfade geprueft.
 """
 Schicht-2 Routing — deterministisches Intent-zu-Pipeline-Mapping.
@@ -180,7 +181,29 @@ def persist_routing_decision(message_log_id: str, decision) -> None:
     try:
         from sqlalchemy import text
 
+        from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
+
         with sync_session_factory() as session:
+            # telegram_message_log traegt seit Migration 058 FORCE ROW LEVEL
+            # SECURITY. Diese Funktion bekommt nur message_log_id (kein
+            # tenant_id-Parameter) — der Tenant steht erst nach einem Read fest.
+            # Bypass NUR fuer den engen PK-Read (aehnliches Muster wie
+            # generate_task.analyze_item), danach sofort auf den gefundenen
+            # Tenant scopen. Ohne das traefe das UPDATE unter FORCE RLS 0
+            # Zeilen — der Idempotenz-Guard (#56/#18) saehe routed_to nie
+            # gesetzt und p08_response liefe bei jedem Celery-Retry erneut.
+            set_rls_bypass_sync(session, True)
+            row = session.execute(
+                text("SELECT tenant_id FROM telegram_message_log WHERE id = :id"),
+                {"id": message_log_id},
+            ).fetchone()
+            set_rls_bypass_sync(session, False)
+            if row is None:
+                logger.warning(
+                    "persist_routing_decision: message_log_id=%s nicht gefunden", message_log_id
+                )
+                return
+            set_rls_tenant_sync(session, str(row[0]))
             session.execute(
                 text("UPDATE telegram_message_log SET routed_to = :rt WHERE id = :id"),
                 {"rt": routed_to, "id": message_log_id},

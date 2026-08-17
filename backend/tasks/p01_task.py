@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """
 P01-Service — Kundenkontext-Extraktion aus Transkript + Mini-Formular.
 
@@ -32,6 +33,7 @@ from services.pipeline_llm import (
     resolve_tier,
 )
 from services.prompt_loader import get_default_prompt_loader
+from services.rls import set_rls_tenant_sync
 from services.schema_transformer import build_canonical_meta, finalize_canonical
 from tasks.canonical_wiring import fetch_tenant_meta, now_iso
 from tasks.celery_app import celery_app
@@ -106,6 +108,7 @@ def run_p01(
     # 1. Setup-Pipeline-Run anlegen
     # ------------------------------------------------------------------
     with sync_session_factory() as session:
+        set_rls_tenant_sync(session, tenant_id)
         session.execute(
             text(
                 "INSERT INTO setup_pipeline_run (id, tenant_id, stage, status, created_at) "
@@ -135,6 +138,7 @@ def run_p01(
                 tenant_id,
             )
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 session.execute(
                     text(
                         "UPDATE setup_pipeline_run SET status='paused_for_cost', "
@@ -151,6 +155,7 @@ def run_p01(
                 tenant_id,
             )
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 session.execute(
                     text(
                         "UPDATE setup_pipeline_run SET status='paused_for_cost', "
@@ -273,6 +278,7 @@ def run_p01(
         output_hash = hashlib.sha256(json.dumps(output_json, sort_keys=True).encode()).hexdigest()
 
         with sync_session_factory() as session:
+            set_rls_tenant_sync(session, tenant_id)
             row = session.execute(
                 text(
                     "SELECT COALESCE(MAX(version), 0) FROM tenant_customer_context "
@@ -313,6 +319,7 @@ def run_p01(
         # ------------------------------------------------------------------
         duration_ms = int((time.monotonic() - start_ts) * 1000)
         with sync_session_factory() as session:
+            set_rls_tenant_sync(session, tenant_id)
             session.execute(
                 text(
                     "UPDATE setup_pipeline_run SET "
@@ -359,6 +366,7 @@ def run_p01(
         )
         try:
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 session.execute(
                     text(
                         "UPDATE setup_pipeline_run SET status='paused_for_cost', "
@@ -377,6 +385,7 @@ def run_p01(
         logger.exception("p01 run_id=%s tenant=%s: FAILED — %s", run_id, tenant_id, exc)
         try:
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 session.execute(
                     text(
                         "UPDATE setup_pipeline_run SET "

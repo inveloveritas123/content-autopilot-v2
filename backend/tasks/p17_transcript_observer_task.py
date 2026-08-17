@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """P17 je-Transkript-Beobachter (Issue #41, Figma Bahn 5).
 
 Beobachtet **jedes** fertige Transkript und schlägt inkrementelle Updates an
@@ -30,6 +31,7 @@ from sqlalchemy import text
 
 from models.base import sync_session_factory
 from services.prompt_loader import get_default_prompt_loader
+from services.rls import set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -154,6 +156,8 @@ def observe_transcript(
     try:
         # 1. Idempotenz-Guard
         with sync_session_factory() as session:
+            # tenant-gescopet: tenant_id ist Funktionsparameter.
+            set_rls_tenant_sync(session, tenant_id)
             if _already_observed(session, tenant_id, source_item_id):
                 logger.info(
                     "observe_transcript: tenant=%s source_item=%s — bereits beobachtet",
@@ -241,6 +245,10 @@ def observe_transcript(
         # 9. Pro Entität eine Observation-Row anlegen
         emitted: list[dict] = []
         with sync_session_factory() as session:
+            # tenant-gescopet: tenant_id ist Funktionsparameter, gilt fuer den
+            # gesamten Block bis zum abschliessenden session.commit() (keine
+            # zwischenzeitlichen commits, die SET LOCAL verfallen liessen).
+            set_rls_tenant_sync(session, tenant_id)
             for item in to_emit:
                 entity_type = item["entity_type"]
                 obs_id = str(uuid.uuid4())

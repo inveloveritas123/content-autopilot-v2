@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """Session-Close → Post-Generierung (Issue #19, [BLOCKER], M24 / Board 5.5).
 
 Wird von tasks.telegram_task._route_inbound_message beim ECHTEN Session-Close
@@ -51,6 +52,7 @@ import logging
 from sqlalchemy import text
 
 from models.base import sync_session_factory
+from services.rls import set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -314,6 +316,7 @@ def _generate_post(session_id: str, tenant_id: str) -> dict:
     # 1. Idempotenz-Gate (zuerst!) — existiert schon ein Piece für diese Session?
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             existing = db.execute(
                 text(
                     "SELECT 1 FROM content_pieces "
@@ -337,6 +340,7 @@ def _generate_post(session_id: str, tenant_id: str) -> dict:
     #    topic_idea_id ist für Steering-Keys (_chosen_hook/_chosen_outline) nötig (Bug c).
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 text(
                     "SELECT messages, status, mode, topic_idea_id FROM bot_session "
@@ -394,6 +398,7 @@ def _generate_post(session_id: str, tenant_id: str) -> dict:
         effective_idea_id = topic_idea_id
         try:
             with sync_session_factory() as db:
+                set_rls_tenant_sync(db, tenant_id)
                 idea_row = db.execute(
                     text(
                         "SELECT hook_suggestion, source_context->>'body_outline' AS body_outline "
@@ -471,6 +476,7 @@ def _generate_post(session_id: str, tenant_id: str) -> dict:
     content_id: str | None = None
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             if p12_run_id:
                 _row = db.execute(
                     text(

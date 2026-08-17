@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 from __future__ import annotations
 
 import logging
@@ -403,6 +404,7 @@ def sync_brand_voice_to_nc(
     from sqlalchemy import text as _text
 
     from models.base import sync_session_factory
+    from services.rls import set_rls_tenant_sync
 
     synced: list[str] = []
     skipped: list[str] = []
@@ -410,6 +412,14 @@ def sync_brand_voice_to_nc(
 
     try:
         with sync_session_factory() as session:
+            # projects sowie die drei Pillar-Tabellen (tenant_voice_profile,
+            # tenant_customer_context, tenant_audience_avatar) tragen seit
+            # Migration 058 FORCE ROW LEVEL SECURITY. tenant_id ist
+            # Funktionsparameter (ein Tenant pro Aufruf) — enger Tenant-Kontext
+            # sofort nach Session-Oeffnung, gilt fuer den gesamten (rein
+            # lesenden, nicht committenden) Block.
+            set_rls_tenant_sync(session, str(tenant_id))
+
             # Resolve tenant slug — prefer dedicated slug column (migration 034),
             # fall back to _slugify(name) for backward-compat before migration runs.
             tenant_row = session.execute(

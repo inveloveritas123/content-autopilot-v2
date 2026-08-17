@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """Feedback-Regenerierungs-Task (Issue #37 — P16-Feedback-Loop „nochmal anders").
 
 Wird von tasks.telegram_task._route_inbound_message per Celery enqueued, wenn
@@ -42,6 +43,7 @@ import os
 from sqlalchemy import text
 
 from models.base import sync_session_factory
+from services.rls import set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -79,6 +81,7 @@ def regenerate_post_from_feedback(
     if log_id is not None:
         try:
             with sync_session_factory() as db:
+                set_rls_tenant_sync(db, tenant_id)
                 existing = db.execute(
                     text(
                         "SELECT 1 FROM content_pieces "
@@ -99,6 +102,7 @@ def regenerate_post_from_feedback(
     # 2. Original-Piece laden (tenant-scoped, E3)
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 text(
                     "SELECT id, content_text, content_metadata->>'bot_session_id' AS bot_session_id "
@@ -125,6 +129,7 @@ def regenerate_post_from_feedback(
     # 3. Loop-Limit prüfen (migrationsfrei, COUNT je bot_session_id, tenant-scoped, E3)
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             count = db.execute(
                 text(
                     "SELECT count(*) FROM content_pieces "
@@ -154,6 +159,7 @@ def regenerate_post_from_feedback(
     # 4. Zurück zum Transkript: Session laden + Q/A-Paare bauen (tenant-scoped, E3)
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             sess_row = db.execute(
                 text(
                     "SELECT messages, status FROM bot_session "
@@ -273,6 +279,7 @@ def regenerate_post_from_feedback(
     content_id: str | None = None
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             if p12_run_id:
                 meta = json.dumps(
                     {

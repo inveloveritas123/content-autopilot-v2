@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """
 Setup-Pipeline-Orchestrator (Issue #58).
 
@@ -61,6 +62,7 @@ def _update_pipeline_status(
 
 def _load_p01_payload(tenant_id: str, project_id: str | None = None) -> dict:
     with sync_session_factory() as session:
+        set_rls_tenant_sync(session, tenant_id)
         if project_id is None:
             row = session.execute(
                 text(
@@ -132,6 +134,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
     # ------------------------------------------------------------------
     try:
         with sync_session_factory() as session:
+            set_rls_tenant_sync(session, tenant_id)
             session.execute(
                 text(
                     "INSERT INTO setup_pipeline_run (id, tenant_id, stage, status, created_at) "
@@ -261,6 +264,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
         # D. Atomarer is_active-Wechsel
         # ------------------------------------------------------------------
         with sync_session_factory() as session:
+            set_rls_tenant_sync(session, tenant_id)
             for table in [
                 "tenant_customer_context",
                 "tenant_voice_profile",

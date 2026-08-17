@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """
 P03 Voice-Profile Task — extrahiert das Stimmprofil eines Tenants aus
 Transkripten und optionalen Beispieltexten.
@@ -37,6 +38,7 @@ from services.pipeline_llm import (
     resolve_tier,
 )
 from services.prompt_loader import get_default_prompt_loader
+from services.rls import set_rls_tenant_sync
 from services.schema_transformer import build_canonical_meta, finalize_canonical
 from tasks.canonical_wiring import fetch_tenant_meta, now_iso
 from tasks.celery_app import celery_app
@@ -210,6 +212,7 @@ def run_p03(
             )
 
         with sync_session_factory() as session:
+            set_rls_tenant_sync(session, tenant_id)
             try:
                 _insert_voice_profile(
                     session=session,
@@ -232,6 +235,7 @@ def run_p03(
 
     # 1. Setup-Pipeline-Run erstellen
     with sync_session_factory() as session:
+        set_rls_tenant_sync(session, tenant_id)
         try:
             session.execute(
                 text(
@@ -282,6 +286,7 @@ def run_p03(
                 "P03 run_id=%s tenant=%s: daily cost cap exceeded, pausing", run_id, tenant_id
             )
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 session.execute(
                     text(
                         "UPDATE setup_pipeline_run SET status='paused_for_cost', finished_at=now() WHERE id=:id"
@@ -313,6 +318,7 @@ def run_p03(
             duration_ms = int((time.monotonic() - t_start) * 1000)
             try:
                 with sync_session_factory() as session:
+                    set_rls_tenant_sync(session, tenant_id)
                     session.execute(
                         text(
                             "UPDATE setup_pipeline_run SET "
@@ -449,6 +455,7 @@ def run_p03(
 
         voice_profile_id = None
         with sync_session_factory() as session:
+            set_rls_tenant_sync(session, tenant_id)
             try:
                 voice_profile_id = _insert_voice_profile(
                     session=session,
@@ -515,6 +522,7 @@ def run_p03(
         )
         try:
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 session.execute(
                     text(
                         "UPDATE setup_pipeline_run SET "
@@ -536,6 +544,7 @@ def run_p03(
         # Audit-Update auf failed
         try:
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 session.execute(
                     text(
                         "UPDATE setup_pipeline_run SET "

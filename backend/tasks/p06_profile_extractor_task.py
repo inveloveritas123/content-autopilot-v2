@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """P06 — Self-Learning Company-Profile-Extractor (Issue #148, Welle D).
 
 Nightly: scannt memory_chunks (Voice-Transkripte etc.) → extrahiert
@@ -27,6 +28,7 @@ from models.company_profile import (
     ProfileFieldProvenance,
 )
 from services.anweisungs_marker import SQL_OHNE_ANWEISUNGEN
+from services.rls import set_rls_tenant_sync
 from services.soft_delete_filter import SQL_NICHT_GELOESCHT
 from tasks.celery_app import celery_app
 
@@ -89,6 +91,10 @@ def run_for_tenant(tenant_id: str, max_chunks: int = 30) -> dict:
     }
 
     with sync_session_factory() as db:
+        # tenant-gescopet: tenant_id ist Funktionsparameter, gilt fuer den
+        # gesamten Block bis zum abschliessenden db.commit() (keine
+        # zwischenzeitlichen commits, die SET LOCAL verfallen liessen).
+        set_rls_tenant_sync(db, tenant_id)
         rows = db.execute(
             text(f"""
                 SELECT id, content_text, source_type, created_at

@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """Hard-Delete-Cron für DSGVO Soft-Deletes nach 30 Tagen Recovery-Cooldown.
 
 Issue #148, Welle E. Daily 04:00.
@@ -243,6 +244,8 @@ def purge_expired() -> dict:
                 # hier darf den bereits erfolgreichen Hard-Delete nicht zurückrollen.
                 try:
                     with sync_session_factory() as db:
+                        # Gleicher Tenant wie der Hard-Delete oben — enger Kontext.
+                        set_rls_tenant_sync(db, tenant_id)
                         db.execute(
                             text(
                                 "UPDATE deletion_requests SET notes = "

@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """P13-Task: Eigene Idee → 3 Aufhänger-Varianten in den Chat (Issue #36 S3).
 
 Wird von tasks.telegram_task._route_inbound_message per Celery enqueued,
@@ -70,6 +71,7 @@ def generate_variants_for_chat(
     if log_id is not None:
         try:
             with sync_session_factory() as db:
+                set_rls_tenant_sync(db, tenant_id)
                 existing = db.execute(
                     text(
                         "SELECT 1 FROM content_ideas "
@@ -117,6 +119,7 @@ def _check_cost_cap(tenant_id: str) -> bool:
         from datetime import date
 
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 text(
                     "SELECT cost_usd FROM daily_cost_tenant "
@@ -157,6 +160,7 @@ def _create_manual_idea(
     """
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             # find-or-create Source type='manual' (E3: tenant-scoped)
             source_row = db.execute(
                 text(
@@ -302,6 +306,7 @@ def _clear_pending_marker(tenant_id: str, idea_id: str) -> None:
     """Entfernt den chat_variant_choice_pending-Marker bei Fehlschlag."""
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             db.execute(
                 text(
                     "UPDATE content_ideas "
@@ -455,6 +460,7 @@ def _load_pending_idea(tenant_id: str) -> dict | None:
     """Lädt die jüngste Pending-Idee des Tenants (Marker=true, ≤24h, E3-scoped)."""
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             row = db.execute(
                 text(
                     "SELECT id FROM content_ideas "
@@ -518,6 +524,7 @@ def _persist_choice(tenant_id: str, idea_id: str, variant: dict) -> bool:
     """
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             # is_chosen Reset (alle Varianten dieser Idee)
             db.execute(
                 text(
@@ -609,6 +616,7 @@ def _detach_source_log(tenant_id: str, idea_id: str) -> None:
     """
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             db.execute(
                 text(
                     "UPDATE content_ideas "
@@ -647,6 +655,7 @@ def _expire_session(session_id: str, tenant_id: str) -> None:
     """
     try:
         with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
             db.execute(
                 text(
                     "UPDATE bot_session SET status = 'expired', updated_at = NOW() "

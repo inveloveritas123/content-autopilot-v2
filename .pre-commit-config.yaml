@@ -59,3 +59,17 @@ repos:
       - id: gitleaks
         name: gitleaks (Secrets-Scan)
         args: [protect, --staged, --config=.gitleaks.toml, --verbose]
+
+  # --- G-RLS-KONTEXT: statisches Gate gegen RLS-Blindstellen (2026-08-17) ---
+  # Migration 058 aktivierte FORCE ROW LEVEL SECURITY auf 43 Tabellen. Ein
+  # sync_session_factory()-Block ohne set_rls_tenant_sync/set_rls_bypass_sync
+  # sieht still 0 Zeilen statt eines Fehlers — docs/RLS-FUNDLISTE-UEBERGABE.md.
+  - repo: local
+    hooks:
+      - id: rls-context-gate
+        name: G-RLS-KONTEXT (RLS-Kontext-Gate)
+        entry: bash -c 'cd backend && python3 scripts/check_rls_context_gate.py'
+        language: system
+        files: ^backend/(tasks|services)/.*\.py$
+        pass_filenames: false
+        require_serial: true

@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """P12c-Task — LLM-basierter Carousel-Generator.
 
 Workflow:
@@ -40,6 +41,7 @@ from services.pipeline_llm import (
     estimate_tier_cost,
     resolve_tier,
 )
+from services.rls import set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -226,6 +228,7 @@ def run_p12c(
     if brand_colors is None:
         try:
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 row = session.execute(
                     text(
                         "SELECT primary_color, secondary_color FROM tenant_branding WHERE tenant_id = :tid"
@@ -303,6 +306,7 @@ def run_p12c(
         try:
             carousel_pdf_path = f"carousel/{tenant_id}/{content_piece_id}/{run_id}.pdf"
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 session.execute(
                     text(
                         "UPDATE content_pieces SET carousel_pdf_path = :path WHERE id = :id AND tenant_id = :tid"

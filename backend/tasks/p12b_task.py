@@ -1,3 +1,4 @@
+# AUDITED-2026-08-17 (zubu-louis-dialog): RLS-Tiefen-Audit, Datei vollstaendig gelesen, alle sync_session_factory-Bloecke geurteilt.
 """
 P12b-Task — Lektor-Pass mit "frischen Augen".
 
@@ -36,6 +37,7 @@ from sqlalchemy import text
 
 from models.base import sync_session_factory
 from services.llm_json import parse_json_from_text as _parse_json_from_text
+from services.rls import set_rls_tenant_sync
 from services.pipeline_llm import (
     call_pipeline_llm,
     estimate_tier_cost,
@@ -200,6 +202,7 @@ def _insert_reviewer_queue(tenant_id: str, p12_output: dict) -> None:
     """Versucht einen Loop-Break-Eintrag in telegram_message_log zu schreiben."""
     try:
         with sync_session_factory() as session:
+            set_rls_tenant_sync(session, tenant_id)
             session.execute(
                 text(
                     "INSERT INTO telegram_message_log "
@@ -274,6 +277,7 @@ def run_p12b(
     # Setup-Pipeline-Run anlegen
     # ------------------------------------------------------------------
     with sync_session_factory() as session:
+        set_rls_tenant_sync(session, tenant_id)
         try:
             session.execute(
                 text(
@@ -331,6 +335,7 @@ def run_p12b(
                 tenant_id,
             )
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 session.execute(
                     text(
                         "UPDATE setup_pipeline_run SET status='paused_for_cost', "
@@ -437,6 +442,7 @@ def run_p12b(
 
             _finalize_run(
                 run_id=run_id,
+                tenant_id=tenant_id,
                 t_start=t_start,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
@@ -475,6 +481,7 @@ def run_p12b(
                 content_texts: list = []
                 extracted_quotes_lists: list = []
                 with sync_session_factory() as _res_session:
+                    set_rls_tenant_sync(_res_session, tenant_id)
                     _rows = _res_session.execute(
                         text(
                             "SELECT content_text, extracted_quotes FROM tenant_reservoir WHERE tenant_id = :tid"
@@ -502,6 +509,7 @@ def run_p12b(
                             )
                             _finalize_run(
                                 run_id=run_id,
+                                tenant_id=tenant_id,
                                 t_start=t_start,
                                 input_tokens=input_tokens,
                                 output_tokens=output_tokens,
@@ -533,6 +541,7 @@ def run_p12b(
 
         _finalize_run(
             run_id=run_id,
+            tenant_id=tenant_id,
             t_start=t_start,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
@@ -590,6 +599,7 @@ def run_p12b(
         )
         try:
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 session.execute(
                     text(
                         "UPDATE setup_pipeline_run SET "
@@ -614,6 +624,7 @@ def run_p12b(
 
         try:
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 session.execute(
                     text(
                         "UPDATE setup_pipeline_run SET "
@@ -647,6 +658,7 @@ def run_p12b(
 
 def _finalize_run(
     run_id: str,
+    tenant_id: str,
     t_start: float,
     input_tokens: int,
     output_tokens: int,
@@ -658,6 +670,7 @@ def _finalize_run(
     duration_ms = int((time.monotonic() - t_start) * 1000)
     try:
         with sync_session_factory() as session:
+            set_rls_tenant_sync(session, tenant_id)
             session.execute(
                 text(
                     "UPDATE setup_pipeline_run SET "
