@@ -22,7 +22,7 @@ import uuid
 from sqlalchemy import text
 
 from models.base import sync_session_factory
-from services.rls import set_rls_bypass_sync
+from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -33,8 +33,18 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _update_pipeline_status(run_id: str, status: str, error: str | None = None):
+def _update_pipeline_status(
+    tenant_id: str, run_id: str, status: str, error: str | None = None
+):
+    """Setzt den Endstatus eines Pipeline-Laufs.
+
+    `tenant_id` ist seit dem RLS-Scharfschalten (Migration 058) Pflicht:
+    `setup_pipeline_run` traegt FORCE ROW LEVEL SECURITY. Ohne Kontext traefe
+    das UPDATE 0 Zeilen — der Lauf bliebe fuer immer auf 'running' stehen und
+    kein Nutzer erfuehre je, dass sein Setup fertig oder gescheitert ist.
+    """
     with sync_session_factory() as session:
+        set_rls_tenant_sync(session, tenant_id)
         params = {"id": run_id, "status": status}
         extra = ""
         if error:
@@ -229,7 +239,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
             p01_result.get("status") == "paused_for_cost"
             or p03_result.get("status") == "paused_for_cost"
         ):
-            _update_pipeline_status(pipeline_run_id, "paused_for_cost")
+            _update_pipeline_status(tenant_id, pipeline_run_id, "paused_for_cost")
             return {"pipeline_run_id": pipeline_run_id, "status": "paused_for_cost"}
 
         # P04 braucht P01-Payload aus DB
@@ -244,7 +254,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
         logger.info("setup_pipeline tenant=%s: P04=%s", tenant_id, p04_result.get("status"))
 
         if p04_result.get("status") == "paused_for_cost":
-            _update_pipeline_status(pipeline_run_id, "paused_for_cost")
+            _update_pipeline_status(tenant_id, pipeline_run_id, "paused_for_cost")
             return {"pipeline_run_id": pipeline_run_id, "status": "paused_for_cost"}
 
         # ------------------------------------------------------------------
@@ -358,7 +368,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
         # ------------------------------------------------------------------
         # F. Pipeline-Status auf done setzen
         # ------------------------------------------------------------------
-        _update_pipeline_status(pipeline_run_id, "done")
+        _update_pipeline_status(tenant_id, pipeline_run_id, "done")
 
         elapsed = round(time.monotonic() - start_ts, 2)
         logger.info(
@@ -374,7 +384,7 @@ def run_setup_pipeline(self, tenant_id: str, source: str, source_payload: dict) 
     # ------------------------------------------------------------------
     except Exception as exc:
         logger.exception("setup_pipeline FAILED tenant=%s: %s", tenant_id, exc)
-        _update_pipeline_status(pipeline_run_id, "failed", error=str(exc))
+        _update_pipeline_status(tenant_id, pipeline_run_id, "failed", error=str(exc))
 
         async def _push_ws_error(err: str):
             from services.ws_manager import ws_manager

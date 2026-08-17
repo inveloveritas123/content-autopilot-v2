@@ -12,6 +12,7 @@ from models.dialogue_question import DialogueQuestion
 from models.source_item import SourceItem
 from models.tenant import Tenant
 from services.llm import set_llm_tenant
+from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -25,10 +26,19 @@ def generate_smart_questions_task(item_id: str):
     Speichert Fragen direkt in dialogue_questions Tabelle.
     """
     with sync_session_factory() as session:
+        # Der Task bekommt nur die item_id — die tenant_id steht erst NACH dem
+        # Laden zur Verfuegung. `source_items` traegt seit Migration 058 FORCE
+        # ROW LEVEL SECURITY, ohne Kontext liefert session.get() None und der
+        # Task meldet faelschlich "no_analysis" statt zu arbeiten. Deshalb:
+        # Bypass NUR fuer den PK-Read, danach sofort auf den engen
+        # Tenant-Kontext einschwenken.
+        set_rls_bypass_sync(session, True)
         item = session.get(SourceItem, item_id)
         if not item or not item.analysis:
             logger.warning(f"Item {item_id} not found or not analyzed — skip question generation")
             return {"status": "skipped", "reason": "no_analysis"}
+        set_rls_bypass_sync(session, False)
+        set_rls_tenant_sync(session, str(item.tenant_id))
 
         if not item.transcript_text:
             logger.warning(f"Item {item_id} has no transcript — skip question generation")

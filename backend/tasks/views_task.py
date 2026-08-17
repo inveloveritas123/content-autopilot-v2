@@ -10,6 +10,7 @@ from models.base import sync_session_factory
 from models.source_item import SourceItem
 from services.keyword_extractor import extract_keywords
 from services.youtube_views import scrape_video_metadata
+from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -90,9 +91,17 @@ def update_all_views():
 def update_single_item_views(item_id: str):
     """Update views + metadata for a single item."""
     with sync_session_factory() as session:
+        # Der Task bekommt nur die item_id — die tenant_id steht erst NACH dem
+        # Laden zur Verfuegung. `source_items` traegt seit Migration 058 FORCE
+        # ROW LEVEL SECURITY, ohne Kontext liefert session.get() None und der
+        # Task meldet faelschlich "nicht gefunden". Deshalb: Bypass NUR fuer den
+        # PK-Read, danach sofort auf den engen Tenant-Kontext einschwenken.
+        set_rls_bypass_sync(session, True)
         item = session.get(SourceItem, item_id)
         if not item:
             return
+        set_rls_bypass_sync(session, False)
+        set_rls_tenant_sync(session, str(item.tenant_id))
 
         meta = asyncio.run(scrape_video_metadata(item.external_id))
         if not meta:

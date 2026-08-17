@@ -7,6 +7,7 @@ from models.base import sync_session_factory
 from models.source import Source
 from models.source_item import SourceItem
 from services.transcription import transcribe_content
+from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -80,9 +81,20 @@ def _enqueue_transcript_observer(tenant_id, source_item_id) -> None:
 def transcribe_item(item_id: str):
     """Transcribe a single source item — supports YouTube and Podcast."""
     with sync_session_factory() as session:
+        # Der Task bekommt nur die item_id — die tenant_id steht erst NACH dem
+        # Laden zur Verfuegung. Ohne Kontext liefert session.get() unter FORCE
+        # ROW LEVEL SECURITY None, und der Task meldet "not_found" fuer ein Item,
+        # das existiert. Bypass NUR fuer den PK-Read, danach eng weiter.
+        set_rls_bypass_sync(session, True)
         item = session.get(SourceItem, item_id)
         if not item:
             return {"item_id": item_id, "status": "not_found"}
+        set_rls_bypass_sync(session, False)
+        # Einmal festhalten: nach jedem commit() muss der Kontext erneuert
+        # werden, und `item.tenant_id` waere dann selbst ein Lazy-Load ohne
+        # Kontext — also den Wert jetzt sichern, solange er sicher lesbar ist.
+        tenant_id_str = str(item.tenant_id)
+        set_rls_tenant_sync(session, tenant_id_str)
 
         if item.status not in RETRYABLE_STATUSES:
             return {"item_id": item_id, "status": item.status, "skipped": True}
@@ -95,6 +107,10 @@ def transcribe_item(item_id: str):
 
         item.status = "transcribing"
         session.commit()
+        # ⛔ SET LOCAL verfaellt beim Commit — ohne Erneuerung liefe der gesamte
+        # Rest dieser Funktion (Source-Lookup, QualityMetric-Insert, die beiden
+        # Abschluss-Commits) ohne Kontext und damit auf 0 Zeilen.
+        set_rls_tenant_sync(session, tenant_id_str)
 
         source = session.get(Source, item.source_id)
         source_type = source.type if source else "youtube"
@@ -114,6 +130,9 @@ def transcribe_item(item_id: str):
         if transcript_text:
             _apply_success(item, transcript_text, source_type)
             session.commit()
+            # ⛔ Kontext nach dem Commit erneuern — sonst laeuft der
+            # QualityMetric-Insert darunter ohne Kontext und verschwindet.
+            set_rls_tenant_sync(session, tenant_id_str)
 
             # Auto-score transcription quality
             try:
@@ -161,6 +180,15 @@ def transcribe_item(item_id: str):
 def batch_transcribe(tenant_id: str | None = None):
     """Batch transcribe 'new' items via unified transcribe_content() — full 4-step fallback chain."""
     with sync_session_factory() as session:
+        # `tenant_id` ist optional: ohne Argument laeuft der Batch bewusst ueber
+        # ALLE Tenants (Cron), mit Argument ueber einen. Entsprechend der enge
+        # oder der breite Weg — `source_items` traegt seit Migration 058 FORCE
+        # ROW LEVEL SECURITY und lieferte sonst 0 Items, ununterscheidbar von
+        # "nichts zu transkribieren".
+        if tenant_id:
+            set_rls_tenant_sync(session, tenant_id)
+        else:
+            set_rls_bypass_sync(session, True)
         items = session.execute(_build_batch_query(tenant_id)).scalars().all()
         total = len(items)
         success = 0
@@ -171,6 +199,12 @@ def batch_transcribe(tenant_id: str | None = None):
         for i, item in enumerate(items):
             item.status = "transcribing"
             session.commit()
+            # ⛔ SET LOCAL verfaellt beim Commit — ohne Erneuerung liefe der Rest
+            # dieser Iteration und jede weitere ohne Kontext (0 Zeilen).
+            if tenant_id:
+                set_rls_tenant_sync(session, tenant_id)
+            else:
+                set_rls_bypass_sync(session, True)
 
             source = session.get(Source, item.source_id)
             source_type = source.type if source else "youtube"
@@ -204,6 +238,12 @@ def batch_transcribe(tenant_id: str | None = None):
                 )
 
             session.commit()
+            # ⛔ Kontext nach dem Commit erneuern — die naechste Iteration und
+            # die Schluss-Zaehlung unten liefen sonst ohne Kontext.
+            if tenant_id:
+                set_rls_tenant_sync(session, tenant_id)
+            else:
+                set_rls_bypass_sync(session, True)
 
         remaining = (
             session.execute(
