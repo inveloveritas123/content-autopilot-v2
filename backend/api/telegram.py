@@ -19,6 +19,7 @@ from sqlalchemy import text
 from config import settings
 from dependencies import get_db, get_tenant
 from models.base import sync_session_factory
+from services.ai_disclosure import chat_ai_hinweis_block
 
 logger = logging.getLogger(__name__)
 
@@ -395,6 +396,13 @@ def _welcome_text(headline: str) -> str:
         "• 💡 Oder lass dir Ideen vorschlagen und wähl eine aus.\n"
         "• Fertige Entwürfe kommen mit [✅ Freigeben] [✏️ Nochmal anders] [❌ Verwerfen].\n\n"
         "Tippe /help für die Übersicht."
+        # EU-AI-Act Art. 50 Abs. 1 — Kennzeichnung der INTERAKTION, nicht des
+        # Inhalts (das ist Abs. 4, siehe `append_ai_notice`). Der Hinweis steht
+        # hier und nicht an den zwei Aufrufstellen, weil dies der EINE
+        # Erstkontakt-Text für beide Eintrittspunkte ist — frisch verbunden und
+        # bereits verbunden. Wer ihn an den Aufrufern anhängt, vergisst den
+        # zweiten.
+        + chat_ai_hinweis_block()
     )
 
 
@@ -665,7 +673,10 @@ async def telegram_webhook(
             "1. Gehe im Dashboard auf Einstellungen → Telegram\n"
             "2. Klicke auf 'Verbindungslink generieren'\n"
             "3. Sende den generierten /start-Link hier\n\n"
-            "Schreib /help für eine Übersicht der Befehle.",
+            "Schreib /help für eine Übersicht der Befehle."
+            # EU-AI-Act Art. 50 Abs. 1: Hinweis auf die KI-Interaktion "vor oder
+            # bei der ersten Interaktion". /start IST die erste Interaktion.
+            + chat_ai_hinweis_block(),
         )
         return {"ok": True}
 
@@ -930,6 +941,10 @@ def _try_memory_command(tenant_id: str, chat_id: int, text_content: str) -> bool
             "─────────────────────────\n"
             "✨ Aus allem entsteht Content — kuratiert im Dashboard.\n"
             "🔒 EU-Server, DSGVO-konform."
+            # EU-AI-Act Art. 50 Abs. 1: /help ist die jederzeit abrufbare
+            # Zweitstelle — wer den Willkommenstext vor Wochen gelesen hat,
+            # findet den Hinweis hier wieder.
+            + chat_ai_hinweis_block()
         )
         buttons = [
             [{"text": "🧠 So liest KI mich", "callback_data": "cmd:ki_profil"}],

@@ -36,3 +36,52 @@ def append_ai_notice(draft_text: str) -> str:
     if "KI-gestützt in deiner Stimme erstellt" in draft_text:
         return draft_text
     return draft_text + _AI_NOTICE
+
+
+# ---------------------------------------------------------------------------
+# Art. 50 Abs. 1 — Kennzeichnung der INTERAKTION (nicht des Inhalts)
+# ---------------------------------------------------------------------------
+#
+# ⛔ Das oben ist Art. 50 Abs. 4 (KI-erzeugter INHALT). Abs. 1 ist ein ANDERER
+# Tatbestand: Systeme, die für die direkte Interaktion mit natürlichen Personen
+# bestimmt sind, müssen so gestaltet sein, dass die Person INFORMIERT WIRD, dass
+# sie mit einem KI-System interagiert — sofern das nicht aus dem Kontext
+# offensichtlich ist.
+#
+# Für den Chat ist es NICHT offensichtlich: Der Bot formuliert seine Rückfragen
+# bereits heute per LLM (`p08_service` → `call_pipeline_llm`, ebenso
+# `p14_entry_service`). Aus Nutzersicht ist das ein Gesprächspartner, der
+# Rückfragen stellt — genau die Situation, die Abs. 1 adressiert.
+#
+# Der Zeitpunkt ist "vor oder bei der ersten Interaktion". Deshalb steht der
+# Hinweis an den beiden Stellen, die ein Nutzer garantiert sieht: im
+# Willkommenstext (/start) und in der Hilfe (/help, jederzeit abrufbar).
+#
+# Bewusst NICHT unter jede einzelne Bot-Nachricht: Abs. 1 verlangt Information,
+# keine Dauerbeschallung. Ein Hinweis unter jeder Zeile würde gelesen werden wie
+# ein Cookie-Banner — also gar nicht — und wäre damit schlechtere Transparenz
+# bei mehr Text.
+
+CHAT_AI_HINWEIS = (
+    "🤖 Du schreibst mit einem KI-Assistenten. Meine Rückfragen und Vorschläge "
+    "sind KI-generiert — deine Inhalte und die Freigabe bleiben bei dir."
+)
+
+
+def chat_ai_hinweis_block() -> str:
+    """Der Interaktionshinweis als abgesetzter Block für Chat-Texte.
+
+    Eigene Funktion statt roher Konstante an fünf Stellen: der Wortlaut einer
+    Rechtspflicht gehört an EINEN Ort. Ändert sich die Formulierung (oder die
+    Rechtslage), ist hier die einzige Stelle.
+    """
+    return f"\n\n─────────────────────────\n{CHAT_AI_HINWEIS}"
+
+
+def hat_chat_ai_hinweis(text: str) -> bool:
+    """True, wenn der Text den Interaktionshinweis bereits trägt.
+
+    Für Tests und für Aufrufer, die Texte zusammensetzen — verhindert, dass der
+    Hinweis doppelt erscheint.
+    """
+    return bool(text) and "Du schreibst mit einem KI-Assistenten" in text
