@@ -123,6 +123,12 @@ def check_drift_triggers():
     skipped = 0
 
     with sync_session_factory() as session:
+        # Cross-Tenant-Cron: _get_all_tenant_ids liest bewusst ueber ALLE
+        # Tenants (SELECT DISTINCT tenant_id). tenant_voice_profile traegt
+        # FORCE ROW LEVEL SECURITY — ohne Bypass liefert die Liste 0 Tenants
+        # und der Drift-Waechter laeuft still ins Leere. Vom RLS-Waechter am
+        # 17.08. gemeldet (voice_drift_task.py:94).
+        set_rls_bypass_sync(session, True)
         tenant_ids = _get_all_tenant_ids(session)
         logger.info("check_drift_triggers: prüfe %d Tenants", len(tenant_ids))
 
@@ -186,6 +192,8 @@ def run_voice_drift(
     # 1. Doppel-Trigger-Guard
     # ------------------------------------------------------------------
     with sync_session_factory() as session:
+        # tenant-gescopet: tenant_id ist Funktionsparameter.
+        set_rls_tenant_sync(session, tenant_id)
         if _has_pending_observation(session, tenant_id):
             logger.info("run_voice_drift: tenant=%s — bereits pending, übersprungen", tenant_id)
             return {"status": "skipped", "reason": "already_pending"}
@@ -215,6 +223,7 @@ def run_voice_drift(
         from services.canonical_profiles import pick_active
 
         with sync_session_factory() as session:
+            set_rls_tenant_sync(session, tenant_id)
             rows = session.execute(
                 text(
                     "SELECT project_id, version, payload FROM tenant_voice_profile "
@@ -264,6 +273,7 @@ def run_voice_drift(
         feedback_rows = []
         try:
             with sync_session_factory() as session:
+                set_rls_tenant_sync(session, tenant_id)
                 feedback_rows = session.execute(
                     text(
                         "SELECT id, feedback_text, field_path FROM voice_feedback "
@@ -349,6 +359,8 @@ def run_voice_drift(
         # ------------------------------------------------------------------
         obs_id = str(uuid.uuid4())
         with sync_session_factory() as session:
+            # INSERT unter FORCE RLS scheitert OHNE Kontext hart am WITH CHECK.
+            set_rls_tenant_sync(session, tenant_id)
             session.execute(
                 text(
                     "INSERT INTO voice_drift_observation "
