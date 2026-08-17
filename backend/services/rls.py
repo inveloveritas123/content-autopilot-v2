@@ -65,6 +65,25 @@ async def set_rls_bypass(session: AsyncSession, enabled: bool) -> None:
     )
 
 
+def set_rls_bypass_sync(connection, enabled: bool) -> None:
+    """Sync-Variante von `set_rls_bypass` für Celery-Tasks mit sync-Session.
+
+    Es gab bisher nur die async-Variante — deshalb konnte `telegram_poll_task`
+    (sync, Celery) den Bypass gar nicht setzen und wurde von FORCE ROW LEVEL
+    SECURITY still auf 0 Zeilen gefiltert: der Poller fand keinen einzigen Bot,
+    ohne dass ein Fehler entstand (2026-08-17, sichtbar geworden nach dem
+    Nachziehen von Migration 058 auf dem Testsystem).
+
+    NUR für explizit cross-tenant-legitime Operationen. `SET LOCAL` →
+    transaktions-lokal, kein Leak in andere Tasks, die sich im Pool dieselbe
+    Verbindung teilen.
+    """
+    connection.execute(
+        text("SELECT set_config(:k, :v, true)"),
+        {"k": _RLS_BYPASS_VAR, "v": "on" if enabled else ""},
+    )
+
+
 @asynccontextmanager
 async def bypass_rls_session(session_factory):
     """Session mit aktivem RLS-Bypass (sieht ALLE Tenants). Nur für Cross-Tenant-Cron/Admin."""

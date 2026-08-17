@@ -31,6 +31,7 @@ from sqlalchemy import text
 
 from models.base import sync_session_factory
 from services.crypto import decrypt_secret
+from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
 from services.telegram_poller import (
     TelegramAPIError,
     TelegramHTTPError,
@@ -201,6 +202,14 @@ def _load_active_bots() -> list[dict]:
     """
     try:
         with sync_session_factory() as db:
+            # ⛔ RLS-Bypass ZWINGEND vor dem SELECT: tenant_bot_config traegt seit
+            # Migration 058 FORCE ROW LEVEL SECURITY. Dieser Task ist der einzige
+            # legitime Cross-Tenant-Leser (er MUSS alle Bots finden, um sie zu
+            # pollen), setzt aber naturgemaess keinen app.tenant_id-Kontext. Ohne
+            # Bypass filtert Postgres still auf 0 Zeilen — kein Fehler, kein Log,
+            # der komplette Bot-Kanal steht. Belegt 2026-08-17: drei aktive Bots
+            # in der Tabelle, `bots_polled: 0` im Task-Ergebnis.
+            set_rls_bypass_sync(db, True)
             rows = db.execute(
                 text(
                     "SELECT tenant_id, telegram_bot_token_encrypted, telegram_poll_offset "
@@ -209,6 +218,15 @@ def _load_active_bots() -> list[dict]:
                     "  AND telegram_bot_token_encrypted IS NOT NULL"
                 )
             ).fetchall()
+        if not rows:
+            # Kein Fehlerfall, aber auch kein Nicht-Ereignis: "keine Bots" sieht
+            # sonst exakt so aus wie ein stiller RLS-/Rechte-Ausfall. Genau diese
+            # Ununterscheidbarkeit hat den Ausfall vom 17.08. so lange verdeckt.
+            logger.info(
+                "telegram_poll: keine aktiven Bots in tenant_bot_config gefunden "
+                "(kein Fehler — aber wenn Bots konfiguriert SIND, ist das ein "
+                "RLS-/Rechte-Problem, kein leerer Bestand)"
+            )
         return [
             {
                 "tenant_id": str(row[0]),
@@ -229,6 +247,12 @@ def _persist_offset(tenant_id: str, offset: int | None, *, last_active: bool) ->
     """
     try:
         with sync_session_factory() as db:
+            # Tenant-Kontext statt Bypass: dieses UPDATE ist auf EINEN Tenant
+            # gescopet (WHERE tenant_id = :tid), also ist der enge Weg der
+            # richtige. Ohne ihn wuerde RLS 0 Zeilen treffen — das UPDATE liefe
+            # ohne Wirkung durch, der Offset bliebe stehen und dieselben Updates
+            # wuerden endlos erneut verarbeitet.
+            set_rls_tenant_sync(db, tenant_id)
             if last_active:
                 db.execute(
                     text(
@@ -265,6 +289,11 @@ def _mark_bot_error(tenant_id: str, safe_reason: str) -> None:
     """
     try:
         with sync_session_factory() as db:
+            # Wie in `_persist_offset`: tenant-gescopetes UPDATE, also
+            # Tenant-Kontext statt Bypass. Ohne ihn bliebe der Bot stumm auf
+            # 'active' stehen, obwohl er nachweislich fehlerhaft ist — die
+            # Fehlermeldung erreichte niemanden.
+            set_rls_tenant_sync(db, tenant_id)
             db.execute(
                 text(
                     "UPDATE tenant_bot_config "
