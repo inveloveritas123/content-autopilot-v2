@@ -574,6 +574,12 @@ def call_pipeline_llm(
 
             # 6. Response parsen
             result = _parse_response(data, model_id, tier, prompt_key)
+            # Kosten zentral erfassen — hier und nicht in `_parse_response`:
+            # jene Hilfsfunktion kennt die tenant_id nicht (der erste Versuch
+            # dort scheiterte real mit NameError, aufgedeckt durch einen echten
+            # LLM-Testaufruf). Direkt neben _record_trace_best_effort, das
+            # dieselbe Stelle aus demselben Grund nutzt.
+            _erfasse_kosten(tenant_id, result.cost_usd)
             _record_trace_best_effort(
                 tenant_id=tenant_id,
                 prompt_key=prompt_key,
@@ -786,8 +792,6 @@ def _parse_response(
         cache_read,
         cost_usd,
     )
-
-    _erfasse_kosten(tenant_id, cost_usd)
 
     return PipelineLLMResult(
         text=text,
