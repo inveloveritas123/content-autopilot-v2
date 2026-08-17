@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from dependencies import get_db
 from models.base import async_session_factory
 from models.content_piece import ContentPiece
+from services.rls import set_rls_bypass
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)  # W1: war undefiniert, aber in Z.~316 genutzt (F821/NameError)
@@ -90,6 +91,13 @@ async def list_models(db=Depends(get_db)):
 
 @router.post("/models/backtest", dependencies=[Depends(require_admin)])
 async def start_backtest(req: BacktestStartRequest, db=Depends(get_db)):
+    # RLS-Bypass: Superadmin-Endpunkt (require_admin), Route nutzt nur get_db
+    # (kein get_tenant) → kein RLS-Kontext gesetzt. content_pieces/backtest_runs
+    # sind RLS-Tabellen, ohne Bypass liefert die Query 0 Zeilen / INSERT scheitert.
+    # Bewusster Admin-Cross-Tenant-Zugriff (Backtest läuft gegen Posts EINES per
+    # req.tenant_id gewählten Tenants, aber ohne dass die Session diesem Tenant
+    # zugeordnet ist).
+    await set_rls_bypass(db, True)
     # Load last N approved posts for tenant
     rows = await db.execute(
         text("""SELECT id FROM content_pieces
@@ -127,6 +135,11 @@ async def start_backtest(req: BacktestStartRequest, db=Depends(get_db)):
 
 @router.get("/models/backtest/{run_id}", dependencies=[Depends(require_admin)])
 async def get_backtest(run_id: str, db=Depends(get_db)):
+    # RLS-Bypass: Superadmin-Endpunkt, kein get_tenant → kein RLS-Kontext.
+    # backtest_runs ist RLS-Tabelle; run_id ist global eindeutig, nicht nach
+    # Tenant gefiltert — Admin muss jeden Backtest-Run sehen können, bewusster
+    # Cross-Tenant-Zugriff.
+    await set_rls_bypass(db, True)
     row = await db.execute(
         text(
             "SELECT id, tenant_id, candidate_model_id, status, results, summary, created_at, finished_at FROM backtest_runs WHERE id = :id"
@@ -145,6 +158,10 @@ async def get_backtest(run_id: str, db=Depends(get_db)):
 @router.post("/models/notify-tenant", dependencies=[Depends(require_admin)])
 async def notify_tenant_model(req: TenantNotifyRequest, db=Depends(get_db)):
     """Send opt-in notification to tenant via Telegram-Stub."""
+    # RLS-Bypass: Superadmin-Endpunkt, kein get_tenant → kein RLS-Kontext.
+    # backtest_runs ist RLS-Tabelle, Lookup über backtest_run_id (nicht tenant-
+    # gefiltert) — bewusster Admin-Cross-Tenant-Zugriff.
+    await set_rls_bypass(db, True)
     # Load backtest summary for message
     row = await db.execute(
         text("SELECT summary, candidate_model_id FROM backtest_runs WHERE id = :id"),
@@ -199,6 +216,10 @@ async def force_publish_content(req: ForcePublishRequest, db=Depends(get_db)):
     """Admin override: publish post without normal approval flow. Logged as admin_override."""
     import uuid as _uuid
 
+    # RLS-Bypass: Superadmin-Endpunkt, kein get_tenant → kein RLS-Kontext.
+    # content_pieces + setup_pipeline_run sind RLS-Tabellen; Admin-Override muss
+    # jeden Tenant erreichen können, bewusster Cross-Tenant-Zugriff.
+    await set_rls_bypass(db, True)
     piece = await db.get(ContentPiece, _uuid.UUID(req.content_piece_id))
     if not piece:
         raise HTTPException(404, "Content piece not found")
@@ -275,6 +296,14 @@ async def create_tenant(req: CreateTenantRequest):
 
                 cfg = get_settings()
                 if cfg.requesty_api_key:
+                    # RLS-Bypass: llm_providers ist RLS-Tabelle. Diese Session hat nie
+                    # einen Tenant-Kontext gesetzt bekommen (eigene Session via
+                    # async_session_factory, kein get_tenant) UND der Tenant ist gerade
+                    # erst angelegt worden — set_rls_tenant wäre hier ohnehin für den
+                    # brandneuen Tenant unnötig, Bypass ist der klare Weg für diesen
+                    # bewussten Admin-Seed-Vorgang. Nach dem commit() eine Zeile vorher
+                    # ist SET LOCAL verfallen → erneut setzen.
+                    await set_rls_bypass(db, True)
                     await db.execute(
                         text(
                             """INSERT INTO llm_providers
@@ -292,6 +321,9 @@ async def create_tenant(req: CreateTenantRequest):
                 # Seed Standard-Projekt
                 import uuid as _uuid
 
+                # RLS-Bypass: projects ist RLS-Tabelle. Commit-Verfall (siehe oben) —
+                # Kontext erneut setzen, unabhängig davon ob der if-Zweig lief.
+                await set_rls_bypass(db, True)
                 await db.execute(
                     text(
                         """INSERT INTO projects (id, tenant_id, name, slug, description)
@@ -333,6 +365,11 @@ class TenantDisableRequest(BaseModel):
 
 @router.post("/tenants/{tenant_id}/disable", dependencies=[Depends(require_admin)])
 async def disable_tenant(tenant_id: str, req: TenantDisableRequest, db=Depends(get_db)):
+    # RLS-Bypass: Superadmin-Endpunkt, kein get_tenant → kein RLS-Kontext.
+    # setup_pipeline_run ist RLS-Tabelle (Audit-Log für den Kill-Switch);
+    # bewusster Admin-Cross-Tenant-Zugriff, der Endpunkt wirkt per Definition
+    # auf einen fremden Tenant.
+    await set_rls_bypass(db, True)
     row = await db.execute(
         text("SELECT id FROM tenants WHERE id = :id OR api_key = :id"), {"id": tenant_id}
     )
@@ -362,6 +399,10 @@ async def disable_tenant(tenant_id: str, req: TenantDisableRequest, db=Depends(g
 
 @router.post("/tenants/{tenant_id}/enable", dependencies=[Depends(require_admin)])
 async def enable_tenant(tenant_id: str, db=Depends(get_db)):
+    # RLS-Bypass: Superadmin-Endpunkt, kein get_tenant → kein RLS-Kontext.
+    # setup_pipeline_run ist RLS-Tabelle (Audit-Log); bewusster Admin-
+    # Cross-Tenant-Zugriff.
+    await set_rls_bypass(db, True)
     row = await db.execute(
         text("SELECT id FROM tenants WHERE id = :id OR api_key = :id"), {"id": tenant_id}
     )
@@ -427,6 +468,11 @@ async def get_throttle_status(tenant_id: str | None = None, db=Depends(get_db)):
       currently_throttled: bool — tenant_count_1h >= tenant_limit OR global_count_1h >= global_limit
     """
     from config import settings as _cfg
+
+    # RLS-Bypass: Superadmin-Endpunkt, kein get_tenant → kein RLS-Kontext.
+    # llm_call_logs + throttle_events sind RLS-Tabellen; die Funktion aggregiert
+    # laut Docstring bewusst GLOBAL über alle Tenants (Alerting/Dashboard-Card).
+    await set_rls_bypass(db, True)
 
     tenant_count_1h = 0
     if tenant_id:

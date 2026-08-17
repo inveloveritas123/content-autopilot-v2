@@ -22,6 +22,7 @@ from dependencies import get_db, get_tenant
 from models.content_idea import ContentIdea
 from models.source_item import SourceItem
 from models.tenant import Tenant
+from services.rls import set_rls_tenant
 from tasks.generate_task import analyze_item, generate_content
 
 logger = logging.getLogger(__name__)
@@ -145,6 +146,12 @@ async def auto_trigger_pipeline(
             for item_id in ids:
                 try:
                     async with async_session_factory() as session:
+                        # RLS-Kontext: läuft als BackgroundTask NACH der Response mit
+                        # eigener Session — kein Request-Kontext mehr vorhanden, FORCE
+                        # ROW LEVEL SECURITY würde sonst 0 Zeilen liefern / INSERTs
+                        # ablehnen. `tid` kommt aus Depends(get_tenant) der äußeren
+                        # Route (Closure) — Tenant-gescopet, kein Bypass nötig.
+                        await set_rls_tenant(session, str(tid))
                         item = await session.get(SourceItem, uuid.UUID(item_id))
                         if not item or not item.analysis:
                             continue

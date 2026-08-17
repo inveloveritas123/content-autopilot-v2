@@ -29,6 +29,7 @@ from models.source import Source
 from models.tenant import Tenant
 from services.brand_voice import format_voice_for_prompt
 from services.content_ideation import run_ideation_pipeline
+from services.rls import set_rls_tenant
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ideas", tags=["ideas"])
@@ -832,6 +833,10 @@ async def batch_generate_ideas(
         for item_id in ids:
             try:
                 async with async_session_factory() as session:
+                    # RLS-Kontext: BackgroundTask läuft nach der Response mit neuer
+                    # Session, kein Request-Kontext mehr da. tenant_id kommt aus
+                    # Depends(get_tenant_id) der Route (Closure) — Tenant-gescopet.
+                    await set_rls_tenant(session, str(tenant_id))
                     item = await session.get(SourceItem, uuid.UUID(item_id))
                     if not item or not item.analysis:
                         continue
@@ -977,6 +982,10 @@ async def refresh_ideas_with_profile(
         for item_id, item_title, transcript_text in items_data:
             try:
                 async with async_session_factory() as session:
+                    # RLS-Kontext: BackgroundTask, eigene Session ohne Request-
+                    # Kontext. tenant kommt aus Depends(get_tenant) der Route
+                    # (Closure) — Tenant-gescopet, kein Bypass nötig.
+                    await set_rls_tenant(session, str(tenant.id))
                     item = await session.get(SourceItem, uuid.UUID(item_id))
                     if not item or not item.analysis:
                         continue
@@ -1186,6 +1195,10 @@ async def bulk_quick_generate_posts(
         for id_str in ids:
             try:
                 async with async_session_factory() as session:
+                    # RLS-Kontext: BackgroundTask, eigene Session ohne Request-
+                    # Kontext. tenant_id kommt aus Depends(get_tenant) der Route
+                    # (Closure, Zeile "tenant_id = tenant.id") — Tenant-gescopet.
+                    await set_rls_tenant(session, str(tenant_id))
                     idea = await session.get(ContentIdea, uuid.UUID(id_str))
                     if not idea:
                         continue
