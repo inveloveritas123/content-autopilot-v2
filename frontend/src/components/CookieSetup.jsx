@@ -48,9 +48,7 @@ export default function CookieSetup({ open, onClose, onSaved }) {
 
         {/* Steps */}
         <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-ink">
-            3 einfache Schritte:
-          </h4>
+          <h4 className="text-sm font-semibold text-ink">3 einfache Schritte:</h4>
 
           {/* Step 1 */}
           <div className="flex gap-3">
@@ -58,9 +56,7 @@ export default function CookieSetup({ open, onClose, onSaved }) {
               1
             </span>
             <div>
-              <p className="text-sm text-ink-light">
-                Browser-Extension installieren:
-              </p>
+              <p className="text-sm text-ink-light">Browser-Extension installieren:</p>
               <div className="flex gap-2 mt-1.5">
                 <a
                   href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"

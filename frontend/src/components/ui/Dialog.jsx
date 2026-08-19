@@ -80,10 +80,7 @@ export function Dialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* bg-black/50: reiner Overlay-Scrim ohne semantische Bedeutung, kein Token nötig */}
-      <div
-        className="fixed inset-0 bg-black/50"
-        onClick={closeOnBackdrop ? onClose : undefined}
-      />
+      <div className="fixed inset-0 bg-black/50" onClick={closeOnBackdrop ? onClose : undefined} />
       <div
         ref={panelRef}
         role="dialog"
@@ -100,10 +97,7 @@ export function Dialog({
       >
         {title && (
           <div className="flex items-center justify-between px-6 py-4 border-b border-surface-border">
-            <h2
-              id={titleId}
-              className="flex items-center gap-2 text-lg font-semibold text-ink"
-            >
+            <h2 id={titleId} className="flex items-center gap-2 text-lg font-semibold text-ink">
               {TitleIcon && <TitleIcon className="w-5 h-5 text-primary-600 shrink-0" />}
               {title}
             </h2>

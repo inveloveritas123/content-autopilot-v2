@@ -68,10 +68,7 @@ const statusColors = {
 
 export function Badge({ color, status, className, children, border = false, size = 'md' }) {
   const resolvedColor =
-    (colors[color] && color) ||
-    legacyColorAliases[color] ||
-    statusColors[status] ||
-    'archiviert'
+    (colors[color] && color) || legacyColorAliases[color] || statusColors[status] || 'archiviert'
   return (
     <span
       className={clsx(

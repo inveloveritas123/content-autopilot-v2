@@ -5,8 +5,7 @@ import { clsx } from 'clsx'
 // eine "fehler"- bzw. "fertig"-Aktion, kein sechster Farbwert.
 const variants = {
   primary: 'bg-primary-600 text-white hover:bg-primary-700 border-transparent',
-  secondary:
-    'bg-surface-card text-ink hover:bg-surface-bg border-surface-border',
+  secondary: 'bg-surface-card text-ink hover:bg-surface-bg border-surface-border',
   danger: 'bg-status-fehler-text text-white hover:opacity-90 border-transparent',
   ghost: 'bg-transparent text-ink-light hover:bg-surface-bg border-transparent',
   success: 'bg-status-fertig-text text-white hover:opacity-90 border-transparent',

@@ -118,9 +118,7 @@ export default function ContentPreview() {
                         </span>
                       )}
                     </div>
-                    <h3 className="text-sm font-semibold text-ink line-clamp-1">
-                      {item.title}
-                    </h3>
+                    <h3 className="text-sm font-semibold text-ink line-clamp-1">{item.title}</h3>
 
                     {/* Topic Pitch from analysis will show via detail view */}
                     <p className="text-xs text-ink-light mt-1 line-clamp-2">
@@ -201,9 +199,7 @@ export default function ContentPreview() {
                         ZB
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-ink">
-                          Zukunftsbund
-                        </p>
+                        <p className="text-sm font-semibold text-ink">Zukunftsbund</p>
                         <p className="text-xs text-ink-light">Gerade eben</p>
                       </div>
                     </div>

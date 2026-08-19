@@ -1217,7 +1217,7 @@ export default function Analytics() {
               {[7, 14, 30].map((d) => (
                 <button
                   key={d}
-  onClick={() => setCostDays(d)}
+                  onClick={() => setCostDays(d)}
                   className={`px-2.5 py-1 text-xs font-medium rounded border transition-colors ${costDays === d ? 'bg-primary-700 text-white border-primary-700' : 'bg-white text-ink-muted border-surface-border hover:border-primary-300'}`}
                 >
                   {d}d
@@ -1739,8 +1739,7 @@ export default function Analytics() {
                 },
                 post_generated: {
                   label: 'Post erstellt',
-                  color:
-                    'bg-status-fertig-bg text-status-fertig-text border-status-fertig-border',
+                  color: 'bg-status-fertig-bg text-status-fertig-text border-status-fertig-border',
                 },
                 skipped: {
                   label: 'Übersprungen',

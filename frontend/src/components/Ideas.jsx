@@ -93,7 +93,11 @@ function RelevanceBar({ score }) {
   const s = score ?? 0
   const pct = Math.min(s * 10, 100)
   const color =
-    s >= 7 ? 'bg-status-fertig-border' : s >= 4 ? 'bg-status-aktiv-border' : 'bg-status-fehler-border'
+    s >= 7
+      ? 'bg-status-fertig-border'
+      : s >= 4
+        ? 'bg-status-aktiv-border'
+        : 'bg-status-fehler-border'
   return (
     <div className="flex items-center gap-2">
       <div className="w-16 h-1.5 bg-surface-border rounded-full overflow-hidden">
@@ -498,7 +502,11 @@ function TriageCard({ idea, onSkip, onGenerate, skipping, generating }) {
         ? 'text-status-aktiv-text'
         : 'text-status-fehler-text'
   const barColor =
-    score >= 7 ? 'bg-status-fertig-border' : score >= 4 ? 'bg-status-aktiv-border' : 'bg-status-fehler-border'
+    score >= 7
+      ? 'bg-status-fertig-border'
+      : score >= 4
+        ? 'bg-status-aktiv-border'
+        : 'bg-status-fehler-border'
 
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 bg-white border border-surface-border rounded-lg hover:border-primary-300 transition-colors group">
@@ -1035,9 +1043,7 @@ export default function Ideas() {
               key={f.value}
               onClick={() => setFilter(f.value)}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                filter === f.value
-                  ? 'bg-white text-ink shadow-sm'
-                  : 'text-ink-light hover:text-ink'
+                filter === f.value ? 'bg-white text-ink shadow-sm' : 'text-ink-light hover:text-ink'
               }`}
             >
               {f.label}
@@ -1063,104 +1069,102 @@ export default function Ideas() {
           ))}
         </div>
         {/* Angle filter + select-all-by-angle */}
-          <select
-            value={sourceFilter}
-            onChange={(e) => setSourceFilter(e.target.value)}
-            className="px-2 py-1.5 text-xs border border-surface-border rounded-lg bg-white text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-500"
-          >
-            <option value="">Alle Quellen</option>
-            {sources.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-          {sourceFilter && (
-            <button
-              onClick={async () => {
-                const sourceName =
-                  sources.find((s) => s.id === sourceFilter)?.name || 'dieser Quelle'
-                if (!window.confirm(`Alle neuen Ideen von "${sourceName}" archivieren?`)) return
-                try {
-                  const r = await bulkArchiveIdeas({ source_id: sourceFilter, status: 'new' })
-                  setArchiveMsg(`🗑 ${r.archived} Ideen von "${sourceName}" archiviert`)
-                  setTimeout(() => {
-                    setArchiveMsg(null)
-                    loadIdeas()
-                  }, 3000)
-                } catch (e) {
-                  toast.error('Fehler: ' + e.message)
-                }
-              }}
-              className="px-2 py-1 text-[10px] font-medium text-status-fehler-text bg-status-fehler-bg border border-status-fehler-border rounded-md hover:bg-status-fehler-border transition-colors"
-              title="Alle neuen Ideen dieser Quelle archivieren"
-            >
-              <Trash2 className="w-3 h-3 inline mr-0.5" />
-              Alle archivieren
-            </button>
-          )}
-          <select
-            value={angleFilter}
-            onChange={(e) => setAngleFilter(e.target.value)}
-            className="px-2 py-1.5 text-xs border border-surface-border rounded-lg bg-white text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-500"
-          >
-            <option value="">Alle Angles</option>
-            {['meinung', 'howto', 'story', 'kontroverse', 'statistik', 'trend'].map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
-          {angleFilter && (
-            <button
-              onClick={() => {
-                const ids = ideas
-                  .filter((i) => i.angle === angleFilter && i.status === 'new')
-                  .slice(0, 20)
-                  .map((i) => i.id)
-                setSelectedIds(new Set(ids))
-              }}
-              className="px-2.5 py-1.5 text-xs font-medium text-accent-700 bg-accent-50 border border-accent-200 rounded-lg hover:bg-accent-100 transition-colors"
-              title={`Alle ${angleFilter}-Ideen auswählen (max 20)`}
-            >
-              Top 20 wählen
-            </button>
-          )}
+        <select
+          value={sourceFilter}
+          onChange={(e) => setSourceFilter(e.target.value)}
+          className="px-2 py-1.5 text-xs border border-surface-border rounded-lg bg-white text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-500"
+        >
+          <option value="">Alle Quellen</option>
+          {sources.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+        {sourceFilter && (
           <button
-            onClick={() => setSortBy((s) => (s === 'relevance' ? 'date' : 'relevance'))}
-            title={sortBy === 'relevance' ? 'Sortiert nach Relevanz' : 'Sortiert nach Datum'}
-            className="px-3 py-1.5 text-xs font-medium border border-surface-border rounded-lg bg-white text-ink-light hover:bg-surface-bg transition-colors"
+            onClick={async () => {
+              const sourceName = sources.find((s) => s.id === sourceFilter)?.name || 'dieser Quelle'
+              if (!window.confirm(`Alle neuen Ideen von "${sourceName}" archivieren?`)) return
+              try {
+                const r = await bulkArchiveIdeas({ source_id: sourceFilter, status: 'new' })
+                setArchiveMsg(`🗑 ${r.archived} Ideen von "${sourceName}" archiviert`)
+                setTimeout(() => {
+                  setArchiveMsg(null)
+                  loadIdeas()
+                }, 3000)
+              } catch (e) {
+                toast.error('Fehler: ' + e.message)
+              }
+            }}
+            className="px-2 py-1 text-[10px] font-medium text-status-fehler-text bg-status-fehler-bg border border-status-fehler-border rounded-md hover:bg-status-fehler-border transition-colors"
+            title="Alle neuen Ideen dieser Quelle archivieren"
           >
-            {sortBy === 'relevance' ? '★ Relevanz' : '📅 Datum'}
+            <Trash2 className="w-3 h-3 inline mr-0.5" />
+            Alle archivieren
+          </button>
+        )}
+        <select
+          value={angleFilter}
+          onChange={(e) => setAngleFilter(e.target.value)}
+          className="px-2 py-1.5 text-xs border border-surface-border rounded-lg bg-white text-ink-light focus:outline-none focus:ring-1 focus:ring-primary-500"
+        >
+          <option value="">Alle Angles</option>
+          {['meinung', 'howto', 'story', 'kontroverse', 'statistik', 'trend'].map((a) => (
+            <option key={a} value={a}>
+              {a}
+            </option>
+          ))}
+        </select>
+        {angleFilter && (
+          <button
+            onClick={() => {
+              const ids = ideas
+                .filter((i) => i.angle === angleFilter && i.status === 'new')
+                .slice(0, 20)
+                .map((i) => i.id)
+              setSelectedIds(new Set(ids))
+            }}
+            className="px-2.5 py-1.5 text-xs font-medium text-accent-700 bg-accent-50 border border-accent-200 rounded-lg hover:bg-accent-100 transition-colors"
+            title={`Alle ${angleFilter}-Ideen auswählen (max 20)`}
+          >
+            Top 20 wählen
+          </button>
+        )}
+        <button
+          onClick={() => setSortBy((s) => (s === 'relevance' ? 'date' : 'relevance'))}
+          title={sortBy === 'relevance' ? 'Sortiert nach Relevanz' : 'Sortiert nach Datum'}
+          className="px-3 py-1.5 text-xs font-medium border border-surface-border rounded-lg bg-white text-ink-light hover:bg-surface-bg transition-colors"
+        >
+          {sortBy === 'relevance' ? '★ Relevanz' : '📅 Datum'}
+        </button>
+        <button
+          onClick={handleSelectLowScore}
+          title="Wählt alle Ideen mit Score < 4 aus"
+          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-status-fehler-text border border-status-fehler-border rounded-lg bg-white hover:bg-status-fehler-bg transition-colors"
+        >
+          <Trash2 className="w-3 h-3" /> Score&lt;4 wählen
+        </button>
+        {/* View mode toggle */}
+        <div className="flex items-center gap-0.5 bg-surface-bg rounded-lg p-1">
+          <button
+            onClick={() => setViewMode('list')}
+            title="Kartenansicht"
+            className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-ink' : 'text-ink-light hover:text-ink'}`}
+          >
+            <LayoutList className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={handleSelectLowScore}
-            title="Wählt alle Ideen mit Score < 4 aus"
-            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-status-fehler-text border border-status-fehler-border rounded-lg bg-white hover:bg-status-fehler-bg transition-colors"
+            onClick={() => setViewMode('triage')}
+            title="Triage-Queue (schnelles Durcharbeiten)"
+            className={`p-1.5 rounded-md transition-colors ${viewMode === 'triage' ? 'bg-white shadow-sm text-primary-700' : 'text-ink-light hover:text-ink'}`}
           >
-            <Trash2 className="w-3 h-3" /> Score&lt;4 wählen
+            <Rows3 className="w-3.5 h-3.5" />
           </button>
-          {/* View mode toggle */}
-          <div className="flex items-center gap-0.5 bg-surface-bg rounded-lg p-1">
-            <button
-              onClick={() => setViewMode('list')}
-              title="Kartenansicht"
-              className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-ink' : 'text-ink-light hover:text-ink'}`}
-            >
-              <LayoutList className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setViewMode('triage')}
-              title="Triage-Queue (schnelles Durcharbeiten)"
-              className={`p-1.5 rounded-md transition-colors ${viewMode === 'triage' ? 'bg-white shadow-sm text-primary-700' : 'text-ink-light hover:text-ink'}`}
-            >
-              <Rows3 className="w-3.5 h-3.5" />
-            </button>
-          </div>
         </div>
+      </div>
       <div className="mt-2">
         <TimeFilter
-
           value={timeFilter}
           onChange={setTimeFilter}
           count={ideasTotal}
@@ -1556,90 +1560,90 @@ export default function Ideas() {
         maxWidth="lg"
       >
         <div className="space-y-4">
-            <p className="text-xs text-ink-muted">
-              Trage eine eigene Idee ein — ohne LLM-Budget. Sobald Budget verfügbar, kannst du
-              Quick-Generate nutzen.
-            </p>
-            {manualMsg && (
-              <div
-                className={`p-3 rounded-lg text-xs font-medium ${manualMsg.type === 'error' ? 'bg-status-fehler-bg text-status-fehler-text border border-status-fehler-border' : 'bg-status-fertig-bg text-status-fertig-text border border-status-fertig-border'}`}
-              >
-                {manualMsg.text}
-              </div>
-            )}
-            <div>
-              <label className="block text-xs font-medium text-ink mb-1">
-                Titel <span className="text-status-fehler-text">*</span>
-              </label>
-              <input
-                type="text"
-                value={manualTitle}
-                onChange={(e) => setManualTitle(e.target.value)}
-                placeholder="z.B. Heizungsoptimierung im Winter: 5 Tipps für SHK-Kunden"
+          <p className="text-xs text-ink-muted">
+            Trage eine eigene Idee ein — ohne LLM-Budget. Sobald Budget verfügbar, kannst du
+            Quick-Generate nutzen.
+          </p>
+          {manualMsg && (
+            <div
+              className={`p-3 rounded-lg text-xs font-medium ${manualMsg.type === 'error' ? 'bg-status-fehler-bg text-status-fehler-text border border-status-fehler-border' : 'bg-status-fertig-bg text-status-fertig-text border border-status-fertig-border'}`}
+            >
+              {manualMsg.text}
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-medium text-ink mb-1">
+              Titel <span className="text-status-fehler-text">*</span>
+            </label>
+            <input
+              type="text"
+              value={manualTitle}
+              onChange={(e) => setManualTitle(e.target.value)}
+              placeholder="z.B. Heizungsoptimierung im Winter: 5 Tipps für SHK-Kunden"
+              className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              maxLength={200}
+            />
+            <p className="text-[10px] text-ink-muted mt-0.5">{manualTitle.length}/200</p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-ink mb-1">
+              Beschreibung (optional)
+            </label>
+            <textarea
+              value={manualDesc}
+              onChange={(e) => setManualDesc(e.target.value)}
+              placeholder="Kurze Beschreibung des Themas..."
+              className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+              rows={3}
+              maxLength={1000}
+            />
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-ink mb-1">Content-Angle</label>
+              <select
+                value={manualAngle}
+                onChange={(e) => setManualAngle(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                maxLength={200}
-              />
-              <p className="text-[10px] text-ink-muted mt-0.5">{manualTitle.length}/200</p>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-ink mb-1">
-                Beschreibung (optional)
-              </label>
-              <textarea
-                value={manualDesc}
-                onChange={(e) => setManualDesc(e.target.value)}
-                placeholder="Kurze Beschreibung des Themas..."
-                className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-                rows={3}
-                maxLength={1000}
-              />
-            </div>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="block text-xs font-medium text-ink mb-1">Content-Angle</label>
-                <select
-                  value={manualAngle}
-                  onChange={(e) => setManualAngle(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  {['manual', 'howto', 'meinung', 'story', 'kontroverse', 'statistik', 'trend'].map(
-                    (a) => (
-                      <option key={a} value={a}>
-                        {a}
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-ink mb-1">
-                Hook-Vorschlag (optional)
-              </label>
-              <input
-                type="text"
-                value={manualHook}
-                onChange={(e) => setManualHook(e.target.value)}
-                placeholder="z.B. 'Die meisten Hausbesitzer wissen nicht, dass...'"
-                className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                maxLength={300}
-              />
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setShowManualIdea(false)}
-                className="flex-1 px-4 py-2.5 text-sm font-medium text-ink-light border border-surface-border rounded-xl hover:bg-surface-bg transition-colors"
               >
-                Abbrechen
-              </button>
-              <button
-                onClick={handleCreateManualIdea}
-                disabled={manualSaving || manualTitle.trim().length < 5}
-                className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-status-fertig-border hover:bg-status-fertig-text rounded-xl disabled:opacity-50 transition-colors"
-              >
-                {manualSaving ? '⏳ Speichern...' : '✓ Idee erstellen'}
-              </button>
+                {['manual', 'howto', 'meinung', 'story', 'kontroverse', 'statistik', 'trend'].map(
+                  (a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  )
+                )}
+              </select>
             </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-ink mb-1">
+              Hook-Vorschlag (optional)
+            </label>
+            <input
+              type="text"
+              value={manualHook}
+              onChange={(e) => setManualHook(e.target.value)}
+              placeholder="z.B. 'Die meisten Hausbesitzer wissen nicht, dass...'"
+              className="w-full px-3 py-2 text-sm border border-surface-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              maxLength={300}
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={() => setShowManualIdea(false)}
+              className="flex-1 px-4 py-2.5 text-sm font-medium text-ink-light border border-surface-border rounded-xl hover:bg-surface-bg transition-colors"
+            >
+              Abbrechen
+            </button>
+            <button
+              onClick={handleCreateManualIdea}
+              disabled={manualSaving || manualTitle.trim().length < 5}
+              className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-status-fertig-border hover:bg-status-fertig-text rounded-xl disabled:opacity-50 transition-colors"
+            >
+              {manualSaving ? '⏳ Speichern...' : '✓ Idee erstellen'}
+            </button>
+          </div>
         </div>
       </Dialog>
     </div>

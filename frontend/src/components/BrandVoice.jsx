@@ -604,14 +604,22 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
 
       <div
         className={`bg-white rounded-xl border p-5 ${
-          allPresent ? 'border-status-fertig-border' : nonePresent ? 'border-status-fehler-border' : 'border-accent-200'
+          allPresent
+            ? 'border-status-fertig-border'
+            : nonePresent
+              ? 'border-status-fehler-border'
+              : 'border-accent-200'
         }`}
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div
               className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-                allPresent ? 'bg-status-fertig-bg' : nonePresent ? 'bg-status-fehler-bg' : 'bg-accent-50'
+                allPresent
+                  ? 'bg-status-fertig-bg'
+                  : nonePresent
+                    ? 'bg-status-fehler-bg'
+                    : 'bg-accent-50'
               }`}
             >
               {allPresent ? (
@@ -637,12 +645,7 @@ function StatusTile({ data, onRefresh, onDriftReview, onSetup }) {
                       { label: 'Kundenkontext', v: customer_context },
                       { label: 'Avatar', v: audience_avatar },
                     ].map(({ label, v }) => (
-                      <Badge
-                        key={label}
-                        color="fertig"
-                        border
-                        size="sm"
-                      >
+                      <Badge key={label} color="fertig" border size="sm">
                         <CheckCircle2 className="w-3 h-3" />
                         {label}
                         {v?.version && <span className="opacity-60">v{v.version}</span>}

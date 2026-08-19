@@ -361,8 +361,8 @@ export default function AccountManagement() {
         closeOnBackdrop={false}
       >
         <p className="text-sm text-ink mb-4">
-          Account <strong>{deleteTarget?.email}</strong> wirklich löschen? Das kann nicht
-          rückgängig gemacht werden.
+          Account <strong>{deleteTarget?.email}</strong> wirklich löschen? Das kann nicht rückgängig
+          gemacht werden.
         </p>
         <div className="flex justify-end gap-2">
           <button

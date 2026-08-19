@@ -84,7 +84,9 @@ function ChatBubble({ text, role }) {
       <div
         className={clsx(
           'max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed',
-          isUser ? 'bg-primary-600 text-white rounded-br-sm' : 'bg-surface-bg text-ink rounded-bl-sm'
+          isUser
+            ? 'bg-primary-600 text-white rounded-br-sm'
+            : 'bg-surface-bg text-ink rounded-bl-sm'
         )}
       >
         {text}
@@ -370,7 +372,11 @@ export function QuestionEngine({
               <HintChips hints={hints} onSelect={handleHintSelect} />
             </div>
 
-            {error && <p className="text-xs text-status-fehler-text bg-status-fehler-bg rounded-lg p-3">{error}</p>}
+            {error && (
+              <p className="text-xs text-status-fehler-text bg-status-fehler-bg rounded-lg p-3">
+                {error}
+              </p>
+            )}
 
             {/* Actions */}
             <div className="flex items-center justify-between gap-3">

@@ -568,9 +568,7 @@ function WeekScheduleWidget({ scheduled, approved, navigate }) {
                     />
                   ))}
                   {day.posts.length > 2 && (
-                    <p className="text-[9px] text-status-fertig-text">
-                      +{day.posts.length - 2}
-                    </p>
+                    <p className="text-[9px] text-status-fertig-text">+{day.posts.length - 2}</p>
                   )}
                 </div>
               ) : isGap ? (

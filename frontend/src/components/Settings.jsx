@@ -708,9 +708,7 @@ export default function Settings() {
                   <tr className="border-b border-surface-border">
                     <th className="text-left py-2 pr-4 font-medium text-ink-light">Aufgabe</th>
                     <th className="text-left py-2 pr-4 font-medium text-ink-light">Modell</th>
-                    <th className="text-right py-2 pr-4 font-medium text-ink-light">
-                      $/1M Token
-                    </th>
+                    <th className="text-right py-2 pr-4 font-medium text-ink-light">$/1M Token</th>
                     <th className="text-right py-2 font-medium text-ink-light">max_tokens</th>
                   </tr>
                 </thead>

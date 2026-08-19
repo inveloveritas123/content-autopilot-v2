@@ -111,14 +111,28 @@ function AnglesChart({ data }) {
         <XAxis dataKey="name" tick={{ fontSize: 12 }} />
         <YAxis tick={{ fontSize: 12 }} />
         <Tooltip
-          contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' /* bewusst behalten: Chart-Farbe */ }}
+          contentStyle={{
+            fontSize: 12,
+            borderRadius: 8,
+            border: '1px solid #e5e7eb' /* bewusst behalten: Chart-Farbe */,
+          }}
           formatter={(value, name) => [
             name === 'engagement' ? `${value}%` : value,
             name === 'engagement' ? 'Engagement' : 'Anzahl',
           ]}
         />
-        <Bar dataKey="engagement" fill="#0d9488" /* bewusst behalten: Chart-Farbe */ radius={[4, 4, 0, 0]} name="engagement" />
-        <Bar dataKey="anzahl" fill="#f59e0b" /* bewusst behalten: Chart-Farbe */ radius={[4, 4, 0, 0]} name="anzahl" />
+        <Bar
+          dataKey="engagement"
+          fill="#0d9488"
+          /* bewusst behalten: Chart-Farbe */ radius={[4, 4, 0, 0]}
+          name="engagement"
+        />
+        <Bar
+          dataKey="anzahl"
+          fill="#f59e0b"
+          /* bewusst behalten: Chart-Farbe */ radius={[4, 4, 0, 0]}
+          name="anzahl"
+        />
       </BarChart>
     </ResponsiveContainer>
   )

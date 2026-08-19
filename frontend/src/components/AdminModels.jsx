@@ -164,7 +164,9 @@ function BacktestResults({ result, tenantId, adminToken, onReset }) {
             <li
               key={idx}
               className={`flex items-start gap-3 p-3 rounded-lg border text-xs ${
-                pass ? 'bg-status-fertig-bg border-status-fertig-border' : 'bg-status-fehler-bg border-status-fehler-border'
+                pass
+                  ? 'bg-status-fertig-bg border-status-fertig-border'
+                  : 'bg-status-fehler-bg border-status-fehler-border'
               }`}
             >
               {pass ? (

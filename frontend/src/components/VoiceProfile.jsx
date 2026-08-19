@@ -572,7 +572,11 @@ export default function VoiceProfile() {
         />
       )}
 
-      {error && <div className="mb-4 p-3 bg-status-fehler-bg text-status-fehler-text rounded-lg text-sm">{error}</div>}
+      {error && (
+        <div className="mb-4 p-3 bg-status-fehler-bg text-status-fehler-text rounded-lg text-sm">
+          {error}
+        </div>
+      )}
 
       {stats && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -841,7 +845,9 @@ function VoiceTestmatrix() {
       </div>
 
       {/* Load error */}
-      {loadError && !brandVoiceData && <p className="text-status-fehler-text text-sm">{loadError}</p>}
+      {loadError && !brandVoiceData && (
+        <p className="text-status-fehler-text text-sm">{loadError}</p>
+      )}
 
       {/* Versions-Auswahl */}
       <div className="grid grid-cols-2 gap-2 mb-3">
@@ -883,7 +889,10 @@ function VoiceTestmatrix() {
             { label: 'Version A', payload: payloadA },
             { label: 'Version B', payload: payloadB },
           ].map(({ label, payload }) => (
-            <div key={label} className="rounded-lg border border-surface-border bg-surface-bg p-3 text-xs">
+            <div
+              key={label}
+              className="rounded-lg border border-surface-border bg-surface-bg p-3 text-xs"
+            >
               <div className="font-semibold text-ink mb-2">{label}</div>
               {payload ? (
                 <div className="space-y-1.5">

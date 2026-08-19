@@ -242,7 +242,9 @@ export default function Memory() {
                   key={item.id}
                   className="bg-status-aktiv-bg/50 border border-status-aktiv-border rounded-xl p-3"
                 >
-                  <p className="text-sm font-medium text-status-aktiv-text mb-1">{item.suggestion}</p>
+                  <p className="text-sm font-medium text-status-aktiv-text mb-1">
+                    {item.suggestion}
+                  </p>
                   <p className="text-xs text-ink whitespace-pre-wrap break-words line-clamp-3">
                     {item.preview}
                   </p>

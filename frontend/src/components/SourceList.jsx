@@ -993,7 +993,10 @@ function SourceItemsModal({ sourceId, sourceName, onClose }) {
               </thead>
               <tbody>
                 {items.map((item) => (
-                  <tr key={item.id} className="border-b border-surface-border hover:bg-surface-bg/60">
+                  <tr
+                    key={item.id}
+                    className="border-b border-surface-border hover:bg-surface-bg/60"
+                  >
                     <td className="px-5 py-2.5">
                       <div className="flex items-center gap-1.5">
                         {!item.has_transcript && (
@@ -1285,9 +1288,7 @@ function FunnelTab({
                 <th className="text-left px-4 py-1.5 font-medium text-status-fertig-text">
                   Quelle
                 </th>
-                <th className="text-left px-3 py-1.5 font-medium text-status-fertig-text">
-                  Items
-                </th>
+                <th className="text-left px-3 py-1.5 font-medium text-status-fertig-text">Items</th>
                 <th className="text-right px-3 py-1.5 font-medium text-status-fertig-text">
                   Ideen
                 </th>

@@ -239,9 +239,7 @@ export default function PostPreview({
             key={key}
             onClick={() => setActiveDevice(key)}
             className={`px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
-              activeDevice === key
-                ? 'bg-white text-ink shadow-sm'
-                : 'text-ink-light hover:text-ink'
+              activeDevice === key ? 'bg-white text-ink shadow-sm' : 'text-ink-light hover:text-ink'
             }`}
             style={{ minHeight: 44, minWidth: 44 }}
           >

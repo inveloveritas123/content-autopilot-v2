@@ -61,13 +61,13 @@ export default [
         'warn',
         {
           selector:
-            "JSXAttribute[name.name=/^(color|fill|stroke|backgroundColor|borderColor|background|bg)$/i] Literal[value=/^#([0-9a-fA-F]{3}){1,2}$/]",
+            'JSXAttribute[name.name=/^(color|fill|stroke|backgroundColor|borderColor|background|bg)$/i] Literal[value=/^#([0-9a-fA-F]{3}){1,2}$/]',
           message:
             'Kein Roh-Hex-Farbwert im Component-Code — Tier-2-Token aus tailwind.config.js nutzen (status-*, primary-*, accent-*, surface-*, ink-*). Siehe docs/SSOT-FRONTEND-REDESIGN-2026-08-14.md.',
         },
         {
           selector:
-            "Property[key.name=/^(color|fill|stroke|backgroundColor|borderColor|background)$/i] > Literal[value=/^#([0-9a-fA-F]{3}){1,2}$/]",
+            'Property[key.name=/^(color|fill|stroke|backgroundColor|borderColor|background)$/i] > Literal[value=/^#([0-9a-fA-F]{3}){1,2}$/]',
           message:
             'Kein Roh-Hex-Farbwert im Component-Code — Tier-2-Token aus tailwind.config.js nutzen (status-*, primary-*, accent-*, surface-*, ink-*). Siehe docs/SSOT-FRONTEND-REDESIGN-2026-08-14.md.',
         },

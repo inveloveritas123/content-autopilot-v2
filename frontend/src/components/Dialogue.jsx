@@ -177,7 +177,11 @@ function QuestionForm({ context, itemId, onDone }) {
         </div>
       ))}
 
-      {error && <p className="text-sm text-status-fehler-text bg-status-fehler-bg rounded-lg p-3">{error}</p>}
+      {error && (
+        <p className="text-sm text-status-fehler-text bg-status-fehler-bg rounded-lg p-3">
+          {error}
+        </p>
+      )}
 
       <button
         onClick={handleSave}
@@ -273,7 +277,11 @@ function GeneratePostPanel({ context, itemId }) {
         {generating ? 'Generiere Prompt…' : 'Claude-Prompt generieren'}
       </button>
 
-      {error && <p className="text-sm text-status-fehler-text bg-status-fehler-bg rounded-lg p-3">{error}</p>}
+      {error && (
+        <p className="text-sm text-status-fehler-text bg-status-fehler-bg rounded-lg p-3">
+          {error}
+        </p>
+      )}
 
       {promptData && (
         <div className="bg-surface-card rounded-xl p-4">
@@ -284,7 +292,9 @@ function GeneratePostPanel({ context, itemId }) {
             <button
               onClick={handleCopy}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                copied ? 'bg-status-fertig-bg text-white' : 'bg-surface-card text-ink-muted hover:bg-surface-card'
+                copied
+                  ? 'bg-status-fertig-bg text-white'
+                  : 'bg-surface-card text-ink-muted hover:bg-surface-card'
               }`}
             >
               {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
@@ -331,7 +341,12 @@ function ItemDetail({ item, onBack }) {
         <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
       </div>
     )
-  if (error) return <div className="p-4 bg-status-fehler-bg text-status-fehler-text rounded-xl text-sm">{error}</div>
+  if (error)
+    return (
+      <div className="p-4 bg-status-fehler-bg text-status-fehler-text rounded-xl text-sm">
+        {error}
+      </div>
+    )
   if (!context) return null
 
   const hasQuestions = context.smart_questions.length > 0

@@ -66,7 +66,9 @@ function OnlineIndicator({ online, lastActiveAt }) {
         aria-hidden="true"
       />
       {online ? (
-        <span className="text-status-fertig-text dark:text-status-fertig-text font-medium">online</span>
+        <span className="text-status-fertig-text dark:text-status-fertig-text font-medium">
+          online
+        </span>
       ) : (
         <span className="text-ink-light dark:text-ink-muted">
           offline{relTime ? ` · zuletzt aktiv ${relTime}` : ''}
@@ -155,7 +157,9 @@ export default function TelegramBotSettings() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-status-fehler-text dark:text-status-fehler-text">Fehler beim Laden: {error}</p>
+          <p className="text-sm text-status-fehler-text dark:text-status-fehler-text">
+            Fehler beim Laden: {error}
+          </p>
           <Button size="sm" variant="secondary" className="mt-3" onClick={refetch}>
             Erneut versuchen
           </Button>
@@ -255,7 +259,10 @@ export default function TelegramBotSettings() {
                 </div>
 
                 {connectError && (
-                  <p className="text-sm text-status-fehler-text dark:text-status-fehler-text" role="alert">
+                  <p
+                    className="text-sm text-status-fehler-text dark:text-status-fehler-text"
+                    role="alert"
+                  >
                     {connectError}
                   </p>
                 )}
@@ -440,8 +447,10 @@ function TelegramUsersPanel({ tenantConfigured }) {
 
   const statusBadge = (status) => {
     const map = {
-      active: 'bg-status-fertig-bg text-status-fertig-text dark:bg-status-fertig-bg/30 dark:text-status-fertig-text',
-      blocked: 'bg-status-fehler-bg text-status-fehler-text dark:bg-status-fehler-bg/30 dark:text-status-fehler-text',
+      active:
+        'bg-status-fertig-bg text-status-fertig-text dark:bg-status-fertig-bg/30 dark:text-status-fertig-text',
+      blocked:
+        'bg-status-fehler-bg text-status-fehler-text dark:bg-status-fehler-bg/30 dark:text-status-fehler-text',
       pending: 'bg-accent-100 text-accent-700 dark:bg-accent-900/30 dark:text-accent-300',
     }
     const label = { active: 'Aktiv', blocked: 'Blockiert', pending: 'Ausstehend' }
@@ -513,7 +522,11 @@ function TelegramUsersPanel({ tenantConfigured }) {
 
           {loading && <p className="text-sm text-ink-light animate-pulse">Lade Nutzer…</p>}
 
-          {error && <p className="text-sm text-status-fehler-text dark:text-status-fehler-text">Fehler: {error}</p>}
+          {error && (
+            <p className="text-sm text-status-fehler-text dark:text-status-fehler-text">
+              Fehler: {error}
+            </p>
+          )}
 
           {!loading && !error && users.length === 0 && (
             <p className="text-sm text-ink-light dark:text-ink-muted">

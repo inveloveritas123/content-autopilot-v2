@@ -146,13 +146,7 @@ function ScheduleModal({ selectedDate, posts, onClose, onScheduled }) {
   })
 
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="Post einplanen"
-      maxWidth="md"
-      contentClassName="p-0"
-    >
+    <Dialog open onClose={onClose} title="Post einplanen" maxWidth="md" contentClassName="p-0">
       <>
         <div className="px-5 pt-1 pb-3 border-b border-surface-border -mt-2">
           <p className="text-xs text-ink-muted">{dateLabel}</p>

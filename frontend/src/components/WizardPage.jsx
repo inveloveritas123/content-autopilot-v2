@@ -311,7 +311,8 @@ function getInlineHints(currentInput) {
 // Stepper (Desktop-Sidebar)
 // ---------------------------------------------------------------------------
 function PhaseIcon({ status }) {
-  if (status === 'done') return <CheckCircle2 className="w-5 h-5 text-status-fertig-text shrink-0" />
+  if (status === 'done')
+    return <CheckCircle2 className="w-5 h-5 text-status-fertig-text shrink-0" />
   if (status === 'active')
     return <Circle className="w-5 h-5 text-primary-600 fill-primary-100 shrink-0" />
   return <Circle className="w-5 h-5 text-ink-muted shrink-0" />
@@ -333,7 +334,8 @@ function PhaseStepper({ phases, currentPhase, progress, onPhaseClick }) {
               className={clsx(
                 'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors text-sm',
                 status === 'active' && 'bg-primary-50 text-primary-800 font-medium',
-                status === 'done' && 'text-status-fertig-text hover:bg-status-fertig-bg cursor-pointer',
+                status === 'done' &&
+                  'text-status-fertig-text hover:bg-status-fertig-bg cursor-pointer',
                 status === 'pending' && 'text-ink-muted cursor-default'
               )}
             >
@@ -765,7 +767,9 @@ export default function WizardPage() {
       <>
         <div className="hidden md:flex items-center justify-center min-h-screen">
           <div className="bg-surface-card rounded-xl border border-status-fehler-border p-8 max-w-md text-center">
-            <p className="text-sm font-semibold text-status-fehler-text mb-2">Fehler beim Starten</p>
+            <p className="text-sm font-semibold text-status-fehler-text mb-2">
+              Fehler beim Starten
+            </p>
             <p className="text-xs text-ink-muted mb-4">{initError}</p>
             <Button variant="primary" size="sm" onClick={() => navigate('/brand-voice')}>
               Zurück zu Brand Voice

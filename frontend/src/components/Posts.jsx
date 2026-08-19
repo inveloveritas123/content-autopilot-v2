@@ -454,7 +454,11 @@ function CharCounter({ text }) {
         ? 'text-status-aktiv-text'
         : 'text-status-fertig-text'
   const barColor =
-    len > 2500 ? 'bg-status-fehler-border' : len > 1300 ? 'bg-status-aktiv-border' : 'bg-status-fertig-border'
+    len > 2500
+      ? 'bg-status-fehler-border'
+      : len > 1300
+        ? 'bg-status-aktiv-border'
+        : 'bg-status-fertig-border'
   const foldPct = Math.min((LI_FOLD / LI_MAX) * 100, 100)
   return (
     <div className="space-y-1.5">
@@ -668,7 +672,9 @@ function PostCard({ post, onSelect, isSelected, onToggleSelect, dupeSim, searchT
           </span>
           {variant && <span className="text-xs text-ink-muted">Variante {variant}</span>}
           {angle && (
-            <span className="px-2 py-0.5 rounded bg-surface-bg text-xs text-ink-light">{angle}</span>
+            <span className="px-2 py-0.5 rounded bg-surface-bg text-xs text-ink-light">
+              {angle}
+            </span>
           )}
           {(() => {
             const p = post.content_metadata?.pillar
@@ -2397,7 +2403,9 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
             {hashtags ? (
               <div className="p-3 bg-status-neu-bg rounded-lg border border-status-neu-border">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-status-neu-text"># Hashtag-Vorschläge</span>
+                  <span className="text-xs font-medium text-status-neu-text">
+                    # Hashtag-Vorschläge
+                  </span>
                   <button
                     onClick={() => setHashtags(null)}
                     className="text-xs text-status-neu-text/70 hover:text-status-neu-text"
@@ -2524,7 +2532,9 @@ function PostDetail({ postId, onClose, onRefresh, prevId, nextId, position, tota
                       {cfg.emoji} {cfg.label}
                     </span>
                   ) : (
-                    <span className="text-[11px] text-ink-muted italic">Keine Säule zugewiesen</span>
+                    <span className="text-[11px] text-ink-muted italic">
+                      Keine Säule zugewiesen
+                    </span>
                   )
                 })()}
                 {pillarSaving && <span className="text-[11px] text-ink-muted ml-1">...</span>}
@@ -3356,7 +3366,9 @@ function LeaderboardModal({ posts, onClose, onCommit }) {
       {/* Footer action bar */}
       <div className="px-6 py-4 border-t border-surface-border bg-white shrink-0">
         {msg ? (
-          <div className="text-center py-2 text-sm font-semibold text-status-fertig-text">{msg}</div>
+          <div className="text-center py-2 text-sm font-semibold text-status-fertig-text">
+            {msg}
+          </div>
         ) : (
           <div className="flex items-center gap-3">
             <span className="text-sm text-ink-muted flex-1">
@@ -3899,9 +3911,7 @@ export default function Posts() {
               key={f.value}
               onClick={() => setFilter(f.value)}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                filter === f.value
-                  ? 'bg-white text-ink shadow-sm'
-                  : 'text-ink-light hover:text-ink'
+                filter === f.value ? 'bg-white text-ink shadow-sm' : 'text-ink-light hover:text-ink'
               }`}
             >
               {f.label}
@@ -5108,7 +5118,9 @@ export default function Posts() {
             {triageApprove.size + triageReject.size} markiert
           </span>
           {triageApprove.size > 0 && (
-            <span className="text-xs text-status-fertig-text">✓ {triageApprove.size} freigeben</span>
+            <span className="text-xs text-status-fertig-text">
+              ✓ {triageApprove.size} freigeben
+            </span>
           )}
           {triageReject.size > 0 && (
             <span className="text-xs text-status-fehler-text">✗ {triageReject.size} verwerfen</span>

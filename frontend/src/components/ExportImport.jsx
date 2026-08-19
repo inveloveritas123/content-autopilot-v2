@@ -145,9 +145,7 @@ export default function ExportImport() {
                     className="mt-0.5 accent-primary-500"
                   />
                   <div>
-                    <p className="text-sm font-medium text-ink dark:text-ink-muted">
-                      {opt.label}
-                    </p>
+                    <p className="text-sm font-medium text-ink dark:text-ink-muted">{opt.label}</p>
                     <p className="text-xs text-ink-light dark:text-ink-muted">{opt.desc}</p>
                   </div>
                 </label>

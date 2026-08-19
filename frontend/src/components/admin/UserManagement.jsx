@@ -189,13 +189,7 @@ function SetKeyDialog({ userId, userName, onClose }) {
   }
 
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title="API-Key setzen"
-      maxWidth="md"
-      closeOnBackdrop={false}
-    >
+    <Dialog open onClose={onClose} title="API-Key setzen" maxWidth="md" closeOnBackdrop={false}>
       <>
         <p className="text-xs text-ink-muted -mt-2 mb-4">Nutzer: {userName}</p>
         <div className="space-y-4">

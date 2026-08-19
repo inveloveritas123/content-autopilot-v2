@@ -390,7 +390,9 @@ function FieldBlock({ profileType, fieldPath, value, editable, highlighted, onEd
   return (
     <div
       className={`rounded-xl border p-4 transition-colors ${
-        highlighted ? 'bg-status-aktiv-bg border-status-aktiv-border' : 'bg-surface-card border-surface-border'
+        highlighted
+          ? 'bg-status-aktiv-bg border-status-aktiv-border'
+          : 'bg-surface-card border-surface-border'
       }`}
     >
       <div className="flex items-start justify-between gap-2">

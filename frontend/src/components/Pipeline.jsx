@@ -584,8 +584,8 @@ export default function Pipeline() {
                 {progress.percent_analyzed}%
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-status-fertig-bg inline-block"></span> Content{' '}
-                {progress.percent_content}%
+                <span className="w-2 h-2 rounded-full bg-status-fertig-bg inline-block"></span>{' '}
+                Content {progress.percent_content}%
               </span>
               {pipelineStatus?.eta_hours > 0 && (
                 <span className="flex items-center gap-1 ml-auto text-ink-light">
@@ -1033,7 +1033,9 @@ export default function Pipeline() {
                       ) : ['new', 'transcribed', 'transcription_failed', 'content_ready'].includes(
                           item.status
                         ) ? (
-                        <span className="text-[10px] text-ink-light italic">Analyse ausstehend</span>
+                        <span className="text-[10px] text-ink-light italic">
+                          Analyse ausstehend
+                        </span>
                       ) : null}
                     </div>
                   </td>
@@ -1139,7 +1141,8 @@ export default function Pipeline() {
                     <span className="text-ink-light">Status:</span> <Badge status={detail.status} />
                   </div>
                   <div>
-                    <span className="text-ink-light">Quelle:</span> {detail.transcript_source || '-'}
+                    <span className="text-ink-light">Quelle:</span>{' '}
+                    {detail.transcript_source || '-'}
                   </div>
                   <div>
                     <span className="text-ink-light">Video-ID:</span> {detail.external_id}
