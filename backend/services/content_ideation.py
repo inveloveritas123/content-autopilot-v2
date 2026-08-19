@@ -15,6 +15,7 @@ Philosophie: "Nicht das Denken abnehmen — die Arbeit."
 
 import logging
 
+from services.analysis_normalize import join_analysis_list
 from services.llm import BudgetExceededError, llm_service
 
 logger = logging.getLogger(__name__)
@@ -75,9 +76,9 @@ UNTERNEHMER-KONTEXT (PFLICHT — alle Ideen MUESSEN dazu passen):
 {industry_block}
 Video-Titel: {title}
 Summary: {analysis.get('summary', '')}
-Kernaussagen: {', '.join(analysis.get('key_points', []))}
-Content-Winkel: {', '.join(analysis.get('content_angles', []))}
-Tags: {', '.join(analysis.get('tags', []))}
+Kernaussagen: {join_analysis_list(analysis, 'key_points')}
+Content-Winkel: {join_analysis_list(analysis, 'content_angles')}
+Tags: {join_analysis_list(analysis, 'tags')}
 Trend-Score: {analysis.get('trend_score', 5)}/10
 
 Transkript-Auszug (erste 5000 Zeichen):

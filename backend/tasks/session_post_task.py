@@ -190,6 +190,130 @@ _FALLBACK_KEIN_POST = (
     "bekommen. Magst du es gleich nochmal versuchen?"
 )
 
+# ---------------------------------------------------------------------------
+# Ursachengerechte Rueckfall-Texte (Louis-Meldung 18.08.2026)
+# ---------------------------------------------------------------------------
+#
+# ⛔ Vorher bekam der Nutzer fuer JEDEN Fehlausgang denselben Satz — auch fuer
+# die, bei denen ein Wiederholen per Konstruktion NICHT helfen kann:
+#   * `paused_for_cost` — das Router-Budget ist erschoepft (HTTP 412). Ein
+#     zweiter Versuch trifft dasselbe Limit. „Versuch's nochmal" schickt den
+#     Nutzer in eine Schleife, die er nie gewinnen kann.
+#   * `tenant_disabled` — der Kill-Switch steht. Wiederholen aendert nichts.
+#   * `no_answers`      — es gibt kein Rohmaterial. Wiederholen erzeugt keins.
+# Ein Fehlerfall, der im Nichts endet, ist keine Lieferung
+# (NAHT_IST_DIE_LIEFERUNG.md). Deshalb sagt jeder dieser Faelle jetzt, was
+# WIRKLICH zu tun ist — und bietet den Retry nur dort an, wo er etwas bewirkt.
+_FALLBACK_BUDGET_ERSCHOEPFT = (
+    "Ich komme gerade nicht ans Schreib-Kontingent — deshalb ist der Post "
+    "nicht fertig geworden. Ein zweiter Versuch bringt jetzt leider nichts. "
+    "Sag Robert kurz Bescheid, dann wird das freigeschaltet."
+)
+_FALLBACK_ABGESCHALTET = (
+    "Das Schreiben ist fuer dein Konto gerade abgeschaltet — deshalb konnte "
+    "ich den Post nicht bauen. Ein neuer Versuch aendert das nicht. "
+    "Melde dich bitte bei Robert."
+)
+_FALLBACK_KEIN_MATERIAL = (
+    "Mir fehlt der Gespraechsstoff fuer den Post — ich habe zu diesem "
+    "Gespraech keine Antworten von dir gefunden. Erzaehl mir einfach nochmal "
+    "in ein, zwei Saetzen, worum es gehen soll."
+)
+
+#: `reason`-Werte, bei denen ein Wiederholen NICHT helfen kann. Sie bekommen
+#: einen eigenen Text UND kein Retry-Angebot.
+_KEIN_RETRY_MOEGLICH: dict[str, str] = {
+    "paused_for_cost": _FALLBACK_BUDGET_ERSCHOEPFT,
+    "cost_cap_reached": _FALLBACK_BUDGET_ERSCHOEPFT,
+    "tenant_disabled": _FALLBACK_ABGESCHALTET,
+    "aborted": _FALLBACK_ABGESCHALTET,
+    "no_answers": _FALLBACK_KEIN_MATERIAL,
+}
+
+
+def _rueckfall_text(result: dict) -> tuple[str, bool]:
+    """(Text, retry_angeboten) fuer ein nicht eingeloestes Ergebnis.
+
+    Drei Lagen, weil der Nutzer drei verschiedene Dinge wissen muss:
+      1. Der Post existiert, nur die Zustellung scheiterte → hol ihn dir.
+         Ein Retry waere hier sogar schaedlich (Doppel-Post).
+      2. Der Fehler ist strukturell (Budget/Kill-Switch/kein Material) →
+         sag WAS zu tun ist, und biete KEINEN Retry an.
+      3. Alles andere (Pipeline-Exception, leerer Post, Parser-Fehler) → ein
+         Wiederholen kann echt helfen, also anbieten.
+    """
+    if result.get("status") == "ok":
+        # Post liegt als Entwurf — kein Retry, sonst entsteht er doppelt.
+        return _FALLBACK_ENTWURF_LIEGT_BEREIT, False
+
+    reason = str(result.get("reason") or "")
+    if reason in _KEIN_RETRY_MOEGLICH:
+        return _KEIN_RETRY_MOEGLICH[reason], False
+
+    return _FALLBACK_KEIN_POST, True
+
+
+#: Schluessel des Retry-Markers in `bot_session.messages[-1]`.
+#: Bewusst IM JSONB und nicht als neue Spalte/neuer `status`-Wert:
+#: `bot_session.status` traegt einen CHECK-Constraint auf genau
+#: ('active','closed','expired') (Migration 019_telegram_tables.py) — ein
+#: vierter Wert waere eine Schema-Migration, und Migrationsnummern werden
+#: hier zentral vergeben (Hauskonvention). `messages` ist bereits JSONB und
+#: traegt mit `next_action` schon heute den Dialogzustand.
+RETRY_MARKER = "post_retry_offen"
+
+
+def _merke_offenes_retry_angebot(session_id: str, tenant_id: str) -> bool:
+    """Vermerkt: der Bot hat gefragt und wartet jetzt auf ein Ja/Nein.
+
+    Der Kern der Louis-Meldung 18.08.2026 (Fehler 2): Der Bot fragte
+    „Magst du es gleich nochmal versuchen?" — und hatte danach KEINEN Zustand,
+    der diese Frage festhielt. Die Session ist zu diesem Zeitpunkt bereits
+    `closed` (p08_service setzt sie beim „ja" auf das Abschluss-Angebot), also
+    liefert `_load_active_session` None, `hat_aktives_gespraech` False, und das
+    „Ja" des Nutzers fiel in die Laengenpruefung: „Zu kurz fuers Gedaechtnis."
+    Der Nutzer wurde belehrt, obwohl er exakt das getan hat, wonach der Bot
+    gefragt hatte.
+
+    Fail-open wie der ganze Task: wirft nie. Schlaegt der Vermerk fehl, bleibt
+    es beim alten Verhalten (Nutzer bekommt den Hinweis-Text) — schlimm genug,
+    aber kein zusaetzlicher Schaden.
+    """
+    try:
+        with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
+            # jsonb_set auf das LETZTE Element — atomar in einem UPDATE, kein
+            # Read-Modify-Write, damit ein paralleler Schreiber nichts verliert.
+            res = db.execute(
+                text(
+                    "UPDATE bot_session SET messages = jsonb_set("
+                    "  messages,"
+                    "  ARRAY[(jsonb_array_length(messages) - 1)::text, :marker],"
+                    "  'true'::jsonb,"
+                    "  true"
+                    "), updated_at = NOW() "
+                    "WHERE id = CAST(:sid AS uuid) AND tenant_id = :tid "
+                    "      AND jsonb_array_length(messages) > 0"
+                ),
+                {"sid": session_id, "tid": tenant_id, "marker": RETRY_MARKER},
+            )
+            db.commit()
+        ok = getattr(res, "rowcount", 0) != 0
+        if not ok:
+            logger.warning(
+                "session_post_task: Retry-Marker nicht gesetzt (session=%s) — "
+                "die Antwort des Nutzers laeuft ins Kurztext-Gate",
+                session_id,
+            )
+        return ok
+    except Exception as exc:
+        logger.warning(
+            "session_post_task: Retry-Marker fehlgeschlagen (session=%s): %s",
+            session_id,
+            type(exc).__name__,
+        )
+        return False
+
 
 def _ensure_user_notified(session_id: str, tenant_id: str, result: dict) -> dict:
     """Löst die Zusage aus CLOSE_MESSAGE ein — oder nimmt sie zurück.
@@ -221,9 +345,13 @@ def _ensure_user_notified(session_id: str, tenant_id: str, result: dict) -> dict
         # Ab hier ist eine Zusage offen. status == "ok" heißt: der Post
         # existiert (er scheiterte erst am Versand) — dann darf der Text ihn
         # nicht totschweigen. Alles andere heißt: es gibt keinen Post.
-        text_msg = (
-            _FALLBACK_ENTWURF_LIEGT_BEREIT if result.get("status") == "ok" else _FALLBACK_KEIN_POST
-        )
+        #
+        # Seit der Louis-Meldung 18.08.2026 entscheidet `_rueckfall_text` auch,
+        # OB ein Wiederholen ueberhaupt etwas bringen kann. Nur dann wird es
+        # angeboten — und nur dann wird der Retry-Marker gesetzt, der die
+        # Antwort des Nutzers spaeter wieder einfangen kann.
+        text_msg, retry_angeboten = _rueckfall_text(result)
+        result["retry_angeboten"] = retry_angeboten
 
         chat_id = _resolve_chat_id(tenant_id)
         if chat_id is None:
@@ -242,6 +370,11 @@ def _ensure_user_notified(session_id: str, tenant_id: str, result: dict) -> dict
 
         sent = _send_telegram_message(chat_id, text_msg, tenant_id=tenant_id)
         result["user_notified"] = bool(sent)
+        # Der Marker gehoert NACH den Send: eine Frage, die nie ankam, darf
+        # keinen Wartezustand hinterlassen — sonst verschluckt der Bot die
+        # naechste echte Nachricht als vermeintliche Antwort darauf.
+        if sent and retry_angeboten:
+            _merke_offenes_retry_angebot(session_id, tenant_id)
         if not sent:
             logger.error(
                 "session_post_task: Rückfall-Nachricht nicht zustellbar "
@@ -609,8 +742,8 @@ def _generate_post(session_id: str, tenant_id: str) -> dict:
             sent_kind = "review_notice"
         else:
             # W6: KI-Transparenz-Hinweis (EU-AI-Act Art. 50) abtrennbar unter den Post.
-            from services.ai_disclosure import append_ai_notice
             from api.telegram import _draft_action_keyboard
+            from services.ai_disclosure import append_ai_notice
 
             _post_out = append_ai_notice(final_post[:_TELEGRAM_MAX_CHARS])
             _markup = _draft_action_keyboard(content_id) if content_id else None

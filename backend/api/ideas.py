@@ -27,6 +27,7 @@ from models.content_idea import ContentIdea
 from models.entrepreneur_answer import EntrepreneurAnswer
 from models.source import Source
 from models.tenant import Tenant
+from services.analysis_normalize import join_analysis_list
 from services.brand_voice import format_voice_for_prompt
 from services.content_ideation import run_ideation_pipeline
 from services.rls import set_rls_tenant
@@ -1090,7 +1091,7 @@ Beschreibung: {idea.description}
 HINTERGRUND (NICHT direkt zitieren, als Inspiration nutzen):
 Video: {title}
 Summary: {analysis.get('summary', '')}
-Kernaussagen: {', '.join(analysis.get('key_points', [])[:4])}
+Kernaussagen: {join_analysis_list(analysis, 'key_points', limit=4)}
 {voice_context}
 
 Formatierungsregeln:
@@ -1213,7 +1214,7 @@ Angle: {idea.angle}
 Hook: {idea.hook_suggestion or ''}
 Beschreibung: {idea.description}
 
-HINTERGRUND: {analysis.get('summary', '')} | {', '.join(analysis.get('key_points', [])[:3])}
+HINTERGRUND: {analysis.get('summary', '')} | {join_analysis_list(analysis, 'key_points', limit=3)}
 {voice_ctx}
 
 Deutsch, 150-250 Wörter, starker Hook, kurze Absätze, 2-4 Emojis, Frage am Ende.

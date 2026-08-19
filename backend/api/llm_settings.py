@@ -594,6 +594,7 @@ async def run_benchmark(
                 PURPOSE_MODEL_MAP.get("analysis", "gemini-flash"), "gemini-flash"
             )
             if analysis:
+                from services.analysis_normalize import join_analysis_list
                 from services.quality_scorer import score_analysis
 
                 scores = score_analysis(analysis)
@@ -603,7 +604,7 @@ async def run_benchmark(
                     f"Titel: {analysis.get('topic_title', '—')}\n"
                     f"Summary: {str(analysis.get('summary', ''))[:200]}\n"
                     f"Key Points: {len(analysis.get('key_points', []))} Punkte\n"
-                    f"Tags: {', '.join(analysis.get('tags', [])[:5])}"
+                    f"Tags: {join_analysis_list(analysis, 'tags', limit=5)}"
                 )
             else:
                 error = "Keine Analyse zurückgegeben"

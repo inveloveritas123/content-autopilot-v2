@@ -1843,7 +1843,16 @@ def dispatch_inbound_update(update: dict, tenant_id: str) -> None:
         from tasks.telegram_task import MIN_TEXT_LEN, hat_aktives_gespraech
 
         if len(stripped) < MIN_TEXT_LEN:
-            if not hat_aktives_gespraech(tenant_id):
+            # Ein offenes Retry-Angebot ("Magst du es gleich nochmal
+            # versuchen?") zaehlt wie ein aktives Gespraech: die Antwort darauf
+            # ist kurz und MUSS durch. Ohne diese zweite Bedingung faengt das
+            # Gate hier das „Ja" ab, bevor `_process_text` es je sieht —
+            # Fehler 2 der Louis-Meldung vom 18.08.2026.
+            from tasks.telegram_task import _lade_offenes_retry_angebot
+
+            if not hat_aktives_gespraech(tenant_id) and (
+                _lade_offenes_retry_angebot(tenant_id) is None
+            ):
                 _send_telegram_message(
                     chat_id_for_dispatch,
                     "💬 Zu kurz fürs Gedächtnis. Schreib einfach einen ganzen Satz!",

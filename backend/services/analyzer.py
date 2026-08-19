@@ -16,6 +16,12 @@ ANALYSIS_SYSTEM_PROMPT = """Du bist ein Content-Analyst. Analysiere den folgende
 9. controversial_takes: 2-3 kontroverse Positionen die man aus dem Inhalt ableiten koennte
 10. target_audience: Fuer wen ist das Thema besonders relevant? (2-3 Zielgruppen)
 
+WICHTIG — Format der Listen: key_points, tags, content_angles, hashtags,
+controversial_takes und target_audience sind Arrays aus EINFACHEN STRINGS,
+niemals aus Objekten.
+  Richtig: "key_points": ["Erste Kernaussage", "Zweite Kernaussage"]
+  Falsch:  "key_points": [{"point": "Erste Kernaussage"}]
+
 Antworte NUR als JSON. Kein Markdown, keine Erklaerung."""
 
 # Source-Type-spezifische Kontext-Hinweise für bessere Analyse
@@ -72,6 +78,33 @@ async def analyze_transcript(
                     result[key] = ""
                 else:
                     result[key] = []
+
+        # Listenfelder auf reine String-Listen normalisieren.
+        #
+        # ⛔ Die Pruefung oben sichert nur die ANWESENHEIT der Keys, nie den Typ
+        # ihrer ELEMENTE. Der Prompt verlangt "als Array" — eine Liste von
+        # Objekten (`[{"point": "..."}]`) erfuellt das und ist damit eine
+        # zulaessige Antwort. Verbraucher wie `content_generator` setzen aber
+        # Strings voraus und rufen `", ".join(...)` darauf auf.
+        #
+        # Ohne diese Zeilen wandert die unpassende Form als `source_items.
+        # analysis` (JSONB) in die DB und toetet JEDEN spaeteren Lauf mit
+        # `TypeError: sequence item 0: expected str instance, dict found` —
+        # im Live-Log von Louis' Container 1722-mal in 7 Tagen, immer identisch.
+        # Ein Retry half nie, weil die unbrauchbare Analyse persistent war.
+        # Repariert wird deshalb der Vertrag, nicht das Modell.
+        from services.analysis_normalize import normalize_text_list
+
+        for _feld in (
+            "key_points",
+            "content_angles",
+            "tags",
+            "hashtags",
+            "controversial_takes",
+            "target_audience",
+        ):
+            if _feld in result:
+                result[_feld] = normalize_text_list(result[_feld], feld=_feld)
 
         # Ensure all optional fields exist
         if "hashtags" not in result:

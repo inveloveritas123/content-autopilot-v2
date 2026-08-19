@@ -20,6 +20,7 @@ import asyncio
 import logging
 import os
 import types
+import uuid
 
 import httpx
 from celery.exceptions import SoftTimeLimitExceeded
@@ -158,6 +159,14 @@ def _load_active_session(tenant_id: str) -> object | None:
 #: vorgesehene Bestaetigung eines Abschluss-Angebots.
 MIN_TEXT_LEN = 10
 
+#: Schluessel des Retry-Markers in `bot_session.messages[-1]`.
+#: ⛔ Muss mit `tasks.session_post_task.RETRY_MARKER` identisch sein — der eine
+#: Task schreibt ihn, dieser liest ihn. Hier als Literal statt als Import, weil
+#: `session_post_task` seinerseits `api.telegram` lazy importiert und ein
+#: Modul-Import an dieser Stelle einen Zyklus im Worker aufzoege. Der Gleichlauf
+#: ist per Test festgenagelt (test_session_post_retry.py).
+_RETRY_MARKER = "post_retry_offen"
+
 
 def hat_aktives_gespraech(tenant_id: str) -> bool:
     """True, wenn gerade ein Bot-Gespraech laeuft.
@@ -176,6 +185,172 @@ def hat_aktives_gespraech(tenant_id: str) -> bool:
     except Exception as exc:
         logger.warning("Kurztext-Gate: Session-Abfrage fehlgeschlagen: %s", type(exc).__name__)
         return False
+
+
+def versuche_post_retry(tenant_id: str, text_content: str) -> dict | None:
+    """Faengt die Antwort auf „Magst du es gleich nochmal versuchen?" ab.
+
+    Gibt None zurueck, wenn gar kein Angebot offen ist — dann laeuft alles wie
+    bisher weiter. Sonst ist die Frage hiermit beantwortet und der Marker weg.
+
+    ⛔ Diese Weiche liegt VOR der Laengenpruefung. Genau daran ist der Dialog am
+    18.08.2026 gescheitert: „Ja" ist drei Zeichen lang, MIN_TEXT_LEN ist 10.
+
+    Kein LLM — `_classify_confirmation` ist dieselbe deterministische
+    Ja/Nein-Erkennung, die p08 nach einem Abschluss-Angebot benutzt. Der
+    Moeglichkeitsraum ist drei Werte gross; raten waere hier falsch.
+    """
+    session_id = _lade_offenes_retry_angebot(tenant_id)
+    if session_id is None:
+        return None
+
+    # ⛔ Fail-open wie der ganze Eingangspfad: schlaegt der Lazy-Import fehl,
+    # darf das NICHT `_process_text` mitreissen — sonst stirbt an dieser Stelle
+    # JEDE kurze Nachricht statt nur der Retry-Sonderfall auszufallen. Ohne
+    # diesen Schutz waere aus einem stummen Retry ein lauter Totalausfall des
+    # Kurztext-Pfades geworden.
+    try:
+        from services.p08_service import _classify_confirmation
+
+        antwort = _classify_confirmation(text_content)
+    except Exception as exc:
+        logger.warning("Retry-Klassifikation nicht moeglich: %s", type(exc).__name__)
+        return None
+
+    if antwort == "weiterer_inhalt":
+        # Der Nutzer antwortet nicht mit ja/nein, sondern redet weiter. Dann ist
+        # das Angebot hinfaellig — aber die Nachricht ist echter Inhalt und darf
+        # NICHT hier verschwinden. Marker weg, Rueckgabe None = normaler Pfad.
+        _loesche_retry_angebot(tenant_id, session_id)
+        return None
+
+    # Ab hier ist die Frage beantwortet — in beiden Richtungen.
+    _loesche_retry_angebot(tenant_id, session_id)
+
+    if antwort == "ablehnung":
+        _antworte(
+            tenant_id,
+            "Alles klar, ich lass es. Wenn du spaeter magst, erzaehl mir "
+            "einfach worum es gehen soll — dann bauen wir den Post neu.",
+        )
+        return {"status": "ok", "reason": "post_retry_abgelehnt", "session_id": session_id}
+
+    # zustimmung → der Retry, den der Bot versprochen hat. Die Session bleibt
+    # `closed`; das Idempotenz-Gate in _generate_post verhindert einen zweiten
+    # Post, falls der erste Lauf doch noch durchkam.
+    try:
+        from tasks.session_post_task import generate_post_from_session
+
+        generate_post_from_session.apply_async(args=[session_id, tenant_id])
+    except Exception as exc:
+        logger.error("post retry enqueue fehlgeschlagen: %s", type(exc).__name__)
+        _antworte(
+            tenant_id,
+            "Ich kriege den zweiten Versuch gerade nicht angestossen. "
+            "Sag Robert bitte kurz Bescheid.",
+        )
+        return {"status": "error", "reason": "post_retry_enqueue_failed"}
+
+    _antworte(tenant_id, "Alles klar — ich versuch's nochmal. Gleich hier im Chat.")
+    return {"status": "ok", "reason": "post_retry_gestartet", "session_id": session_id}
+
+
+def _antworte(tenant_id: str, text_msg: str) -> None:
+    """Kurze Bot-Antwort in den Tenant-Chat. Fail-open (wirft nie)."""
+    try:
+        from api.telegram import _send_telegram_message
+
+        chat_id = _resolve_chat_id(tenant_id)
+        if chat_id is None:
+            logger.error("Retry-Antwort: kein aktiver Chat-Link (tenant=%s)", tenant_id)
+            return
+        _send_telegram_message(chat_id, text_msg, tenant_id=tenant_id)
+    except Exception as exc:
+        logger.error("Retry-Antwort nicht zustellbar: %s", type(exc).__name__)
+
+
+def _lade_offenes_retry_angebot(tenant_id: str) -> str | None:
+    """session_id, wenn der Bot zuletzt einen Post-Retry ANGEBOTEN hat.
+
+    Gegenstueck zu `session_post_task._merke_offenes_retry_angebot`.
+
+    Warum das noetig ist (Louis-Meldung 18.08.2026, Fehler 2): Scheitert die
+    Post-Generierung, fragt der Bot „Magst du es gleich nochmal versuchen?".
+    Die Session ist da aber schon `closed` — `_load_active_session` filtert auf
+    `status = 'active'` und findet sie nicht mehr. Damit war `hat_aktives_
+    gespraech` False und das „Ja" des Nutzers fiel in die Laengenpruefung
+    (MIN_TEXT_LEN = 10): „Zu kurz fuers Gedaechtnis. Schreib einfach einen
+    ganzen Satz!" — eine Belehrung fuer eine vollkommen richtige Antwort.
+
+    Bewusst NUR `closed` (nicht `expired`): Ein abgebrochenes Gespraech hat der
+    Nutzer selbst beendet, dort haben wir nichts angeboten.
+
+    Fail-open zu None wie die anderen Weichen: bei einem DB-Fehler verhaelt es
+    sich wie vor diesem Fix.
+    """
+    try:
+        with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
+            row = db.execute(
+                text(
+                    "SELECT id FROM bot_session "
+                    "WHERE tenant_id = :tid AND status = 'closed' "
+                    "      AND jsonb_array_length(messages) > 0 "
+                    "      AND (messages -> (jsonb_array_length(messages) - 1) "
+                    "           ->> :marker) = 'true' "
+                    "ORDER BY updated_at DESC LIMIT 1"
+                ),
+                {"tid": tenant_id, "marker": _RETRY_MARKER},
+            ).fetchone()
+        if row is None:
+            return None
+        session_id = row[0]
+        # ⛔ Nur eine plausible Kennung zaehlt. `bot_session.id` ist eine UUID;
+        # alles andere (leer, None, ein Objekt ohne sinnvolle Textform) ist
+        # keine Session, sondern ein Artefakt — und wuerde hier eine offene
+        # Rueckfrage vortaeuschen, die es nie gab. Der Bot wuerde dann eine
+        # voellig normale kurze Nachricht als „Ja, nochmal versuchen" deuten.
+        if not isinstance(session_id, (str, uuid.UUID)):
+            logger.warning(
+                "Retry-Angebot: unerwarteter id-Typ %s — ignoriert",
+                type(session_id).__name__,
+            )
+            return None
+        session_id = str(session_id).strip()
+        try:
+            uuid.UUID(session_id)
+        except (ValueError, AttributeError, TypeError):
+            logger.warning("Retry-Angebot: id ist keine UUID — ignoriert")
+            return None
+        return session_id
+    except Exception as exc:
+        logger.warning("Retry-Angebot-Abfrage fehlgeschlagen: %s", type(exc).__name__)
+        return None
+
+
+def _loesche_retry_angebot(tenant_id: str, session_id: str) -> None:
+    """Nimmt den Marker zurueck — die Frage ist beantwortet.
+
+    ⛔ Muss bei JEDER Antwort passieren, auch bei „nein" und auch bei einer
+    inhaltlichen Antwort. Ein stehengebliebener Marker wuerde die naechste
+    kurze Nachricht faelschlich als Retry-Zusage deuten.
+    """
+    try:
+        with sync_session_factory() as db:
+            set_rls_tenant_sync(db, tenant_id)
+            db.execute(
+                text(
+                    "UPDATE bot_session SET messages = messages #- "
+                    "  ARRAY[(jsonb_array_length(messages) - 1)::text, :marker], "
+                    "  updated_at = NOW() "
+                    "WHERE id = CAST(:sid AS uuid) AND tenant_id = :tid "
+                    "      AND jsonb_array_length(messages) > 0"
+                ),
+                {"sid": session_id, "tid": tenant_id, "marker": _RETRY_MARKER},
+            )
+            db.commit()
+    except Exception as exc:
+        logger.warning("Retry-Marker-Loeschung fehlgeschlagen: %s", type(exc).__name__)
 
 
 def _is_pending_variant_choice(tenant_id: str, text_content: str) -> bool:
@@ -1618,6 +1793,13 @@ def _process_text(log_id: str, tenant_id: str, payload: dict) -> dict:
         text_content = ""
     if not text_content:
         return {"status": "skipped", "reason": "empty_text"}
+    # Antwort auf ein offenes Retry-Angebot? Diese Weiche liegt VOR der
+    # Laengenpruefung — „Ja" ist drei Zeichen und waere sonst weg (Fehler 2 der
+    # Louis-Meldung 18.08.2026). Gibt None zurueck, wenn nichts offen ist.
+    _retry = versuche_post_retry(tenant_id, text_content)
+    if _retry is not None:
+        return _retry
+
     if len(text_content) < MIN_TEXT_LEN and not hat_aktives_gespraech(tenant_id):
         # Zweites Kurztext-Gate. Seit 04.08.2026 an dieselbe Session-Bedingung
         # gekoppelt wie das erste in api/telegram.py — „ja" auf ein

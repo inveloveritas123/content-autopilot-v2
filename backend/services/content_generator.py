@@ -11,6 +11,7 @@ Der Dialog-Mode ist der Kern des Kunden-Konzepts:
 
 import logging
 
+from services.analysis_normalize import join_analysis_list
 from services.brand_voice import format_voice_for_prompt
 from services.llm import BudgetExceededError, llm_service
 
@@ -79,7 +80,7 @@ ANTWORTEN DES UNTERNEHMERS:
 
 HINTERGRUND (aus Video-Analyse, NICHT im Post erwaehnen):
 {analysis.get('summary', '')}
-Kernaussagen: {', '.join(analysis.get('key_points', [])[:3])}
+Kernaussagen: {join_analysis_list(analysis, 'key_points', limit=3)}
 {voice_context}
 
 Trenne die {variants} Varianten mit "---VARIANTE---".
@@ -123,7 +124,7 @@ async def generate_linkedin_post(
 
 Video-Titel: {title}
 Summary: {analysis.get('summary', '')}
-Kernaussagen: {', '.join(analysis.get('key_points', [])[:5])}
+Kernaussagen: {join_analysis_list(analysis, 'key_points', limit=5)}
 
 Tonalitaet: {tone}
 Laenge: 150-250 Woerter
@@ -164,8 +165,8 @@ async def generate_blog_draft(
 
 Video-Titel: {title}
 Summary: {analysis.get('summary', '')}
-Kernaussagen: {', '.join(analysis.get('key_points', []))}
-Content-Winkel: {', '.join(analysis.get('content_angles', [])[:2])}
+Kernaussagen: {join_analysis_list(analysis, 'key_points')}
+Content-Winkel: {join_analysis_list(analysis, 'content_angles', limit=2)}
 
 Transkript-Auszug (erste 3000 Zeichen):
 {transcript_text[:3000]}
