@@ -1,3 +1,4 @@
+# AUDITED-PARTIAL-2026-08-19 (louis-telegram-zwei-fehler): die drei join()-Prompt-Pfade geprueft und entschaerft; Pipeline-Rest nicht beurteilt.
 """
 Content Ideation Service — Kern des dialogischen Workflows.
 

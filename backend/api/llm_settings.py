@@ -1,3 +1,4 @@
+# AUDITED-PARTIAL-2026-08-19 (louis-telegram-zwei-fehler): der join()-Pfad in der Analyse-Vorschau geprueft; Rest der Datei nicht beurteilt.
 """LLM Provider Settings — CRUD + Test."""
 
 import logging

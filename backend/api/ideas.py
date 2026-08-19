@@ -1,3 +1,4 @@
+# AUDITED-PARTIAL-2026-08-19 (louis-telegram-zwei-fehler): zwei join()-Prompt-Pfade + _run_p12_p12b_pipeline gelesen; die uebrigen ~1500 Zeilen nicht beurteilt.
 """
 API-Endpoints fuer Content-Ideen und den dialogischen Workflow.
 

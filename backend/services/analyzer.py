@@ -1,3 +1,4 @@
+# AUDITED-2026-08-19 (louis-telegram-zwei-fehler): Tiefen-Audit, Datei vollstaendig gelesen; Validierungsluecke bei Listen-Elementtypen gefunden und geschlossen.
 import logging
 
 from services.llm import BudgetExceededError, llm_service

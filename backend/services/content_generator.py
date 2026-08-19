@@ -1,3 +1,4 @@
+# AUDITED-PARTIAL-2026-08-19 (louis-telegram-zwei-fehler): alle vier join()-Prompt-Pfade geprueft und entschaerft; LLM-Aufrufe/Parser nicht beurteilt.
 """
 Content Generator — Erstellt LinkedIn-Posts, Blog-Drafts und Newsletter-Snippets.
 
