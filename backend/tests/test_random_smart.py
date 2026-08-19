@@ -202,10 +202,14 @@ class TestRandomSmartConfig:
 
         pause_random_smart("tenant-1", days=90)
 
-        ctx.execute.assert_called_once()
+        # set_rls_tenant_sync (Migration 058, FORCE ROW LEVEL SECURITY auf
+        # tenant_bot_config) fuehrt VOR dem fachlichen UPDATE einen eigenen
+        # execute()-Call aus (SELECT set_config(...)) — zwei Calls sind also
+        # das richtige Verhalten, nicht ein Regress.
+        assert ctx.execute.call_count == 2
         ctx.commit.assert_called_once()
 
-        params = ctx.execute.call_args[0][1]
+        params = ctx.execute.call_args_list[-1][0][1]
         assert "pu" in params
         pu = params["pu"]
         expected_min = datetime.now(UTC) + timedelta(days=89)
@@ -221,10 +225,12 @@ class TestRandomSmartConfig:
 
         resume_random_smart("tenant-1")
 
-        ctx.execute.assert_called_once()
+        # set_rls_tenant_sync fuehrt vor dem fachlichen UPDATE einen eigenen
+        # execute()-Call aus — zwei Calls sind das richtige Verhalten.
+        assert ctx.execute.call_count == 2
         ctx.commit.assert_called_once()
 
-        sql_str = str(ctx.execute.call_args[0][0])
+        sql_str = str(ctx.execute.call_args_list[-1][0][0])
         assert "NULL" in sql_str or "paused_until" in sql_str
 
     @patch("services.random_smart_config.sync_session_factory")
@@ -237,10 +243,12 @@ class TestRandomSmartConfig:
 
         set_schedule_2_weeks("tenant-1")
 
-        ctx.execute.assert_called_once()
+        # set_rls_tenant_sync fuehrt vor dem fachlichen UPDATE einen eigenen
+        # execute()-Call aus — zwei Calls sind das richtige Verhalten.
+        assert ctx.execute.call_count == 2
         ctx.commit.assert_called_once()
 
-        params = ctx.execute.call_args[0][1]
+        params = ctx.execute.call_args_list[-1][0][1]
         assert params.get("cron") == "0 9 1,15 * *"
 
     @patch("services.random_smart_config.sync_session_factory")
@@ -342,3 +350,26 @@ class TestSendOpeningQuestion:
         from tasks.random_smart_scheduler import _send_opening_question
 
         _send_opening_question("tenant-db-err", "Frage?")  # muss schweigen
+
+    @patch("tasks.random_smart_scheduler.set_rls_tenant_sync")
+    @patch("tasks.random_smart_scheduler.sync_session_factory")
+    def test_sets_rls_tenant_context_before_lookup(self, mock_factory, mock_set_rls):
+        """Regression ed90abf: tenant_telegram_link traegt FORCE ROW LEVEL SECURITY
+        (Migration 058). Fehlt set_rls_tenant_sync vor dem SELECT, liefert die
+        Query still 0 Zeilen statt eines Fehlers — die proaktive Frage wuerde nie
+        gestellt, ohne dass etwas rot wird (79 Nachrichten rein, 0 raus, 2026-08-17).
+        Dieser Test waere mit dem alten Code (Setter-Aufruf fehlt) GRUEN geblieben,
+        weil die gemockte Session immer den praeparierten Wert liefert — er prueft
+        deshalb den Aufruf selbst, nicht nur das Endergebnis."""
+        mock_factory.return_value = self._make_chat_db(chat_id_val=99001)
+
+        mock_send = MagicMock(return_value=True)
+        with patch.dict(
+            sys.modules,
+            {"api.telegram": MagicMock(_send_telegram_message=mock_send)},
+        ):
+            from tasks.random_smart_scheduler import _send_opening_question
+
+            _send_opening_question("tenant-x", "Frage?")
+
+        mock_set_rls.assert_called_once_with(mock_factory.return_value, "tenant-x")

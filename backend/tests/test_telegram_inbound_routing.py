@@ -726,3 +726,56 @@ class TestPersistMappingFix:
         assert written_vals == [
             "voice_feedback"
         ], f"Erwartet 'voice_feedback', bekommen {written_vals}"
+
+
+# ---------------------------------------------------------------------------
+# Regression ed90abf — _resolve_chat_id muss den RLS-Kontext setzen
+# ---------------------------------------------------------------------------
+
+
+class TestResolveChatIdSetsRlsContext:
+    """Regression ed90abf (2026-08-17): tenant_telegram_link traegt FORCE ROW
+    LEVEL SECURITY (Migration 058). Fehlt set_rls_tenant_sync vor dem SELECT,
+    liefert die Query still 0 Zeilen statt eines Fehlers -> _resolve_chat_id
+    gibt fail-open None zurueck, von "kein Chat verknuepft" nicht unterscheidbar.
+    Gemessen ueber alle Tenants: 79 eingehende Nachrichten, 0 ausgehende.
+
+    Die anderen Tests in dieser Datei mocken _resolve_chat_id komplett weg
+    (siehe TestFollowupMessageSend) und pruefen daher nicht, ob die Funktion
+    selbst den Kontext setzt. Dieser Test ruft _resolve_chat_id ungemockt auf
+    und waere mit dem alten Code (Setter-Aufruf fehlt) GRUEN geblieben, wenn
+    er nur das Rueckgabeergebnis pruefte - deshalb assertiert er den Aufruf
+    selbst."""
+
+    def _make_link_db(self, chat_id_val):
+        row = MagicMock()
+        row.__getitem__ = lambda self, i: chat_id_val
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        ctx.execute.return_value.fetchone.return_value = (
+            row if chat_id_val is not None else None
+        )
+        return ctx
+
+    def test_sets_rls_tenant_context_before_lookup(self):
+        db_ctx = self._make_link_db(chat_id_val=441152287)
+
+        with (
+            patch.object(tt, "sync_session_factory", return_value=db_ctx),
+            patch.object(tt, "set_rls_tenant_sync") as mock_set_rls,
+        ):
+            result = tt._resolve_chat_id("tenant-eric")
+
+        mock_set_rls.assert_called_once_with(db_ctx, "tenant-eric")
+        assert result == 441152287
+
+    def test_fail_open_returns_none_without_raising(self):
+        """Fail-open bleibt erhalten: DB-Fehler -> None, kein Raise."""
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(side_effect=RuntimeError("DB down"))
+
+        with patch.object(tt, "sync_session_factory", return_value=ctx):
+            result = tt._resolve_chat_id("tenant-x")
+
+        assert result is None
