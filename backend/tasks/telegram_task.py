@@ -310,7 +310,7 @@ def _lade_offenes_retry_angebot(tenant_id: str) -> str | None:
         # keine Session, sondern ein Artefakt — und wuerde hier eine offene
         # Rueckfrage vortaeuschen, die es nie gab. Der Bot wuerde dann eine
         # voellig normale kurze Nachricht als „Ja, nochmal versuchen" deuten.
-        if not isinstance(session_id, (str, uuid.UUID)):
+        if not isinstance(session_id, str | uuid.UUID):
             logger.warning(
                 "Retry-Angebot: unerwarteter id-Typ %s — ignoriert",
                 type(session_id).__name__,

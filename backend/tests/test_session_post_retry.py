@@ -324,7 +324,9 @@ class TestVersuchePostRetry:
 
     def test_enqueue_fehler_laesst_den_nutzer_nicht_im_dunkeln(self):
         """Auch der Fehlerfall des Fehlerfalls sagt etwas — keine stille Sackgasse."""
-        out, _e, _l, antwort = self._run("Ja", enqueue=MagicMock(side_effect=RuntimeError("broker")))
+        out, _e, _l, antwort = self._run(
+            "Ja", enqueue=MagicMock(side_effect=RuntimeError("broker"))
+        )
         assert out["reason"] == "post_retry_enqueue_failed"
         assert antwort.call_count == 1
 

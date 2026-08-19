@@ -108,7 +108,7 @@ def normalize_text_list(value: object, *, feld: str = "") -> list[str]:
         text = value.strip()
         return [text] if text else []
 
-    if not isinstance(value, (list, tuple)):
+    if not isinstance(value, list | tuple):
         logger.warning(
             "analysis-Feld %r ist %s statt Liste — verworfen",
             feld or "?",
@@ -141,7 +141,7 @@ def normalize_text_list(value: object, *, feld: str = "") -> list[str]:
                     verworfen += 1
             continue
 
-        if isinstance(element, (int, float, bool)):
+        if isinstance(element, int | float | bool):
             ergebnis.append(str(element))
             continue
 
