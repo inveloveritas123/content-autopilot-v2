@@ -247,6 +247,23 @@ class TestBestaetigung:
             ("Ein konkretes Anwendungsbeispiel ist, dass wir …", "weiterer_inhalt"),
             ("", "weiterer_inhalt"),
             (None, "weiterer_inhalt"),
+            # ⛔ MEHRWORT-PHRASEN (Befund zubu-mehrwort-zustimmung-wirkungslos,
+            #   2026-08-19). Diese drei standen in _ZUSTIMMUNG, konnten aber
+            #   per Konstruktion nie greifen: die Pruefung lief tokenweise, und
+            #   „das"/„los"/„ihn" stehen nicht einzeln im Set. Wer auf „Soll
+            #   ich ihn schreiben?" so antwortete, bekam KEINEN Post.
+            ("mach das", "zustimmung"),
+            ("leg los", "zustimmung"),
+            ("schreib ihn", "zustimmung"),
+            # ⛔ GEGENRICHTUNG — die eigentliche Zusicherung: Ablehnung greift
+            #   VOR Zustimmung. Ohne diese Faelle wuerde ein Fix, der die
+            #   Phrase blind gegen den Gesamttext prueft, „mach das nicht" als
+            #   Freigabe lesen. Ein Post gegen den Willen des Nutzers ist der
+            #   teurere Fehler — deshalb stehen sie in derselben Tabelle.
+            ("mach das nicht", "ablehnung"),
+            ("leg los aber warte", "ablehnung"),
+            # Echter Inhalt bleibt Inhalt, auch wenn er mit einer Phrase beginnt.
+            ("schreib ihn kuerzer bitte", "weiterer_inhalt"),
         ],
     )
     def test_klassifikation(self, text, erwartet):

@@ -446,6 +446,25 @@ def _classify_confirmation(user_text: str | None) -> str:
 
     if any(t in _ABLEHNUNG for t in tokens):
         return "ablehnung"
+    # ⛔ MEHRWORT-PHRASEN GEGEN DEN GESAMTTEXT, NICHT TOKENWEISE (Befund
+    #   zubu-mehrwort-zustimmung-wirkungslos, gemeldet 2026-08-19 von der
+    #   Welle louis-telegram-zwei-fehler).
+    #   `all(t in _ZUSTIMMUNG ...)` prueft JEDES Token einzeln. Fuer
+    #   „mach das" wird ["mach", "das"] geprueft — „das" steht nicht im Set,
+    #   also faellt es durch. Die Mehrwort-Eintraege („mach das", „leg los",
+    #   „schreib ihn") konnten per Konstruktion NIE greifen, obwohl jemand sie
+    #   ausdruecklich in die Liste geschrieben hat.
+    #   ⛔ WIRKUNG IM BETRIEB, nicht theoretisch: Wer auf „Soll ich ihn
+    #   schreiben?" mit „mach das" antwortet, bekommt KEINEN Post — die
+    #   Antwort wandert als weiterer Gespraechsinhalt ins Interview und das
+    #   Gespraech haengt am Angebot fest. Dieselbe Enttaeuschung wie beim
+    #   „Ja"-Fehler, nur eine Formulierung weiter.
+    #   ⛔ REIHENFOLGE IST TEIL DES FIXES: erst Ablehnung (oben), dann hier.
+    #   Sonst wuerde „mach das nicht" als Zustimmung durchgehen — „nicht"
+    #   steht in _ABLEHNUNG und muss zuerst greifen (Docstring: „damit
+    #   'ja, aber warte' nie als Freigabe durchgeht").
+    if " ".join(tokens) in _ZUSTIMMUNG:
+        return "zustimmung"
     if all(t in _ZUSTIMMUNG for t in tokens):
         return "zustimmung"
     return "weiterer_inhalt"

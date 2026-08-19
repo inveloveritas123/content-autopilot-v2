@@ -275,9 +275,11 @@ class TestVersuchePostRetry:
         „schreib ihn" — greifen deshalb NIE. Nachgemessen am echten Code:
             _classify_confirmation("mach")     -> "zustimmung"
             _classify_confirmation("mach das") -> "weiterer_inhalt"
-        Das ist ein Vorbefund im Bestand (an den Hub gemeldet 19.08.2026), NICHT
-        Gegenstand dieser Welle. Dieser Test bildet das IST ab, damit er ehrlich
-        bleibt; wird der Vorbefund gefixt, gehoeren die Phrasen hier ergaenzt.
+        ⛔ NACHGEZOGEN 2026-08-19: der Vorbefund ist GEFIXT. Mehrwort-Phrasen
+        werden jetzt gegen den normalisierten Gesamttext geprueft; die Faelle
+        stehen in `test_mehrwort_zustimmung_startet_den_retry` (unten) und in
+        der Tabelle von test_p08_gespraech.py. Dieser Test bleibt bewusst
+        einwortig — er sichert die kurzen Formen ab, nicht die Phrasen.
         """
         for wort in ("ja", "JA", "klar", "gerne", "ok", "mach", "👍"):
             out, enqueue, _l, _a = self._run(wort)
@@ -285,15 +287,28 @@ class TestVersuchePostRetry:
             assert out["reason"] == "post_retry_gestartet", wort
             enqueue.assert_called_once()
 
-    def test_mehrwort_zustimmung_greift_heute_nicht(self):
-        """Friert den gemeldeten Vorbefund als bekanntes IST ein.
+    def test_mehrwort_zustimmung_startet_den_retry(self):
+        """UMGEDREHT am 2026-08-19 — der Vorbefund ist gefixt.
 
-        Kein Wunschverhalten — eine Messung. Faellt dieser Test eines Tages,
-        wurde `_classify_confirmation` repariert; dann gehoert er umgedreht.
+        Dieser Test hiess bis eben `test_mehrwort_zustimmung_greift_heute_nicht`
+        und fror das kaputte IST ein, mit der ausdruecklichen Anweisung im
+        Docstring: „Faellt dieser Test eines Tages, wurde
+        `_classify_confirmation` repariert; dann gehoert er umgedreht."
+        Genau das ist eingetreten.
+
+        ⛔ DIESE ANWEISUNG WAR DER WERTVOLLE TEIL. Ohne sie haette der rote
+        Test nach dem Fix wie ein Regress ausgesehen — und der naechste haette
+        den FIX zurueckgenommen statt den Test. Wer ein bekanntes
+        Fehlverhalten einfriert, schreibt die Umdreh-Bedingung dazu.
+
+        Der Fix prueft Mehrwort-Phrasen gegen den normalisierten Gesamttext,
+        NACH der Ablehnungspruefung (services/p08_service.py). „mach das nicht"
+        bleibt daher Ablehnung.
         """
         out, enqueue, _l, _a = self._run("mach das")
-        assert out is None, "Vorbefund behoben? Dann diesen Test umdrehen."
-        enqueue.assert_not_called()
+        assert out is not None, "'mach das' muss den Retry starten"
+        assert out["reason"] == "post_retry_gestartet"
+        enqueue.assert_called_once()
 
     def test_nein_startet_nichts_und_antwortet_freundlich(self):
         out, enqueue, loesch, antwort = self._run("nein")
