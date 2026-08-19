@@ -1,3 +1,4 @@
+# AUDITED-2026-08-19 (zubu-ci-gruen-machen): Tiefen-Audit, Datei vollstaendig gelesen.
 """Tests fuer P08 Conversation Service (Issue #15, #65).
 
 Umgestellt auf call_pipeline_llm-Seam (Issue #15).

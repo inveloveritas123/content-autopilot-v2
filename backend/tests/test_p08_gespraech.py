@@ -1,3 +1,4 @@
+# AUDITED-2026-08-19 (zubu-ci-gruen-machen): Tiefen-Audit, Datei vollstaendig gelesen.
 """Der Telegram-Dialog als Gespräch — Wächter für den Neuentwurf vom 04.08.2026.
 
 Prüft die drei Ausgänge (ASK / OFFER / CLOSED), die Bestätigung nach einem

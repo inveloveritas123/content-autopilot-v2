@@ -1,3 +1,4 @@
+# AUDITED-2026-08-19 (zubu-ci-gruen-machen): Tiefen-Audit, Datei vollstaendig gelesen.
 """Tests für Idempotenz (#18), routed_to-Persistenz (#56) und targeted-Filter (#57).
 
 Abdeckung:

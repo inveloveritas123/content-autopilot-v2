@@ -1,3 +1,4 @@
+# AUDITED-2026-08-19 (zubu-ci-gruen-machen): Tiefen-Audit, Datei vollstaendig gelesen.
 """Tests für #36 P13 — eigene Idee → 3 Aufhänger → Wahl → p08_opener (S3+S4).
 
 Drei Ebenen:

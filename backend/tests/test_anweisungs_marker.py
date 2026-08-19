@@ -1,3 +1,4 @@
+# AUDITED-2026-08-19 (zubu-ci-gruen-machen): Tiefen-Audit, Datei vollstaendig gelesen.
 """Der Anweisungs-Marker und sein Auswerter — dieselbe Wahrheit auf beiden Seiten.
 
 Vorgeschichte: der Marker `metadata.intent = "start_instruction"` wurde am 05.08.2026

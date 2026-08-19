@@ -1,3 +1,4 @@
+# AUDITED-2026-08-19 (zubu-ci-gruen-machen): Tiefen-Audit, Datei vollstaendig gelesen.
 """memory_chunks respektiert seinen eigenen Soft-Delete.
 
 Muster von test_anweisungs_marker.py uebernommen: `_FakeDb`/`_FakeResult` fangen das

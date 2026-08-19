@@ -1,3 +1,4 @@
+# AUDITED-2026-08-19 (zubu-ci-gruen-machen): Tiefen-Audit, Datei vollstaendig gelesen.
 """Tests für die Inbound-Intent-Routing-Verdrahtung in tasks/telegram_task.py (Issue #16).
 
 Wirft den Intent-Routing-Flow (extract_intent_features → route_telegram_intent →

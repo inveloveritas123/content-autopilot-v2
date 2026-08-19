@@ -1,3 +1,4 @@
+# AUDITED-2026-08-19 (zubu-ci-gruen-machen): Tiefen-Audit, Datei vollstaendig gelesen.
 """Verhaltensnachweis: monitor_all_sources selektiert wirklich aktive Quellen.
 
 Der statische Waechter in test_query_filter_invariants.py verbietet das Muster.

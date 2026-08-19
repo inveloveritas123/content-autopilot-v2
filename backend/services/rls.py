@@ -1,3 +1,4 @@
+# AUDITED-2026-08-19 (zubu-ci-gruen-machen): Tiefen-Audit, Datei vollstaendig gelesen.
 """Row-Level-Security (RLS) — Tenant-Scoping auf DB-Session-Ebene (W2, 2026-07-21).
 
 Enterprise-Multi-Tenant-Isolation: Statt sich darauf zu verlassen, dass JEDE Query
