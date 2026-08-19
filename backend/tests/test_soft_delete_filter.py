@@ -164,8 +164,12 @@ class TestP06FiltertGeloeschteChunks:
         ):
             run_for_tenant("tenant-1")
 
-        erstes_sql = str(ctx.execute.call_args_list[0].args[0])
-        assert SQL_NICHT_GELOESCHT in erstes_sql
+        # RLS-Kontext (services/rls.py) fuegt vor der Fach-Query ein
+        # `SELECT set_config(...)` ein — Struktur pruefen (kommt sie vor?), nicht Index.
+        alle_sql = [str(c.args[0]) for c in ctx.execute.call_args_list]
+        assert any(SQL_NICHT_GELOESCHT in sql for sql in alle_sql), (
+            f"Praedikat in keiner der ausgefuehrten Queries: {alle_sql}"
+        )
 
 
 class _FakeBackfillResult:
@@ -213,8 +217,12 @@ class TestMemoryBackfillFiltertBeidePaesse:
         ):
             asyncio.run(_backfill_async(limit=10))
 
-        assert len(fake_db.queries) == 2
-        assert all(SQL_NICHT_GELOESCHT in q for q in fake_db.queries)
+        # RLS-Bypass (services/rls.py: bypass_rls_session) fuegt vor den beiden
+        # Fach-SELECTs ein `SELECT set_config(...)` ein — das ist erwarteter,
+        # gewollter Kontext (Cross-Tenant-Wartungstask), keine Fach-Query.
+        fach_queries = [q for q in fake_db.queries if "set_config" not in q]
+        assert len(fach_queries) == 2
+        assert all(SQL_NICHT_GELOESCHT in q for q in fach_queries)
 
 
 class _FakeBackfillRow:
@@ -234,21 +242,27 @@ class _FakeBackfillResultWithRows:
 
 
 class _FakeBackfillDbWithRows:
-    """Erster SELECT liefert eine Row mit tenant_id, alle weiteren Aufrufe leer.
+    """Erster FACH-SELECT liefert eine Row mit tenant_id, alle weiteren Aufrufe leer.
 
     Bildet den echten Ablauf nach: Pass 1 (embedding IS NULL) trifft eine Zeile,
-    Pass 2 (Bonus-Klassifikation) danach nichts mehr.
+    Pass 2 (Bonus-Klassifikation) danach nichts mehr. RLS-Bypass (services/rls.py:
+    bypass_rls_session) setzt VOR Pass 1 einen `SELECT set_config(...)`-Call ab —
+    der zaehlt nicht als Fach-SELECT und wird am SQL-Text erkannt, nicht am
+    Call-Index (sonst verschiebt jeder zusaetzliche RLS-Call diese Zaehlung).
     """
 
     def __init__(self, first_rows):
         self._first_rows = first_rows
-        self._call_count = 0
+        self._fach_call_count = 0
         self.queries = []
 
     async def execute(self, sql, params=None):
-        self.queries.append(str(sql))
-        self._call_count += 1
-        if self._call_count == 1:
+        sql_text = str(sql)
+        self.queries.append(sql_text)
+        if "set_config" in sql_text:
+            return _FakeBackfillResultWithRows([])
+        self._fach_call_count += 1
+        if self._fach_call_count == 1:
             return _FakeBackfillResultWithRows(self._first_rows)
         return _FakeBackfillResultWithRows([])
 
@@ -438,7 +452,11 @@ _KONSTANTE_VERWENDUNG_RE = re.compile(r"\bSQL_NICHT_GELOESCHT\b")
 _READER_FILES = {
     "api/memory.py": (5, 4),
     "api/memory_viz.py": (7, 4),
-    "services/embedding_service.py": (1, 1),
+    # 2 statt 1: _lexical_search (Hybrid-Search, Commit 5c52a11) bekam den
+    # SQL_NICHT_GELOESCHT-Filter erst mit Commit 5970f69 (DSGVO-Fix, Volltext-
+    # suche lieferte geloeschte memory_chunks zurueck) -- beide Stellen sind
+    # bereits korrekt gefiltert, kein offener Befund.
+    "services/embedding_service.py": (2, 2),
     "tasks/p06_profile_extractor_task.py": (1, 1),
     "tasks/values_backfill_task.py": (1, 1),
     "tasks/memory_backfill_task.py": (2, 2),

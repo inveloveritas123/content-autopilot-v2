@@ -69,10 +69,14 @@ class TestProcessTextRouting:
         # p08_response genau einmal mit (session_id, features, raw_transcript).
         # #19: text_content wird als raw_transcript durchgereicht (Schicht-3:
         # p08 persistiert es in der Session, nie in den Prompt).
+        # tenant_id_hint: seit dem RLS-Umbau setzt p08_response() damit den
+        # RLS-Tenant-Kontext (services/p08_service.py); _process_text reicht den
+        # bereits aufgeloesten Tenant durch (tasks/telegram_task.py).
         mock_p08.assert_called_once_with(
             "sess-1",
             {"k": "v"},
             raw_transcript="Das ist eine ausführliche Antwort auf deine Frage.",
+            tenant_id_hint="tenant-1",
         )
 
     @patch("services.p08_service.p08_response")
@@ -708,14 +712,24 @@ class TestPersistMappingFix:
         assert _l2_real._ROUTED_TO_MAP.get("voice_feedback_api") == "voice_feedback"
 
         # Außerdem: persist_routing_decision schreibt den gemappten Wert
+        # RLS-Kontext (services/rls.py): persist_routing_decision setzt einen
+        # engen Bypass fuer den PK-Read (set_rls_bypass_sync), liest tenant_id
+        # per SELECT (braucht funktionierendes .fetchone()), scoped dann auf den
+        # Tenant (set_rls_tenant_sync) und schreibt erst danach das UPDATE. Der
+        # Mock muss den SELECT-Call von den set_config-Calls unterscheiden.
         written_vals = []
+
+        def capture_execute(sql, params):
+            sql_text = str(sql)
+            if "SELECT tenant_id" in sql_text:
+                return types.SimpleNamespace(fetchone=lambda: ("tenant-abc",))
+            if "rt" in params:
+                written_vals.append(params.get("rt"))
+            return types.SimpleNamespace(fetchone=lambda: None)
+
         mock_db = MagicMock()
         mock_db.__enter__ = MagicMock(return_value=mock_db)
         mock_db.__exit__ = MagicMock(return_value=False)
-
-        def capture_execute(sql, params):
-            written_vals.append(params.get("rt"))
-
         mock_db.execute.side_effect = capture_execute
 
         decision = types.SimpleNamespace(target="voice_feedback_api")

@@ -275,10 +275,13 @@ class TestBestaetigung:
         assert result.message == CLOSE_MESSAGE
         mock_llm.assert_not_called()
 
+        # RLS-Kontext (services/rls.py) fuegt einen `set_config`-Call mit Params
+        # {"k": ..., "v": ...} ein — dict, aber ohne "status"-Key. Filter muss das
+        # explizit ausschliessen statt sich auf den dict-Typ allein zu verlassen.
         status = [
             c[0][1].get("status")
             for c in update_ctx.execute.call_args_list
-            if len(c[0]) > 1 and isinstance(c[0][1], dict)
+            if len(c[0]) > 1 and isinstance(c[0][1], dict) and "status" in c[0][1]
         ]
         assert status == ["closed"]
 

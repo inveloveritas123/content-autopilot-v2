@@ -230,8 +230,13 @@ class TestVoiceProfilScanUeberspringtAnweisungen:
         with patch("services.llm.set_llm_tenant"):
             run_for_tenant("tenant-1")
 
-        erstes_sql = str(ctx.execute.call_args_list[0].args[0])
-        assert SQL_OHNE_ANWEISUNGEN in erstes_sql
+        # RLS-Kontext (services/rls.py) fuegt vor der Fach-Query ein
+        # `SELECT set_config(...)` ein — die Fach-Query steht daher nicht mehr
+        # zwingend an Index 0. Struktur pruefen (kommt sie vor?), nicht die Marke.
+        alle_sql = [str(c.args[0]) for c in ctx.execute.call_args_list]
+        assert any(SQL_OHNE_ANWEISUNGEN in sql for sql in alle_sql), (
+            f"Praedikat in keiner der ausgefuehrten Queries: {alle_sql}"
+        )
 
 
 class TestPickerSchlaegtKeineAnweisungenVor:

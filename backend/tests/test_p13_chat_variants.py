@@ -501,7 +501,10 @@ class TestP13Task:
         ]
         db = _make_db(fetchall_val=rows)
         with patch.object(p13, "sync_session_factory", return_value=db):
-            variants = p13._load_variants("idea-order")
+            # _load_variants braucht seit dem RLS-Umbau tenant_id ZUERST, um
+            # set_rls_tenant_sync() zu setzen, bevor idea_variants gelesen wird
+            # (FORCE ROW LEVEL SECURITY seit Migration 058).
+            variants = p13._load_variants("tenant-x", "idea-order")
         assert [v["variant_type"] for v in variants] == ["hook", "story", "these"]
 
     def test_no_chat_link_returns_sent_false(self):

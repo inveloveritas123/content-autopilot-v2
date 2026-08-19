@@ -433,8 +433,13 @@ class TestTargetedModeFilter:
         with patch.object(tt, "sync_session_factory", return_value=mock_db):
             tt._load_active_session("tenant-x")
 
-        assert len(executed_queries) == 1, f"Genau eine Query erwartet: {executed_queries}"
-        query = executed_queries[0]
+        # RLS-Kontext (services/rls.py) fuegt vor der Fach-Query ein
+        # `SELECT set_config(...)` ein — "genau eine Query" war eine unzugesicherte
+        # Eigenschaft. Pruefe stattdessen, dass genau EINE Fach-Query mit den
+        # erwarteten Modus-Filtern dabei ist.
+        fach_queries = [q for q in executed_queries if "targeted" in q or "random_smart" in q]
+        assert len(fach_queries) == 1, f"Genau eine Fach-Query erwartet: {executed_queries}"
+        query = fach_queries[0]
         assert "targeted" in query, f"'targeted' nicht in Query: {query!r}"
         assert "random_smart" in query, f"'random_smart' nicht in Query: {query!r}"
 

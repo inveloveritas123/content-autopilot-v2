@@ -56,7 +56,15 @@ def _compiled_where_clause() -> str:
         monitor_task.monitor_all_sources()
 
     assert statements, "monitor_all_sources hat keine Query abgesetzt"
-    where_clause = statements[0].whereclause
+    # RLS-Kontext (services/rls.py: set_rls_bypass_sync) setzt vor der eigentlichen
+    # Query ein `SELECT set_config(...)` ab — ein reines TextClause ohne
+    # `.whereclause`-Attribut. Das echte Select-Statement suchen, nicht auf
+    # Index 0 vertrauen.
+    select_statements = [s for s in statements if hasattr(s, "whereclause")]
+    assert select_statements, (
+        f"Kein Statement mit WHERE-Klausel abgesetzt: {statements}"
+    )
+    where_clause = select_statements[0].whereclause
     assert where_clause is not None, "Die Query hat gar keine WHERE-Klausel"
     return (
         str(

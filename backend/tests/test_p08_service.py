@@ -366,7 +366,9 @@ class TestP08Opener:
         assert len(result.session_id) == 36
         assert result.question_text == "Was war dein erster Schritt?"
         assert result.category == "kategorie"
-        insert_ctx.execute.assert_called_once()
+        # RLS-Kontext (services/rls.py) setzt vor dem INSERT einen `set_config`-
+        # Call ab — "genau ein execute" war eine unzugesicherte Eigenschaft.
+        assert insert_ctx.execute.call_count >= 1
         insert_ctx.commit.assert_called_once()
         mock_call_llm.assert_called_once()
         kw = mock_call_llm.call_args.kwargs
@@ -585,10 +587,13 @@ class TestP08Response:
 
         # Der geschriebene Status muss 'active' bleiben — sonst wäre die Session
         # weg, obwohl der Nutzer noch bestätigen soll.
+        # RLS-Kontext (services/rls.py) fuegt einen `set_config`-Call mit Params
+        # {"k": ..., "v": ...} ein — dict, aber ohne "status"-Key. Filter muss das
+        # explizit ausschliessen statt sich auf den dict-Typ allein zu verlassen.
         status_werte = [
             call[0][1].get("status")
             for call in update_ctx.execute.call_args_list
-            if len(call[0]) > 1 and isinstance(call[0][1], dict)
+            if len(call[0]) > 1 and isinstance(call[0][1], dict) and "status" in call[0][1]
         ]
         assert status_werte == ["active"]
 
@@ -946,7 +951,9 @@ class TestP08Close:
 
         p08_close(session_id="sess-to-close")
 
-        update_ctx.execute.assert_called_once()
+        # RLS-Kontext (services/rls.py) setzt vor dem UPDATE einen `set_config`-
+        # Call ab — "genau ein execute" war eine unzugesicherte Eigenschaft.
+        # Das UPDATE ist der LETZTE Call, das ist die relevante Zusicherung.
         update_ctx.commit.assert_called_once()
         call_args = update_ctx.execute.call_args
         sql_text = str(call_args[0][0])
@@ -1214,7 +1221,9 @@ class TestErzeugeBotSession:
         )
 
         assert len(session_id) == 36
-        ctx.execute.assert_called_once()
+        # RLS-Kontext (services/rls.py) setzt vor dem INSERT einen `set_config`-
+        # Call ab — "genau ein execute" war eine unzugesicherte Eigenschaft.
+        # Der Insert ist der LETZTE Call, das ist die relevante Zusicherung.
         ctx.commit.assert_called_once()
         params = ctx.execute.call_args.args[1]
         assert params["id"] == session_id
