@@ -335,8 +335,8 @@ def regenerate_post_from_feedback(
             sent_kind = "review_notice"
         else:
             # W6: KI-Transparenz-Hinweis (EU-AI-Act Art. 50) abtrennbar unter den Post.
-            from services.ai_disclosure import append_ai_notice
             from api.telegram import _draft_action_keyboard
+            from services.ai_disclosure import append_ai_notice
 
             _post_out = append_ai_notice(final_post[:_TELEGRAM_MAX_CHARS])
             _markup = _draft_action_keyboard(content_id) if content_id else None

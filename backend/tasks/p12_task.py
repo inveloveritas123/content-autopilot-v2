@@ -38,7 +38,6 @@ from sqlalchemy import text
 
 from models.base import sync_session_factory
 from services.llm_json import parse_json_from_text as _parse_json_from_text
-from services.rls import set_rls_tenant_sync
 from services.pipeline_llm import (
     PROMPT_MAX_TOKENS,
     call_pipeline_llm,
@@ -46,6 +45,7 @@ from services.pipeline_llm import (
     resolve_tier,
 )
 from services.prompt_loader import get_default_prompt_loader
+from services.rls import set_rls_tenant_sync
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)

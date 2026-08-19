@@ -90,9 +90,7 @@ class TestValidCookie:
         async def _execute(stmt):
             result = MagicMock()
             # Erster Call: User-Lookup. Zweiter Call (in _resolve_tenant_by_api_key): Tenant-Lookup.
-            result.scalar_one_or_none.return_value = (
-                user if _execute.calls == 0 else tenant
-            )
+            result.scalar_one_or_none.return_value = user if _execute.calls == 0 else tenant
             _execute.calls += 1
             return result
 
@@ -117,9 +115,7 @@ class TestValidCookie:
 
         async def _execute(stmt):
             result = MagicMock()
-            result.scalar_one_or_none.return_value = (
-                user if _execute.calls == 0 else tenant
-            )
+            result.scalar_one_or_none.return_value = user if _execute.calls == 0 else tenant
             _execute.calls += 1
             return result
 
@@ -131,7 +127,9 @@ class TestValidCookie:
 
         with (
             patch("dependencies.auth_svc.verify_session", return_value="user-1"),
-            patch("dependencies.auth_svc.user_may_access_tenant", new=AsyncMock(return_value=False)),
+            patch(
+                "dependencies.auth_svc.user_may_access_tenant", new=AsyncMock(return_value=False)
+            ),
         ):
             with pytest.raises(Exception) as exc_info:
                 await _resolve_tenant(req, API_KEY, db)
@@ -146,9 +144,7 @@ class TestValidCookie:
 
         async def _execute(stmt):
             result = MagicMock()
-            result.scalar_one_or_none.return_value = (
-                user if _execute.calls == 0 else tenant
-            )
+            result.scalar_one_or_none.return_value = user if _execute.calls == 0 else tenant
             _execute.calls += 1
             return result
 

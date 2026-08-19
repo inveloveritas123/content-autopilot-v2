@@ -12,7 +12,6 @@ die ganze Welle antritt.
 
 from tasks.telegram_task import _FOTO_FEHLERTEXTE, _foto_quittung
 
-
 # ---------------------------------------------------------------------------
 # Erfolgsfälle — die Quittung muss unterscheiden, was wirklich passiert ist
 # ---------------------------------------------------------------------------
@@ -57,9 +56,7 @@ def test_nichts_erkannt_wird_nicht_als_erfolg_verkauft():
 
 def test_nichts_erkannt_mit_caption_erwaehnt_die_caption():
     """Wer eine Bildunterschrift mitschickt, soll wissen, dass sie zählt."""
-    out = _foto_quittung(
-        {"ocr_chars": 0, "content_text": "", "description": None}, "unser Offsite"
-    )
+    out = _foto_quittung({"ocr_chars": 0, "content_text": "", "description": None}, "unser Offsite")
     assert "Bildunterschrift" in out
 
 
@@ -104,8 +101,7 @@ def test_fehlertexte_sind_handlungsfaehig():
     """
     for schluessel, text in _FOTO_FEHLERTEXTE.items():
         hat_handlung = any(
-            wort in text.lower()
-            for wort in ("nochmal", "versuch", "schreib", "probier", "hilft")
+            wort in text.lower() for wort in ("nochmal", "versuch", "schreib", "probier", "hilft")
         )
         assert hat_handlung, f"{schluessel} nennt keinen naechsten Schritt: {text!r}"
 

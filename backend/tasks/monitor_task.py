@@ -8,8 +8,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from models.base import sync_session_factory
 from models.source import Source
 from models.source_item import SourceItem
-from services.source_adapters import check_source_for_new_items
 from services.rls import set_rls_bypass_sync
+from services.source_adapters import check_source_for_new_items
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)

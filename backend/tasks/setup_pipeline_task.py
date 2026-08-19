@@ -34,9 +34,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _update_pipeline_status(
-    tenant_id: str, run_id: str, status: str, error: str | None = None
-):
+def _update_pipeline_status(tenant_id: str, run_id: str, status: str, error: str | None = None):
     """Setzt den Endstatus eines Pipeline-Laufs.
 
     `tenant_id` ist seit dem RLS-Scharfschalten (Migration 058) Pflicht:

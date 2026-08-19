@@ -1546,9 +1546,7 @@ def _process_voice(log_id: str, tenant_id: str, payload: dict) -> dict:
 #: tun kann. Jeder Text sagt, was passiert ist UND was der nächste Schritt ist.
 #: Keine technischen Begriffe — der Empfänger ist Unternehmer, nicht Betreiber.
 _FOTO_FEHLERTEXTE = {
-    "no_photo_array": (
-        "📸 Da war kein Bild dabei — schick es bitte nochmal als Foto."
-    ),
+    "no_photo_array": ("📸 Da war kein Bild dabei — schick es bitte nochmal als Foto."),
     "no_file_id": (
         "📸 Das Bild konnte ich nicht öffnen. Versuch es bitte nochmal — "
         "am besten als normales Foto, nicht als Datei."

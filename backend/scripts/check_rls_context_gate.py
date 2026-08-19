@@ -50,19 +50,49 @@ _SCAN_DIRS = ("tasks", "services")
 #: laeuft. Aendert sich die Laufzeit-Liste, muss diese hier mitgezogen werden.
 RLS_TABELLEN: frozenset[str] = frozenset(
     {
-        "backtest_runs", "bot_session", "campaigns", "carousel_templates",
-        "company_profile", "content_dna_profiles", "content_ideas",
-        "content_performances", "content_pieces", "daily_cost_tenant",
-        "deletion_requests", "dialogue_questions", "entrepreneur_answers",
-        "hook_library", "idea_selection_logs", "idea_variants", "llm_call_logs",
-        "llm_providers", "llm_trace", "memory_chunks", "profile_field_provenance",
-        "projects", "quality_metrics", "research_findings", "scheduled_posts",
-        "setup_pipeline_run", "source_items", "sources", "telegram_message_log",
-        "tenant_audience_avatar", "tenant_bot_config", "tenant_branding",
-        "tenant_concurrency", "tenant_customer_context", "tenant_customer_values",
-        "tenant_reservoir", "tenant_review_queue", "tenant_telegram_link",
-        "tenant_voice_profile", "throttle_events", "voice_drift_observation",
-        "voice_feedback", "wizard_session",
+        "backtest_runs",
+        "bot_session",
+        "campaigns",
+        "carousel_templates",
+        "company_profile",
+        "content_dna_profiles",
+        "content_ideas",
+        "content_performances",
+        "content_pieces",
+        "daily_cost_tenant",
+        "deletion_requests",
+        "dialogue_questions",
+        "entrepreneur_answers",
+        "hook_library",
+        "idea_selection_logs",
+        "idea_variants",
+        "llm_call_logs",
+        "llm_providers",
+        "llm_trace",
+        "memory_chunks",
+        "profile_field_provenance",
+        "projects",
+        "quality_metrics",
+        "research_findings",
+        "scheduled_posts",
+        "setup_pipeline_run",
+        "source_items",
+        "sources",
+        "telegram_message_log",
+        "tenant_audience_avatar",
+        "tenant_bot_config",
+        "tenant_branding",
+        "tenant_concurrency",
+        "tenant_customer_context",
+        "tenant_customer_values",
+        "tenant_reservoir",
+        "tenant_review_queue",
+        "tenant_telegram_link",
+        "tenant_voice_profile",
+        "throttle_events",
+        "voice_drift_observation",
+        "voice_feedback",
+        "wizard_session",
     }
 )
 
@@ -181,7 +211,7 @@ def _scan_file(path: Path) -> list[_BlockFinding]:
     rel = path.relative_to(_BACKEND_ROOT)
 
     for node in ast.walk(tree):
-        if not isinstance(node, (ast.With, ast.AsyncWith)):
+        if not isinstance(node, ast.With | ast.AsyncWith):
             continue
         if not any(_is_sync_session_with(item, node) for item in node.items):
             continue

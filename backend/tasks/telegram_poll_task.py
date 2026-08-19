@@ -85,10 +85,7 @@ def poll_all_active_bots() -> dict:
     # nur die Ausführungsreihenfolge ändert sich von sequenziell zu parallel.
     async def _run_all() -> list[dict]:
         return await asyncio.gather(
-            *(
-                asyncio.to_thread(_poll_one_bot, row, dispatch_inbound_update)
-                for row in rows
-            )
+            *(asyncio.to_thread(_poll_one_bot, row, dispatch_inbound_update) for row in rows)
         )
 
     results = asyncio.run(_run_all()) if rows else []

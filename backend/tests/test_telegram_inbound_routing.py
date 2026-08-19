@@ -753,9 +753,7 @@ class TestResolveChatIdSetsRlsContext:
         ctx = MagicMock()
         ctx.__enter__ = MagicMock(return_value=ctx)
         ctx.__exit__ = MagicMock(return_value=False)
-        ctx.execute.return_value.fetchone.return_value = (
-            row if chat_id_val is not None else None
-        )
+        ctx.execute.return_value.fetchone.return_value = row if chat_id_val is not None else None
         return ctx
 
     def test_sets_rls_tenant_context_before_lookup(self):

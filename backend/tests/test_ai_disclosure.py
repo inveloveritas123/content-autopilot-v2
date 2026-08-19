@@ -36,7 +36,7 @@ def test_post_text_precedes_notice():
 # Beide Pflichten sind unabhängig — deshalb prüft der letzte Test hier
 # ausdrücklich, dass sie sich nicht gegenseitig ersetzen.
 
-from services.ai_disclosure import (  # noqa: E402
+from services.ai_disclosure import (
     CHAT_AI_HINWEIS,
     chat_ai_hinweis_block,
     hat_chat_ai_hinweis,

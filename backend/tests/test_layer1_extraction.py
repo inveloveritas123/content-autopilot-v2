@@ -541,12 +541,10 @@ class TestLayer1Extraction:
         # set_rls_tenant_sync-Kontext-Setter (SELECT set_config(...)) — die
         # eigentliche Cost-Cap-Query steht danach. Wir suchen deshalb gezielt
         # nach der Query, die die Tabelle referenziert, statt Index 0 anzunehmen.
-        cost_cap_queries = [
-            (q, p) for q, p in captured_queries if "daily_cost_tenant" in q
-        ]
-        assert cost_cap_queries, (
-            f"Keine Query referenziert 'daily_cost_tenant', gesehen: {captured_queries!r}"
-        )
+        cost_cap_queries = [(q, p) for q, p in captured_queries if "daily_cost_tenant" in q]
+        assert (
+            cost_cap_queries
+        ), f"Keine Query referenziert 'daily_cost_tenant', gesehen: {captured_queries!r}"
         sql_text, params = cost_cap_queries[0]
         assert (
             "cost_tracking" not in sql_text

@@ -67,19 +67,49 @@ logger = logging.getLogger(__name__)
 #: funktionieren, wenn die Verbindung gerade das Problem ist.
 RLS_TABELLEN: frozenset[str] = frozenset(
     {
-        "backtest_runs", "bot_session", "campaigns", "carousel_templates",
-        "company_profile", "content_dna_profiles", "content_ideas",
-        "content_performances", "content_pieces", "daily_cost_tenant",
-        "deletion_requests", "dialogue_questions", "entrepreneur_answers",
-        "hook_library", "idea_selection_logs", "idea_variants", "llm_call_logs",
-        "llm_providers", "llm_trace", "memory_chunks", "profile_field_provenance",
-        "projects", "quality_metrics", "research_findings", "scheduled_posts",
-        "setup_pipeline_run", "source_items", "sources", "telegram_message_log",
-        "tenant_audience_avatar", "tenant_bot_config", "tenant_branding",
-        "tenant_concurrency", "tenant_customer_context", "tenant_customer_values",
-        "tenant_reservoir", "tenant_review_queue", "tenant_telegram_link",
-        "tenant_voice_profile", "throttle_events", "voice_drift_observation",
-        "voice_feedback", "wizard_session",
+        "backtest_runs",
+        "bot_session",
+        "campaigns",
+        "carousel_templates",
+        "company_profile",
+        "content_dna_profiles",
+        "content_ideas",
+        "content_performances",
+        "content_pieces",
+        "daily_cost_tenant",
+        "deletion_requests",
+        "dialogue_questions",
+        "entrepreneur_answers",
+        "hook_library",
+        "idea_selection_logs",
+        "idea_variants",
+        "llm_call_logs",
+        "llm_providers",
+        "llm_trace",
+        "memory_chunks",
+        "profile_field_provenance",
+        "projects",
+        "quality_metrics",
+        "research_findings",
+        "scheduled_posts",
+        "setup_pipeline_run",
+        "source_items",
+        "sources",
+        "telegram_message_log",
+        "tenant_audience_avatar",
+        "tenant_bot_config",
+        "tenant_branding",
+        "tenant_concurrency",
+        "tenant_customer_context",
+        "tenant_customer_values",
+        "tenant_reservoir",
+        "tenant_review_queue",
+        "tenant_telegram_link",
+        "tenant_voice_profile",
+        "throttle_events",
+        "voice_drift_observation",
+        "voice_feedback",
+        "wizard_session",
     }
 )
 
@@ -171,7 +201,7 @@ def aktiviere_rls_waechter(engine) -> None:
         return
 
     @event.listens_for(engine, "before_cursor_execute")
-    def _pruefe(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001
+    def _pruefe(conn, cursor, statement, parameters, context, executemany):
         try:
             if _KONTEXT_SETZER.search(statement):
                 return

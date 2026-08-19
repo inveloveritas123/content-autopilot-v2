@@ -6,8 +6,8 @@ from sqlalchemy import func, select
 from models.base import sync_session_factory
 from models.source import Source
 from models.source_item import SourceItem
-from services.transcription import transcribe_content
 from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
+from services.transcription import transcribe_content
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
