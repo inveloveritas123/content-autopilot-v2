@@ -234,9 +234,9 @@ class TestVoiceProfilScanUeberspringtAnweisungen:
         # `SELECT set_config(...)` ein — die Fach-Query steht daher nicht mehr
         # zwingend an Index 0. Struktur pruefen (kommt sie vor?), nicht die Marke.
         alle_sql = [str(c.args[0]) for c in ctx.execute.call_args_list]
-        assert any(SQL_OHNE_ANWEISUNGEN in sql for sql in alle_sql), (
-            f"Praedikat in keiner der ausgefuehrten Queries: {alle_sql}"
-        )
+        assert any(
+            SQL_OHNE_ANWEISUNGEN in sql for sql in alle_sql
+        ), f"Praedikat in keiner der ausgefuehrten Queries: {alle_sql}"
 
 
 class TestPickerSchlaegtKeineAnweisungenVor:

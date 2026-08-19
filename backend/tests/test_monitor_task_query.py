@@ -61,9 +61,7 @@ def _compiled_where_clause() -> str:
     # `.whereclause`-Attribut. Das echte Select-Statement suchen, nicht auf
     # Index 0 vertrauen.
     select_statements = [s for s in statements if hasattr(s, "whereclause")]
-    assert select_statements, (
-        f"Kein Statement mit WHERE-Klausel abgesetzt: {statements}"
-    )
+    assert select_statements, f"Kein Statement mit WHERE-Klausel abgesetzt: {statements}"
     where_clause = select_statements[0].whereclause
     assert where_clause is not None, "Die Query hat gar keine WHERE-Klausel"
     return (

@@ -167,9 +167,9 @@ class TestP06FiltertGeloeschteChunks:
         # RLS-Kontext (services/rls.py) fuegt vor der Fach-Query ein
         # `SELECT set_config(...)` ein — Struktur pruefen (kommt sie vor?), nicht Index.
         alle_sql = [str(c.args[0]) for c in ctx.execute.call_args_list]
-        assert any(SQL_NICHT_GELOESCHT in sql for sql in alle_sql), (
-            f"Praedikat in keiner der ausgefuehrten Queries: {alle_sql}"
-        )
+        assert any(
+            SQL_NICHT_GELOESCHT in sql for sql in alle_sql
+        ), f"Praedikat in keiner der ausgefuehrten Queries: {alle_sql}"
 
 
 class _FakeBackfillResult:
