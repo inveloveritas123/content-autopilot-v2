@@ -80,20 +80,26 @@ ssh -i ~/.ssh/zukunftsbund-ops -p "$SSH_PORT" "$SSH_TARGET" \
     "sudo incus exec $CONTAINER -- bash -c 'cd /opt/content-autopilot-v2 && docker compose -f docker-compose.v2.yml up -d --build backend-v2 celery-worker-v2 celery-beat-v2 nginx-v2'"
 ok "Backend/Celery/Nginx neu gebaut und gestartet"
 
-# ─── 6. Auf gesunde Container warten (max. 60s) ───────────────────
-for _ in $(seq 1 12); do
-    STATUS="$(ssh -i ~/.ssh/zukunftsbund-ops -p "$SSH_PORT" "$SSH_TARGET" \
-        "sudo incus exec $CONTAINER -- sudo docker ps --format '{{.Names}}\t{{.Status}}' | grep -c healthy" || true)"
-    if [ "${STATUS:-0}" -ge 4 ]; then
+# ─── 6+7. PFLICHT-VERIFY: /api/version direkt abfragen, mit Retry ─
+# docker ps "healthy" ist KEIN verlaesslicher Vorbote — Nginx kann healthy
+# melden, waehrend das frisch gestartete Backend dahinter noch nicht auf
+# Requests antwortet (502 Bad Gateway, real beobachtet trotz 4/4 healthy).
+# Deshalb direkt gegen /api/version pollen — das ist die Bedingung, die
+# tatsaechlich zaehlt, nicht ein Zwischenschritt davor.
+REMOTE_SHA=""
+VERSION_RESPONSE=""
+for _ in $(seq 1 24); do
+    VERSION_RESPONSE="$(ssh -i ~/.ssh/zukunftsbund-ops -p "$SSH_PORT" "$SSH_TARGET" \
+        "sudo incus exec $CONTAINER -- curl -s '$VERSION_URL'" || true)"
+    REMOTE_SHA="$(echo "$VERSION_RESPONSE" | grep -oP '"commit_sha"\s*:\s*"\K[^"]+' || true)"
+    if [ -n "$REMOTE_SHA" ]; then
         break
     fi
     sleep 5
 done
-
-# ─── 7. PFLICHT-VERIFY: /api/version muss GENAU diesen SHA zeigen ─
-REMOTE_SHA="$(ssh -i ~/.ssh/zukunftsbund-ops -p "$SSH_PORT" "$SSH_TARGET" \
-    "sudo incus exec $CONTAINER -- curl -s '$VERSION_URL'" | \
-    grep -oP '"commit_sha"\s*:\s*"\K[^"]+' || true)"
+if [ -z "$REMOTE_SHA" ]; then
+    fail "Konnte nach 120s keine commit_sha aus /api/version lesen. Letzte Rohantwort: ${VERSION_RESPONSE:-<leer>}"
+fi
 
 if [ "$REMOTE_SHA" != "$RESOLVED_SHA" ]; then
     fail "VERIFY FEHLGESCHLAGEN: /api/version zeigt '$REMOTE_SHA', erwartet '$RESOLVED_SHA'"
