@@ -5,7 +5,6 @@ name: Tests (pytest)
 # Läuft die hermetischen Unit-Tests (kein Service-Stack nötig). Bewusst NICHT
 # enthalten (brauchen Postgres/Redis oder sind vorbestehende Fehler):
 #   - tests/security/test_tenant_isolation.py   → braucht laufende Postgres-DB
-#   - tests/test_telegram_webhook.py            → braucht laufende Postgres-DB
 #   - test_random_smart (5)                     → zeit-/cron-fenster-abhängig
 #   - test_rtbf_critical_fixes migration_047(4) → testet harten Pfad /opt/content-autopilot-v2/...
 #   - test_tenant_export_formats (2)            → CSV-UTF8-BOM-Assertion
@@ -52,8 +51,8 @@ jobs:
         run: |
           .ci-venv/bin/python -m pytest tests/ -p no:cacheprovider --tb=short \
             --ignore=tests/security \
-            --ignore=tests/test_telegram_webhook.py \
             --ignore=tests/test_transcribe_attempts.py \
+            --ignore=tests/test_telegram_webhook.py \
             --deselect "tests/test_embedding_versioning.py::test_canary_task_unknown_model_id_returns_error" \
             --deselect "tests/test_random_smart.py::TestCronFiredInWindow::test_cron_fired_in_window_true" \
             --deselect "tests/test_random_smart.py::TestCheckRandomSmartTriggers::test_paused_tenant_not_triggered" \
@@ -85,6 +84,27 @@ jobs:
       # (das .compile() liefe gegen MagicMocks statt echter Spalten). Ein eigener
       # Prozess umgeht das, weil die Stubs dort nie gesetzt werden. NICHT wieder
       # mit dem Hauptlauf zusammenlegen — das bringt exakt diesen Fehlschlag zurueck.
+      # ⛔ Das --ignore im Hauptlauf oben ist ABSICHT und bleibt: die Datei
+      # ersetzt beim Import global sys.modules und gehoert deshalb in einen
+      # eigenen Prozess, nicht in den Sammellauf. NEU ist, dass sie ueberhaupt
+      # wieder laeuft — vorher war sie ausgeschlossen OHNE Ersatzlauf.
+      # Bis 2026-08-20 war diese Datei per --ignore KOMPLETT ausgeschlossen,
+      # mit der Begruendung "braucht laufende Postgres-DB". Das war FALSCH —
+      # ihr eigener Kopfkommentar sagt "No DB required, all DB/HTTP calls are
+      # patched", und gemessen laeuft sie mit `env -u DATABASE_URL -u
+      # SYNC_DATABASE_URL -u REDIS_URL` gruen durch (8 passed). Der wahre Grund
+      # war, dass sie gar nicht SAMMELBAR war (fehlendes __path__ an den
+      # Stub-Paketen, behoben in eb4a2c4) — und ein Collection-Error stoppt die
+      # ganze Suite. Ein --ignore ist eine STILLE Abschaltung: die 8 Tests
+      # galten als vorhanden und liefen ueber Wochen nie.
+      # Eigener Prozess, weil die Datei beim Import global sys.modules ersetzt
+      # (models, services, api.telegram) — dieselbe Vorsicht wie beim
+      # Batch-Transcribe-Lauf unten, auch wenn eine Teardown-Fixture existiert.
+      - name: Run telegram-webhook tests (isoliert)
+        run: |
+          .ci-venv/bin/python -m pytest tests/test_telegram_webhook.py \
+            -p no:cacheprovider --tb=short
+
       - name: Run batch-transcribe tests (isoliert)
         run: |
           .ci-venv/bin/python -m pytest tests/test_transcribe_attempts.py \
