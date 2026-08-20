@@ -394,6 +394,21 @@ async def health():
     )
 
 
+@app.get("/api/version")
+async def version():
+    """Deployten Commit-Stand nachweisen — ein curl statt SSH-Forensik.
+
+    Belegte Deploy-Luecke vom 20.08.: "alles deployed" war fuenf Minuten
+    spaeter falsch, niemand konnte es sehen, weil kein /api/version
+    existierte. Logik in services/version_info.py, isoliert testbar.
+    """
+    from pathlib import Path
+
+    from services.version_info import read_version
+
+    return read_version(Path(__file__).resolve().parent)
+
+
 @app.get("/api/csrf-token")
 async def get_csrf_token(response: Response):
     """Issue a CSRF token — sets cookie + returns token in body.
