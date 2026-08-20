@@ -610,3 +610,37 @@ def test_telegram_get_me_wirft_bei_netzwerkfehler_statt_none():
     with patch.object(bot_module.httpx, "AsyncClient", return_value=failing_client):
         with _pytest.raises(bot_module.TelegramUnavailable):
             asyncio.run(bot_module._telegram_get_me("123456:FAKE"))
+
+
+class TestInterviewAusgaenge:
+    """Zwei sichtbare Wege aus einem laufenden Gespraech (Louis-Bug 2026-08-20)."""
+
+    def test_frage_bietet_neustart_und_abbruch(self):
+        """⛔ Louis 22:24: "wenn ich 'neuer Post' schreibe speichert er auch nur
+        und startet keine neue Konversation".
+
+        Der Abbrechen-Knopf allein sagt dem Nutzer nicht, dass dahinter ein
+        Neuanfang moeglich ist — er formuliert es also, und der Text lief in die
+        Gedaechtnis-Quittung. Ein zweiter Knopf macht die Absicht waehlbar,
+        ohne eine Wortliste zu raten (Owner: "die Erkennung was der User will
+        ist eine riesige Wortliste").
+        """
+        from api.telegram import _interview_cancel_keyboard
+
+        row = _interview_cancel_keyboard()["inline_keyboard"][0]
+        callbacks = {b["callback_data"] for b in row}
+        assert "cmd:session_restart" in callbacks, "Neustart-Ausgang fehlt"
+        assert "cmd:session_cancel" in callbacks, "Abbruch darf nicht verschwinden"
+
+    def test_neustart_text_meint_dasselbe_wie_der_knopf(self):
+        """Knopf-Wortlaut und Antwort-Wortlaut muessen dieselbe Sache meinen.
+
+        Lehre vom 06.08.2026: Auf "🗄 Nur merken" kam "❌ Gespraech abgebrochen"
+        zurueck — Louis verstand es als Absturz. Ein Knopf "🆕 Neuer Post" darf
+        also keine Abbruch-Sprache antworten.
+        """
+        from api.telegram import _ABBRUCH_TEXT, _NEUSTART_TEXT
+
+        assert _NEUSTART_TEXT != _ABBRUCH_TEXT
+        assert "abgebrochen" not in _NEUSTART_TEXT.lower()
+        assert "neuen Post" in _NEUSTART_TEXT or "neuer Post" in _NEUSTART_TEXT.lower()

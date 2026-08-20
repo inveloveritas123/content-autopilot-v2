@@ -75,11 +75,63 @@ def route_telegram_intent(
     #    Ohne diese Weiche liefe die Bestaetigung ins Gedaechtnis statt in den
     #    Post, und das Gespraech haenge fuer immer auf dem Angebot fest.
     #    Deterministisch, kein LLM — passend zur Zusicherung dieser Schicht.
+    #    ⛔⛔ BEWEISLASTUMKEHR (Louis-Live-Bug 2026-08-20 22:2x): Bis hierher
+    #    musste Schicht 1 die Nachricht als `answer_to_question` ERKENNEN,
+    #    sonst fiel sie durch ALLE Regeln bis zur Gedaechtnis-Quittung
+    #    "✅ Gespeichert im Gedaechtnis." — die Antwort auf eine gerade
+    #    gestellte Frage ging als Notiz verloren.
+    #
+    #    Louis woertlich: "Jetzt passiert leider garnichts mehr / Er speichert
+    #    nur noch". Im Screenshot beantwortet er drei Rueckfragen korrekt, bei
+    #    der vierten ("Wir haben ein Claude Code Setup gemacht") bricht der
+    #    Dialog ab. Das Gespraech bleibt offen zurueck — deshalb startet auch
+    #    "neuer Post" nichts mehr: die alte Session lebt, nimmt aber nichts an.
+    #
+    #    ⛔ DER KONSTRUKTIONSFEHLER WAR DIE RICHTUNG DER FRAGE. Wenn der Bot
+    #    GERADE eine Frage gestellt hat, ist die naechste Textnachricht per
+    #    KONTEXT eine Antwort. Zu fragen "ist das eine Antwort?" laedt die
+    #    Beweislast beim Klassifikator ab — und JEDER Fehltreffer kostet den
+    #    Nutzer seine Antwort. Bei vier Rueckfragen und 95 % Trefferquote
+    #    bricht rund jeder fuenfte Dialog irgendwo ab.
+    #
+    #    ⛔ WARUM DAS KEINE AUFWEICHUNG IST: Abbrechen laeuft NICHT ueber Text,
+    #    sondern ueber den Button an jeder Frage (`cmd:session_cancel`,
+    #    api/telegram.py:268). Der Nutzer hat also einen deterministischen,
+    #    sichtbaren Ausweg — wir brauchen keine Abbruch-Wortliste zu raten.
+    #    Genau solche Wortlisten sind das Problem, nicht die Loesung
+    #    (Owner 2026-08-20: "die Erkennung was der User will ist eine riesige
+    #    Wortliste"). Slash-Kommandos greifen ohnehin vor diesem Punkt.
+    #
+    #    ⛔ DAS MUSTER IST NICHT NEU, NUR NIE HIER ANGEWENDET: 574b609
+    #    ("explizite Wahl statt geratenem Intent") hat den LLM-Rateschritt
+    #    bereits fuer Nachrichten OHNE laufendes Gespraech ersetzt. Der Fall
+    #    MIT Gespraech blieb ausgespart — das ist genau Louis' Fall.
+    #
+    #    ⛔ DIE UMKEHR GILT NUR BEI OFFENER FRAGE — und diese Praezisierung
+    #    stammt aus einem Bestandstest, der widersprochen hat:
+    #    `test_ohne_angebot_bleibt_smalltalk_smalltalk` sagt woertlich, die
+    #    Weiche duerfe kein "Freibrief" sein, "der jede Nachricht ins Interview
+    #    zwingt". Der Einwand ist berechtigt: eine aktive Session OHNE offene
+    #    Frage (der Bot hat zuletzt nichts gefragt) darf Smalltalk nicht
+    #    einsaugen. Mit gestellter Frage dagegen IST die naechste Nachricht die
+    #    Antwort darauf. `current_question` traegt die letzte Bot-Frage
+    #    (telegram_task.py:143, aus messages[-1]["bot"]) und trennt beide Faelle
+    #    sauber — ohne den Test zu entschaerfen.
+    #
+    #    `awaiting_confirmation` bleibt als eigener Grund daneben stehen: es
+    #    deckt das Angebot "Soll ich ihn schreiben?", bei dem keine Frage im
+    #    klassischen Sinn offensteht.
     if (
         current_session is not None
         and getattr(current_session, "status", None) == "active"
         and (
+            # (a) Schicht 1 hat es klar erkannt — der Weg wie bisher.
             extraction_result.intent == "answer_to_question"
+            # (b) NEU: eine Frage steht offen -> die Nachricht IST die Antwort,
+            #     egal was der Klassifikator meint (Louis-Bug 2026-08-20).
+            or str(getattr(current_session, "current_question", "") or "").strip() != ""
+            # (c) Angebot "Soll ich ihn schreiben?" -> "ja" ist kein
+            #     answer_to_question, muss aber ankommen (04.08.2026).
             or getattr(current_session, "awaiting_confirmation", False)
         )
     ):

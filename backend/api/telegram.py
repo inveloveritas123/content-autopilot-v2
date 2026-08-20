@@ -265,7 +265,27 @@ def _interview_cancel_keyboard() -> dict:
 
     Frisches Dict je Aufruf — ein geteiltes Modul-Dict könnte ein Caller mutieren.
     """
-    return {"inline_keyboard": [[{"text": "❌ Abbrechen", "callback_data": "cmd:session_cancel"}]]}
+    # ⛔ ZWEITER AUSGANG (Louis-Live-Bug 2026-08-20 22:24): "Und wenn ich
+    # 'neuer Post' schreibe speichert er auch nur und startet keine neue
+    # Konversation". Der Abbrechen-Knopf allein reicht nicht — er sagt dem
+    # Nutzer nicht, dass DAHINTER ein Neuanfang moeglich ist. Wer neu anfangen
+    # will, formuliert das (und lief bisher in die Gedaechtnis-Quittung),
+    # statt einen Knopf zu suchen, der "Abbrechen" heisst.
+    #
+    # ⛔ WARUM EIN KNOPF UND KEINE WORTLISTE: "neuer Post", "nochmal",
+    # "anderes Thema", "vergiss das" — jede Liste ist unvollstaendig, und
+    # genau daran krankt die Erkennung heute (Owner 2026-08-20: "die
+    # Erkennung was der User will ist eine riesige Wortliste"). Der Knopf ist
+    # deterministisch, kostet keinen LLM-Call und ist derselbe Weg wie
+    # 574b609 ("explizite Wahl statt geratenem Intent").
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "🆕 Neuer Post", "callback_data": "cmd:session_restart"},
+                {"text": "❌ Abbrechen", "callback_data": "cmd:session_cancel"},
+            ]
+        ]
+    }
 
 
 def _choice_keyboard(log_id: str) -> dict:
@@ -1289,6 +1309,12 @@ def _handle_callback_query(callback_query: dict, known_tenant_id: str | None = N
         _send_telegram_message(chat_id, _VOICE_PROFILE_ORIGIN_TEXT, tenant_id=tenant_id_str)
     elif data == "cmd:session_cancel":
         _cancel_active_session(tenant_id_str, chat_id)
+    elif data == "cmd:session_restart":
+        # Technisch derselbe Vorgang wie der Abbruch (die aktive Session wird
+        # beendet) — fachlich das Gegenteil, deshalb ein eigener Text.
+        # Die naechste Nachricht laeuft dann ohne aktive Session durch die
+        # normale Eingangs-Weiche und startet ein frisches Gespraech.
+        _cancel_active_session(tenant_id_str, chat_id, bestaetigung=_NEUSTART_TEXT)
     elif data == "cmd:bs_generate":
         _brainstorming_generate_ideas(tenant_id_str, chat_id)
     elif data.startswith("cmd:bs_pick:"):
@@ -1568,6 +1594,16 @@ _ABBRUCH_TEXT = (
 #: „❌ Gespräch abgebrochen" auf einen Knopf, der „🗄 Nur merken" heißt, und
 #: verstand es als Absturz („bei nur merken bricht der Chat ab"). Der Wortlaut
 #: des Knopfes und der Wortlaut der Antwort müssen dieselbe Sache meinen.
+#: Antwort auf [🆕 Neuer Post]. Beendet das laufende Gespraech wie ein Abbruch,
+#: sagt aber das Gegenteil aus: der Nutzer hoert nicht auf, er faengt an.
+#: Der Wortlaut des Knopfes und der Wortlaut der Antwort muessen dieselbe Sache
+#: meinen (Lehre vom 06.08.2026, s. _NUR_MERKEN_TEXT).
+_NEUSTART_TEXT = (
+    "🆕 Alles klar — das alte Gespräch ist beendet, deine Antworten bleiben "
+    "im Gedächtnis.\n\n"
+    "Worum soll es im neuen Post gehen? Schreib oder sprich einfach los."
+)
+
 _NUR_MERKEN_TEXT = (
     "🗄 Gut — bleibt im Gedächtnis. Ich frage nicht weiter.\n\n"
     "Schick mir jederzeit eine Sprachnachricht oder tippe /help."

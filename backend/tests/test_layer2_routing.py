@@ -95,6 +95,38 @@ class TestLayer2Routing:
         assert result.target == "p08_response"
         assert result.payload["session_id"] == "sess-offer"
 
+    def test_offene_frage_faengt_jeden_intent_louis_20260820(self):
+        """Bei offener Bot-Frage IST die naechste Nachricht die Antwort.
+
+        ⛔ LIVE-BUG (Louis, 20.08.2026 22:22): Er beantwortete drei Rueckfragen
+        korrekt; bei der vierten ("Wir haben ein Claude Code Setup gemacht")
+        stufte Schicht 1 den Intent NICHT als `answer_to_question` ein. Die
+        Nachricht fiel durch alle Regeln bis zur Gedaechtnis-Quittung
+        "✅ Gespeichert im Gedaechtnis." — die Antwort war weg, das Gespraech
+        blieb offen stehen. Louis woertlich: "Er speichert nur noch."
+
+        ⛔ Die Beweislast lag beim Klassifikator, und JEDER Fehltreffer kostete
+        den Nutzer seine Antwort. Dieser Test nagelt die Umkehr fest: steht eine
+        Frage offen, zaehlt der KONTEXT, nicht die Einschaetzung.
+
+        Abbrechen laeuft ueber den Button an jeder Frage, nicht ueber Text —
+        deshalb ist das kein Freibrief (s. Nachbartest).
+        """
+        from services.layer2_routing import route_telegram_intent
+
+        session = SimpleNamespace(
+            id="sess-louis",
+            status="active",
+            awaiting_confirmation=False,
+            current_question="Kannst du mir ein Beispiel nennen?",
+        )
+        for intent in ("spontaneous_idea", "unclassified", "smalltalk", "post_feedback"):
+            result = route_telegram_intent(
+                _extraction(intent), tenant_id="t1", current_session=session
+            )
+            assert result.target == "p08_response", f"{intent} verlor die Antwort"
+            assert result.payload["session_id"] == "sess-louis"
+
     def test_ohne_angebot_bleibt_smalltalk_smalltalk(self):
         """Die Weiche greift NUR nach einem Angebot — sonst wäre sie ein Freibrief,
         der jede Nachricht ins Interview zwingt."""
