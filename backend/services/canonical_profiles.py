@@ -134,6 +134,21 @@ def load_active_profile(profile_type: str, tenant_id: str, project_id: str | Non
 
     table = TABLE_MAP[profile_type]
     with sync_session_factory() as session:
+        # ⛔ RLS-KONTEXT ZWINGEND vor dem SELECT: alle vier Tabellen aus TABLE_MAP
+        #    (tenant_customer_context, tenant_voice_profile, tenant_audience_avatar,
+        #    tenant_customer_values) tragen seit Migration 058 FORCE ROW LEVEL
+        #    SECURITY. Ohne gesetzten app.tenant_id filtert Postgres STILL auf 0
+        #    Zeilen — kein Fehler, keine Exception. Der Aufrufer bekommt ({}, False)
+        #    und liest das als "kein Profil gepflegt", obwohl eines existiert.
+        #    Gemessen am 2026-08-20 auf dem Testsystem: als App-User ohne Kontext
+        #    liefert tenant_voice_profile 0 Zeilen, als Superuser 6;
+        #    tenant_customer_context 0 gegen 8.
+        #    ⛔ Enger Tenant-Kontext, KEIN Bypass: tenant_id ist ein Parameter dieser
+        #    Funktion, es gibt also nichts tenant-uebergreifend zu lesen. Ein Bypass
+        #    waere hier eine unnoetige Aufhebung der Mandantentrennung.
+        from services.rls import set_rls_tenant_sync
+
+        set_rls_tenant_sync(session, str(tenant_id))
         result = session.execute(
             text(
                 f"SELECT project_id, version, payload FROM {table} "
