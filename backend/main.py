@@ -346,18 +346,46 @@ async def health():
         checks["redis"] = "error: connection failed"
         overall = "degraded"
 
-    # NC Storage check (optional, timeout 5s)
+    # Storage check — prueft den TATSAECHLICH konfigurierten Adapter.
+    #
+    # ⛔ Bis 2026-08-20 rief dieser Block hart get_default_nc_adapter() auf und
+    #    ignorierte settings.prompt_storage_backend. Ergebnis: er mass Nextcloud,
+    #    waehrend produktiv "localfs" laeuft — und meldete dauerhaft
+    #    "degraded: unreachable" fuer einen Dienst, den der Kernpfad gar nicht
+    #    benutzt. Ein Health-Check, der immer denselben Fehler zeigt, wird
+    #    ignoriert; er verdeckt damit genau die echten Ausfaelle, die er melden
+    #    soll. Nextcloud ist als spaeterer Backup-Pfad vorgesehen und bleibt
+    #    konfiguriert — es ist nur nicht der aktive Speicher.
+    backend_name = getattr(settings, "prompt_storage_backend", "localfs")
     try:
-        from services.brand_voice_storage import get_default_nc_adapter
+        from services.brand_voice_storage import get_default_storage_adapter
 
-        adapter = get_default_nc_adapter()
-        # stat() the root path — fast check without reading file content
+        adapter = get_default_storage_adapter()
+        # stat() auf den Wurzelpfad — schnelle Pruefung ohne Dateiinhalt zu lesen.
         adapter.stat("/")
-        checks["storage_adapter"] = "ok"
+        checks["storage_adapter"] = f"ok ({backend_name})"
     except Exception as e:
-        logger.warning("Storage health check failed: %s", e)
-        checks["storage_adapter"] = "degraded: unreachable"
-        # NC degraded does NOT make overall status degraded (NC can be down without breaking core)
+        logger.warning("Storage health check failed (backend=%s): %s", backend_name, e)
+        checks["storage_adapter"] = f"degraded: unreachable ({backend_name})"
+        # Der Speicher macht den Gesamtstatus NICHT degraded: Lesen faellt auf die
+        # Base-Schicht zurueck, der Kernpfad (DB + Redis) bleibt bedienbar.
+
+    # Nextcloud separat und NUR informativ — es ist der vorgesehene spaetere
+    # Backup-Pfad, nicht der aktive Speicher. Ist es nicht konfiguriert, steht das
+    # auch so da; "not_configured" ist eine Aussage, "unreachable" waere eine Luege.
+    if backend_name != "nc":
+        nc_url = (getattr(settings, "nextcloud_url", "") or "").strip()
+        if not nc_url:
+            checks["nextcloud_backup"] = "not_configured"
+        else:
+            try:
+                from services.brand_voice_storage import get_default_nc_adapter
+
+                get_default_nc_adapter().stat("/")
+                checks["nextcloud_backup"] = "ok"
+            except Exception as e:
+                logger.info("Nextcloud backup path not reachable (informational): %s", e)
+                checks["nextcloud_backup"] = "unreachable (inaktiv, kein Kernpfad)"
 
     status_code = 200 if overall == "ok" else 503
     return JSONResponse(
