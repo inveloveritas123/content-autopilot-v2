@@ -100,22 +100,18 @@ MODEL_PRICING = {
     "anthropic/claude-sonnet-4-6": {"input": 3.00, "output": 15.00},
 }
 
-# Task → preferred model mapping (Cycle 86: Gemini 2.0 Flash + Mistral Medium)
-TASK_MODEL_MAP = {
-    "research": "google/gemini-2.0-flash",
-    "analysis": "google/gemini-2.0-flash",
-    "transcription": "google/gemini-2.0-flash",
-    "ideation": "mistral/mistral-medium-latest",
-    "voice_profile": "mistral/mistral-medium-latest",
-    "post_finalize": "mistral/mistral-medium-latest",
-    "content_dna": "mistral/mistral-medium-latest",
-    "creative": "mistral/mistral-medium-latest",
-}
-
-
-def get_model_for_task(task: str) -> str:
-    """Get the optimal model for a task type."""
-    return TASK_MODEL_MAP.get(task, "google/gemini-2.0-flash")
+# ⛔ TASK_MODEL_MAP + get_model_for_task ENTFERNT (2026-08-20).
+#    Beide hatten NULL Aufrufer im gesamten Repo (Backend, Frontend, MCP, Tests)
+#    und trugen veraltete Modell-IDs: "google/gemini-2.0-flash" (heute
+#    vertex/gemini-3.5-flash-lite@eu) und viermal "mistral/mistral-medium-latest"
+#    — genau das Modell, das laut llm_mapping.py am 2026-05-03 wegen eines
+#    20-USD-Budgetueberlaufs an EINEM Tag deaktiviert wurde.
+#    Verbindlich fuer das Routing sind PURPOSE_MODEL_MAP (services/llm.py) und
+#    REQUESTY_MODELS (services/llm_mapping.py); nur die speisen den Endpoint
+#    GET /settings/llm-routing und damit die UI.
+#    Eine zweite, tote Modell-Tabelle neben der echten ist kein toter Code,
+#    sondern eine Falle: der naechste Leser haelt sie fuer die Wahrheit und
+#    baut ein deaktiviertes Modell wieder ein.
 
 
 _DAILY_CAP_USD = float(os.environ.get("COST_CAP_USD_PER_DAY", "5.0"))

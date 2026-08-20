@@ -114,55 +114,72 @@ const REQUESTY_MODELS = [
   },
 ]
 
-// Aufgaben → Modell-Zuordnung (Cycle 86: google/gemini-2.0-flash + mistral/mistral-medium-latest)
+// Aufgaben → Modell-Zuordnung.
+//
+// ⛔ Diese Tabelle ist eine ANZEIGE, keine Konfiguration — sie steuert nichts.
+//    Verbindlich routet das Backend ueber PURPOSE_MODEL_MAP (services/llm.py)
+//    und REQUESTY_MODELS (services/llm_mapping.py). Weichen die Werte hier ab,
+//    liest der Betreiber Modellnamen, die keine Pipeline verwendet.
+//
+// ⛔ GENAU DAS WAR BIS 2026-08-20 DER FALL: die Tabelle nannte
+//    "Gemini 2.0 Flash" (real: gemini-3.5-flash-lite@eu) und dreimal
+//    "Mistral Medium" — ein Modell, das am 2026-05-03 nach einem
+//    20-USD-Budgetueberlauf an EINEM Tag deaktiviert wurde und seither auf
+//    Gemini-Flash-Lite umgeleitet ist. Auch die Kostenangaben waren dadurch
+//    falsch ($0.40/1M fuer einen Pfad, der real Flash-Lite-Preise kostet).
+//
+//    Aendert sich das Routing im Backend, ist diese Liste nachzuziehen.
+//    Die tatsaechlich aktive Zuordnung zeigt das Panel "Live Routing Override"
+//    weiter unten — es laedt sie ueber GET /settings/llm-routing aus dem
+//    Backend und ist damit immer aktuell.
 const TASK_MODEL_MAP = [
   {
     task: 'Analyse / Transkription',
-    model: 'Gemini 2.0 Flash',
-    modelId: 'google/gemini-2.0-flash',
+    model: 'Gemini 3.5 Flash Lite',
+    modelId: 'vertex/gemini-3.5-flash-lite@eu',
     tier: 'flash',
     assignment: 'analysis',
-    cost: '$0.075/1M',
+    cost: '$0.30/1M',
   },
   {
     task: 'Tagging / Scoring',
-    model: 'Gemini 2.0 Flash',
-    modelId: 'google/gemini-2.0-flash',
+    model: 'Gemini 3.5 Flash Lite',
+    modelId: 'vertex/gemini-3.5-flash-lite@eu',
     tier: 'flash',
     assignment: 'analysis',
-    cost: '$0.075/1M',
+    cost: '$0.30/1M',
   },
   {
     task: 'Zusammenfassung',
-    model: 'Gemini 2.0 Flash',
-    modelId: 'google/gemini-2.0-flash',
+    model: 'Gemini 3.5 Flash Lite',
+    modelId: 'vertex/gemini-3.5-flash-lite@eu',
     tier: 'flash',
     assignment: 'analysis',
-    cost: '$0.075/1M',
+    cost: '$0.30/1M',
   },
   {
     task: 'Ideation',
-    model: 'Mistral Medium',
-    modelId: 'mistral/mistral-medium-latest',
+    model: 'Gemini 3.5 Flash Lite',
+    modelId: 'vertex/gemini-3.5-flash-lite@eu',
     tier: 'creative',
     assignment: 'creative',
-    cost: '$0.40/1M',
+    cost: '$0.30/1M',
   },
   {
     task: 'Posts generieren',
-    model: 'Mistral Medium',
-    modelId: 'mistral/mistral-medium-latest',
+    model: 'Gemini 3.5 Flash Lite',
+    modelId: 'vertex/gemini-3.5-flash-lite@eu',
     tier: 'creative',
     assignment: 'creative',
-    cost: '$0.40/1M',
+    cost: '$0.30/1M',
   },
   {
     task: 'Smart-Fragen',
-    model: 'Mistral Medium',
-    modelId: 'mistral/mistral-medium-latest',
+    model: 'Gemini 3.5 Flash Lite',
+    modelId: 'vertex/gemini-3.5-flash-lite@eu',
     tier: 'creative',
     assignment: 'creative',
-    cost: '$0.40/1M',
+    cost: '$0.30/1M',
   },
 ]
 
