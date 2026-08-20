@@ -521,6 +521,42 @@ class TestSendTelegramMessagePerTenant:
         payload = insert_calls[0].args[1]["payload"]
         assert '"send_status": "sent"' in payload
 
+    def test_scheiterndes_outbound_log_insert_wird_nicht_stumm_verschluckt(self, caplog):
+        """SSOT AP1.3 (21.08.): scheitert der Erfolgs-INSERT selbst (z.B. RLS-
+        Policy-Verletzung), muss das auf WARNING erscheinen — nicht auf DEBUG.
+        War es DEBUG, blieb ein erfolgreicher Send in telegram_message_log
+        UNSICHTBAR, ohne dass irgendwo ein Log-Level das anzeigt (Louis' Fall:
+        90 in / 0 out, obwohl Antworten laut seinen Screenshots ankamen)."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"ok": True}
+
+        db_mock = _make_db_mock()
+        db_mock.execute.side_effect = Exception("insert boom")
+
+        with (
+            patch.object(
+                sys.modules["services.telegram_token_resolver"],
+                "get_tenant_bot_token",
+                return_value="987654:TENANT_TOKEN",
+            ),
+            patch.object(
+                sys.modules["services.telegram_token_resolver"],
+                "update_last_active",
+            ),
+            patch.object(tg, "sync_session_factory", return_value=db_mock),
+            patch("httpx.post", return_value=mock_response),
+            caplog.at_level(logging.DEBUG),
+        ):
+            result = tg._send_telegram_message(12345, "Test msg", tenant_id="tenant-abc")
+
+        # Der Send selbst bleibt erfolgreich (best-effort-Logging darf ihn nicht blockieren).
+        assert result is True
+        warnungen = [r for r in caplog.records if r.levelno >= logging.WARNING]
+        assert any(
+            "telegram_message_log INSERT (sent) failed" in r.getMessage() for r in warnungen
+        ), f"scheiternder Erfolgs-INSERT wurde nicht auf WARNING geloggt: {caplog.records}"
+
 
 # ===========================================================================
 # Tests: _send_admin_telegram_message

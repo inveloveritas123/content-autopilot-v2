@@ -34,10 +34,22 @@ def auto_generate_ideas(item_id: str):
     from services.content_ideation import run_ideation_pipeline
 
     with sync_session_factory() as session:
+        # Der Task bekommt nur die item_id — die tenant_id steht erst NACH dem
+        # Laden zur Verfuegung. `source_items` traegt FORCE ROW LEVEL SECURITY:
+        # ohne Kontext liefert session.get() None und der Task meldet
+        # "item_not_found" fuer ein real existierendes Item (analog
+        # generate_task.py:analyze_item, Fix ed90abf). Deshalb Bypass NUR fuer
+        # den PK-Read, danach sofort eng auf den Tenant-Kontext.
+        from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
+
+        set_rls_bypass_sync(session, True)
         item = session.get(SourceItem, item_id)
         if not item:
             logger.error(f"Item {item_id} not found")
             return {"error": "item_not_found"}
+        set_rls_bypass_sync(session, False)
+        _ideation_tenant = str(item.tenant_id)
+        set_rls_tenant_sync(session, _ideation_tenant)
 
         if not item.analysis:
             logger.error(f"Item {item_id} has no analysis")
@@ -141,6 +153,10 @@ def auto_generate_ideas(item_id: str):
                 saved_count += 1
 
             session.commit()
+            # ⛔ SET LOCAL verfaellt beim Commit — ohne Erneuerung liefe der
+            # Rest (Quality-Scoring-INSERT unten) ohne Kontext und scheiterte
+            # an FORCE RLS (analog generate_task.py:analyze_item).
+            set_rls_tenant_sync(session, _ideation_tenant)
             logger.info(
                 f"Auto-ideation for item {item_id}: {saved_count} ideas with questions generated"
             )
@@ -208,9 +224,16 @@ def regenerate_ideas(item_id: str, force: bool = False):
     """
 
     with sync_session_factory() as session:
+        # Gleiche RLS-Falle wie in auto_generate_ideas oben — Bypass nur fuer
+        # den PK-Read, danach eng auf den Tenant-Kontext.
+        from services.rls import set_rls_bypass_sync, set_rls_tenant_sync
+
+        set_rls_bypass_sync(session, True)
         item = session.get(SourceItem, item_id)
         if not item or not item.analysis:
             return {"error": "item_not_found_or_no_analysis"}
+        set_rls_bypass_sync(session, False)
+        set_rls_tenant_sync(session, str(item.tenant_id))
 
         if force:
             # Bestehende Ideen archivieren

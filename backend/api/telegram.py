@@ -181,8 +181,11 @@ def _send_telegram_message(
                     )
                     db.commit()
             except Exception as log_exc:
-                # Log-Persistierung ist best-effort — darf Send-Pfad NICHT blockieren
-                logger.debug(
+                # Log-Persistierung ist best-effort — darf Send-Pfad NICHT blockieren.
+                # WARNING statt DEBUG: ein scheiternder INSERT macht Zustellung
+                # unmessbar (die exakte Stille, die Louis' Fall unbeobachtbar
+                # machte — telegram_message_log blieb sonst 90 in / 0 out).
+                logger.warning(
                     "_send_telegram_message: telegram_message_log INSERT failed: %s",
                     type(log_exc).__name__,
                 )
@@ -223,7 +226,10 @@ def _send_telegram_message(
         except Exception as log_exc:
             # Log-Persistierung ist best-effort — darf den (bereits erfolgreichen)
             # Send-Pfad NICHT blockieren.
-            logger.debug(
+            # WARNING statt DEBUG: scheitert genau dieser INSERT, bleibt der
+            # erfolgreiche Send unsichtbar — direction='out' erscheint nie in
+            # telegram_message_log, obwohl die Zustellung geklappt hat.
+            logger.warning(
                 "_send_telegram_message: telegram_message_log INSERT (sent) failed: %s",
                 type(log_exc).__name__,
             )

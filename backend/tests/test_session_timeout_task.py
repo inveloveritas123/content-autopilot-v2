@@ -95,8 +95,14 @@ class TestCoalesce:
         sql = " ".join(sql_gesehen).lower()
         assert "coalesce(last_message_at, created_at)" in sql.replace("\n", " ")
 
-    def test_timeout_ist_24_stunden(self):
-        assert _stt.SESSION_TIMEOUT_HOURS == 24
+    def test_timeout_ist_2_stunden(self):
+        """War 24h (Owner-Entscheid 04.08.), auf 2h gesenkt (SSOT AP1.2, 21.08.):
+
+        eine haengende Session schaltete sonst 24h lang die Rueckfrage-Knoepfe
+        ab — belegt an Louis' Session vom 20.08. 20:21, hing bis zum naechsten
+        Tag auf 'active'.
+        """
+        assert _stt.SESSION_TIMEOUT_HOURS == 2
 
 
 class TestVerhalten:

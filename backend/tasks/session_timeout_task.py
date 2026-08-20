@@ -22,7 +22,7 @@ from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
-SESSION_TIMEOUT_HOURS = 24
+SESSION_TIMEOUT_HOURS = 2
 
 _ANSAGE_MIT_MATERIAL = (
     "Ich habe unser Gespräch mal abgeschlossen — es ist eine Weile her. "
@@ -59,7 +59,7 @@ def _hat_antworten(messages_raw) -> bool:
 
 @celery_app.task(name="tasks.session_timeout_task.expire_stale_sessions")
 def expire_stale_sessions() -> dict:
-    """Beendet `active` Bot-Sessions ohne Regung seit 24 Stunden."""
+    """Beendet `active` Bot-Sessions ohne Regung seit SESSION_TIMEOUT_HOURS Stunden."""
     try:
         with sync_session_factory() as db:
             # Cross-Tenant-Cron: verarbeitet abgelaufene Bot-Sessions ALLER Tenants. Die gelesene
