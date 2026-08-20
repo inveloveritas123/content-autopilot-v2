@@ -164,7 +164,7 @@ def _send_telegram_message(
                         text(
                             "INSERT INTO telegram_message_log "
                             "(tenant_id, direction, message_type, original_payload) "
-                            "VALUES (:tid, 'out', 'text', :payload::jsonb)"
+                            "VALUES (:tid, 'out', 'text', CAST(:payload AS jsonb))"
                         ),
                         {
                             "tid": tenant_id,
@@ -210,7 +210,7 @@ def _send_telegram_message(
                     text(
                         "INSERT INTO telegram_message_log "
                         "(tenant_id, direction, message_type, original_payload) "
-                        "VALUES (:tid, 'out', 'text', :payload::jsonb)"
+                        "VALUES (:tid, 'out', 'text', CAST(:payload AS jsonb))"
                     ),
                     {
                         "tid": tenant_id,

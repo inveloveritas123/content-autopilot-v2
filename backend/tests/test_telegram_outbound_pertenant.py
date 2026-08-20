@@ -481,6 +481,52 @@ class TestSendTelegramMessagePerTenant:
 
         assert result is False
 
+    def test_logs_outbound_row_on_telegram_rejection(self):
+        """Telegram lehnt ab (z.B. 400 'chat not found') → telegram_message_log
+        bekommt trotzdem eine 'out'/send_status='failed'-Zeile.
+
+        Regression (21.08., real reproduziert gegen den Testserver): der
+        INSERT dieses Zweigs nutzte ':payload::jsonb' — SQLAlchemys text()
+        schneidet den Bind-Parameter-Namen am zweiten ':' ab ("payloa" statt
+        "payload"), der INSERT scheiterte IMMER mit einem SyntaxError. Bei
+        DEBUG-Logging war das unsichtbar (best-effort except-Block) — exakt
+        Louis' Symptom: 90 in / 0 out, weil auch der Fehlerzweig nie schrieb.
+        """
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.json.return_value = {"ok": False, "description": "Bad Request: chat not found"}
+
+        db_mock = _make_db_mock()
+
+        with (
+            patch.object(
+                sys.modules["services.telegram_token_resolver"],
+                "get_tenant_bot_token",
+                return_value="987654:TENANT_TOKEN",
+            ),
+            patch.object(tg, "sync_session_factory", return_value=db_mock),
+            patch("httpx.post", return_value=mock_response),
+        ):
+            result = tg._send_telegram_message(999000001, "Test msg", tenant_id="tenant-abc")
+
+        assert result is False
+        insert_calls = [
+            c
+            for c in db_mock.execute.call_args_list
+            if "INSERT INTO telegram_message_log" in str(c.args[0])
+        ]
+        assert len(insert_calls) == 1, "erwartet: genau ein Outbound-Log-INSERT beim Ablehnen"
+        sql = str(insert_calls[0].args[0])
+        assert "'out'" in sql
+        payload = insert_calls[0].args[1]["payload"]
+        assert '"send_status": "failed"' in payload
+
+        bindparams = set(insert_calls[0].args[0]._bindparams.keys())
+        assert "payload" in bindparams, (
+            f"Bind-Parameter 'payload' fehlt (gefunden: {bindparams}) — "
+            "vermutlich ':payload::jsonb' statt 'CAST(:payload AS jsonb)'"
+        )
+
     def test_logs_outbound_row_on_success(self):
         """Erfolgreicher Send → telegram_message_log-Zeile (direction='out', send_status='sent').
 
@@ -520,6 +566,19 @@ class TestSendTelegramMessagePerTenant:
         assert "'out'" in sql
         payload = insert_calls[0].args[1]["payload"]
         assert '"send_status": "sent"' in payload
+
+        # Regression (21.08.): `:payload::jsonb` (Postgres-Cast direkt hinterm
+        # Bind-Parameter) wird von SQLAlchemys text()-Parser als zwei
+        # getrennte Doppelpunkte gelesen — der Bind-Parameter-Name wird am
+        # zweiten ':' abgeschnitten ("payloa" statt "payload"), der echte
+        # INSERT scheitert IMMER mit einem SyntaxError, egal wie der Mock
+        # aussieht. Ein reiner String-Check auf "'out'" haette das NIE
+        # gefunden — nur die echten SQLAlchemy-Bindparameter zeigen es.
+        bindparams = set(insert_calls[0].args[0]._bindparams.keys())
+        assert "payload" in bindparams, (
+            f"Bind-Parameter 'payload' fehlt (gefunden: {bindparams}) — "
+            "vermutlich ':payload::jsonb' statt 'CAST(:payload AS jsonb)'"
+        )
 
     def test_scheiterndes_outbound_log_insert_wird_nicht_stumm_verschluckt(self, caplog):
         """SSOT AP1.3 (21.08.): scheitert der Erfolgs-INSERT selbst (z.B. RLS-
