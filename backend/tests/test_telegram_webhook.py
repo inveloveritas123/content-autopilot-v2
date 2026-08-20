@@ -48,7 +48,11 @@ _POLLUTED_KEYS = (
     "models",
     "models.base",
     "models.tenant",
+    "models.user",
     "services",
+    "services.ai_disclosure",
+    "services.auth",
+    "services.embedding_service",
     "services.llm",
     "services.rls",
     "services.crypto",
@@ -95,21 +99,69 @@ _fake_base_mod.sync_session_factory = MagicMock()
 _fake_base_mod.async_session_factory = MagicMock()
 
 _models_pkg = _ensure_stub("models")
+# ⛔ __path__ macht den Stub zu einem PAKET. Ohne dieses Attribut scheitert jedes
+# `from models.<X> import ...`, das nicht selbst gestubbt ist, mit der irrefuehrenden
+# Meldung "No module named 'models.user'; 'models' is not a package" — der Import
+# sieht aus wie ein fehlendes Modul, ist aber ein fehlendes Paket-Merkmal. Genau
+# dieser Collection-Error hat die GESAMTE Suite gestoppt (pytest: "Interrupted:
+# 1 error during collection" → kein einziger der uebrigen Tests lief).
+if not hasattr(_models_pkg, "__path__"):
+    _models_pkg.__path__ = []  # type: ignore[attr-defined]
 # dependencies.py: `from models.tenant import Tenant`
 _fake_tenant_mod = _ensure_stub("models.tenant")
 if not hasattr(_fake_tenant_mod, "Tenant"):
     _fake_tenant_mod.Tenant = MagicMock()
-# models.base als Attribut registrieren (für patch("models.base.sync_session_factory"))
+# dependencies.py: `from models.user import User` — fehlte, obwohl dependencies.py
+# es seit jeher zieht. Der Stub muss JEDES Modell mitliefern, das dependencies.py
+# importiert, sonst bricht der Import an der ersten ungestubbten Zeile.
+_fake_user_mod = _ensure_stub("models.user")
+if not hasattr(_fake_user_mod, "User"):
+    _fake_user_mod.User = MagicMock()
+# models.base/.tenant/.user als Attribute registrieren
+# (fuer patch("models.base.sync_session_factory") usw.)
 _models_pkg.base = _fake_base_mod
+_models_pkg.tenant = _fake_tenant_mod
+_models_pkg.user = _fake_user_mod
 
 # dependencies.py zieht zudem services.llm.set_llm_tenant + services.rls.set_rls_tenant
+# sowie `from services import auth as auth_svc`.
 _svc_pkg = _ensure_stub("services")
+# ⛔ Wie bei "models": ohne __path__ ist der Stub kein Paket und jedes
+# `from services.<X> import ...` scheitert mit "unknown location".
+if not hasattr(_svc_pkg, "__path__"):
+    _svc_pkg.__path__ = []  # type: ignore[attr-defined]
+# dependencies.py: `from services import auth as auth_svc` — holt das Submodul als
+# ATTRIBUT des Pakets, nicht per Submodul-Import. Beides muss gesetzt sein.
+if "services.auth" not in sys.modules:
+    _svc_auth = _ensure_stub("services.auth")
+    _svc_auth.verify_password = MagicMock()
+    _svc_auth.hash_password = MagicMock()
+_svc_pkg.auth = sys.modules["services.auth"]
 if "services.llm" not in sys.modules:
     _svc_llm = _ensure_stub("services.llm")
     _svc_llm.set_llm_tenant = MagicMock()
 if "services.rls" not in sys.modules:
     _svc_rls = _ensure_stub("services.rls")
     _svc_rls.set_rls_tenant = MagicMock()
+    # api/telegram.py zieht zusaetzlich die sync-Varianten (RLS-Welle 08/2026).
+    _svc_rls.set_rls_tenant_sync = MagicMock()
+    _svc_rls.set_rls_bypass_sync = MagicMock()
+# ⛔ Die Stub-Liste MUSS alles abdecken, was api/telegram.py und dependencies.py
+#    importieren — sonst bricht der Import an der ersten ungestubbten Zeile und
+#    der Collection-Error stoppt wieder die gesamte Suite. Ermittelt per
+#    `grep -hoE "from (services|models)\.[a-z_]+ import ..." api/telegram.py
+#    dependencies.py`, nicht geraten. Waechst api/telegram.py um einen Import,
+#    ist diese Liste nachzuziehen.
+if "services.ai_disclosure" not in sys.modules:
+    _svc_aid = _ensure_stub("services.ai_disclosure")
+    # Echter Wortlaut nicht noetig — geprueft wird die Webhook-Mechanik, nicht die Copy.
+    _svc_aid.chat_ai_hinweis_block = MagicMock(return_value="")
+    _svc_aid.append_ai_notice = MagicMock(side_effect=lambda t: t)
+    _svc_aid.hat_chat_ai_hinweis = MagicMock(return_value=True)
+if "services.embedding_service" not in sys.modules:
+    _svc_emb = _ensure_stub("services.embedding_service")
+    _svc_emb.search_similar = MagicMock(return_value=[])
+    _svc_emb.store_chunk = MagicMock()
 
 # datetime.UTC Py3.9-Compat: api.telegram importiert `from datetime import UTC`
 # WICHTIG: sys.modules["datetime"] NICHT ersetzen — das bricht FastAPI's class-Identity
