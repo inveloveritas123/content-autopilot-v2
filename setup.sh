@@ -277,13 +277,27 @@ fi
 # ─── STEP 4: Stack hochfahren ─────────────────────────────────────────────────
 step "STEP 4: Stack hochfahren"
 
-# Idempotenz: pruefen ob bereits laeuft
-RUNNING_CONTAINERS=$(docker compose -f "$COMPOSE_FILE" ps --status running -q 2>/dev/null | wc -l)
+# Idempotenz: pruefen ob bereits laeuft.
+# ⛔ NAMENTLICH pruefen, nicht zaehlen. Ein blosses `ps --status running | wc -l`
+#    zaehlt JEDEN Container im Compose-Projekt — auch die beiden Nextcloud-
+#    Container, die hier mitlaufen, aber keine App-Services sind. Sie allein
+#    erfuellten "> 0" und setup.sh meldete "Stack laeuft bereits", waehrend
+#    Backend, Worker, Beat und nginx gar nicht liefen. Der Fehler ist still:
+#    das Skript ueberspringt den Start und meldet Erfolg.
+APP_SERVICES="backend-v2 celery-worker-v2 celery-beat-v2 nginx-v2"
+FEHLENDE_SERVICES=""
+for SVC in $APP_SERVICES; do
+    if [ -z "$(docker compose -f "$COMPOSE_FILE" ps --status running -q "$SVC" 2>/dev/null)" ]; then
+        FEHLENDE_SERVICES="${FEHLENDE_SERVICES}${SVC} "
+    fi
+done
 
-if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
-    info "Stack laeuft bereits (${RUNNING_CONTAINERS} Container aktiv) — kein Neustart."
+if [ -z "$FEHLENDE_SERVICES" ]; then
+    info "Stack laeuft bereits (alle App-Services aktiv: ${APP_SERVICES}) — kein Neustart."
     info "Um den Stack neu zu starten: docker compose -f ${COMPOSE_FILE} restart"
 else
+    [ -n "$(docker compose -f "$COMPOSE_FILE" ps --status running -q 2>/dev/null)" ] \
+        && info "Teilweise gestartet — fehlende App-Services: ${FEHLENDE_SERVICES}"
     docker compose -f "$COMPOSE_FILE" up -d \
         || die "docker compose up -d fehlgeschlagen." \
                "Logs pruefen: docker compose -f ${COMPOSE_FILE} logs"
