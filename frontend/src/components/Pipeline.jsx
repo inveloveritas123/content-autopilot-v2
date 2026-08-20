@@ -320,7 +320,7 @@ export default function Pipeline() {
           <span className="text-status-fehler-text shrink-0 mt-0.5">🔴</span>
           <div className="flex-1">
             <span className="font-semibold text-status-fehler-text">
-              KI-Pipeline pausiert: Requesty.ai Portal-Budget erschöpft.
+              KI-Pipeline pausiert: Guthaben beim KI-Anbieter erschöpft.
             </span>
             <span className="text-status-fehler-text ml-1">
               Analyse und Content-Generierung sind gestoppt. Bitte bei{' '}

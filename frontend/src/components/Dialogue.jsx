@@ -238,7 +238,7 @@ function GeneratePostPanel({ context, itemId }) {
         </p>
         <p className="text-[11px] text-status-fertig-text">
           Wähle ein Format und kopiere den Claude-Prompt. Claude generiert deinen Post direkt — ohne
-          Requesty-Budget (kostenlos).
+          KI-Guthaben (kostenlos).
         </p>
       </div>
 
@@ -440,7 +440,7 @@ function ItemDetail({ item, onBack }) {
                 ⏳ Smarte Fragen werden noch generiert
               </p>
               <p className="text-[11px] text-ink-muted">
-                Wenn das Requesty-Budget aufgeladen wird, generiert die Pipeline automatisch 3-5
+                Sobald wieder KI-Guthaben verfügbar ist, generiert die Pipeline automatisch 3-5
                 personalisierte Fragen aus diesem Content — basierend auf deinem Unternehmer-Profil.
               </p>
             </div>
@@ -648,8 +648,8 @@ export default function Dialogue() {
                   ⏳ Noch keine Fragen generiert
                 </p>
                 <p className="text-[11px] text-accent-700">
-                  Wenn das Requesty-Budget aufgeladen wird, generiert die Pipeline automatisch
-                  smarte Fragen für alle {stats.total} analysierten Items.
+                  Sobald wieder KI-Guthaben verfügbar ist, generiert die Pipeline automatisch smarte
+                  Fragen für alle {stats.total} analysierten Items.
                 </p>
               </div>
             )}

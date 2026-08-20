@@ -532,7 +532,27 @@ export default function Analytics() {
         {error}
       </div>
     )
-  if (!stats) return <div className="text-center py-12 text-ink-muted">Keine Daten vorhanden.</div>
+  // Empty-State mit AUSWEG. Ein nacktes "Keine Daten vorhanden." sagt dem
+  // Betreiber nicht, ob etwas kaputt ist oder er nur noch nichts angelegt hat —
+  // und schon gar nicht, was er tun soll. Analytics wertet Content aus; ohne
+  // Quellen gibt es keinen Content und damit nichts auszuwerten. Genau das
+  // steht jetzt da, samt Weg zur Ursache.
+  if (!stats)
+    return (
+      <div className="text-center py-16 px-4">
+        <BarChart3 className="w-10 h-10 mx-auto mb-3 text-ink-muted opacity-40" />
+        <p className="text-sm font-medium text-ink mb-1">Noch keine Auswertung möglich</p>
+        <p className="text-xs text-ink-muted max-w-md mx-auto">
+          Analytics wertet generierte Posts aus. Sobald die Pipeline aus deinen Quellen den ersten
+          Content erzeugt hat, erscheinen hier Kennzahlen zu Kanälen, Formaten und
+          Veröffentlichungen.
+        </p>
+        <p className="text-xs text-ink-muted mt-3">
+          Noch keine Quellen angelegt? Unter <strong>Quellen</strong> hinzufügen — der Rest läuft
+          automatisch.
+        </p>
+      </div>
+    )
 
   const {
     byStatus,

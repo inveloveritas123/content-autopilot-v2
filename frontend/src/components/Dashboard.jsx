@@ -1188,7 +1188,7 @@ export default function Dashboard() {
           <AlertCircle className="w-4 h-4 text-status-fehler-text shrink-0 mt-0.5" />
           <div className="flex-1">
             <span className="font-semibold text-status-fehler-text">
-              🔴 KI-Pipeline pausiert: Requesty.ai Portal-Budget erschöpft.
+              🔴 KI-Pipeline pausiert: Guthaben beim KI-Anbieter erschöpft.
             </span>
             <span className="text-status-fehler-text ml-1">
               Bitte bei{' '}
