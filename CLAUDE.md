@@ -358,3 +358,32 @@ Router-Default abhängig.
 - Neue Modelle vor dem Einbauen gegen den Router prüfen, nicht nur in der UI freigeben
 - Alle Calls gehen ueber Requesty.ai Router (LITELLM_BASE_URL in .env)
 - Zielbudget: <€170/Monat fuer den gesamten Stack
+
+### Deploy scheitert still: UID-Mismatch statt root (2026-08-20)
+Der GitHub-Deploy feuert bei jedem Push auf main und das CI-Gate wird gruen, aber der
+Job-Schritt "Code nach /opt/content-autopilot-v2 syncen" scheitert. Ursache auf dem
+Testsystem: alle 818 Dateien gehoeren UID 1005, der self-hosted-Runner laeuft als
+uid=1000 (runner). UID 1005 ist der SSH-User `ingo` auf dem HOST — der Incus-Container
+hat kein Identitaets-Mapping, deshalb erscheint dieselbe Nummer drinnen namenlos.
+Entstanden durch ein Handdeploy per SSH von aussen. Modus ist 775, der Gruppe fehlt nur
+die Mitgliedschaft. Fix: `chown -R 1000:1000 /opt/content-autopilot-v2` IM Container,
+oder `usermod -aG 1005 runner`.
+Warum wichtig: Nach aussen sieht die Kette gruen aus (Gate success, Merge sichtbar) — wer
+nur auf GitHub schaut, haelt gemergte Fixes fuer live. Real gemessen: das Testsystem lief
+vom 07.08. bis 20.08. auf altem Code.
+
+### Ein Handdeploy per SSH kostet die Automatik (2026-08-20)
+Wer sich per SSH einloggt und Dateien nach /opt/content-autopilot-v2 kopiert, uebernimmt
+damit das Eigentum am Deploy-Ziel und sperrt den CI-Runner dauerhaft aus. Der Fehler
+faellt nicht sofort auf, weil der naechste Deploy erst beim naechsten Push laeuft.
+Warum wichtig: Der Zeitverlust liegt nicht im Fix (eine Zeile), sondern in der Diagnose —
+der Bestandsbefund nannte faelschlich "root:root", wer nach root sucht findet nichts und
+haelt den Befund fuer erledigt.
+
+### HTTP 200 beweist nicht, dass der neue Code laeuft (2026-08-20)
+/api/health lieferte zwei Wochen lang 200, waehrend der Container Code vom 17.08. fuhr.
+Ein Wirknachweis muss pruefen, ob eine konkrete, NEU hinzugekommene Datei im laufenden
+Container liegt — z.B. `docker exec <worker> test -f /app/services/analysis_normalize.py`.
+Warum wichtig: Der bereits gefixte join()-Bug wirkte live weiter ("sequence item 0:
+expected str instance, dict found"), weil der Fix nie ankam. Ein Nutzer fuehrte einen
+vollstaendigen Dialog und bekam nie den versprochenen Post.
