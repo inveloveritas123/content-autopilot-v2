@@ -90,6 +90,11 @@ MODEL_PER_PROMPT: dict[str, str] = {
     "SENSITIVE_DETECT": "S2",
     "MD_CONVERT_P03": "S2",
     "LAYER1": "S2",  # Strukturierte Intent/Feature-Extraktion — schnelle JSON-Klassifikation, kein Frontier nötig (Issue #15)
+    # Layer-2-Rückfall der Bestätigungs-Erkennung nach einem OFFER. S2 reicht:
+    # der Möglichkeitsraum ist DREI Werte groß und die Frage ist geschlossen.
+    # Compendium HYBRID_REGEX_LLM_CLASSIFIER.md: Layer 1 (Wortlisten) trägt
+    # 60-80 %, Layer 2 nur den unklaren Rest.
+    "CONFIRM_L2": "S2",
     "P14": "S2",  # Eingangs-Zug: Anweisung oder Inhalt? — dieselbe Gattung Aufgabe wie LAYER1
     "VOICE_FALLBACK": "S6",  # Voice-Fallback-Generierung aus Kontext+Avatar — analytisch, Frontier-Qualität, EU via Bedrock-Frankfurt (Issue #40)
     "P17": "S2",  # je-Transkript-Beobachter (Voice/Werte/Avatar-Drift-Extraktion) — Testmodus S2/EU; Decisions werden reviewt; via #72 anhebbar (Issue #41)
@@ -99,6 +104,12 @@ MODEL_PER_PROMPT: dict[str, str] = {
 PROMPT_MAX_TOKENS: dict[str, int] = {
     "P01": 16384,  # Unternehmerportrait-JSON — 8192 truncatete real (Hotpatch 2026-07-27, #62)
     "P02": 2000,  # Website-Analyse — kompakte JSON-Zusammenfassung (Issue #39)
+    # Drei-Werte-Antwort ({"urteil": "..."}). 512 wäre für ein reines
+    # Nicht-Thinking-Modell (S2/Mistral Small) reichlich; 1024 deckt den Fall,
+    # dass PIPELINE_TIER_DEFAULT den Key auf ein Thinking-Modell umbiegt —
+    # die teilen sich max_tokens mit dem unsichtbaren Reasoning (s. Kommentar
+    # unten). Lieber Luft als eine mitten im JSON abgeschnittene Antwort.
+    "CONFIRM_L2": 1024,
     "P03": 16384,  # Voice-Profil-JSON (12 Dimensionen) — 8192 truncatete real (Hotpatch 2026-07-27, #62)
     "P04": 16384,  # Audience-Avatar-JSON — analog zu P01/P03
     # ⚠️ Thinking-Modelle teilen sich max_tokens zwischen unsichtbarem Reasoning und der

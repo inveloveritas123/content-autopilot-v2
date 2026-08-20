@@ -629,3 +629,83 @@ def test_privates_modul_kollidiert_nicht_mit_sys_modules():
     """
     assert sys.modules.get("services.p08_service") is not p08
     assert p08.__name__ == "services._p08_service_fuer_gespraechstests"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LAYER 2 — LLM-Rückfall der Bestätigungs-Erkennung
+#
+# ⛔ WARUM DIESE TESTS: Layer 2 ist der Pfad, den Layer 1 per Definition NICHT
+#   abdeckt. Ohne Test wäre er genau die Klasse „gebaut, aber nie nachweislich
+#   wirksam" — die 69 Layer-1-Tests beweisen nur, dass nichts kaputt ging.
+#   Compendium: domains/llm-integration/HYBRID_REGEX_LLM_CLASSIFIER.md
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_layer2_faengt_formulierung_die_in_keiner_wortliste_steht():
+    """„na dann mal los" steht in KEINER Liste — Layer 2 erkennt die Zustimmung."""
+    fake = MagicMock()
+    fake.text = '{"urteil": "zustimmung"}'
+
+    with patch.object(p08, "_classify_confirmation", p08._classify_confirmation):
+        import services.pipeline_llm as _pl
+
+        with patch.object(_pl, "call_pipeline_llm", return_value=fake) as call:
+            ergebnis = _classify_confirmation("na dann mal los", tenant_id="t-1")
+
+    assert ergebnis == "zustimmung"
+    # ⛔ Der Call MUSS stattgefunden haben — sonst käme das "zustimmung" aus
+    #   Layer 1 und der Test würde den neuen Pfad gar nicht prüfen.
+    assert call.called, "Layer 2 wurde nicht aufgerufen"
+    assert call.call_args.kwargs["prompt_key"] == "CONFIRM_L2"
+    assert call.call_args.kwargs["tenant_id"] == "t-1"
+
+
+def test_layer2_ausfall_endet_fail_safe_in_weiterer_inhalt():
+    """Jeder Ausfall (Budget, Timeout, Parse) darf NIE zu 'zustimmung' führen."""
+    import services.pipeline_llm as _pl
+
+    with patch.object(_pl, "call_pipeline_llm", side_effect=RuntimeError("Budget")):
+        ergebnis = _classify_confirmation("na dann mal los", tenant_id="t-1")
+
+    # ⛔ Ein Post gegen den Willen des Nutzers ist der teurere Fehler.
+    assert ergebnis == "weiterer_inhalt"
+
+
+def test_layer2_ohne_tenant_kein_llm_call():
+    """Ohne tenant_id kein Call — er liefe an Kostenerfassung und Cap vorbei."""
+    import services.pipeline_llm as _pl
+
+    with patch.object(_pl, "call_pipeline_llm") as call:
+        ergebnis = _classify_confirmation("na dann mal los")
+
+    assert ergebnis == "weiterer_inhalt"
+    assert not call.called, "Layer 2 lief OHNE Tenant — Kosten wären nicht zuordenbar"
+
+
+def test_layer2_langer_text_geht_gar_nicht_erst_an_das_modell():
+    """Layer 0 (Pre-Filter): wer lange antwortet, will erkennbar weiterreden."""
+    import services.pipeline_llm as _pl
+
+    langer_text = (
+        "Also eigentlich wollte ich noch erzaehlen, dass wir letzte Woche einen "
+        "richtig spannenden Kundentermin hatten und das gehoert da unbedingt rein"
+    )
+    assert len(langer_text) > p08._CONFIRM_L2_MAX_CHARS
+
+    with patch.object(_pl, "call_pipeline_llm") as call:
+        ergebnis = _classify_confirmation(langer_text, tenant_id="t-1")
+
+    assert ergebnis == "weiterer_inhalt"
+    assert not call.called, "Langer Gespraechsinhalt kostete unnoetig einen LLM-Call"
+
+
+def test_layer2_ablehnung_wird_durchgereicht():
+    """Auch die Ablehnung kommt aus Layer 2 zurück, nicht nur die Zustimmung."""
+    fake = MagicMock()
+    fake.text = '{"urteil": "ablehnung"}'
+    import services.pipeline_llm as _pl
+
+    with patch.object(_pl, "call_pipeline_llm", return_value=fake):
+        ergebnis = _classify_confirmation("lieber noch nicht", tenant_id="t-1")
+
+    assert ergebnis == "ablehnung"

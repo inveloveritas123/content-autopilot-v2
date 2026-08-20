@@ -398,6 +398,23 @@ _ZUSTIMMUNG = frozenset(
         "sicher",
     }
 )
+# ── Layer-2-Rückfall (s. _classify_confirmation) ─────────────────────────────
+# Pre-Filter: nur kurze Antworten sind ueberhaupt Bestaetigungs-Kandidaten.
+# 80 Zeichen deckt „na dann mal los, bin gespannt" mit Luft; alles darueber ist
+# erkennbar Gespraechsinhalt.
+_CONFIRM_L2_MAX_CHARS = 80
+
+_CONFIRM_L2_SYSTEM = (
+    "Du entscheidest EINE Frage: Der Bot hat gefragt, ob er den Post jetzt "
+    "schreiben soll. Der Nutzer hat geantwortet. Ist das eine Zustimmung, eine "
+    "Ablehnung, oder redet er einfach weiter?\n\n"
+    'Antworte NUR mit JSON: {"urteil": "zustimmung"} oder '
+    '{"urteil": "ablehnung"} oder {"urteil": "weiterer_inhalt"}.\n\n'
+    "Im Zweifel IMMER weiterer_inhalt — lieber fragt der Bot nochmal, als dass "
+    "ein Post gegen den Willen des Nutzers entsteht. "
+    "Ein 'ja, aber...' ist KEINE Zustimmung."
+)
+
 _ABLEHNUNG = frozenset(
     {
         "nein",
@@ -422,7 +439,7 @@ _ZUSTIMMUNG_EMOJI = ("👍", "✅", "👌", "🙌")
 _NUR_BUCHSTABEN = re.compile(r"[^\wäöüß ]+", re.UNICODE)
 
 
-def _classify_confirmation(user_text: str | None) -> str:
+def _classify_confirmation(user_text: str | None, tenant_id: str | None = None) -> str:
     """'zustimmung' | 'ablehnung' | 'weiterer_inhalt'.
 
     Im Zweifel **immer** 'weiterer_inhalt' — dann redet der Nutzer weiter,
@@ -467,6 +484,59 @@ def _classify_confirmation(user_text: str | None) -> str:
         return "zustimmung"
     if all(t in _ZUSTIMMUNG for t in tokens):
         return "zustimmung"
+
+    # ── LAYER 2: LLM für den unklaren Rest ────────────────────────────────
+    # ⛔ WARUM (Compendium domains/llm-integration/HYBRID_REGEX_LLM_CLASSIFIER.md,
+    #   kanonisch seit 2026-05-01): Layer 1 (Wortlisten) trägt 60-80 % der Fälle
+    #   deterministisch und kostenlos, Layer 2 nur den Rest. Ohne Layer 2 landet
+    #   JEDE unbekannte Formulierung bei "weiterer_inhalt" — der Nutzer sagt
+    #   „na dann mal los" und bekommt keinen Post, obwohl er zugestimmt hat.
+    #   Genau die Enttäuschung, die schon „mach das" ausgelöst hat, nur eine
+    #   Formulierung weiter. Eine endlos wachsende Wortliste ist keine Lösung:
+    #   niemand kann alle Zustimmungen vorausdenken.
+    #
+    # ⛔ LAYER 0 (Pre-Filter): nur KURZE Antworten gehen an Layer 2. Wer auf
+    #   „Soll ich ihn schreiben?" mit drei Sätzen antwortet, will erkennbar
+    #   weiterreden — dafür braucht es kein Modell und keine Kosten.
+    #
+    # ⛔ FAIL-SAFE BLEIBT FAIL-SAFE: jeder Ausfall (kein Tenant, Budget-Cap,
+    #   Timeout, unparsbare Antwort) endet in "weiterer_inhalt", NIE in
+    #   "zustimmung". Ein Post gegen den Willen des Nutzers ist der teurere
+    #   Fehler — dieselbe Linie wie im Docstring oben.
+    #
+    # ⛔ OHNE tenant_id KEIN CALL: der Tenant trägt Kostenerfassung und
+    #   Tagesbudget (services/llm.py::set_llm_tenant, 5 USD/Tag). Ein Call
+    #   ohne Zuordnung liefe an beidem vorbei.
+    if tenant_id and len(roh) <= _CONFIRM_L2_MAX_CHARS:
+        try:
+            from services.pipeline_llm import call_pipeline_llm
+
+            res = call_pipeline_llm(
+                prompt_key="CONFIRM_L2",
+                system_prompt=_CONFIRM_L2_SYSTEM,
+                user_content=roh,
+                tenant_id=tenant_id,
+                max_retries=1,
+            )
+            urteil = (json.loads(res.text.strip()).get("urteil") or "").strip().lower()
+            if urteil in {"zustimmung", "ablehnung"}:
+                logger.info(
+                    "confirm_l2 tenant=%s: '%s' -> %s (Layer 1 hatte keinen Treffer)",
+                    tenant_id,
+                    roh[:60],
+                    urteil,
+                )
+                return urteil
+        except Exception as exc:
+            # ⛔ Compendium-Anti-Pattern 6.3 („Layer-1-Bug silent"): der Ausfall
+            #   wird GELOGGT, nicht verschluckt. Sonst laeuft Layer 2 monatelang
+            #   nicht, und niemand merkt es.
+            logger.warning(
+                "confirm_l2 tenant=%s nicht moeglich (%s) — Rueckfall auf weiterer_inhalt",
+                tenant_id,
+                type(exc).__name__,
+            )
+
     return "weiterer_inhalt"
 
 
@@ -921,7 +991,7 @@ def p08_response(
 
     # 2. Hat der Bot zuletzt ein Angebot gemacht? Dann ist jetzt die Bestätigung dran.
     if _letzte_bot_aktion(messages_list) == ResponseOutcome.OFFER.value:
-        antwort = _classify_confirmation(raw_transcript)
+        antwort = _classify_confirmation(raw_transcript, tenant_id=tenant_id)
 
         if antwort == "zustimmung":
             lebt = _persistiere_runde(
