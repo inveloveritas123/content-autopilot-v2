@@ -25,3 +25,7 @@ sentry-sdk[fastapi,celery]>=2.0
 openpyxl>=3.1.0
 pypdf>=4.0
 python-docx>=1.1
+# Zeitplan-Auswertung fuer Random-Smart (tasks/random_smart_scheduler.py).
+# ⛔ Fehlte bis 2026-08-21: der ImportError-Fallback griff STILL und ignorierte
+#    jeden konfigurierten Zeitplan (alles fiel auf Mo+Do 09:00 zurueck).
+croniter>=2.0

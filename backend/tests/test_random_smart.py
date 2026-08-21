@@ -373,3 +373,62 @@ class TestSendOpeningQuestion:
             _send_opening_question("tenant-x", "Frage?")
 
         mock_set_rls.assert_called_once_with(mock_factory.return_value, "tenant-x")
+
+
+# ---------------------------------------------------------------------------
+# croniter-Abhaengigkeit — der stille Fallback (Befund 2026-08-21)
+# ---------------------------------------------------------------------------
+# ⛔ WAS HIER BEWIESEN WIRD: `croniter` stand in KEINER requirements-Datei, war
+#   also auf keinem Server installiert. Der `except ImportError`-Fallback griff
+#   deshalb IMMER und feuerte stur Mo+Do 09:00 — jeder vom Kunden konfigurierte
+#   Zeitplan wurde ignoriert. Nichts wurde rot, alles war falsch.
+#   Das ist ein Teil von Louis' "funktioniert nicht zuverlaessig".
+
+
+class TestCroniterAbhaengigkeit:
+    def test_croniter_steht_in_den_requirements(self):
+        """Die Bibliothek, ohne die der Scheduler jeden Zeitplan ignoriert, MUSS deklariert sein.
+
+        ⛔ Regression gegen den Ist-Zustand bis 2026-08-21: benutzt, aber nirgends
+        deklariert. Ein Import-Fallback ersetzt keine Abhaengigkeit — er verdeckt sie.
+        """
+        from pathlib import Path
+
+        req = Path(__file__).resolve().parents[1] / "requirements.txt"
+        assert req.exists(), f"requirements.txt nicht gefunden: {req}"
+        assert "croniter" in req.read_text(encoding="utf-8"), (
+            "croniter fehlt in requirements.txt — der Scheduler faellt dann still "
+            "auf Mo+Do 09:00 zurueck und ignoriert jeden konfigurierten Zeitplan."
+        )
+
+    def test_fallback_ignoriert_abweichenden_zeitplan(self):
+        """DER SCHADEN, festgehalten: ohne croniter wird 'Di+Fr' zu 'Mo+Do'.
+
+        Dienstag 09:03 mit Zeitplan '0 9 * * 2,5' (Di+Fr) muesste feuern. Der
+        Fallback kennt nur Mo+Do und schweigt — der Kunde bekommt seinen Post
+        nie an dem Tag, den er eingestellt hat.
+
+        ⛔ Dieser Test dokumentiert bewusst das FEHLVERHALTEN des Fallbacks.
+        Waere croniter installiert, MUESSTE das Ergebnis True sein — genau
+        deshalb gehoert die Bibliothek in die requirements (Test darueber).
+        """
+        dienstag_09_03_local = datetime(2026, 4, 28, 9, 3, 0)
+        dienstag_09_03_utc = datetime(2026, 4, 28, 7, 3, 0, tzinfo=UTC)
+
+        with patch("tasks.random_smart_scheduler._CRONITER_AVAILABLE", False):
+            with patch("tasks.random_smart_scheduler.datetime") as mock_dt:
+                mock_dt.now.side_effect = lambda tz=None: (
+                    dienstag_09_03_utc if tz is not None else dienstag_09_03_local
+                )
+                mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+                from tasks.random_smart_scheduler import _cron_fired_in_window
+
+                result = _cron_fired_in_window(
+                    "0 9 * * 2,5", window_minutes=5, timezone_str="Europe/Berlin"
+                )
+
+        assert result is False, (
+            "Der Fallback hat einen Di+Fr-Zeitplan als gefeuert gemeldet — dann "
+            "misst dieser Test nicht mehr, was er messen soll."
+        )

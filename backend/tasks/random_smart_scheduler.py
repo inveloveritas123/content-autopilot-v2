@@ -16,8 +16,19 @@ try:
     from croniter import croniter as _croniter
 
     _CRONITER_AVAILABLE = True
-except ImportError:
+except ImportError:  # pragma: no cover — haengt an der Installation, nicht am Code
+    # ⛔ DER FALLBACK IST NICHT HARMLOS: ohne croniter ignoriert dieser Scheduler
+    #   JEDEN konfigurierten Zeitplan und feuert stur Mo+Do 09:00. Der Kunde
+    #   stellt "Dienstag und Freitag" ein und bekommt Montag und Donnerstag —
+    #   nichts wird rot, alles ist falsch. Genau so lief es bis 2026-08-21,
+    #   weil croniter in keiner requirements-Datei stand.
+    #   Deshalb WARNING beim Import, nicht Schweigen: die Bibliothek gehoert
+    #   installiert, der Fallback ist ein Notnagel und kein Betriebszustand.
     _CRONITER_AVAILABLE = False
+    logger.warning(
+        "croniter nicht installiert — konfigurierte Zeitplaene werden IGNORIERT, "
+        "Fallback auf Mo+Do 09:00. Bitte 'croniter>=2.0' installieren."
+    )
 
 
 def _cron_fired_in_window(

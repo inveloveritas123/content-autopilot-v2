@@ -440,7 +440,12 @@ def run_p12(
             user_content=user_prompt,
             tenant_id=tenant_id,
             few_shot_messages=voice_fewshot,
-            max_tokens=3000,
+            # ⛔ KEIN max_tokens hier — PROMPT_MAX_TOKENS["P12"] (8192) ist die SSOT.
+            #   Der frueher hartkodierte Wert 3000 UEBERSTIMMTE das Register und machte
+            #   dessen Korrektur wirkungslos: die Registerzeile traegt ausdruecklich
+            #   "2000 truncatete real (#62)" — jemand hat gemessen und zentral auf 8192
+            #   erhoeht, waehrend diese lokale Kopie weiter abschnitt.
+            #   Symptom beim Kunden: abgeschnittene Posts, ohne dass etwas rot wird.
         )
 
         raw_text = res.text
