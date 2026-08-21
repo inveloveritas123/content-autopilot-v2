@@ -470,6 +470,27 @@ def run_p12(
         actual_cost = res.cost_usd
 
         # ------------------------------------------------------------------
+        # 8b. Trunkierung: abgeschnittene Antwort ist KEIN Ergebnis
+        # ------------------------------------------------------------------
+        # ⛔ finish_reason=="length" heisst: das Token-Budget beendete die Antwort,
+        #   nicht das Modell. Der Text ist dann unvollstaendig — bei P12 typisch
+        #   mitten im JSON. Frueher lief er ungeprueft ins Parsing: entweder brach
+        #   das mit einer irrefuehrenden Meldung ("JSON-Parsing fehlgeschlagen"),
+        #   oder — schlimmer — das JSON war zufaellig noch schliessbar und ein
+        #   HALBER POST ging an den Kunden. Genau die Klasse, die Louis mit
+        #   "funktioniert nicht zuverlaessig" beschreibt: nichts wird rot,
+        #   alles ist falsch.
+        #   Bewusst ein ValueError wie beim Parse-Fehler: der bestehende
+        #   except-Pfad (Audit auf 'failed' + self.retry) ist genau richtig —
+        #   ein Retry kann gelingen, weil das Thinking-Budget dynamisch ist.
+        if getattr(res, "truncated", False):
+            raise ValueError(
+                f"p12 LLM-Antwort ABGESCHNITTEN am Token-Deckel "
+                f"(finish_reason=length, {len(raw_text)} Zeichen sichtbar, "
+                f"output_tokens={res.output_tokens}). Kein halber Post an den Kunden."
+            )
+
+        # ------------------------------------------------------------------
         # 9. JSON-Parsing
         # ------------------------------------------------------------------
         try:

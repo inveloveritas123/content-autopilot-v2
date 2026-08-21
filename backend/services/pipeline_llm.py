@@ -389,6 +389,10 @@ class PipelineLLMResult:
         cache_read_tokens:  Cache-Hit-Tokens (0 wenn kein Cache-Hit).
         cache_write_tokens: Cache-Write-Tokens (0 wenn kein Cache-Write).
         cost_usd:           Berechnete Kosten aus TIER_PRICING (konservativ, ohne Cache-Rabatt).
+        truncated:          True, wenn der Router finish_reason=="length" meldete — die
+                            Antwort endete am Token-Deckel, nicht weil das Modell fertig war.
+                            ⛔ Der Text ist dann UNVOLLSTAENDIG und darf nicht als Ergebnis
+                            ausgeliefert werden.
     """
 
     text: str
@@ -398,6 +402,8 @@ class PipelineLLMResult:
     output_tokens: int
     cache_read_tokens: int = field(default=0)
     cache_write_tokens: int = field(default=0)
+    #: ⛔ Default False, damit bestehende Konstruktionen ohne dieses Feld weiterlaufen.
+    truncated: bool = field(default=False)
     cost_usd: float = field(default=0.0)
 
 
@@ -805,6 +811,12 @@ def _parse_response(
     )
 
     return PipelineLLMResult(
+        # ⛔ finish_reason wurde bis 2026-08-21 BERECHNET, GELOGGT — und dann
+        #   weggeworfen. Es stand nicht im Ergebnisobjekt, also konnte KEIN
+        #   Aufrufer darauf reagieren, selbst wenn er wollte. Symptom beim
+        #   Kunden: ein am Token-Deckel abgeschnittener Post wird ausgeliefert,
+        #   waehrend im Log eine Warnung steht, die niemand liest.
+        truncated=(finish_reason == "length"),
         text=text,
         model_id=model_id,
         tier=tier,
