@@ -99,9 +99,13 @@ jobs:
         run: |
           # Passwort-Hash ist scrypt mit Python-generiertem Salt (services/auth.py::hash_password) —
           # kein reiner SQL-Insert möglich, daher Hash im Container erzeugen und einbetten.
-          # agency.slug MUSS mit tenants.agentur_id oben übereinstimmen, sonst greift
-          # user_may_access_tenant() (role='owner' → alle Tenants der eigenen Agentur) nicht,
-          # und der Login-E2E-Test bekäme "kein Zugang eingerichtet" statt das Dashboard.
+          #
+          # user_tenant-Zeile ist PFLICHT (Nähte-Fund 2026-08-21): api/auth.py::_accessible_tenants
+          # und services/auth.py::user_may_access_tenant lösen die Agentur-Zugehörigkeit eines
+          # Tenants seit 2026-08-15 AUSSCHLIESSLICH über `user_tenant → users.agency_id` auf, nicht
+          # mehr über tenants.agentur_id (dort steht nur der _meta-Default 'zb', kein Fremdschlüssel
+          # auf agencies.slug). Ohne diese Zeile bleibt die Tenant-Liste selbst für role='owner' LEER
+          # — der Login gelingt, aber die SPA zeigt "Kein Zugang eingerichtet" statt das Dashboard.
           HASH=$(docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml \
             exec -T backend-v2 python -c "from services.auth import hash_password; print(hash_password('${E2E_LOGIN_PASSWORD}'))" | tr -d '\r')
           docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml \
@@ -110,6 +114,9 @@ jobs:
           docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml \
             exec -T postgres-ci psql -U autopilot -d content_autopilot_v2 \
             -c "INSERT INTO users (id, email, agency_id, role, password_hash, is_active, created_at) SELECT gen_random_uuid(), '${E2E_LOGIN_EMAIL}', id, 'owner', '${HASH}', true, NOW() FROM agencies WHERE slug = 'ci-test-agency' ON CONFLICT (email) DO NOTHING;"
+          docker compose -f docker-compose.v2.yml -f docker-compose.ci.yml \
+            exec -T postgres-ci psql -U autopilot -d content_autopilot_v2 \
+            -c "INSERT INTO user_tenant (id, user_id, tenant_id, scope, created_at) SELECT gen_random_uuid(), u.id, t.id, 'agency', NOW() FROM users u, tenants t WHERE u.email = '${E2E_LOGIN_EMAIL}' AND t.api_key = '${{ env.E2E_API_KEY }}' ON CONFLICT (user_id, tenant_id) DO NOTHING;"
 
       - name: Wait for /api/health
         timeout-minutes: 3
