@@ -1,0 +1,37 @@
+name: Diagnose Deploy-Rechte
+
+# ⛔ REINE MESSUNG, KEIN EINGRIFF. Der automatische Deploy scheitert seit
+# 2026-08-20 21:02 mit "rsync: Permission denied (13)" auf /opt/content-autopilot-v2.
+# Dieser Workflow stellt NUR fest, WEM das Verzeichnis gehoert und ALS WEN der
+# Runner laeuft — er aendert nichts. Nach der Diagnose wieder entfernen.
+#
+# Manuell ausloesen: gh workflow run "Diagnose Deploy-Rechte"
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  messen:
+    name: Rechtelage messen (read-only)
+    runs-on: [self-hosted, kolonie]
+    timeout-minutes: 5
+    steps:
+      - name: Wer bin ich, wem gehoert das Ziel
+        run: |
+          echo "=== Runner-Identitaet ==="
+          id
+          echo "=== Zielverzeichnis ==="
+          ls -ld /opt/content-autopilot-v2 || echo "Verzeichnis nicht lesbar"
+          echo "=== Betroffene Unterverzeichnisse (Stichprobe aus dem Fehler) ==="
+          for d in frontend/src/hooks mcp-server nginx scripts tests/e2e-explore; do
+            ls -ld "/opt/content-autopilot-v2/$d" 2>&1 | head -1
+          done
+          echo "=== Schreibtest (legt NICHTS an, das bleibt) ==="
+          if touch /opt/content-autopilot-v2/.orko_schreibprobe 2>/dev/null; then
+            echo "SCHREIBEN GEHT im Wurzelverzeichnis"
+            rm -f /opt/content-autopilot-v2/.orko_schreibprobe
+          else
+            echo "SCHREIBEN VERWEIGERT im Wurzelverzeichnis"
+          fi
+          echo "=== Gruppen des Runners vs. Gruppe des Ziels ==="
+          stat -c '%U %G %a' /opt/content-autopilot-v2 2>/dev/null || true
