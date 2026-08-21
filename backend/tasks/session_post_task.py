@@ -508,6 +508,12 @@ def _generate_post(session_id: str, tenant_id: str) -> dict:
     # 4. Aktive Profile (voice/avatar) sync laden (Fassade, Muster p12_task)
     voice_payload: dict = {}
     avatar_payload: dict = {}
+    #: ⛔ DRITTER ZUSTAND, bewusst getrennt vom leeren Profil: "Laden ist
+    #:   AUSGEFALLEN" ist etwas anderes als "Kunde hat noch kein Profil".
+    #:   Ein Neukunde im Onboarding hat legitim keins — den duerfen wir nicht
+    #:   flaggen, sonst landet jeder erste Post in der Review-Queue.
+    #:   Eine Exception dagegen heisst: wir wissen NICHT, ob es eins gibt.
+    voice_profil_nicht_ladbar = False
     try:
         from services.canonical_profiles import load_active_profiles
 
@@ -515,8 +521,23 @@ def _generate_post(session_id: str, tenant_id: str) -> dict:
         voice_payload = profiles.get("voice_profile", {}).get("payload") or {}
         avatar_payload = profiles.get("audience_avatar", {}).get("payload") or {}
     except Exception as exc:
-        logger.warning(
-            "session_post_task: profile load failed (continuing empty): %s",
+        # ⛔ ERROR, nicht WARNING — und der Lauf traegt die Folge jetzt sichtbar.
+        #   Der P12-Prompt fuehrt "Die Stimme ist heilig" als OBERSTES Prinzip und
+        #   leitet die gesamte Formulierung daraus ab. Ohne Profil entsteht
+        #   generischer Text: genau die Beschwerde "klingt nicht nach mir".
+        #   Frueher lief das als WARNING zwischen Hunderten durch, der Post galt
+        #   als erfolgreich generiert, und das Voice-Gate prueft gegen ein leeres
+        #   Profil — es kann Anti-KI-Phrasen noch finden, die Stimmen-AEHNLICHKEIT
+        #   (sein eigentlicher Zweck) aber nicht mehr.
+        #   Verwandt: der Vorfall vom 2026-08-06 (Post ohne einen einzigen
+        #   Kunden-Datenpunkt, vom Gate mit 84.4 Punkten bewertet) — gleiche
+        #   Wirkung, anderer Pfad. Dort wurde ein Riegel gebaut, hier fehlte er.
+        voice_profil_nicht_ladbar = True
+        logger.error(
+            "session_post_task: profile load FAILED (tenant=%s session=%s) — Post "
+            "entsteht ohne Voice-Profil und geht in die Review-Queue: %s",
+            tenant_id,
+            session_id,
             type(exc).__name__,
         )
 
@@ -702,6 +723,7 @@ def _generate_post(session_id: str, tenant_id: str) -> dict:
         # Enforce-Mode: schlechter Post (Branche ODER Voice) → Review-Queue-Pfad.
         if _gate_enforce and (not _gate_result["passed"] or _voice_passed is False):
             flagged = True
+
     except Exception as exc:
         # fail-open: Gate-Fehler darf NIEMALS den Versandpfad blockieren
         logger.warning(
@@ -709,6 +731,15 @@ def _generate_post(session_id: str, tenant_id: str) -> dict:
             session_id,
             type(exc).__name__,
         )
+
+    # ⛔ UNABHAENGIG vom Enforce-Modus: konnte das Voice-Profil nicht geladen
+    #   werden, ist der Post ohne die Stimme des Kunden entstanden. Das ist kein
+    #   Qualitaets-SCORE, sondern eine fehlende Voraussetzung — deshalb greift es
+    #   auch im Shadow-Mode. Der Kunde bekommt dann den Review-Hinweis statt
+    #   eines Posts, der nicht nach ihm klingt.
+    if voice_profil_nicht_ladbar:
+        flagged = True
+        _gate_info["voice_profil_nicht_ladbar"] = True
 
     # 7. Post in den Chat. Geflaggt → NICHT roh senden (Review-Queue-Pfad #83).
     chat_id = _resolve_chat_id(tenant_id)
