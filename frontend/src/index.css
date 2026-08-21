@@ -4,7 +4,23 @@
    @import muss vor den @tailwind-Direktiven stehen (CSS-Spec-Pflicht — der
    Vorzustand hatte den Inter-Import DANACH, was PostCSS/Vite bereits vorher
    als Fehler meldete; hier gleich mitkorrigiert). */
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+/* Schriften LOKAL gebuendelt (@fontsource), nicht von fonts.googleapis.com.
+   Zwei Gruende, beide hart:
+   1. Die nginx-CSP (nginx/nginx.v2.conf) erlaubt style-src/font-src nur 'self'.
+      Der externe @import wurde produktiv IMMER blockiert — das Type-Pairing
+      dieses Redesigns lud bei keinem Kunden je, der Browser fiel auf
+      Georgia/system-ui zurueck. Belegt im E2E-Log Run 32461170538.
+   2. DSGVO: ein externer Google-Fonts-Request sendet die Nutzer-IP an Google
+      in die USA — in DE abmahnfaehig (LG Muenchen I, 3 O 17493/20).
+   ⛔ Die CSP NICHT oeffnen, um das "zu reparieren". Lokal buendeln ist der Fix.
+   @import muss vor den @tailwind-Direktiven stehen (CSS-Spec-Pflicht). */
+@import '@fontsource-variable/fraunces';
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-sans/700.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
 
 @tailwind base;
 @tailwind components;
@@ -23,7 +39,7 @@ body {
 h1,
 h2,
 h3 {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: 'Fraunces Variable', 'Fraunces', Georgia, serif;
 }
 
 /* Scrollbar */

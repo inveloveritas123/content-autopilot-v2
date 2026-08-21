@@ -85,7 +85,9 @@ export default {
         // einem Redaktions-/Content-Werkzeug, ohne steif zu wirken).
         // Body: IBM Plex Sans (neutral, sehr gut lesbar, kein Slop-Tell wie Inter).
         // Mono: IBM Plex Mono (Zeitstempel, IDs, Zahlen — konsistent zur Body-Familie).
-        display: ['Fraunces', 'Georgia', 'serif'],
+        // 'Fraunces Variable' ist der Familienname aus @fontsource-variable/fraunces
+        // (gemessen in dessen index.css) — 'Fraunces' allein trifft NICHTS.
+        display: ['"Fraunces Variable"', 'Fraunces', 'Georgia', 'serif'],
         sans: ['"IBM Plex Sans"', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
       },
