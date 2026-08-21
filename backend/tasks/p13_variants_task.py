@@ -681,30 +681,59 @@ def _start_targeted_session(tenant_id: str, idea_id: str) -> dict | None:
         # Opener-Frage in den Chat senden (Muster random_smart_scheduler.py:104)
         chat_id = _resolve_chat_id(tenant_id)
         sent = False
-        if chat_id is not None:
-            try:
-                from api.telegram import _interview_cancel_keyboard, _send_telegram_message
+        if chat_id is None:
+            # ⛔ LIVE REPRODUZIERT 2026-08-21: Ohne diesen Zweig endete der Fall in
+            #   STILLE. Der Nutzer bekam die Zusage "ich stelle gleich ein paar
+            #   Fragen" (die kommt an, weil der EINGEHENDE Pfad die chat_id aus dem
+            #   Telegram-Update selbst kennt) — und danach nichts mehr. Der
+            #   Interview-Task schlaegt die chat_id dagegen in der DB nach; stand
+            #   dort noch der Onboarding-Platzhalter (telegram_chat_id=0,
+            #   status='pending'), lieferte der Resolver None, der Send wurde
+            #   uebersprungen, und die einzige Spur war ein "opener not delivered"
+            #   OHNE Grund. Telegram kannte den Nutzer, die Anwendung nicht.
+            #   ⛔ Der LLM-Aufruf ist zu diesem Zeitpunkt bereits bezahlt und die
+            #   Frage fertig — sie verfaellt hier ungesehen.
+            logger.error(
+                "p13_task: KEINE Chat-Verknuepfung fuer tenant=%s — Interview kann nicht "
+                "starten. Pruefen: tenant_telegram_link.status='active' und "
+                "telegram_chat_id != 0. Die bereits erzeugte Frage verfaellt.",
+                tenant_id,
+            )
+            _expire_session(opener.session_id, tenant_id)
+            return None
 
-                # C5: eröffnet eine Session, die danach jede Nachricht als Antwort
-                # schluckt (kein TTL) — sichtbarer Ausgang gehört an die Frage.
-                sent = _send_telegram_message(
-                    chat_id,
-                    opener.question_text,
-                    tenant_id=tenant_id,
-                    reply_markup=_interview_cancel_keyboard(),
-                )
-            except Exception as exc:
-                logger.warning(
-                    "p13_task: opener send failed (session created): %s",
-                    type(exc).__name__,
-                )
+        # chat_id ist ab hier garantiert gesetzt — der None-Fall ist oben raus.
+        try:
+            from api.telegram import _interview_cancel_keyboard, _send_telegram_message
+
+            # C5: eröffnet eine Session, die danach jede Nachricht als Antwort
+            # schluckt (kein TTL) — sichtbarer Ausgang gehört an die Frage.
+            sent = _send_telegram_message(
+                chat_id,
+                opener.question_text,
+                tenant_id=tenant_id,
+                reply_markup=_interview_cancel_keyboard(),
+            )
+        except Exception as exc:
+            logger.warning(
+                "p13_task: opener send failed (session created): %s",
+                type(exc).__name__,
+            )
 
         if not sent:
             # ⚠️ _send_telegram_message WIRFT NICHT, es gibt False zurück. Ohne diese
             # Prüfung bliebe eine aktive Session zurück, deren Frage der Nutzer nie
             # gesehen hat — ab dann schluckt sie jede seiner Nachrichten als Antwort
             # auf eine unsichtbare Frage. Lieber zurückrollen und ehrlich scheitern.
-            logger.warning("p13_task: opener not delivered — rolling session back")
+            # ⛔ Hier ist die chat_id BEKANNT (der None-Fall ist oben abgefangen) —
+            #   der Send wurde also versucht und von Telegram abgelehnt. Der Grund
+            #   steht in der Warnung von _send_telegram_message (tg_description),
+            #   typisch: Bot blockiert, Chat geloescht, Token widerrufen.
+            logger.warning(
+                "p13_task: opener not delivered (chat=…%s, tenant=%s) — rolling session back",
+                str(chat_id)[-4:],
+                tenant_id,
+            )
             _expire_session(opener.session_id, tenant_id)
             return None
 
