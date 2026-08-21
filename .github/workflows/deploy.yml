@@ -135,6 +135,22 @@ jobs:
             --exclude='/data' \
             "$GITHUB_WORKSPACE/" /opt/content-autopilot-v2/
 
+      - name: VERSION-Datei schreiben (Deploy-Nachweis)
+        # ⛔ OHNE DIESEN SCHRITT MELDET /api/version DAUERHAFT "unknown".
+        #   Der Endpoint (services/version_info.py) liest <backend>/VERSION —
+        #   angelegt wurde sie bisher NUR von scripts/deploy_named_commit.sh,
+        #   also beim manuellen Weg. Der automatische Deploy hier lieferte
+        #   dadurch einen Container ohne Versionsnachweis: genau die
+        #   Unsichtbarkeit, gegen die AP3 den Endpoint ueberhaupt gebaut hat
+        #   (SSOT-LOUIS-KETTE-KORREKT-2026-08-21 §0).
+        #   Gemessen 2026-08-21 nach einem gruenen Deploy:
+        #   {"commit_sha":"unknown (VERSION-Datei fehlt — kein Deploy-Skript-Build)"}
+        #   Der SHA ist der vom Gate gepruefte, nicht "der aktuelle Stand".
+        run: |
+          set -euo pipefail
+          printf '%s' "${{ needs.gate.outputs.sha }}" > /opt/content-autopilot-v2/backend/VERSION
+          echo "VERSION = $(cat /opt/content-autopilot-v2/backend/VERSION)"
+
       - name: Frontend bauen
         run: |
           set -euo pipefail
@@ -178,3 +194,25 @@ jobs:
           cd /opt/content-autopilot-v2 && docker compose -f docker-compose.v2.yml logs \
             backend-v2 --tail 50 >&2
           exit 1
+
+      - name: Verifizieren, dass GENAU dieser SHA laeuft
+        # ⛔ "Container ist gesund" ist NICHT "der richtige Stand laeuft".
+        #   Genau diese Luecke ist die Renn-Luecke aus SSOT §0: am 20.08. war
+        #   "alles deployed" beim Absprung wahr und fuenf Minuten spaeter falsch,
+        #   und niemand konnte es sehen. scripts/deploy_named_commit.sh vergleicht
+        #   deshalb /api/version gegen den angeforderten SHA — dieser Workflow tat
+        #   es bis 2026-08-21 nicht.
+        #   ⛔ Gefragt wird LOKAL (localhost:8601), nicht ueber die Domain:
+        #   content-autopilot.zukunftsbund.de zeigt auf einen ANDEREN Server
+        #   (mit Marke belegt, Befund zubu-domain-zeigt-auf-live-deploy-geht-auf-test).
+        run: |
+          set -euo pipefail
+          erwartet="${{ needs.gate.outputs.sha }}"
+          gemeldet="$(curl -sf http://localhost:8601/api/version | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit_sha"])')"
+          echo "erwartet: $erwartet"
+          echo "gemeldet: $gemeldet"
+          if [ "$erwartet" != "$gemeldet" ]; then
+            echo "::error::Deploy gruen, aber es laeuft ein anderer Stand ($gemeldet statt $erwartet)" >&2
+            exit 1
+          fi
+          echo "Verifiziert: genau dieser SHA laeuft."
