@@ -94,11 +94,80 @@ ANTI_KI_GENERIC_OPENERS: list[str] = [
 # Em-Dashes auftaucht (ein einzelner Gedankenstrich ist normales Deutsch).
 _EM_DASH_CLUSTER_RE = re.compile(r"—.*—")
 
+#: LinkedIn-Ratgeber-Floskeln — die VERBOTSLISTE AUS DEM P12-PROMPT.
+#:
+#: ⛔ WARUM DIESE KATEGORIE NACHGEZOGEN WURDE (2026-08-21): Die vier Listen oben
+#:   jagen den CHATBOT-Ton ("Klar! Hier ist", "Tolle Frage!", "Ich hoffe, das
+#:   hilft!"). P12 verbietet auf 544 Zeilen einen ANDEREN KI-Dialekt: den
+#:   generischen Ratgeber-Ton, der nicht nach Assistent klingt, sondern nach
+#:   Content-Marketing — und genau der landet in Posts.
+#:
+#:   GEMESSEN: von den 20 woertlich im P12-Prompt verbotenen Formulierungen
+#:   erkannte der Detektor ZWEI. Prompt und Blocklist waren nie gegeneinander
+#:   abgeglichen. Ein Post konnte damit fuenf ausdrueckliche Verbote enthalten
+#:   und trotzdem als sauber gelten.
+#:
+#:   Quelle: content-truth/prompts/P12-post-generierung.md, Abschnitt
+#:   "7. KI-Signale kompromisslos vermeiden" -> "Verbotene Formulierungen
+#:   (absolut, ohne Ausnahme)". ⛔ Beim Aendern des Prompts hier nachziehen —
+#:   test_anti_ki_deckt_p12_verbote() haelt die beiden Listen zusammen.
+#: ⛔ NUR AM SATZANFANG eine Floskel — mitten im Satz normales Deutsch.
+#:   GEGENPROBE, die das aufdeckte (2026-08-21): "Wir arbeiten grundsaetzlich
+#:   anders als der Wettbewerb" und "Er hat kurz gesagt, es sei dringend" wurden
+#:   als KI-Signal gemeldet. Beides sind korrekte Handwerker-Saetze. Ein Gate,
+#:   das die abstraft, ist schlimmer als keins — es bestraft genau die
+#:   konkrete Sprache, die P12 erreichen will.
+#:   Als Signal wirken diese Woerter nur einleitend: "Grundsaetzlich: ..." /
+#:   "Kurz gesagt: ...". Deshalb Positionspruefung statt Substring.
+_ANTI_KI_NUR_SATZANFANG: frozenset[str] = frozenset(
+    {
+        "letztendlich",
+        "zusammenfassend",
+        "abschließend",
+        "abschliessend",
+        "grundsätzlich",
+        "grundsaetzlich",
+        "im wesentlichen",
+        "kurz gesagt",
+        "auf den punkt gebracht",
+        "erstaunlicherweise",
+        "bemerkenswerterweise",
+        "nicht zu vergessen",
+    }
+)
+
+ANTI_KI_LINKEDIN_RATGEBER: list[str] = [
+    "Lass uns ehrlich sein",
+    "Lassen Sie uns ehrlich sein",
+    "Die Wahrheit ist",
+    "Es ist an der Zeit",
+    "Hier ist, warum",
+    "Die meisten Menschen wissen nicht, dass",
+    "Die meisten wissen nicht, dass",
+    "Erstaunlicherweise",
+    "Bemerkenswerterweise",
+    "Letztendlich",
+    "Zusammenfassend",
+    "Abschließend",
+    "Abschliessend",
+    "Nicht zu vergessen",
+    "Es stellt sich die Frage",
+    "Grundsätzlich",
+    "Grundsaetzlich",
+    "Im Wesentlichen",
+    "Im Kern geht es darum",
+    "Hierbei gilt es zu beachten",
+    "Es ist wichtig zu verstehen, dass",
+    "Kurz gesagt",
+    "Auf den Punkt gebracht",
+]
+
 _ANTI_KI_CATEGORIES: list[tuple[str, list[str]]] = [
     ("Eröffnungs-/Abschlussfloskeln", ANTI_KI_OPENERS_CLOSERS),
     ("Hedging/Absicherung", ANTI_KI_HEDGING),
     ("Aufsatz-Konnektoren", ANTI_KI_ESSAY_CONNECTORS),
     ("Generische Opener", ANTI_KI_GENERIC_OPENERS),
+    ("LinkedIn-Ratgeber-Floskeln (P12-Verbotsliste)", ANTI_KI_LINKEDIN_RATGEBER),
 ]
 
 
@@ -114,6 +183,23 @@ def _find_phrase(text: str, phrase: str) -> str | None:
 
     hay = _norm(text)
     needle = _norm(phrase)
+
+    # Floskeln aus _ANTI_KI_NUR_SATZANFANG zaehlen ausschliesslich einleitend.
+    # Gesucht wird deshalb JEDES Vorkommen, bis eines am Satzanfang steht —
+    # `find()` allein wuerde beim ersten (legitimen) Treffer aufgeben und den
+    # spaeteren echten uebersehen.
+    if needle in _ANTI_KI_NUR_SATZANFANG:
+        start = 0
+        while True:
+            idx = hay.find(needle, start)
+            if idx == -1:
+                return None
+            davor = hay[:idx].rstrip()
+            # Satzanfang: Textbeginn oder direkt nach Satzende/Zeilenumbruch.
+            if not davor or davor[-1] in ".!?…:\n" or hay[:idx].endswith("\n"):
+                return text[idx : idx + len(phrase)]
+            start = idx + 1
+
     idx = hay.find(needle)
     if idx == -1:
         return None

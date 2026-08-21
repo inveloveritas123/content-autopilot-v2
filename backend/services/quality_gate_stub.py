@@ -400,6 +400,42 @@ def _get_config(branche: str) -> dict[str, Any]:
     return _config_cache[branche]
 
 
+def _anti_ki_hits(text: str) -> list[str]:
+    """Floskel-Treffer aus dem voice_gate — ohne den Em-Dash-Hinweis.
+
+    ⛔ FAIL-OPEN, bewusst: Faellt der Detektor aus (Import-Fehler, kaputte
+    Blocklist), darf das den Versandpfad nicht blockieren — dieselbe Doktrin,
+    die session_post_task fuer das Gate insgesamt anwendet. Ein leerer Treffersatz
+    bedeutet dann "nicht gemessen", und der Score bleibt unveraendert gut. Das ist
+    die richtige Richtung: lieber ein ungeprueft durchgelassener Post als gar keiner.
+    """
+    try:
+        from services.voice_gate import check_anti_ki_phrases
+    except Exception:  # pragma: no cover — Importfehler nur bei kaputtem Deployment
+        return []
+    try:
+        hits = check_anti_ki_phrases(text)
+    except Exception:  # pragma: no cover
+        return []
+    # Der Em-Dash-Treffer ist im voice_gate selbst als schwaches Signal markiert.
+    return [h for h in hits if not h.startswith("[Typografie-Hinweis]")]
+
+
+def _anti_ki_score(hits: list[str]) -> tuple[float, list[str]]:
+    """Treffer -> (Score 0..1, Violations).
+
+    Stufung bewusst grob — der Detektor liefert exakte Phrasen, keine
+    Wahrscheinlichkeiten: 0 Treffer = sauber, 1-2 = Abzug, ab 3 = Block.
+    """
+    n = len(hits)
+    if n == 0:
+        return 1.0, []
+    if n >= 3:
+        return 0.0, ["ki_phrasen_massiv"]
+    # 1 Treffer -> 0.5, 2 -> 0.25
+    return (0.5 if n == 1 else 0.25), ["ki_phrasen"]
+
+
 def quality_gate_check(post_text: str, branche: str) -> dict[str, Any]:
     """Bewertet einen LinkedIn-Post gegen branchenspezifische Quality-Standards.
 
@@ -462,6 +498,27 @@ def quality_gate_check(post_text: str, branche: str) -> dict[str, Any]:
     pii_violations = _pii_heuristic_check(post_text)
     violations.extend(pii_violations)
 
+    # -- Signal 8: KI-Floskeln (2026-08-21) --
+    # ⛔ WARUM DIESES SIGNAL NACHGEZOGEN WURDE: Der Scorer mass bis hier
+    #   ausschliesslich FORM (Laenge, Caps, Absaetze, Hashtags). Gemessen an vier
+    #   realistischen Handwerker-Posts bewertete er dadurch einen Text aus fuenf
+    #   VERBOTENEN Formulierungen mit 95.0 — waehrend der konkrete Post mit echter
+    #   Szene und Zahl nur 84.3 bekam. Vierzehn aneinandergereihte Verbotsfloskeln
+    #   bestanden mit 68.4. NEIN sagte der Scorer nur bei too_short/excessive_caps.
+    #
+    #   Der Prompt P12 verbietet genau diese Formulierungen auf 544 Zeilen — nichts
+    #   pruefte, ob das Modell sich daran gehalten hat. Und der Detektor dafuer war
+    #   die ganze Zeit da: voice_gate.check_anti_ki_phrases. Er lief nur separat in
+    #   session_post_task, ausdruecklich "additiv, blockt nie eigenstaendig", und
+    #   floss in DIESEN Score nicht ein. Zwei fertige Teile, keine Naht.
+    #
+    #   ⛔ Der Em-Dash-Treffer ist im voice_gate selbst als "schwaches Signal"
+    #   ausgewiesen und wird deshalb NICHT gewichtet — sonst bestraft das Gate
+    #   einen legitimen Gedankenstrich wie eine Floskel.
+    ki_hits = _anti_ki_hits(post_text)
+    ki_score, ki_violations = _anti_ki_score(ki_hits)
+    violations.extend(ki_violations)
+
     # -- Gewichtete Score-Berechnung --
     weights: dict[str, Any] = cfg.get("weights", {})
     w_length = float(weights.get("length", 35))
@@ -470,8 +527,14 @@ def quality_gate_check(post_text: str, branche: str) -> dict[str, Any]:
     w_caps = float(weights.get("caps_ok", 15))
     w_hashtag = float(weights.get("hashtag_ok", 10))
     w_disclaimer = float(weights.get("disclaimer", 0))
+    # Default 30: das Signal muss den Formteil ueberstimmen koennen. Bei den
+    # gemessenen Faellen kippt es den Floskeltext (95.0) unter den konkreten
+    # Post — ohne einen sauberen Text zu bestrafen (0 Treffer => voller Score).
+    w_anti_ki = float(weights.get("anti_ki", 30))
 
-    total_weight = w_length + w_structure + w_cta + w_caps + w_hashtag + w_disclaimer
+    total_weight = (
+        w_length + w_structure + w_cta + w_caps + w_hashtag + w_disclaimer + w_anti_ki
+    )
     if total_weight <= 0:
         total_weight = 100.0
 
@@ -482,6 +545,7 @@ def quality_gate_check(post_text: str, branche: str) -> dict[str, Any]:
         + w_caps * caps_score
         + w_hashtag * hashtag_score
         + w_disclaimer * disc_score
+        + w_anti_ki * ki_score
     )
 
     # Normierung auf 0..100
@@ -499,6 +563,9 @@ def quality_gate_check(post_text: str, branche: str) -> dict[str, Any]:
         "missing_legal_disclaimer",
         "missing_financial_disclaimer",
         "missing_disclaimer",
+        # Ab drei echten Floskeln ist der Post nicht "etwas schwach", sondern
+        # maschinengeschrieben — das darf kein guter Formteil ausgleichen.
+        "ki_phrasen_massiv",
     }
     has_block_violation = bool(set(violations) & block_violations)
 
