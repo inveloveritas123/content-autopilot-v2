@@ -613,24 +613,37 @@ def test_telegram_get_me_wirft_bei_netzwerkfehler_statt_none():
 
 
 class TestInterviewAusgaenge:
-    """Zwei sichtbare Wege aus einem laufenden Gespraech (Louis-Bug 2026-08-20)."""
+    """EIN sichtbarer Weg aus einem laufenden Gespraech (Owner-Entscheid 2026-08-21)."""
 
-    def test_frage_bietet_neustart_und_abbruch(self):
-        """⛔ Louis 22:24: "wenn ich 'neuer Post' schreibe speichert er auch nur
-        und startet keine neue Konversation".
+    def test_frage_bietet_NUR_abbruch(self):
+        """⛔ "🆕 Neuer Post" ENTFERNT — Owner 2026-08-21: "ein Klick auf
+        'neuer Post', auch versehentlich, killt die ganze Arbeit bis dahin".
 
-        Der Abbrechen-Knopf allein sagt dem Nutzer nicht, dass dahinter ein
-        Neuanfang moeglich ist — er formuliert es also, und der Text lief in die
-        Gedaechtnis-Quittung. Ein zweiter Knopf macht die Absicht waehlbar,
-        ohne eine Wortliste zu raten (Owner: "die Erkennung was der User will
-        ist eine riesige Wortliste").
+        Der Knopf loeste ein echtes Problem (Louis 2026-08-20 22:24: ein
+        GETIPPTES "neuer Post" wurde nur als Notiz gespeichert), aber mit dem
+        falschen Mittel: Er stand direkt neben "Abbrechen", war die
+        destruktivere der beiden Wahlmoeglichkeiten und verwarf das laufende
+        Gespraech OHNE Rueckfrage. Auf einem Telefon entscheidet dann die
+        Trefferflaeche ueber ein halbes Interview.
+
+        "Abbrechen" leistet dasselbe in zwei Schritten — beenden, dann neu
+        anfangen — und der Nutzer merkt dazwischen, was passiert.
+
+        ⛔ DIESER TEST HAELT DIE ENTSCHEIDUNG FEST: Wer den Knopf zurueckbaut,
+        faellt hier auf. Der CALLBACK bleibt bestehen (s.
+        test_neustart_text_meint_dasselbe_wie_der_knopf) — aeltere Nachrichten
+        im Chat tragen ihn weiterhin und muessen sauber behandelt werden.
         """
         from api.telegram import _interview_cancel_keyboard
 
-        row = _interview_cancel_keyboard()["inline_keyboard"][0]
-        callbacks = {b["callback_data"] for b in row}
-        assert "cmd:session_restart" in callbacks, "Neustart-Ausgang fehlt"
+        rows = _interview_cancel_keyboard()["inline_keyboard"]
+        callbacks = {b["callback_data"] for row in rows for b in row}
         assert "cmd:session_cancel" in callbacks, "Abbruch darf nicht verschwinden"
+        assert "cmd:session_restart" not in callbacks, (
+            "Der Neustart-Knopf ist bewusst entfernt — er vernichtet die laufende "
+            "Arbeit ohne Rueckfrage (Owner 2026-08-21)"
+        )
+        assert sum(len(r) for r in rows) == 1, "Genau EIN Ausgang, kein Fehlklick-Risiko"
 
     def test_neustart_text_meint_dasselbe_wie_der_knopf(self):
         """Knopf-Wortlaut und Antwort-Wortlaut muessen dieselbe Sache meinen.

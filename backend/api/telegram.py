@@ -271,23 +271,28 @@ def _interview_cancel_keyboard() -> dict:
 
     Frisches Dict je Aufruf — ein geteiltes Modul-Dict könnte ein Caller mutieren.
     """
-    # ⛔ ZWEITER AUSGANG (Louis-Live-Bug 2026-08-20 22:24): "Und wenn ich
-    # 'neuer Post' schreibe speichert er auch nur und startet keine neue
-    # Konversation". Der Abbrechen-Knopf allein reicht nicht — er sagt dem
-    # Nutzer nicht, dass DAHINTER ein Neuanfang moeglich ist. Wer neu anfangen
-    # will, formuliert das (und lief bisher in die Gedaechtnis-Quittung),
-    # statt einen Knopf zu suchen, der "Abbrechen" heisst.
+    # ⛔ NUR EIN AUSGANG — "🆕 Neuer Post" ENTFERNT (Owner 2026-08-21):
+    #   "ein Klick auf 'neuer Post', auch versehentlich, killt die ganze Arbeit
+    #   bis dahin".
     #
-    # ⛔ WARUM EIN KNOPF UND KEINE WORTLISTE: "neuer Post", "nochmal",
-    # "anderes Thema", "vergiss das" — jede Liste ist unvollstaendig, und
-    # genau daran krankt die Erkennung heute (Owner 2026-08-20: "die
-    # Erkennung was der User will ist eine riesige Wortliste"). Der Knopf ist
-    # deterministisch, kostet keinen LLM-Call und ist derselbe Weg wie
-    # 574b609 ("explizite Wahl statt geratenem Intent").
+    #   Der Knopf loeste ein echtes Problem (Louis-Live-Bug 2026-08-20 22:24:
+    #   ein GETIPPTES "neuer Post" wurde nur als Notiz gespeichert), aber mit
+    #   dem falschen Mittel: Er stand direkt neben "Abbrechen", war die
+    #   destruktivere der beiden Wahlmoeglichkeiten und verwarf das laufende
+    #   Gespraech OHNE Rueckfrage. Zwei benachbarte Knoepfe, von denen einer
+    #   ohne Warnung Arbeit vernichtet, sind eine Falle — die Trefferflaeche
+    #   auf einem Telefon entscheidet sonst ueber ein halbes Interview.
+    #
+    #   "Abbrechen" leistet dasselbe in zwei Schritten: Gespraech beenden,
+    #   dann neu anfangen. Der Unterschied ist, dass der Nutzer dazwischen
+    #   merkt, was passiert — und ein Fehlklick nur einen Schritt kostet.
+    #
+    #   ⛔ Der Callback "cmd:session_restart" bleibt im Handler bestehen: aeltere
+    #   Nachrichten im Chat tragen den Knopf weiterhin, und ein Klick darauf muss
+    #   sauber behandelt werden statt ins Leere zu laufen.
     return {
         "inline_keyboard": [
             [
-                {"text": "🆕 Neuer Post", "callback_data": "cmd:session_restart"},
                 {"text": "❌ Abbrechen", "callback_data": "cmd:session_cancel"},
             ]
         ]
@@ -1600,7 +1605,12 @@ _ABBRUCH_TEXT = (
 #: „❌ Gespräch abgebrochen" auf einen Knopf, der „🗄 Nur merken" heißt, und
 #: verstand es als Absturz („bei nur merken bricht der Chat ab"). Der Wortlaut
 #: des Knopfes und der Wortlaut der Antwort müssen dieselbe Sache meinen.
-#: Antwort auf [🆕 Neuer Post]. Beendet das laufende Gespraech wie ein Abbruch,
+#: Antwort auf [🆕 Neuer Post]. ⛔ DER KNOPF WIRD SEIT 2026-08-21 NICHT MEHR
+#: ANGEBOTEN (Owner: "ein Klick, auch versehentlich, killt die ganze Arbeit bis
+#: dahin") — dieser Text bleibt trotzdem, weil AELTERE Nachrichten im Chat den
+#: Knopf weiterhin tragen. Ein Klick darauf muss sauber behandelt werden statt
+#: ins Leere zu laufen. Neue Tastaturen bieten nur noch [❌ Abbrechen].
+#: Beendet das laufende Gespraech wie ein Abbruch,
 #: sagt aber das Gegenteil aus: der Nutzer hoert nicht auf, er faengt an.
 #: Der Wortlaut des Knopfes und der Wortlaut der Antwort muessen dieselbe Sache
 #: meinen (Lehre vom 06.08.2026, s. _NUR_MERKEN_TEXT).
