@@ -1,3 +1,4 @@
+# AUDITED-2026-08-21 (zubu-e2e-auth): Tiefen-Audit, Datei vollständig gelesen.
 import uuid
 
 from fastapi import Depends, Header, HTTPException, Request

@@ -1,3 +1,4 @@
+# AUDITED-2026-08-21 (zubu-e2e-auth): Tiefen-Audit, Datei vollständig gelesen.
 """User-/Agentur-/Auth-Datenmodell (W3, 2026-07-21).
 
 Hierarchie (aus Scope-Call mit Louis, E9 White-Label-Ziel):

@@ -1,3 +1,4 @@
+// AUDITED-2026-08-21 (zubu-e2e-auth): Tiefen-Audit, Datei vollständig gelesen.
 import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
