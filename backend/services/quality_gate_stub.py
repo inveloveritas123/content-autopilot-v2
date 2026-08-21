@@ -532,9 +532,7 @@ def quality_gate_check(post_text: str, branche: str) -> dict[str, Any]:
     # Post — ohne einen sauberen Text zu bestrafen (0 Treffer => voller Score).
     w_anti_ki = float(weights.get("anti_ki", 30))
 
-    total_weight = (
-        w_length + w_structure + w_cta + w_caps + w_hashtag + w_disclaimer + w_anti_ki
-    )
+    total_weight = w_length + w_structure + w_cta + w_caps + w_hashtag + w_disclaimer + w_anti_ki
     if total_weight <= 0:
         total_weight = 100.0
 

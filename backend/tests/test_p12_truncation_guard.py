@@ -22,7 +22,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from services.pipeline_llm import PipelineLLMResult  # noqa: E402
+from services.pipeline_llm import PipelineLLMResult
 
 
 def _ergebnis(*, truncated: bool, text: str) -> PipelineLLMResult:
@@ -38,9 +38,7 @@ def _ergebnis(*, truncated: bool, text: str) -> PipelineLLMResult:
 
 def test_result_traegt_truncated_und_ist_per_default_falsch() -> None:
     """Das Feld existiert — vorher war die Information nach dem Log-Aufruf weg."""
-    sauber = PipelineLLMResult(
-        text="{}", model_id="m", tier="S3", input_tokens=1, output_tokens=1
-    )
+    sauber = PipelineLLMResult(text="{}", model_id="m", tier="S3", input_tokens=1, output_tokens=1)
     assert sauber.truncated is False, "Default muss False sein, sonst brechen Altaufrufer"
     assert _ergebnis(truncated=True, text="{ halb").truncated is True
 

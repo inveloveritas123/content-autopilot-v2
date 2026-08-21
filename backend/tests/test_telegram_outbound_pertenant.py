@@ -494,7 +494,10 @@ class TestSendTelegramMessagePerTenant:
         """
         mock_response = MagicMock()
         mock_response.status_code = 400
-        mock_response.json.return_value = {"ok": False, "description": "Bad Request: chat not found"}
+        mock_response.json.return_value = {
+            "ok": False,
+            "description": "Bad Request: chat not found",
+        }
 
         db_mock = _make_db_mock()
 

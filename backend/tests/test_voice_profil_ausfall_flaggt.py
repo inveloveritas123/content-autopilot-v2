@@ -35,9 +35,7 @@ def test_ausfall_wird_als_error_geloggt_nicht_als_warning() -> None:
 def test_ausfall_setzt_flagged() -> None:
     """Der Riegel nutzt den ETABLIERTEN Weg (Review-Queue), keinen neuen."""
     assert "voice_profil_nicht_ladbar" in QUELLE
-    block = re.search(
-        r"if voice_profil_nicht_ladbar:\n(?P<body>(?:\s{8}.*\n)+)", QUELLE
-    )
+    block = re.search(r"if voice_profil_nicht_ladbar:\n(?P<body>(?:\s{8}.*\n)+)", QUELLE)
     assert block, "Riegel-Block nicht gefunden"
     assert "flagged = True" in block.group("body")
 
@@ -56,9 +54,9 @@ def test_riegel_greift_auch_im_shadow_mode() -> None:
     # oder im Enforce-Zweig eingerueckt.
     zeile = [z for z in QUELLE.splitlines() if z.strip() == "if voice_profil_nicht_ladbar:"]
     assert zeile, "Riegel-Zeile fehlt"
-    assert len(zeile[0]) - len(zeile[0].lstrip()) == 4, (
-        "Riegel ist eingerueckt — er wuerde nur unter einer Bedingung greifen"
-    )
+    assert (
+        len(zeile[0]) - len(zeile[0].lstrip()) == 4
+    ), "Riegel ist eingerueckt — er wuerde nur unter einer Bedingung greifen"
 
 
 def test_leeres_profil_ohne_ausfall_flaggt_NICHT() -> None:
@@ -70,8 +68,8 @@ def test_leeres_profil_ohne_ausfall_flaggt_NICHT() -> None:
     """
     # Die Flagge wird im except-Zweig gesetzt, nicht an einer Leerprüfung.
     assert "voice_profil_nicht_ladbar = True" in QUELLE
-    assert not re.search(r"if not voice_payload:\s*\n\s+flagged = True", QUELLE), (
-        "Riegel haengt am leeren Profil statt am Ausfall — blockiert Neukunden"
-    )
+    assert not re.search(
+        r"if not voice_payload:\s*\n\s+flagged = True", QUELLE
+    ), "Riegel haengt am leeren Profil statt am Ausfall — blockiert Neukunden"
     # Initialisierung ist False, damit der Normalfall unberuehrt bleibt.
     assert "voice_profil_nicht_ladbar = False" in QUELLE

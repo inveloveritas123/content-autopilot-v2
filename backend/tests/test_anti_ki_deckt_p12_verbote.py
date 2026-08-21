@@ -23,7 +23,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from services.voice_gate import check_anti_ki_phrases  # noqa: E402
+from services.voice_gate import check_anti_ki_phrases
 
 
 def _echter_scorer():
@@ -47,6 +47,7 @@ def _echter_scorer():
     modul = _ilu.module_from_spec(spec)  # type: ignore[arg-type]
     spec.loader.exec_module(modul)  # type: ignore[union-attr]
     return modul.quality_gate_check
+
 
 #: Die Verbotsliste aus content-truth/prompts/P12-post-generierung.md,
 #: Abschnitt "7. KI-Signale kompromisslos vermeiden".
