@@ -8,10 +8,32 @@ Test-Isolation (2026-07-21): Viele Testdateien injizieren projekt-INTERNE
 Module (dependencies, api.telegram, services.*, tasks.*, models.*) per
 `sys.modules[...] = <Stub>` OHNE Teardown. Ohne Aufräumen leckt so ein
 unvollständiger Stub in nachfolgende Tests (reihenfolgenabhängige Failures,
-z.B. `ImportError: cannot import name 'get_tenant'`). Die autouse-Fixture
-`_isolate_internal_sys_modules` unten stellt den `sys.modules`-Zustand für
-projekt-interne Module nach JEDEM Test wieder her. Externe Heavy-Deps
-(google/anthropic/celery, s.u.) bleiben bewusst dauerhaft gestubbt.
+z.B. `ImportError: cannot import name 'get_tenant'`).
+
+⛔ AUFGERÄUMT WIRD AUF COLLECTION-EBENE, NICHT PER TEST (`pytest_collectstart`,
+Begründung am Ende dieser Datei). Eine per-Test-autouse-Fixture gibt es
+BEWUSST NICHT — sie würde die dateieigenen Laufzeit-Stubs zerstören, die viele
+Dateien beim Import setzen und während ihres Laufs brauchen.
+
+⛔ ZWEI FOLGEN, die beim Debuggen Zeit kosten und beide gemessen sind
+(2026-08-21):
+  * Eine Datei, die eine Voraussetzung NICHT selbst herstellt, ist ISOLIERT ROT
+    und in der Suite grün — `test_telegram_outbound_pertenant` (10 von 29,
+    `KeyError: 'services.telegram_token_resolver'`),
+    `test_quality_gate_send_wiring` (3 von 4).
+  * INNERHALB eines Laufs leckt ein Stub sehr wohl: nach
+    `import tests.test_quality_gate_send_wiring` liefert `quality_gate_check()`
+    den dort gesetzten MagicMock-Wert `score=80.0` statt des echten Ergebnisses.
+    Wer die ECHTE Implementierung testen will, lädt sie per Dateipfad — Muster
+    in `tests/test_anti_ki_deckt_p12_verbote.py::_echter_scorer`.
+
+⛔ Bis 2026-08-21 stand hier das GEGENTEIL ("Die autouse-Fixture
+`_isolate_internal_sys_modules` stellt den Zustand nach JEDEM Test wieder her").
+Diese Fixture existiert nicht; der Hinweis am Dateiende widersprach dem Kopf.
+Wer den Kopf las, suchte den Fehler an der falschen Stelle.
+
+Externe Heavy-Deps (google/anthropic/celery, s.u.) bleiben bewusst dauerhaft
+gestubbt.
 """
 
 import os
