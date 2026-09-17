@@ -1,3 +1,4 @@
+# AUDITED-2026-09-17 (zubu-telegram-tests-isoliert-rot) — vollstaendig gelesen
 """Tests für per-Tenant Telegram-Outbound-Routing.
 
 Prüft:
@@ -21,6 +22,8 @@ import logging
 import sys
 import types
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 # ---------------------------------------------------------------------------
 # Stub-Basisumgebung (identisch zum Muster in _telegram_task_env.py)
@@ -251,6 +254,37 @@ tg = _at_mod
 # which this stub lacks. Drop it so downstream re-imports the real config.
 if _created_config_stub:
     sys.modules.pop("config", None)
+
+
+# ---------------------------------------------------------------------------
+# Selbstgenügsamkeit gegen tests/conftest.py::pytest_collectstart (2026-09-17)
+# ---------------------------------------------------------------------------
+#
+# conftest.py setzt "services.telegram_token_resolver" vor JEDER weiteren
+# Collection (auch pro Klasse INNERHALB dieser Datei — collectstart feuert
+# modul-intern) auf die beim allerersten collectstart eingefrorene Baseline
+# zurück (_POLLUTION_PRONE_MODULES, conftest.py). Läuft diese Datei isoliert,
+# ist diese Baseline "kein Eintrag" — der oben (Modul-Ebene, einmalig beim
+# Import) gesetzte Stub verschwindet dann vor der zweiten Testklasse wieder
+# und sys.modules["services.telegram_token_resolver"] wirft KeyError.
+# Im Suiten-Kontext bleibt es unsichtbar, weil eine alphabetisch früher
+# gesammelte Datei (z.B. test_telegram_poller.py) den Stub schon VOR dem
+# allerersten collectstart gesetzt hat — dann ist er Teil der Baseline.
+#
+# Fix nach demselben Muster wie test_telegram_poller.py::_pin_api_telegram_stub:
+# vor jedem Test in dieser Datei den eigenen Stand neu verankern, danach den
+# zuvor vorgefundenen Zustand restaurieren (kein globaler Eingriff in conftest.py).
+@pytest.fixture(autouse=True)
+def _pin_telegram_token_resolver_stub():
+    _prev = sys.modules.get("services.telegram_token_resolver")
+    sys.modules["services.telegram_token_resolver"] = _ttr_mod
+    try:
+        yield
+    finally:
+        if _prev is not None:
+            sys.modules["services.telegram_token_resolver"] = _prev
+        else:
+            sys.modules.pop("services.telegram_token_resolver", None)
 
 
 # ---------------------------------------------------------------------------
