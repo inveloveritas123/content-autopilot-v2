@@ -1,4 +1,7 @@
 # AUDITED-2026-09-17 (zubu-telegram-tests-isoliert-rot) — vollstaendig gelesen
+# AUDITED-2026-09-17 (zubu-stub-klasse) — vollstaendig gelesen, services.llm- und
+# services.embedding_service-Stubs auf 'echtes Modul bevorzugen' umgestellt
+# (Rot-Beweis: brach test_anweisungs_marker.py in Kombination, siehe Report)
 """
 Tests for Telegram webhook receiver + one-time-token auth flow (Issue #61).
 
@@ -139,8 +142,17 @@ if "services.auth" not in sys.modules:
     _svc_auth.hash_password = MagicMock()
 _svc_pkg.auth = sys.modules["services.auth"]
 if "services.llm" not in sys.modules:
-    _svc_llm = _ensure_stub("services.llm")
-    _svc_llm.set_llm_tenant = MagicMock()
+    # Echtes Modul bevorzugen — ein Minimal-Stub mit nur set_llm_tenant fehlt
+    # z.B. `llm_service`, das services/embedding_service.py auf Modulebene
+    # per `from services.llm import llm_service` braucht. Gewinnt dieser Stub,
+    # bricht der Import von services.embedding_service in JEDER nachfolgend
+    # AUSGEFÜHRTEN Datei (auch wenn diese Datei hier längst "fertig" ist —
+    # die Collection aller Testdateien läuft VOR jedem einzelnen Testlauf).
+    try:
+        import services.llm  # noqa: F401
+    except Exception:
+        _svc_llm = _ensure_stub("services.llm")
+        _svc_llm.set_llm_tenant = MagicMock()
 if "services.rls" not in sys.modules:
     _svc_rls = _ensure_stub("services.rls")
     _svc_rls.set_rls_tenant = MagicMock()
@@ -160,9 +172,21 @@ if "services.ai_disclosure" not in sys.modules:
     _svc_aid.append_ai_notice = MagicMock(side_effect=lambda t: t)
     _svc_aid.hat_chat_ai_hinweis = MagicMock(return_value=True)
 if "services.embedding_service" not in sys.modules:
-    _svc_emb = _ensure_stub("services.embedding_service")
-    _svc_emb.search_similar = MagicMock(return_value=[])
-    _svc_emb.store_chunk = MagicMock()
+    # Echtes Modul bevorzugen (dep-frei genug: httpx/sqlalchemy/config/services.llm/
+    # services.anweisungs_marker/services.soft_delete_filter sind zu diesem Zeitpunkt
+    # bereits gestubbt bzw. echt verfügbar). Ein Minimal-Stub mit nur search_similar/
+    # store_chunk fehlt z.B. `embed_text` — leckt das in eine NACHFOLGEND
+    # ausgeführte Datei (z.B. test_anweisungs_marker.py::TestSearchSimilarFiltertPerDefault,
+    # die `patch("services.embedding_service.embed_text", ...)` braucht), wirft das
+    # dort AttributeError, obwohl test_telegram_webhook.py selbst laengst fertig ist —
+    # der Restore-Snapshot dieser Datei greift erst NACH ihren eigenen Tests, die
+    # COLLECTION aller Dateien (inkl. dieser hier) läuft aber VOR jedem Testlauf.
+    try:
+        import services.embedding_service  # noqa: F401
+    except Exception:
+        _svc_emb = _ensure_stub("services.embedding_service")
+        _svc_emb.search_similar = MagicMock(return_value=[])
+        _svc_emb.store_chunk = MagicMock()
 
 # datetime.UTC Py3.9-Compat: api.telegram importiert `from datetime import UTC`
 # WICHTIG: sys.modules["datetime"] NICHT ersetzen — das bricht FastAPI's class-Identity

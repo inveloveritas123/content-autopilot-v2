@@ -1,4 +1,7 @@
 # AUDITED-2026-08-19 (zubu-ci-gruen-machen): Tiefen-Audit, Datei vollstaendig gelesen.
+# AUDITED-2026-09-17 (zubu-stub-klasse) — vollstaendig gelesen (nicht geaendert):
+# Opfer der Klasse zubu-sys-modules-stubs-ohne-path-brechen-submodul-importe,
+# siehe Report
 """Der Anweisungs-Marker und sein Auswerter — dieselbe Wahrheit auf beiden Seiten.
 
 Vorgeschichte: der Marker `metadata.intent = "start_instruction"` wurde am 05.08.2026

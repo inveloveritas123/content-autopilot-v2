@@ -1,4 +1,7 @@
 # AUDITED-2026-09-17 (zubu-telegram-tests-isoliert-rot) — vollstaendig gelesen
+# AUDITED-2026-09-17 (zubu-stub-klasse) — vollstaendig gelesen, Stub-Bootstrap
+# ueberarbeitet (services/models/tasks/api/celery/sqlalchemy/config: echtes
+# Modul bevorzugen statt pauschal stubben)
 """Tests für services/telegram_poller.py + tasks/telegram_poll_task.py.
 
 Coverage:
@@ -47,8 +50,19 @@ def _ensure_stub(name: str) -> types.ModuleType:
     return sys.modules[name]
 
 
-# sqlalchemy
-if "sqlalchemy" not in sys.modules:
+# sqlalchemy — echtes Modul bevorzugen (Muster aus _telegram_task_env.py).
+# `if "sqlalchemy" not in sys.modules` allein prüft nur, ob IRGENDEIN Modul unter
+# diesem Namen schon importiert wurde — läuft diese Datei als ERSTE der Suite
+# (Reihenfolge-Probe), ist das noch nicht der Fall, obwohl sqlalchemy im venv
+# echt installiert ist. Der Minimal-Stub gewinnt dann fälschlich und liegt für
+# JEDE nachfolgend gesammelte Datei in sys.modules — u.a. ohne
+# sqlalchemy.orm.sessionmaker, das tasks/telegram_task.py real braucht.
+try:
+    import sqlalchemy  # noqa: F401
+    import sqlalchemy.dialects.postgresql  # noqa: F401
+    import sqlalchemy.ext.asyncio  # noqa: F401
+    import sqlalchemy.orm  # noqa: F401
+except ImportError:
     _sq = _ensure_stub("sqlalchemy")
     _sq.text = lambda q: q
     _sq.create_engine = MagicMock()
@@ -70,18 +84,36 @@ except ImportError:
     _cf.Fernet = MagicMock
     _cf.InvalidToken = Exception
 
-# config
+# config — echtes Modul bevorzugen (Muster oben). pydantic_settings liest
+# ENV-Vars mit Defaults; ein Minimal-Stub hier fehlt z.B. `litellm_base_url`,
+# das services/llm.py beim Instanziieren von LLMService() auf Modulebene
+# braucht — läuft diese Datei zuerst, gewinnt sonst der unvollständige Stub
+# global und `import services` in einer nachfolgenden Datei crasht mit
+# AttributeError statt zu laden.
 if "config" not in sys.modules:
-    _cfg = _ensure_stub("config")
-    _cfg.settings = types.SimpleNamespace(
-        default_tenant_key="test-key-32-bytes-padding-xxxxxxx",
-        redis_url="redis://localhost:6379/1",
-        database_url="postgresql+asyncpg://t:t@localhost/t",
-        sync_database_url="postgresql://t:t@localhost/t",
-    )
+    try:
+        import config  # noqa: F401
+    except Exception:
+        _cfg = _ensure_stub("config")
+        _cfg.settings = types.SimpleNamespace(
+            default_tenant_key="test-key-32-bytes-padding-xxxxxxx",
+            redis_url="redis://localhost:6379/1",
+            database_url="postgresql+asyncpg://t:t@localhost/t",
+            sync_database_url="postgresql://t:t@localhost/t",
+        )
 
-# celery
-if "celery" not in sys.modules:
+# celery — echtes Modul bevorzugen (Muster oben bei sqlalchemy/services).
+# Der Fake-Stub stammt aus einer Zeit ohne installiertes celery im venv; ist es
+# installiert, braucht tasks/celery_app.py u.a. after_setup_logger,
+# after_setup_task_logger, beat_init, worker_process_init aus celery.signals —
+# Namen, die der Fake-Stub unten NICHT nachbildet. Läuft diese Datei zuerst
+# (Reihenfolge-Probe), gewinnt sonst der unvollständige Fake global und jede
+# nachfolgend gesammelte Datei, die celery_app.py real lädt, crasht.
+try:
+    import celery  # noqa: F401
+    import celery.schedules  # noqa: F401
+    import celery.signals  # noqa: F401
+except ImportError:
     _cel = _ensure_stub("celery")
 
     class _FakeCelery:
@@ -118,15 +150,38 @@ if "celery" not in sys.modules:
     _sig.task_postrun = _FakeSig()
     _sig.task_failure = _FakeSig()
 
-# models.base
-_ensure_stub("models")
+# models.base — Stub-Package MIT __path__, sonst "not a package" statt bloss
+# "not found": models/__init__.py importiert alle ORM-Modelle und ist zu schwer
+# für einen echten Import hier; ein Plain-ModuleType ohne __path__ (bisherige
+# Fassung) lässt aber `from models.base import ...` in NACHFOLGEND gesammelten
+# Dateien mit "'models' is not a package" abstürzen, sobald diese Datei zuerst
+# läuft (Reihenfolge-Probe) — Muster aus test_telegram_outbound_pertenant.py::
+# _ensure_package.
+_models_pkg = _ensure_stub("models")
+if not hasattr(_models_pkg, "__path__"):
+    import os as _os_early
+
+    _models_pkg.__path__ = [
+        _os_early.path.normpath(
+            _os_early.path.join(_os_early.path.dirname(__file__), "..", "models")
+        )
+    ]
 if "models.base" not in sys.modules:
     _mb = _ensure_stub("models.base")
     _mb.sync_session_factory = MagicMock()
 
-# services als Package stubben — verhindert Import von services/__init__.py
-# der seinerseits services.llm (mit Py3.10-Union-Syntax) zieht
-if "services" not in sys.modules:
+# services — echtes Package bevorzugen (Muster aus _telegram_task_env.py).
+# EIN Plain-Stub mit __path__=[] (bisherige Fassung) macht `services` zwar zum
+# Package, aber mit LEEREM Suchpfad — Python findet dann KEIN Submodul mehr,
+# auch nicht `services.rls`, das tasks/telegram_poll_task.py per
+# `from services.rls import ...` braucht (ModuleNotFoundError, reihenfolge-
+# abhängig: siehe Befund zubu-sys-modules-stubs-ohne-path-brechen-submodul-
+# importe). `config` ist zu diesem Zeitpunkt bereits gestubbt (s.o.), das
+# reicht services/__init__.py (`from .llm import llm_service`, `from .nextcloud
+# import nextcloud_client`) zum Laden.
+try:
+    import services  # noqa: F401
+except Exception:
     _svc_pkg = _ensure_stub("services")
     _svc_pkg.__path__ = []  # macht es zum Package
 
@@ -164,10 +219,27 @@ def _load_module(dotted_name: str, rel_path: str) -> types.ModuleType:
 
 _crypto = _load_module("services.crypto", "services/crypto.py")
 
-# tasks-Package
-if "tasks" not in sys.modules:
-    _tasks_pkg = _ensure_stub("tasks")
-    _tasks_pkg.__path__ = []
+# services.rls — dep-frei genug (nur sqlalchemy, s.o. gestubbt) für direktes Laden.
+# tasks.telegram_poll_task macht `from services.rls import ...`; da `services`
+# oben als Plain-Stub mit __path__=[] gesetzt ist (Zeile ~131), findet ein
+# normaler `import services.rls` das Submodul NICHT — Python durchsucht dafür
+# __path__, und ein leeres __path__ liefert nie einen Treffer. Der direkte Load
+# über importlib umgeht die Paketsuche und legt den Namen selbst in sys.modules ab.
+_rls = _load_module("services.rls", "services/rls.py")
+
+# tasks-Package — __path__ MUSS auf das echte Verzeichnis zeigen (nicht []),
+# sonst findet Python kein einziges tasks.*-Submodul mehr, sobald diese Datei
+# zuerst gesammelt wird (z.B. `import tasks.ideation_task` in einer anderen
+# Datei) — derselbe Mechanismus wie bei services/models oben.
+_tasks_pkg = _ensure_stub("tasks")
+if not hasattr(_tasks_pkg, "__path__"):
+    import os as _os_early2
+
+    _tasks_pkg.__path__ = [
+        _os_early2.path.normpath(
+            _os_early2.path.join(_os_early2.path.dirname(__file__), "..", "tasks")
+        )
+    ]
 
 # tasks.celery_app laden (braucht celery-Stub — bereits oben gesetzt)
 _celery_app_mod = _load_module("tasks.celery_app", "tasks/celery_app.py")
@@ -175,10 +247,18 @@ _celery_app_mod = _load_module("tasks.celery_app", "tasks/celery_app.py")
 # services.telegram_poller laden
 _poller_mod = _load_module("services.telegram_poller", "services/telegram_poller.py")
 
-# api-Stubs (dispatch_inbound_update)
-if "api" not in sys.modules:
-    _api_pkg = _ensure_stub("api")
-    _api_pkg.__path__ = []
+# api-Package — __path__ MUSS ebenfalls echt sein (nicht []), sonst findet
+# Python kein api.*-Submodul mehr (z.B. `import api.telegram_bots` in einer
+# anderen Datei), sobald diese Datei zuerst läuft.
+_api_pkg = _ensure_stub("api")
+if not hasattr(_api_pkg, "__path__"):
+    import os as _os_early3
+
+    _api_pkg.__path__ = [
+        _os_early3.path.normpath(
+            _os_early3.path.join(_os_early3.path.dirname(__file__), "..", "api")
+        )
+    ]
 
 _api_tg = _ensure_stub("api.telegram")
 # NUR stubben, wenn hier wirklich ein Stub steht. _ensure_stub gibt ein bereits

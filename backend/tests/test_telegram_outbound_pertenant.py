@@ -1,4 +1,6 @@
 # AUDITED-2026-09-17 (zubu-telegram-tests-isoliert-rot) — vollstaendig gelesen
+# AUDITED-2026-09-17 (zubu-stub-klasse) — vollstaendig gelesen, Package-Attribut
+# fuer telegram_token_resolver ergaenzt + _ensure_package __path__-Bug behoben
 """Tests für per-Tenant Telegram-Outbound-Routing.
 
 Prüft:
@@ -128,10 +130,25 @@ def _ensure_package(name: str) -> types.ModuleType:
     in sys.modules steht (z.B. als kaputter Nicht-Package-Stub einer anderen
     Datei), wird __path__ nachgerüstet statt das Fehlen stillschweigend zu
     ignorieren.
+
+    __path__ zeigt auf das ECHTE Verzeichnis (nicht []): ein leeres __path__
+    macht `name` zwar zum Package, aber mit leerem Suchpfad — Python findet
+    dann KEIN Submodul mehr (z.B. `models.user`), sobald diese Datei vor einer
+    Datei läuft, die ein solches Submodul real importiert (Reihenfolge-
+    abhängig, derselbe Mechanismus wie beim Befund
+    zubu-sys-modules-stubs-ohne-path-brechen-submodul-importe).
     """
     mod = _ensure_stub(name)
     if not hasattr(mod, "__path__"):
-        mod.__path__ = []
+        # Lokal berechnet statt der weiter unten definierten globalen
+        # _BACKEND_DIR: diese Funktion wird bereits VOR jener Definition
+        # aufgerufen (Zeile ~157 ff., _BACKEND_DIR erst ~Zeile 202).
+        import os as _os_local
+
+        _backend_dir = _os_local.path.normpath(
+            _os_local.path.join(_os_local.path.dirname(__file__), "..")
+        )
+        mod.__path__ = [_os_local.path.join(_backend_dir, *name.split("."))]
     return mod
 
 
@@ -213,6 +230,15 @@ _ttr_spec = _ilu.spec_from_file_location(
 _ttr_mod = _ilu.module_from_spec(_ttr_spec)
 sys.modules["services.telegram_token_resolver"] = _ttr_mod
 _ttr_spec.loader.exec_module(_ttr_mod)
+# Als Paket-Attribut registrieren: spec_from_file_location + exec_module setzt
+# NUR sys.modules, nicht (wie ein regulärer `import services.telegram_token_resolver`)
+# automatisch services.telegram_token_resolver = <mod>. Ohne dieses Attribut
+# löst `patch("services.telegram_token_resolver.get_tenant_bot_token", …)` in
+# einer NACHFOLGEND gesammelten Datei über pkgutil.resolve_name per
+# `getattr(services, "telegram_token_resolver")` auf und wirft AttributeError —
+# unabhängig vom sys.modules-Eintrag, der für den String-Pfad nicht befragt wird.
+if "services" in sys.modules:
+    sys.modules["services"].telegram_token_resolver = _ttr_mod
 
 # api.telegram laden — mit vorgeladenen Stubs für schwere Deps
 _ensure_stub("api")
@@ -277,7 +303,10 @@ if _created_config_stub:
 @pytest.fixture(autouse=True)
 def _pin_telegram_token_resolver_stub():
     _prev = sys.modules.get("services.telegram_token_resolver")
+    _prev_attr = getattr(sys.modules.get("services"), "telegram_token_resolver", None)
     sys.modules["services.telegram_token_resolver"] = _ttr_mod
+    if "services" in sys.modules:
+        sys.modules["services"].telegram_token_resolver = _ttr_mod
     try:
         yield
     finally:
@@ -285,6 +314,11 @@ def _pin_telegram_token_resolver_stub():
             sys.modules["services.telegram_token_resolver"] = _prev
         else:
             sys.modules.pop("services.telegram_token_resolver", None)
+        if "services" in sys.modules:
+            if _prev_attr is not None:
+                sys.modules["services"].telegram_token_resolver = _prev_attr
+            else:
+                sys.modules["services"].__dict__.pop("telegram_token_resolver", None)
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,6 @@
 # AUDITED-2026-09-17 (zubu-diagnose): Tiefen-Audit, Datei vollstaendig gelesen.
+# AUDITED-2026-09-17 (zubu-stub-klasse) — vollstaendig gelesen, fehlendes
+# _draft_action_keyboard-Stub-Attribut an api.telegram ergaenzt
 """Gemeinsame Stub-Umgebung für tasks.telegram_task — KEIN Test-Modul.
 
 Wird von test_telegram_inbound_routing.py und test_idempotency_routing.py
@@ -335,6 +337,29 @@ if "api.telegram" not in sys.modules:
     _at._entry_keep_keyboard = MagicMock(
         return_value={"inline_keyboard": [[{"callback_data": "cmd:entry_keep"}]]}
     )
+    # session_post_task.py importiert `_draft_action_keyboard` lazy im
+    # nicht-geflaggten Sendezweig (`from api.telegram import _draft_action_keyboard`).
+    # Fehlt es am Stub, wirft dieser Import ImportError — und weil der Aufrufer
+    # in einem try/except sitzt, sieht man nur ein stummes sent=False statt der
+    # Ursache. side_effect statt eines statischen Rückgabewerts: bettet
+    # content_id wie das ECHTE Modul in die callback_data ein — ein fester Wert
+    # würde test_post_feedback_task.py::test_regenerated_post_sent_with_action_keyboard
+    # brechen, das sich (via `if not hasattr(_at_stub, "_draft_action_keyboard")`)
+    # bislang auf das FEHLEN dieses Attributs verließ, um die echte Funktion
+    # nachzuladen. Inhalt zusätzlich gegen das ECHTE Modul geprüft in
+    # test_telegram_outbound_pertenant.py::TestDraftActionKeyboard.
+    def _fake_draft_action_keyboard(content_id: str) -> dict:
+        return {
+            "inline_keyboard": [
+                [
+                    {"text": "✅ Freigeben", "callback_data": f"cmd:approve:{content_id}"},
+                    {"text": "✏️ Nochmal anders", "callback_data": f"cmd:regenerate:{content_id}"},
+                ],
+                [{"text": "❌ Verwerfen", "callback_data": f"cmd:reject:{content_id}"}],
+            ]
+        }
+
+    _at._draft_action_keyboard = MagicMock(side_effect=_fake_draft_action_keyboard)
 # Als Paket-Attribut registrieren (für @patch-Auflösung via getattr)
 sys.modules["api"].telegram = sys.modules["api.telegram"]
 

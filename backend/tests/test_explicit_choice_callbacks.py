@@ -1,3 +1,4 @@
+# AUDITED-2026-09-17 (zubu-stub-klasse) — vollstaendig gelesen
 """PR 2 — die zwei Buttons unter einer eingegangenen Nachricht.
 
 [✍️ Daraus einen Post machen] führt direkt ins gezielte Interview, [🗄 Nur merken]

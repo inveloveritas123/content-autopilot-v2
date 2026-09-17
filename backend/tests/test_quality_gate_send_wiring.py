@@ -1,3 +1,4 @@
+# AUDITED-2026-09-17 (zubu-stub-klasse) — vollstaendig gelesen
 """Tests für Quality-Gate-Wiring in tasks.session_post_task (Issue #38, Chunk 3).
 
 Verifiziert:

@@ -1,3 +1,4 @@
+# AUDITED-2026-09-17 (zubu-stub-klasse) — vollstaendig gelesen
 """Per-Tenant Telegram Bot Token Resolver.
 
 Jeder Projekt-Send läuft über den EIGENEN Telegram-Token des Tenants.
