@@ -1,3 +1,6 @@
+# AUDITED-PARTIAL-2026-09-17 (zubu-diagnose): nur Zeilen 1-80 gelesen
+# (_fix_models_for_sqlalchemy-Kopf, der sys.modules-Selbstschutz-Mechanismus) —
+# die restlichen ~670 Zeilen (Testfaelle selbst) nicht geprueft.
 """
 #155 Cost-Monitoring: Unit-Tests fuer cost-trend, cache-hit-rate, runaway-detection.
 

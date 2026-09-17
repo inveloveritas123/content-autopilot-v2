@@ -1,3 +1,4 @@
+<!-- AUDITED-2026-09-17 (zubu-diagnose): Tiefen-Audit, Datei vollstaendig gelesen. -->
 # Discovery: „Louis sagt, sein Telegram-Bot geht nicht mehr" — liegt es an uns?
 
 **Stand:** 2026-08-15, ~16:40 · Welle `zubu-telegram-discovery`
