@@ -1,3 +1,4 @@
+# AUDITED-2026-09-17 (zubu-diagnose): Tiefen-Audit, Datei vollstaendig gelesen.
 """Tests for backend/api/telegram_bots.py — tenant self-service bot management.
 
 Coverage:

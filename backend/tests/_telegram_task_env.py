@@ -1,3 +1,4 @@
+# AUDITED-2026-09-17 (zubu-diagnose): Tiefen-Audit, Datei vollstaendig gelesen.
 """Gemeinsame Stub-Umgebung für tasks.telegram_task — KEIN Test-Modul.
 
 Wird von test_telegram_inbound_routing.py und test_idempotency_routing.py

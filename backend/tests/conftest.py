@@ -1,3 +1,4 @@
+# AUDITED-2026-09-17 (zubu-diagnose): Tiefen-Audit, Datei vollstaendig gelesen.
 """
 Pytest conftest for unit tests.
 Stubs out heavy optional dependencies that are not installed in the test
