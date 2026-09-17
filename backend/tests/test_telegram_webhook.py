@@ -1,3 +1,4 @@
+# AUDITED-2026-09-17 (zubu-telegram-tests-isoliert-rot) — vollstaendig gelesen
 """
 Tests for Telegram webhook receiver + one-time-token auth flow (Issue #61).
 
