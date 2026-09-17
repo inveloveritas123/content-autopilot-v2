@@ -50,6 +50,26 @@ def _stub(name: str) -> types.ModuleType:
     return sys.modules[name]
 
 
+def _drop_foreign_stub(name: str) -> None:
+    """Entfernt einen FREMDEN Stub aus sys.modules, damit ein lazy Import das
+    echte Modul frisch laedt statt eines unvollstaendigen Nachbar-Stubs.
+
+    tests/_telegram_task_env.py traegt beim Import ``sys.modules["api.telegram"]``
+    OHNE Teardown ein — nur die dort lazy gebrauchten Namen sind vorhanden
+    (z.B. ``_interview_cancel_keyboard``), nicht ``_ABBRUCH_TEXT``/``_NEUSTART_TEXT``.
+    Laeuft eine Testdatei, die ``_telegram_task_env`` importiert, VOR dieser Datei
+    in derselben pytest-Session, bricht ein spaeterer ``from api.telegram import
+    _ABBRUCH_TEXT`` mit ImportError — reihenfolgeabhaengig und nur in der vollen
+    Suite sichtbar, nie isoliert. ``api.telegram`` steht bewusst NICHT in
+    conftest.py::_POLLUTION_PRONE_MODULES (andere Dateien brauchen ihren eigenen
+    Collection-Stub ueber Testlaufzeit hinweg) — die Haertung muss daher hier,
+    am Verbraucher des echten Moduls, passieren.
+    """
+    mod = sys.modules.get(name)
+    if mod is not None and not hasattr(mod, "__file__"):
+        del sys.modules[name]
+
+
 # sqlalchemy stubs — only injected when sqlalchemy is not installed
 try:
     import sqlalchemy as _sa_real  # noqa: F401
@@ -634,6 +654,7 @@ class TestInterviewAusgaenge:
         test_neustart_text_meint_dasselbe_wie_der_knopf) — aeltere Nachrichten
         im Chat tragen ihn weiterhin und muessen sauber behandelt werden.
         """
+        _drop_foreign_stub("api.telegram")
         from api.telegram import _interview_cancel_keyboard
 
         rows = _interview_cancel_keyboard()["inline_keyboard"]
@@ -652,6 +673,7 @@ class TestInterviewAusgaenge:
         zurueck — Louis verstand es als Absturz. Ein Knopf "🆕 Neuer Post" darf
         also keine Abbruch-Sprache antworten.
         """
+        _drop_foreign_stub("api.telegram")
         from api.telegram import _ABBRUCH_TEXT, _NEUSTART_TEXT
 
         assert _NEUSTART_TEXT != _ABBRUCH_TEXT
