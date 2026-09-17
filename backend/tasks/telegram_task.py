@@ -1567,19 +1567,33 @@ _FOTO_FEHLERTEXTE = {
 }
 
 
-#: Antworten für die zwei Ziele, die `layer2_routing` seit jeher vergibt, für
-#: die aber nie ein Text existierte: `help_response` (Frage an den Bot) und
-#: `close_friendly` (Smalltalk).
+#: Antworten für Ziele, die `layer2_routing` vergibt, für die aber nie ein
+#: eigener Text existierte: `help_response` (Frage an den Bot), `close_friendly`
+#: (Smalltalk) und `reviewer_queue` (unbekannter/geflaggter Intent).
 #:
-#: ⛔ Warum das eine Lücke war und keine Kleinigkeit: Beide Ziele standen NICHT
-#: in `_ZIELE_MIT_EIGENER_ANTWORT`. Der Nutzer bekam auf „Was kannst du
+#: ⛔ Warum das eine Lücke war und keine Kleinigkeit: Alle drei Ziele standen
+#: NICHT in `_ZIELE_MIT_EIGENER_ANTWORT`. Der Nutzer bekam auf „Was kannst du
 #: eigentlich?" also „✅ Gespeichert im Gedächtnis." — eine Frage wurde als
 #: Notiz abgelegt. Louis am 15.08.2026: „Zwei Antworttypen sind angelegt, aber
 #: nie fertig gebaut […] Ausgerechnet in den beiden menschlichsten Fällen
 #: schweigt er."
 #:
+#: ⛔ `reviewer_queue` ist der dritte, schwerere Fall (Diagnose 2026-09-17):
+#: Vor diesem Eintrag lief die Nachricht in denselben generischen Fallback wie
+#: oben — „✅ Gespeichert im Gedächtnis." log. Das ist keine Stille, aber eine
+#: FALSCHAUSKUNFT: die Nachricht wurde NICHT als Notiz abgelegt, sondern zur
+#: manuellen Pruefung zurückgehalten (`route_telegram_intent`, unmapped_intent/
+#: flagged_in_schicht_1). Gemessen: Louis' letzte Nachricht (2026-08-20 20:22
+#: UTC) landete auf `reviewer_queue`, bekam die Gedächtnis-Quittung — die
+#: inhaltlich nicht stimmte — und er hat das System seither (28 Tage) nicht
+#: mehr genutzt. Eine Queue, die eine falsche Erfolgsmeldung ausgibt, ist von
+#: aussen nicht von einem kaputten Bot zu unterscheiden — nur schwerer zu
+#: finden, weil "irgendetwas kam ja zurück".
+#:
 #: Die Texte sind bewusst kurz und führen weiter, statt nur zu quittieren: Wer
-#: fragt, will etwas wissen; wer Smalltalk macht, will nicht abgefertigt werden.
+#: fragt, will etwas wissen; wer Smalltalk macht, will nicht abgefertigt werden;
+#: wer in der Prüf-Queue landet, soll wissen, dass ein Mensch draufschaut,
+#: statt zu glauben, er sei nur wieder eine Notiz.
 _ZIEL_ANTWORTEN = {
     "help_response": (
         "Klar — kurz, was ich kann:\n\n"
@@ -1592,6 +1606,9 @@ _ZIEL_ANTWORTEN = {
     "close_friendly": (
         "🙂 Alles klar. Wenn dir was einfällt, das einen Post wert ist — "
         "einfach reinsprechen oder tippen."
+    ),
+    "reviewer_queue": (
+        "👀 Angekommen — das schaut sich gleich jemand von uns an."
     ),
 }
 

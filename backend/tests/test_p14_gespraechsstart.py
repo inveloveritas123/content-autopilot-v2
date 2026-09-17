@@ -489,3 +489,17 @@ class TestKeineStilleNachDemRouting:
         sender = MagicMock(return_value=True)
         self._lauf({"routed_to": "p08_response", "post_generation_enqueued": False}, sender)
         sender.assert_not_called()
+
+    def test_reviewer_queue_bekommt_ehrliche_antwort_keine_gedaechtnis_luege(self):
+        """reviewer_queue bekam vor diesem Fix dieselbe generische Quittung wie
+        eine echte Notiz ("✅ Gespeichert im Gedächtnis.") — eine Falschauskunft,
+        denn die Nachricht wurde NICHT abgelegt, sondern zur manuellen Prüfung
+        zurückgehalten. Diagnose 2026-09-17: Louis' letzte Nachricht (2026-08-20)
+        landete auf reviewer_queue, bekam diese falsche Quittung, und er hat das
+        System seither (28 Tage) nicht mehr genutzt — nicht von einem kaputten
+        Bot zu unterscheiden, nur schwerer zu finden, weil etwas zurückkam."""
+        sender = MagicMock(return_value=True)
+        self._lauf({"routed_to": "reviewer_queue"}, sender)
+        gesendeter_text = sender.call_args.args[1]
+        assert "Gespeichert im Gedächtnis" not in gesendeter_text
+        assert "angekommen" in gesendeter_text.lower()
